@@ -58,6 +58,7 @@ export const http = {
   post: <T = void>(url: string, body?: unknown) => request<T>('POST', url, { body }),
   postJson: <T = void>(url: string, json: string) => request<T>('POST', url, { rawJson: json }),
   put: <T = void>(url: string, body?: unknown) => request<T>('PUT', url, { body }),
+  delete: <T = void>(url: string) => request<T>('DELETE', url),
 }
 
 export function errorMessage(error: unknown): string {

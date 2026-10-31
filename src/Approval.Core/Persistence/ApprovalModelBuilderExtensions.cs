@@ -86,6 +86,16 @@ public static class ApprovalModelBuilderExtensions
             b.HasIndex(x => new { x.AssigneeKind, x.AssigneeValue });
         });
 
+        modelBuilder.Entity<ApprovalDraft>(b =>
+        {
+            b.ToTable($"{tablePrefix}Drafts");
+            b.HasKey(x => x.Id);
+            b.Property(x => x.UserId).HasMaxLength(100);
+            b.Property(x => x.DefinitionKey).HasMaxLength(100);
+            b.Property(x => x.Comment).HasMaxLength(500);
+            b.HasIndex(x => new { x.UserId, x.UpdatedAt });
+        });
+
         modelBuilder.Entity<ApprovalMessage>(b =>
         {
             b.ToTable($"{tablePrefix}Messages");
@@ -117,7 +127,7 @@ public static class ApprovalModelBuilderExtensions
         foreach (var type in new[]
                  {
                      typeof(ApprovalDefinition), typeof(ApprovalInstance), typeof(ApprovalTask), typeof(ApprovalLog),
-                     typeof(ApprovalCarbonCopy), typeof(ApprovalMessage), typeof(ApprovalOutboxMessage)
+                     typeof(ApprovalCarbonCopy), typeof(ApprovalDraft), typeof(ApprovalMessage), typeof(ApprovalOutboxMessage)
                  })
             modelBuilder.Entity(type).UseUtcDateTimes();
 

@@ -26,6 +26,20 @@ public static class FormDataValidator
 
     public static FormValidationResult Validate(FormSchema schema, JsonElement data)
     {
+        var (output, errors) = NormalizeAll(schema, data);
+        return new FormValidationResult(
+            output.ToJsonString(FormData.JsonOptions),
+            errors.ToDictionary(e => e.Key, e => e.Value.ToArray()));
+    }
+
+    /// <summary>
+    /// 宽松规范化（草稿）：不检查必填、范围等规则，只保证结构正确——剔除未定义字段，类型不对的值丢弃（置空）。
+    /// </summary>
+    public static string NormalizeLenient(FormSchema schema, JsonElement data) =>
+        NormalizeAll(schema, data).Output.ToJsonString(FormData.JsonOptions);
+
+    private static (JsonObject Output, Dictionary<string, List<string>> Errors) NormalizeAll(FormSchema schema, JsonElement data)
+    {
         if (data.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null)
             data = JsonDocument.Parse("{}").RootElement;
         if (data.ValueKind != JsonValueKind.Object) throw new ApprovalException("表单数据必须是 JSON 对象");
@@ -42,10 +56,7 @@ public static class FormDataValidator
             output[field.Key] = Normalize(field, value, field.Key, errors);
             if (field.Type == FormFieldType.Table) AddSums(field, output);
         }
-
-        return new FormValidationResult(
-            output.ToJsonString(FormData.JsonOptions),
-            errors.ToDictionary(e => e.Key, e => e.Value.ToArray()));
+        return (output, errors);
     }
 
     /// <summary>校验失败时抛出 <see cref="ApprovalValidationException"/>，否则返回规范化后的 JSON。</summary>

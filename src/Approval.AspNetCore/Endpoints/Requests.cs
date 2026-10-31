@@ -16,7 +16,11 @@ public sealed record AddSignRequest(string[] UserIds, AddSignMode Mode, string? 
 /// <summary>重新提交；<see cref="FormData"/> 仅表单审批可修改。</summary>
 public sealed record ResubmitRequest(string? Comment, JsonElement? FormData);
 
-public sealed record StartFormRequest(JsonElement FormData, string? Comment);
+/// <summary>发起表单审批；<see cref="DraftId"/> 不为空时提交成功后删除该草稿。</summary>
+public sealed record StartFormRequest(JsonElement FormData, string? Comment, Guid? DraftId = null);
+
+/// <summary>保存草稿；<see cref="DraftId"/> 为空时新建。</summary>
+public sealed record SaveDraftRequest(Guid? DraftId, JsonElement FormData, string? Comment);
 
 /// <summary>终止流程等需要填写原因的管理操作。</summary>
 public sealed record ReasonRequest(string? Reason);

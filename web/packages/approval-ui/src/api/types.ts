@@ -359,6 +359,23 @@ export interface StartForm {
   form: FormSchema
 }
 
+/** 草稿列表项 */
+export interface DraftSummary {
+  id: string
+  definitionKey: string
+  definitionName: string
+  comment: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface DraftDetail extends DraftSummary {
+  /** 按最新表单宽松规范化后的数据 */
+  formDataJson: string
+  /** 流程已更新，草稿已按最新表单调整 */
+  adjusted: boolean
+}
+
 export interface DirectoryUser {
   id: string
   name: string

@@ -106,6 +106,29 @@ public sealed class FormEndpointTests
     }
 
     [Fact]
+    public async Task 草稿保存_列表_打开_提交后删除()
+    {
+        await using var host = await StartAsync();
+        await host.PublishAsync("leave", LeaveFlow, name: "请假");
+
+        var saved = await host.SendAsync(HttpMethod.Put, "/api/approval/forms/leave/draft", "alice", new { formData = new { days = 0 }, comment = "未完成" });
+        Assert.True(saved.IsSuccessStatusCode, await saved.Content.ReadAsStringAsync());
+        var draftId = JsonDocument.Parse(await saved.Content.ReadAsStringAsync()).RootElement.GetProperty("draftId").GetGuid();
+
+        var list = (await host.GetJsonAsync("/api/approval/forms/drafts", "alice")).EnumerateArray().ToList();
+        var draft = await host.GetJsonAsync($"/api/approval/forms/drafts/{draftId}", "alice");
+        Assert.Equal("请假", Assert.Single(list).GetProperty("definitionName").GetString());
+        Assert.Equal("未完成", draft.GetProperty("comment").GetString());
+        Assert.False(draft.GetProperty("adjusted").GetBoolean());
+        await (await host.SendAsync(HttpMethod.Get, $"/api/approval/forms/drafts/{draftId}", "bob")).ProblemAsync(404);
+
+        await host.PostJsonAsync("/api/approval/forms/leave/start", "alice", new { formData = new { days = 1 }, draftId });
+
+        Assert.Empty((await host.GetJsonAsync("/api/approval/forms/drafts", "alice")).EnumerateArray());
+        await (await host.SendAsync(HttpMethod.Delete, $"/api/approval/forms/drafts/{draftId}", "alice")).ProblemAsync(404);
+    }
+
+    [Fact]
     public async Task 退回后带表单重新提交()
     {
         await using var host = await StartAsync();

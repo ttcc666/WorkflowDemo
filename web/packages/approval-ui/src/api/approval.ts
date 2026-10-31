@@ -10,6 +10,8 @@ import type {
   ApprovalStatistics,
   ApprovalTask,
   DirectoryUser,
+  DraftDetail,
+  DraftSummary,
   FlowSummary,
   InstanceListItem,
   ListQuery,
@@ -47,9 +49,16 @@ export const approvalApi = {
 
   startableForms: (signal?: AbortSignal) => http.get<StartableFlow[]>(api('/forms/startable'), signal),
   startForm: (key: string, signal?: AbortSignal) => http.get<StartForm>(api(`/forms/${enc(key)}`), signal),
-  /** 发起表单审批；校验失败抛出 ApiError（errors 为字段错误） */
-  submitForm: (key: string, formData: FormValues, comment: string) =>
-    http.post<{ instanceId: string }>(api(`/forms/${enc(key)}/start`), { formData, comment }),
+  /** 发起表单审批；校验失败抛出 ApiError（errors 为字段错误）；带 draftId 时提交成功后删除草稿 */
+  submitForm: (key: string, formData: FormValues, comment: string, draftId?: string | null) =>
+    http.post<{ instanceId: string }>(api(`/forms/${enc(key)}/start`), { formData, comment, draftId: draftId ?? null }),
+
+  drafts: (signal?: AbortSignal) => http.get<DraftSummary[]>(api('/forms/drafts'), signal),
+  draft: (id: string, signal?: AbortSignal) => http.get<DraftDetail>(api(`/forms/drafts/${id}`), signal),
+  /** 保存草稿（不校验必填）；draftId 为空时新建 */
+  saveDraft: (key: string, draftId: string | null, formData: FormValues, comment: string) =>
+    http.put<{ draftId: string; updatedAt: string }>(api(`/forms/${enc(key)}/draft`), { draftId, formData, comment }),
+  deleteDraft: (id: string) => http.delete(api(`/forms/drafts/${id}`)),
 
   todo: (query: ListQuery = {}, signal?: AbortSignal) => http.get<PagedResult<TodoItem>>(api(`/todo${queryString(query)}`), signal),
   todoCount: (signal?: AbortSignal) => http.get<{ count: number }>(api('/todo/count'), signal),

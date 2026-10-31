@@ -178,6 +178,18 @@ public class ApprovalCarbonCopy
     public DateTime CreatedAt { get; set; }
 }
 
+/// <summary>表单审批的草稿：不校验必填，只做结构规范化；提交时删除。</summary>
+public class ApprovalDraft
+{
+    public Guid Id { get; set; }
+    public required string UserId { get; set; }
+    public required string DefinitionKey { get; set; }
+    public string FormDataJson { get; set; } = "{}";
+    public string? Comment { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime UpdatedAt { get; set; }
+}
+
 /// <summary>审批轨迹，只追加不修改。</summary>
 public class ApprovalLog
 {

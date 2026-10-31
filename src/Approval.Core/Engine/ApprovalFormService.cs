@@ -26,7 +26,7 @@ public sealed class ApprovalFormOptions
 /// 表单审批：用户在发起中心选择 <see cref="FlowSettings.Startable"/> 的流程、填写表单直接发起，无需业务代码。
 /// 表单数据按流程定义中的 <see cref="FormSchema"/> 在服务端校验与规范化。
 /// </summary>
-public sealed class ApprovalFormService(
+public sealed partial class ApprovalFormService(
     ApprovalDbContextAccessor accessor,
     ApprovalEngine engine,
     IApprovalIdentityProvider identity,
@@ -58,12 +58,15 @@ public sealed class ApprovalFormService(
         return new StartForm(definition.Id, definition.Key, definition.Name, definition.Version, flow.Settings!, flow.Form ?? new FormSchema());
     }
 
-    /// <summary>发起表单审批：校验表单 → 生成标题 → 发起实例（业务主键为新 ID）。</summary>
+    /// <summary>发起表单审批：校验表单 → 生成标题 → 发起实例（业务主键为新 ID）。从草稿提交时同一事务删除草稿。</summary>
     public async Task<ApprovalInstance> StartAsync(string key, string userId, JsonElement formData, string? comment = null,
-        CancellationToken ct = default)
+        Guid? draftId = null, CancellationToken ct = default)
     {
         var (definition, flow) = await LoadStartableAsync(key, userId, ct);
         var json = await NormalizeAsync(flow.Form ?? new FormSchema(), formData, ct);
+
+        // 草稿的删除随发起一起提交（引擎在同一 DbContext 中 SaveChanges）
+        if (draftId is { } id) _db.Set<ApprovalDraft>().Remove(await FindDraftAsync(userId, id, ct));
 
         return await engine.StartAsync(new StartApprovalRequest(definition.Key, BusinessType, Guid.NewGuid().ToString("N"), userId)
         {

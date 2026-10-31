@@ -1,16 +1,20 @@
 <script setup lang="ts">
 import { computed, shallowRef } from 'vue'
 import { useRouter } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { approvalApi } from '../api/approval'
-import type { StartableFlow } from '../api/types'
+import { errorMessage } from '../api/http'
+import type { DraftSummary, StartableFlow } from '../api/types'
 import { useAsyncData } from '../composables/useAsyncData'
 import { approvalUserKey } from '../config'
 import { approvalRouteNames } from '../routes'
+import { formatDateTime } from '../utils/labels'
 
-/** 发起中心：按分类列出当前用户可发起的流程（设置了“在发起中心显示”）。 */
+/** 发起中心：我的草稿 + 按分类列出当前用户可发起的流程（设置了“在发起中心显示”）。 */
 const router = useRouter()
 const keyword = shallowRef('')
 const flows = useAsyncData((signal) => approvalApi.startableForms(signal), { watch: [approvalUserKey], initial: [] })
+const drafts = useAsyncData((signal) => approvalApi.drafts(signal), { watch: [approvalUserKey], initial: [], notifyError: false })
 
 const groups = computed(() => {
   const text = keyword.value.trim().toLowerCase()
@@ -26,9 +30,45 @@ const groups = computed(() => {
 })
 
 const open = (flow: StartableFlow) => router.push({ name: approvalRouteNames.startForm, params: { key: flow.key } })
+const openDraft = (draft: DraftSummary) =>
+  router.push({ name: approvalRouteNames.startForm, params: { key: draft.definitionKey }, query: { draft: draft.id } })
+
+async function removeDraft(draft: DraftSummary) {
+  try {
+    await ElMessageBox.confirm(`删除「${draft.definitionName}」的草稿？`, '删除草稿', { type: 'warning' })
+  } catch {
+    return
+  }
+  try {
+    await approvalApi.deleteDraft(draft.id)
+    ElMessage.success('已删除')
+  } catch (e) {
+    ElMessage.error(errorMessage(e))
+  }
+  await drafts.reload()
+}
 </script>
 
 <template>
+  <el-card v-if="drafts.data.value?.length" shadow="never" class="start__drafts">
+    <template #header>我的草稿（{{ drafts.data.value.length }}）</template>
+    <el-table :data="drafts.data.value" size="small" @row-click="(row: DraftSummary) => openDraft(row)">
+      <el-table-column label="流程" min-width="160">
+        <template #default="{ row }"><el-link type="primary" underline="never">{{ row.definitionName }}</el-link></template>
+      </el-table-column>
+      <el-table-column prop="comment" label="说明" min-width="200" show-overflow-tooltip />
+      <el-table-column label="最后保存" width="170">
+        <template #default="{ row }">{{ formatDateTime(row.updatedAt) }}</template>
+      </el-table-column>
+      <el-table-column label="" width="140" align="right">
+        <template #default="{ row }">
+          <el-button link type="primary" size="small" @click.stop="openDraft(row as DraftSummary)">继续编辑</el-button>
+          <el-button link type="danger" size="small" @click.stop="removeDraft(row as DraftSummary)">删除</el-button>
+        </template>
+      </el-table-column>
+    </el-table>
+  </el-card>
+
   <el-card v-loading="flows.loading.value" shadow="never">
     <template #header>
       <div class="start__header">
@@ -57,6 +97,14 @@ const open = (flow: StartableFlow) => router.push({ name: approvalRouteNames.sta
 </template>
 
 <style scoped>
+.start__drafts {
+  margin-bottom: 16px;
+}
+
+.start__drafts :deep(.el-table__row) {
+  cursor: pointer;
+}
+
 .start__header {
   display: flex;
   align-items: center;
