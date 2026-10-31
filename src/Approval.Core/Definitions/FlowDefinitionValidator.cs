@@ -43,6 +43,7 @@ public static partial class FlowDefinitionValidator
             errors.Add("流程至少需要一个 End 节点");
 
         ValidateNotifications(errors, "流程级通知", definition.Notifications, null, context);
+        Forms.FormSchemaValidator.Validate(definition, errors);
 
         foreach (var (key, node) in nodes)
         {

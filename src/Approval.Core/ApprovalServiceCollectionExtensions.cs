@@ -78,6 +78,19 @@ public sealed class ApprovalBuilder(IServiceCollection services)
         return this;
     }
 
+    /// <summary>
+    /// 启用表单审批：设置了 <c>settings.startable</c> 的流程可在发起中心直接填写表单发起，
+    /// 业务类型为 <paramref name="businessType"/>，表单数据即单据。
+    /// </summary>
+    public ApprovalBuilder AddFormApprovals(string businessType = "Form")
+    {
+        var options = new ApprovalFormOptions { BusinessType = businessType };
+        Services.AddSingleton(options);
+        Services.AddScoped<ApprovalFormService>();
+        Services.AddScoped<IApprovalBusinessHandler>(_ => new FormApprovalHandler(options));
+        return this;
+    }
+
     /// <summary>注册业务回调，每个 BusinessType 一个。</summary>
     public ApprovalBuilder AddBusinessHandler<T>() where T : class, IApprovalBusinessHandler
     {

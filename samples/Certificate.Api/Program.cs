@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using Approval.AspNetCore;
 using Approval.Core;
@@ -45,6 +46,8 @@ var approval = builder.Services
         o.TimeoutScanInterval = approvalConfig.GetValue("TimeoutScanInterval", o.TimeoutScanInterval);
     })
     .AddBusinessHandler<CertificateApprovalHandler>()
+    // 表单审批：设置了“可发起”的流程（如 Flows/leave.json、expense.json）可在发起中心直接填写表单发起
+    .AddFormApprovals()
     .AddActionHandler<CertificateExpiryCheckAction>()
     // 演示：Webhook 发到本服务的模拟接收端（/api/demo/webhook），可在“投递记录”页模拟失败观察重试
     .AddWebhookChannel(o =>
@@ -107,7 +110,8 @@ app.MapFallbackToFile("index.html");
 
 app.Run();
 
-// 演示用：建库并发布 Flows 目录下尚未发布的流程。生产环境请使用 EF Core 迁移与流程管理界面
+// 演示用：建库并发布 Flows 目录下尚未发布的流程（文件名为流程标识，顶层 name 为流程名称）。
+// 生产环境请使用 EF Core 迁移与流程管理界面
 static async Task InitializeAsync(WebApplication app)
 {
     await using var scope = app.Services.CreateAsyncScope();
@@ -121,7 +125,10 @@ static async Task InitializeAsync(WebApplication app)
         var key = Path.GetFileNameWithoutExtension(file);
         if (await db.Set<ApprovalDefinition>().AnyAsync(d => d.Key == key)) continue;
 
-        var definition = await definitions.PublishAsync(key, key, await File.ReadAllTextAsync(file));
+        var json = await File.ReadAllTextAsync(file);
+        using var document = JsonDocument.Parse(json);
+        var name = document.RootElement.TryGetProperty("name", out var n) && n.GetString() is { Length: > 0 } text ? text : key;
+        var definition = await definitions.PublishAsync(key, name, json);
         app.Logger.LogInformation("已发布流程 {Key} v{Version}", definition.Key, definition.Version);
     }
 }

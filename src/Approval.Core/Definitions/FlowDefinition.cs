@@ -43,6 +43,12 @@ public sealed class FlowDefinition
 
     public string StartNodeId { get; set; } = "";
 
+    /// <summary>发起设置（发起中心、发起角色、标题模板），可选。</summary>
+    public Forms.FlowSettings? Settings { get; set; }
+
+    /// <summary>表单结构，可选；随流程版本一起发布，实例按发起时的版本展示与校验。</summary>
+    public Forms.FormSchema? Form { get; set; }
+
     /// <summary>流程级通知规则：对所有审批节点生效，以及流程结束（<see cref="NotifyEvent.Completed"/>）。</summary>
     public List<NotificationRule> Notifications { get; set; } = [];
 

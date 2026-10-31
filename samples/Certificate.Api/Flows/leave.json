@@ -1,0 +1,37 @@
+{
+  "name": "请假申请",
+  "startNodeId": "start",
+  "settings": {
+    "startable": true,
+    "category": "人事",
+    "description": "员工请假，超过 3 天需负责人审批，通过后抄送人事与工作交接人",
+    "titleTemplate": "{申请人}的请假申请（{form.days} 天）"
+  },
+  "form": {
+    "fields": [
+      { "key": "leaveType", "label": "请假类型", "type": "Select", "required": true, "span": 12,
+        "options": [
+          { "label": "年假", "value": "annual" }, { "label": "事假", "value": "personal" },
+          { "label": "病假", "value": "sick" }, { "label": "调休", "value": "compensatory" } ] },
+      { "key": "period", "label": "起止日期", "type": "DateRange", "required": true, "span": 12 },
+      { "key": "days", "label": "请假天数", "type": "Number", "required": true, "min": 0.5, "max": 30, "precision": 1, "span": 12,
+        "help": "按工作日计算，可填 0.5 天" },
+      { "key": "handover", "label": "工作交接人", "type": "User", "span": 12 },
+      { "key": "reason", "label": "请假事由", "type": "TextArea", "required": true, "maxLength": 500 }
+    ]
+  },
+  "nodes": {
+    "start":   { "name": "提交申请", "type": "Start", "next": "dept", "position": { "x": 250, "y": 0 } },
+    "dept":    { "name": "直属领导审批", "type": "Approval", "mode": "Any",
+                 "approvers": [{ "type": "Role", "value": "DeptReviewer" }], "next": "days", "position": { "x": 250, "y": 120 } },
+    "days":    { "name": "天数判断", "type": "Condition", "position": { "x": 250, "y": 240 }, "branches": [
+                   { "priority": 1, "expression": "days > 3", "next": "leader" },
+                   { "priority": 99, "expression": null, "next": "cc" } ] },
+    "leader":  { "name": "负责人审批", "type": "Approval", "mode": "Any",
+                 "approvers": [{ "type": "Role", "value": "Leader" }], "next": "cc", "position": { "x": 100, "y": 360 } },
+    "cc":      { "name": "抄送人事与交接人", "type": "Cc",
+                 "approvers": [{ "type": "Role", "value": "HR" }, { "type": "FormField", "value": "handover" }],
+                 "next": "end", "position": { "x": 250, "y": 480 } },
+    "end":     { "name": "结束", "type": "End", "position": { "x": 250, "y": 600 } }
+  }
+}

@@ -1,4 +1,5 @@
 {
+  "name": "证书新增",
   "startNodeId": "start",
   "notifications": [
     { "events": ["Completed"], "recipients": [{ "type": "Initiator", "value": "" }], "channels": ["InApp", "Webhook"],

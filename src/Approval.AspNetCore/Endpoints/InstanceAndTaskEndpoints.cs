@@ -1,3 +1,5 @@
+using System.Text.Json;
+using Approval.Core;
 using Approval.Core.Engine;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -40,7 +42,7 @@ internal static class InstanceEndpoints
 /// <summary>任务操作：同意、驳回 / 退回、转交、加签、重新提交。</summary>
 internal static class TaskEndpoints
 {
-    public static void Map(RouteGroupBuilder group)
+    public static void Map(RouteGroupBuilder group, bool formsEnabled)
     {
         group.MapGet("/tasks/{id:guid}/can-handle", async (Guid id, HttpContext http, ApprovalEngine e, CancellationToken ct) =>
             new { canHandle = await e.CanHandleAsync(id, http.GetApprovalUserId(), ct) });
@@ -76,9 +78,12 @@ internal static class TaskEndpoints
             return Results.NoContent();
         });
 
-        // 退回发起人后重新提交；本接口只提交意见，业务数据由业务单据决定
+        // 退回发起人后重新提交；本接口只提交意见，业务数据由业务单据决定。启用表单审批时由 FormEndpoints 提供（可带表单数据）
+        if (formsEnabled) return;
         group.MapPost("/tasks/{id:guid}/resubmit", async (Guid id, ResubmitRequest body, HttpContext http, ApprovalEngine e, CancellationToken ct) =>
         {
+            if (body.FormData is { ValueKind: not (JsonValueKind.Null or JsonValueKind.Undefined) })
+                throw new ApprovalException("未启用表单审批，重新提交不能修改表单数据");
             await e.ResubmitAsync(id, http.GetApprovalUserId(), body.Comment, ct: ct);
             return Results.NoContent();
         });

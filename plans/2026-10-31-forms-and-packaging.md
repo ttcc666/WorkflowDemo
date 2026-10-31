@@ -1,6 +1,6 @@
 # B 表单设计器 + 通用发起页 / C 封装为可复用包 — 开发计划
 
-> 状态：**执行中**。阶段 0、1 已完成（每阶段完成后本地提交，不推送）。
+> 状态：**执行中**。阶段 0、1、2 已完成（每阶段完成后本地提交，不推送）。
 > 执行时按“阶段 → 清单”逐项完成，每个阶段结束运行该阶段的验证命令；本文件的复选框随进度更新。
 
 ## 0. 背景与现状（执行前必读）
@@ -196,14 +196,16 @@ web/
 - [x] 验证：`dotnet build -c Release`、全部测试、`smoke-test.ps1` / `output/e2e/e2e-v3.ps1` 回归。
 
 ### 阶段 2：表单后端（B-后端）
-- [ ] `Forms/*` 模型与 `FlowDefinition.Settings/Form`。
-- [ ] `FormSchemaValidator`（接入发布校验）、`FormDataValidator`（规范化 + 合计）。
-- [ ] `ApprovalFormService` + `AddFormApprovals()`（注册服务与 `FormApprovalHandler`）。
-- [ ] 端点：`forms/startable`、`forms/{key}`、`forms/{key}/start`；`tasks/{id}/resubmit` 支持 formData。
-- [ ] 标题模板变量增加 `{流程名}`（`TemplateVariables` 需要定义名称：`ApprovalFormService` 渲染时传入）。
-- [ ] 示例流程：`Flows/leave.json`（请假：类型、起止、天数、交接人、事由；直属领导 →（days > 3）部门经理 → 人事抄送），`Flows/expense.json`（报销：明细表 + 合计；`items_amount_sum > 5000` 走 并行[财务, 负责人]，否则 财务）。`appsettings.json` 演示用户增加 `hana`（HR）、`fiona`（Finance）。
-- [ ] 测试（Core）：schema 校验各错误、数据校验（必填 / 类型 / 选项 / 范围 / 未知字段剔除 / 表格行与合计）、发起人角色限制、标题模板、条件按合计分支、退回后带新表单重新提交、非表单业务不能改表单。
-- [ ] 测试（AspNetCore）：发起 400 字段错误结构、发起成功返回 instanceId、startable 过滤（角色 / startable=false）。
+- [x] `Forms/*` 模型与 `FlowDefinition.Settings/Form`。
+- [x] `FormSchemaValidator`（接入发布校验）、`FormDataValidator`（规范化 + 合计）。
+- [x] `ApprovalFormService` + `AddFormApprovals()`（注册服务与 `FormApprovalHandler`）。
+- [x] 端点：`forms/startable`、`forms/{key}`、`forms/{key}/start`；`tasks/{id}/resubmit` 支持 formData。
+- [x] 标题模板变量 `{流程名}`、`{申请人}`、`{发起时间}`、`{form.x}`（仅标题模板可用，由 `ApprovalFormService` 渲染时提供，不进入通知模板目录）。
+- [x] 示例流程：`Flows/leave.json`（请假：类型、起止、天数、交接人、事由；直属领导 →（days > 3）部门经理 → 人事抄送），`Flows/expense.json`（报销：明细表 + 合计；`items_amount_sum > 5000` 走 并行[财务, 负责人]，否则 财务）。`appsettings.json` 演示用户增加 `hana`（HR）、`fiona`（Finance）。
+- [x] 测试（Core）：schema 校验各错误、数据校验（必填 / 类型 / 选项 / 范围 / 未知字段剔除 / 表格行与合计）、发起人角色限制、标题模板、条件按合计分支、退回后带新表单重新提交、非表单业务不能改表单。
+- [x] 测试（AspNetCore）：发起 400 字段错误结构、发起成功返回 instanceId、startable 过滤（角色 / startable=false）。
+
+- 补充：`/me` 返回 `formsEnabled`；未调用 `AddFormApprovals()` 时不映射表单接口；`Flows/*.json` 顶层 `name` 作为演示流程名称；e2e 脚本 `output/e2e/e2e-forms.ps1`。
 
 ### 阶段 3：前端 workspace 重构（C-前端）
 - [ ] 建立 `web/package.json`、`pnpm-workspace.yaml`；用 `git mv` 迁移文件（保留历史），通用代码 → `packages/approval-ui/src`，证书 / 布局 / 演示用户 → `apps/demo/src`。

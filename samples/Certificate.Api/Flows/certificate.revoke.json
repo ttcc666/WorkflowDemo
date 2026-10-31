@@ -1,4 +1,5 @@
 {
+  "name": "证书注销",
   "startNodeId": "start",
   "notifications": [
     { "events": ["Enter"], "recipients": [{ "type": "Assignees", "value": "" }], "channels": ["InApp"],

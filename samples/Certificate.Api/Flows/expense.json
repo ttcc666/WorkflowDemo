@@ -1,0 +1,46 @@
+{
+  "name": "费用报销",
+  "startNodeId": "start",
+  "settings": {
+    "startable": true,
+    "category": "财务",
+    "description": "费用报销，合计超过 5000 元需财务与负责人同时审批",
+    "titleTemplate": "{申请人}的费用报销（合计 {form.items_amount_sum} 元）"
+  },
+  "form": {
+    "fields": [
+      { "key": "expenseType", "label": "报销类型", "type": "Select", "required": true, "span": 12,
+        "options": [
+          { "label": "差旅费", "value": "travel" }, { "label": "办公用品", "value": "office" },
+          { "label": "业务招待", "value": "entertainment" }, { "label": "其他", "value": "other" } ] },
+      { "key": "payee", "label": "收款人", "type": "User", "span": 12, "help": "为空时打款给申请人" },
+      { "key": "items", "label": "费用明细", "type": "Table", "required": true, "maxRows": 50,
+        "columns": [
+          { "key": "name", "label": "费用项目", "type": "Text", "required": true, "maxLength": 100 },
+          { "key": "date", "label": "发生日期", "type": "Date", "required": true },
+          { "key": "amount", "label": "金额（元）", "type": "Money", "required": true, "min": 0.01, "sum": true },
+          { "key": "remark", "label": "备注", "type": "Text", "maxLength": 200 } ] },
+      { "key": "tip", "label": "报销须知", "type": "Description", "help": "请在提交后 3 个工作日内将发票原件交至财务部。" },
+      { "key": "reason", "label": "报销说明", "type": "TextArea", "maxLength": 500 }
+    ]
+  },
+  "nodes": {
+    "start":    { "name": "提交申请", "type": "Start", "next": "dept", "position": { "x": 250, "y": 0 } },
+    "dept":     { "name": "部门审核", "type": "Approval", "mode": "Any",
+                  "approvers": [{ "type": "Role", "value": "DeptReviewer" }], "next": "amount", "position": { "x": 250, "y": 120 } },
+    "amount":   { "name": "金额判断", "type": "Condition", "position": { "x": 250, "y": 240 }, "branches": [
+                    { "priority": 1, "expression": "items_amount_sum > 5000", "next": "fork" },
+                    { "priority": 99, "expression": null, "next": "finance" } ] },
+    "fork":     { "name": "大额会审", "type": "Parallel", "position": { "x": 100, "y": 360 }, "branches": [
+                    { "priority": 1, "expression": null, "next": "finance_big" },
+                    { "priority": 2, "expression": null, "next": "leader" } ] },
+    "finance_big": { "name": "财务审核", "type": "Approval", "mode": "Any",
+                  "approvers": [{ "type": "Role", "value": "Finance" }], "next": "join", "position": { "x": 0, "y": 480 } },
+    "leader":   { "name": "负责人审批", "type": "Approval", "mode": "Any",
+                  "approvers": [{ "type": "Role", "value": "Leader" }], "next": "join", "position": { "x": 200, "y": 480 } },
+    "join":     { "name": "会审完成", "type": "Join", "next": "end", "position": { "x": 100, "y": 600 } },
+    "finance":  { "name": "财务审核", "type": "Approval", "mode": "Any",
+                  "approvers": [{ "type": "Role", "value": "Finance" }], "next": "end", "position": { "x": 400, "y": 360 } },
+    "end":      { "name": "结束", "type": "End", "position": { "x": 250, "y": 720 } }
+  }
+}
