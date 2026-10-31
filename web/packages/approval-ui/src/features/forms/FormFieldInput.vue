@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import UserPicker from '../../components/UserPicker.vue'
+import FileUploadInput from './FileUploadInput.vue'
 import type { FormField } from './formModel'
 
 /** 单个字段的输入控件（明细表单元格也使用）。 */
@@ -64,6 +65,7 @@ const formulaText = computed(() => {
   <el-switch v-else-if="field.type === 'Switch'" :model-value="model === true" :size="size" @update:model-value="(v) => (model = v === true)" />
   <UserPicker v-else-if="field.type === 'User' || field.type === 'Users'" v-model="userValue" :multiple="field.type === 'Users'"
     :placeholder="placeholder ?? '搜索人员'" :size="size" />
+  <FileUploadInput v-else-if="field.type === 'File'" v-model="model" :field="field" />
   <el-input v-else-if="field.type === 'Formula'" :model-value="formulaText" disabled placeholder="自动计算" :size="size"
     class="field-input--formula" :title="field.formula ?? ''" />
 </template>

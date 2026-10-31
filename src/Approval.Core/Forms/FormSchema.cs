@@ -54,7 +54,9 @@ public enum FormFieldType
     /// <summary>说明文字（<see cref="FormField.Label"/> 为标题、<see cref="FormField.Help"/> 为正文），没有值。</summary>
     Description,
     /// <summary>计算字段：值由 <see cref="FormField.Formula"/> 在服务端计算（忽略提交的值），可作为明细列按行计算。</summary>
-    Formula
+    Formula,
+    /// <summary>附件，值为 <c>[{ id, name, size, contentType }]</c>；文件先通过上传接口保存，提交时按上传记录校验并以服务端元数据为准。</summary>
+    File
 }
 
 public sealed class FormField
@@ -97,6 +99,12 @@ public sealed class FormField
 
     /// <summary>文本最大长度；默认单行 200、多行 2000，上限 4000。</summary>
     public int? MaxLength { get; set; }
+
+    /// <summary>附件字段最多文件数，默认 10，最大 50。</summary>
+    public int? MaxFiles { get; set; }
+
+    /// <summary>附件字段允许的扩展名（不含点），为空时为全局允许的扩展名。</summary>
+    public List<string> Accept { get; set; } = [];
 
     /// <summary>明细表最多行数，默认 100。</summary>
     public int? MaxRows { get; set; }

@@ -23,6 +23,7 @@ public static class FormDataValidator
     public const int MaxTextLength = 4000;
     public const int DefaultMaxRows = 100;
     public const int MaxUsers = 100;
+    public const int DefaultMaxFiles = 10;
     private const string DateFormat = "yyyy-MM-dd";
 
     public static FormValidationResult Validate(FormSchema schema, JsonElement data)
@@ -104,7 +105,7 @@ public static class FormDataValidator
         if (IsEmpty(value))
         {
             if (field.Required) Error(RequiredMessage(field));
-            return field.Type is FormFieldType.MultiSelect or FormFieldType.Users or FormFieldType.Table ? new JsonArray() : null;
+            return field.Type is FormFieldType.MultiSelect or FormFieldType.Users or FormFieldType.Table or FormFieldType.File ? new JsonArray() : null;
         }
 
         var element = value!.Value;
@@ -180,6 +181,27 @@ public static class FormDataValidator
             case FormFieldType.Table:
                 return NormalizeTable(field, element, path, errors, Error);
 
+            case FormFieldType.File:
+            {
+                // 只保留文件 ID（去重）；名称、大小、类型由表单服务按上传记录补全，不信任提交的值
+                var files = new JsonArray();
+                var ids = new HashSet<Guid>();
+                if (element.ValueKind != JsonValueKind.Array) { Error($"{field.Label}格式不正确"); return files; }
+                foreach (var item in element.EnumerateArray())
+                {
+                    if (item.ValueKind != JsonValueKind.Object || !item.TryGetProperty("id", out var idElement)
+                        || idElement.ValueKind != JsonValueKind.String || !Guid.TryParse(idElement.GetString(), out var id))
+                    {
+                        Error($"{field.Label}格式不正确");
+                        return new JsonArray();
+                    }
+                    if (ids.Add(id)) files.Add(new JsonObject { ["id"] = id.ToString() });
+                }
+                var max = field.MaxFiles ?? DefaultMaxFiles;
+                if (files.Count > max) Error($"{field.Label}最多上传 {max} 个文件");
+                return files;
+            }
+
             default:
                 return null;
         }
@@ -241,6 +263,7 @@ public static class FormDataValidator
         FormFieldType.Select or FormFieldType.MultiSelect or FormFieldType.Radio or FormFieldType.User or FormFieldType.Users
             or FormFieldType.Date or FormFieldType.DateRange => $"请选择{field.Label}",
         FormFieldType.Table => $"请至少添加一行{field.Label}",
+        FormFieldType.File => $"请上传{field.Label}",
         _ => $"请填写{field.Label}"
     };
 

@@ -137,3 +137,21 @@ describe('节点字段权限：隐藏字段与可编辑字段', () => {
     expect(changedFields(schema, before, { ...before, items: [{ name: 'b' }] }, ['amount', 'items']).map((f) => f.key)).toEqual(['items'])
   })
 })
+
+describe('附件字段', () => {
+  const invoices: FormField = { key: 'invoices', label: '发票', type: 'File', required: true, maxFiles: 1, accept: ['pdf'] }
+  const file = { id: '1', name: 'a.pdf', size: 1, contentType: 'application/pdf' }
+
+  it('必填、数量上限，初始值为空数组', () => {
+    expect(validateValue(invoices, [])).toBe('请上传发票')
+    expect(validateValue(invoices, [file, { ...file, id: '2' }])).toBe('发票最多上传 1 个文件')
+    expect(validateValue(invoices, [file])).toBeNull()
+    expect(initialValues({ fields: [invoices] })).toEqual({ invoices: [] })
+  })
+
+  it('保存时保留文件数与类型，去掉默认值', () => {
+    expect(cleanField({ ...invoices, defaultValue: [file] })).toEqual({
+      key: 'invoices', label: '发票', type: 'File', required: true, maxFiles: 1, accept: ['pdf'],
+    })
+  })
+})

@@ -1,5 +1,6 @@
 using Approval.Core.Domain;
 using Approval.Core.Engine;
+using Approval.Core.Files;
 using Approval.Core.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -78,6 +79,17 @@ public sealed class ApprovalTimeoutScanner(
                     select t.Id)
                 .Take(BatchSize)
                 .ToListAsync(ct);
+        }
+
+        // 顺带清理过期的未绑定附件（启用表单审批时）
+        try
+        {
+            await using var scope = scopeFactory.CreateAsyncScope();
+            if (scope.ServiceProvider.GetService<ApprovalFileService>() is { } files) await files.CleanupAsync(ct);
+        }
+        catch (Exception ex) when (!ct.IsCancellationRequested)
+        {
+            logger.LogError(ex, "清理未绑定附件失败");
         }
 
         var handled = 0;

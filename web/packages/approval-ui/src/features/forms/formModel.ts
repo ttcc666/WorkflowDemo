@@ -18,6 +18,7 @@ export type FormFieldType =
   | 'Table'
   | 'Description'
   | 'Formula'
+  | 'File'
 
 export interface FormFieldOption {
   label: string
@@ -46,7 +47,22 @@ export interface FormField {
   sum?: boolean
   /** 计算字段的公式，如 `qty * price`、`items_amount_sum - ifnull(advance, 0)` */
   formula?: string | null
+  /** 附件字段：最多文件数（默认 10） */
+  maxFiles?: number | null
+  /** 附件字段：允许的扩展名（不含点），为空时按系统允许的类型 */
+  accept?: string[]
 }
+
+/** 附件字段的值：上传后由服务端返回 */
+export interface FileValue {
+  id: string
+  name: string
+  size: number
+  contentType: string
+}
+
+/** 系统默认允许上传的扩展名（与服务端 ApprovalFileOptions.AllowedExtensions 默认值一致） */
+export const defaultFileExtensions = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'csv', 'png', 'jpg', 'jpeg', 'gif', 'zip']
 
 export interface FormSchema {
   fields: FormField[]
@@ -85,6 +101,7 @@ export const fieldTypes: FieldTypeMeta[] = [
   { type: 'User', label: '人员', icon: '👤', group: '人员' },
   { type: 'Users', label: '多个人员', icon: '👥', group: '人员' },
   { type: 'Table', label: '明细表', icon: '▦', group: '其他' },
+  { type: 'File', label: '附件', icon: '📎', group: '其他' },
   { type: 'Description', label: '说明文字', icon: 'ℹ', group: '其他' },
 ]
 
@@ -100,7 +117,7 @@ export const numberTypes = new Set<FormFieldType>(['Number', 'Money'])
 export const numericTypes = new Set<FormFieldType>(['Number', 'Money', 'Formula'])
 export const textTypes = new Set<FormFieldType>(['Text', 'TextArea'])
 export const userTypes = new Set<FormFieldType>(['User', 'Users'])
-const arrayTypes = new Set<FormFieldType>(['MultiSelect', 'Users', 'Table'])
+const arrayTypes = new Set<FormFieldType>(['MultiSelect', 'Users', 'Table', 'File'])
 /** 默认整行显示的类型 */
 const wideTypes = new Set<FormFieldType>(['TextArea', 'Table', 'Description'])
 
@@ -221,6 +238,7 @@ const isEmpty = (value: unknown) =>
 export function requiredMessage(field: FormField) {
   if (field.type === 'Switch') return `请勾选${field.label}`
   if (field.type === 'Table') return `请至少添加一行${field.label}`
+  if (field.type === 'File') return `请上传${field.label}`
   const choose: FormFieldType[] = ['Select', 'MultiSelect', 'Radio', 'User', 'Users', 'Date', 'DateRange']
   return choose.includes(field.type) ? `请选择${field.label}` : `请填写${field.label}`
 }
@@ -256,6 +274,8 @@ export function validateValue(field: FormField, value: unknown): string | null {
     return (value as unknown[]).length > maxRows ? `${field.label}最多 ${maxRows} 行` : null
   }
   if (field.type === 'Users' && (value as unknown[]).length > 100) return `${field.label}最多选择 100 人`
+  if (field.type === 'File' && (value as unknown[]).length > (field.maxFiles ?? 10))
+    return `${field.label}最多上传 ${field.maxFiles ?? 10} 个文件`
   return null
 }
 
@@ -302,6 +322,11 @@ export function cleanField(field: FormField, isColumn = false): FormField {
     delete result.placeholder
   }
   if (textTypes.has(field.type) && field.maxLength) result.maxLength = field.maxLength
+  if (field.type === 'File') {
+    if (field.maxFiles) result.maxFiles = field.maxFiles
+    if (field.accept?.length) result.accept = [...field.accept]
+    delete result.defaultValue
+  }
   if (field.type === 'Table') {
     if (field.maxRows) result.maxRows = field.maxRows
     result.columns = (field.columns ?? []).map((c) => cleanField(c, true))

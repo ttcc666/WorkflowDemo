@@ -3,6 +3,7 @@ using Approval.Core.Actions;
 using Approval.Core.Background;
 using Approval.Core.Conditions;
 using Approval.Core.Engine;
+using Approval.Core.Files;
 using Approval.Core.Notifications;
 using Approval.Core.Persistence;
 using Approval.Core.Resolvers;
@@ -96,7 +97,17 @@ public sealed class ApprovalBuilder(IServiceCollection services)
         var options = new ApprovalFormOptions { BusinessType = businessType };
         Services.AddSingleton(options);
         Services.AddScoped<ApprovalFormService>();
+        // 附件：表单的附件字段使用；默认本地磁盘存储，可用 AddFileStore<T>() 替换
+        Services.TryAddScoped<IApprovalFileStore, LocalApprovalFileStore>();
+        Services.AddScoped<ApprovalFileService>();
         Services.AddScoped<IApprovalBusinessHandler>(_ => new FormApprovalHandler(options));
+        return this;
+    }
+
+    /// <summary>替换附件存储（默认 <see cref="LocalApprovalFileStore"/>），如对象存储。</summary>
+    public ApprovalBuilder AddFileStore<T>() where T : class, IApprovalFileStore
+    {
+        Services.Replace(ServiceDescriptor.Scoped<IApprovalFileStore, T>());
         return this;
     }
 

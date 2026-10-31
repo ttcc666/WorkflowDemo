@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, shallowRef, watch } from 'vue'
 import { useDirectory } from '../../composables/useDirectory'
-import type { FormField } from './formModel'
+import FileList from './FileList.vue'
+import type { FileValue, FormField } from './formModel'
 
 /** 字段值的只读展示：选项显示名称、人员显示姓名、金额保留两位小数。 */
 const props = defineProps<{ field: FormField; value: unknown }>()
@@ -51,7 +52,8 @@ const text = computed(() => {
 </script>
 
 <template>
-  <span class="field-value" :class="{ 'field-value--multiline': field.type === 'TextArea' }">{{ text }}</span>
+  <FileList v-if="field.type === 'File'" :files="Array.isArray(value) ? (value as FileValue[]) : []" />
+  <span v-else class="field-value" :class="{ 'field-value--multiline': field.type === 'TextArea' }">{{ text }}</span>
 </template>
 
 <style scoped>

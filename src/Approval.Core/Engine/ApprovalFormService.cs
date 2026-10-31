@@ -4,6 +4,7 @@ using Approval.Core.Abstractions;
 using Approval.Core.Conditions;
 using Approval.Core.Definitions;
 using Approval.Core.Domain;
+using Approval.Core.Files;
 using Approval.Core.Forms;
 using Approval.Core.Persistence;
 using Approval.Core.Templates;
@@ -30,6 +31,7 @@ public sealed class ApprovalFormOptions
 public sealed partial class ApprovalFormService(
     ApprovalDbContextAccessor accessor,
     ApprovalEngine engine,
+    ApprovalFileService files,
     IApprovalIdentityProvider identity,
     ApprovalFormOptions formOptions,
     ApprovalOptions options,
@@ -64,13 +66,18 @@ public sealed partial class ApprovalFormService(
         Guid? draftId = null, CancellationToken ct = default)
     {
         var (definition, flow) = await LoadStartableAsync(key, userId, ct);
-        var json = await NormalizeAsync(flow.Form ?? new FormSchema(), formData, ct);
+        var schema = flow.Form ?? new FormSchema();
+        var draft = draftId is { } id ? await FindDraftAsync(userId, id, ct) : null;
+        var (json, attachments) = await files.ResolveAsync(schema, await NormalizeAsync(schema, formData, ct), userId, null, draft?.Id, false, ct);
 
-        // 草稿的删除随发起一起提交（引擎在同一 DbContext 中 SaveChanges）
-        if (draftId is { } id) _db.Set<ApprovalDraft>().Remove(await FindDraftAsync(userId, id, ct));
+        // 草稿删除、附件绑定随发起一起提交（引擎在同一 DbContext 中 SaveChanges）
+        var instanceId = Guid.NewGuid();
+        await files.BindToInstanceAsync(instanceId, attachments, draft?.Id, ct);
+        if (draft is not null) _db.Set<ApprovalDraft>().Remove(draft);
 
         return await engine.StartAsync(new StartApprovalRequest(definition.Key, BusinessType, Guid.NewGuid().ToString("N"), userId)
         {
+            InstanceId = instanceId,
             Title = RenderTitle(flow.Settings!, definition.Name, userId, clock.GetUtcNow().UtcDateTime, json),
             FormData = json,
             Comment = comment
@@ -100,7 +107,9 @@ public sealed partial class ApprovalFormService(
 
         var definition = await _db.Set<ApprovalDefinition>().AsNoTracking().FirstAsync(d => d.Id == instance.DefinitionId, ct);
         var flow = FlowDefinition.Parse(definition.DefinitionJson);
-        var json = await NormalizeAsync(flow.Form ?? new FormSchema(), data, ct);
+        var schema = flow.Form ?? new FormSchema();
+        var (json, attachments) = await files.ResolveAsync(schema, await NormalizeAsync(schema, data, ct), userId, instance.Id, null, false, ct);
+        await files.BindToInstanceAsync(instance.Id, attachments, null, ct);
         instance.Title = RenderTitle(flow.Settings ?? new FlowSettings(), definition.Name, userId, instance.CreatedAt, json);
 
         await engine.ResubmitAsync(taskId, userId, comment, json, ct);
@@ -113,7 +122,7 @@ public sealed partial class ApprovalFormService(
     /// </summary>
     public Task ApproveAsync(Guid taskId, string userId, JsonElement? formData, string? comment = null, CancellationToken ct = default) =>
         formData is { ValueKind: not (JsonValueKind.Null or JsonValueKind.Undefined) } data
-            ? engine.ApproveWithFormAsync(taskId, userId, comment, (instance, task, flow) => EditAsync(instance, task, flow, data, ct), ct)
+            ? engine.ApproveWithFormAsync(taskId, userId, comment, (instance, task, flow) => EditAsync(instance, task, flow, data, userId, ct), ct)
             : engine.ApproveAsync(taskId, userId, comment, ct);
 
     /// <summary>任务所在节点可在同意时修改的字段（仅表单审批的审批任务）；审批详情页据此显示编辑框。</summary>
@@ -129,7 +138,7 @@ public sealed partial class ApprovalFormService(
 
     /// <summary>审批人修改可编辑字段：合并到当前数据 → 整表校验与计算 → 字段差异；没有实际修改时返回 null。</summary>
     private async Task<FormEdit?> EditAsync(ApprovalInstance instance, ApprovalTask task, FlowDefinition flow, JsonElement data,
-        CancellationToken ct)
+        string userId, CancellationToken ct)
     {
         if (!IsFormInstance(instance)) throw new ApprovalException("该申请的数据由业务单据决定，不能在审批中修改表单");
         if (data.ValueKind != JsonValueKind.Object) throw new ApprovalException("表单数据必须是 JSON 对象");
@@ -149,9 +158,12 @@ public sealed partial class ApprovalFormService(
         // 只报告可编辑字段的错误：其他字段是发起时已校验的数据（如人员字段中的用户后来离职），不应阻止审批
         var normalized = await NormalizeAsync(schema, JsonSerializer.SerializeToElement(merged), ct,
             editable.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase));
-        var json = KeepNonFormVariables(instance.FormDataJson, normalized);
+        // 附件：保留本实例已有的，新上传的须为审批人本人上传
+        var (resolved, attachments) = await files.ResolveAsync(schema, normalized, userId, instance.Id, null, false, ct);
+        var json = KeepNonFormVariables(instance.FormDataJson, resolved);
         var changes = FieldVisibility.Diff(schema, instance.FormDataJson, json);
         if (changes.Count == 0) return null;
+        await files.BindToInstanceAsync(instance.Id, attachments, null, ct);
 
         // 标题模板可能引用了被修改的字段
         var definition = await _db.Set<ApprovalDefinition>().AsNoTracking().FirstAsync(d => d.Id == instance.DefinitionId, ct);

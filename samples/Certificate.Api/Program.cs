@@ -43,6 +43,8 @@ var approval = builder.Services
         // HTTP 动作只允许访问白名单主机
         o.Http.AllowedHosts.AddRange(approvalConfig.GetSection("HttpAllowedHosts").Get<string[]>() ?? []);
         approvalConfig.GetSection("Outbox").Bind(o.Outbox);
+        // 附件：本地目录（相对于内容根目录，不在 wwwroot 下）、大小限制
+        approvalConfig.GetSection("Files").Bind(o.Files);
         o.TimeoutScanInterval = approvalConfig.GetValue("TimeoutScanInterval", o.TimeoutScanInterval);
     })
     .AddBusinessHandler<CertificateApprovalHandler>()
@@ -144,6 +146,7 @@ static async Task EnsureSchemaUpToDateAsync(AppDbContext db)
         await db.Set<ApprovalOutboxMessage>().AnyAsync();
         await db.Set<ApprovalCarbonCopy>().AnyAsync();
         await db.Set<ApprovalDraft>().AnyAsync();
+        await db.Set<ApprovalFile>().AnyAsync();
         await db.Set<ApprovalTask>().Select(t => new { t.NextRemindAt, t.Round }).FirstOrDefaultAsync();
         await db.Set<ApprovalLog>().Select(l => l.Details).FirstOrDefaultAsync();
     }

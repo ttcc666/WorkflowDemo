@@ -1,15 +1,43 @@
+using Approval.Core;
 using Approval.Core.Engine;
+using Approval.Core.Files;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
 
 namespace Approval.AspNetCore.Endpoints;
 
-/// <summary>表单审批：发起中心、发起页、草稿、提交（需 <c>AddFormApprovals()</c>）。</summary>
+/// <summary>表单审批：发起中心、发起页、草稿、提交、附件（需 <c>AddFormApprovals()</c>）。</summary>
 internal static class FormEndpoints
 {
-    public static void Map(RouteGroupBuilder group)
+    public const string FileNameHeader = "X-File-Name";
+
+    public static void Map(RouteGroupBuilder group, ApprovalOptions options)
     {
+        // 上传附件：请求体为文件内容，文件名放在请求头 X-File-Name（URL 编码）。
+        // 必须带自定义请求头：浏览器跨站请求带自定义头会触发 CORS 预检，因此无法被跨站伪造上传
+        group.MapPost("/files", async (HttpContext http, ApprovalFileService files, CancellationToken ct) =>
+        {
+            if (http.Request.Headers[FileNameHeader].ToString() is not { Length: > 0 } name)
+                throw new ApprovalException($"缺少文件名（请求头 {FileNameHeader}）");
+            if (http.Request.ContentLength > options.Files.MaxFileSizeBytes)
+                throw new ApprovalException($"文件不能超过 {options.Files.MaxFileSizeMb} MB");
+            var file = await files.UploadAsync(http.GetApprovalUserId(), Uri.UnescapeDataString(name), http.Request.Body, ct);
+            return Results.Ok(new { id = file.Id, name = file.FileName, size = file.Size, contentType = file.ContentType });
+        }).WithMetadata(new RequestSizeLimitAttribute(options.Files.MaxFileSizeBytes + 64 * 1024));
+
+        // 下载附件：上传者，或能查看所属审批且附件不在隐藏字段中；一律作为附件下载，禁止浏览器嗅探类型
+        group.MapGet("/files/{id:guid}", async (Guid id, HttpContext http, ApprovalFileService files, CancellationToken ct) =>
+        {
+            var (file, content) = await files.OpenAsync(id, await http.GetApprovalViewerAsync(ct), ct)
+                                  ?? throw new ApprovalException("附件不存在或无权下载") { Code = ApprovalErrorCode.NotFound };
+            http.Response.Headers.XContentTypeOptions = "nosniff";
+            http.Response.Headers.CacheControl = "private, no-store";
+            http.Response.Headers.ContentSecurityPolicy = "default-src 'none'; sandbox";
+            return Results.File(content, file.ContentType, file.FileName);
+        });
+
         group.MapGet("/forms/startable", (HttpContext http, ApprovalFormService forms, CancellationToken ct) =>
             forms.ListStartableAsync(http.GetApprovalUserId(), ct));
 

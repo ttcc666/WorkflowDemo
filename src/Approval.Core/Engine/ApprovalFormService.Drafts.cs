@@ -32,7 +32,8 @@ public sealed partial class ApprovalFormService
         CancellationToken ct = default)
     {
         var (definition, flow) = await LoadStartableAsync(key, userId, ct);
-        var json = FormDataValidator.NormalizeLenient(flow.Form ?? new FormSchema(), formData);
+        var schema = flow.Form ?? new FormSchema();
+        var json = FormDataValidator.NormalizeLenient(schema, formData);
         if (Encoding.UTF8.GetByteCount(json) > MaxDraftBytes) throw new ApprovalException($"草稿内容超过 {MaxDraftBytes / 1024} KB，无法保存");
         comment = string.IsNullOrWhiteSpace(comment) ? null : comment.Trim();
         if (comment is { Length: > 500 }) comment = comment[..500];
@@ -53,7 +54,10 @@ public sealed partial class ApprovalFormService
             _db.Set<ApprovalDraft>().Add(draft);
         }
 
-        draft.FormDataJson = json;
+        // 附件随草稿绑定：无效的（不存在、他人的、已用于其他申请的）直接丢弃
+        var (resolved, attachments) = await files.ResolveAsync(schema, json, userId, null, draft.Id, true, ct);
+        await files.BindToDraftAsync(draft.Id, attachments, ct);
+        draft.FormDataJson = resolved;
         draft.Comment = comment;
         draft.UpdatedAt = now;
         await _db.SaveChangesAsync(ct);
@@ -87,6 +91,8 @@ public sealed partial class ApprovalFormService
     public async Task DeleteDraftAsync(string userId, Guid id, CancellationToken ct = default)
     {
         _db.Set<ApprovalDraft>().Remove(await FindDraftAsync(userId, id, ct));
+        // 草稿中的附件解除绑定，过期后清理
+        await files.BindToDraftAsync(id, [], ct);
         await _db.SaveChangesAsync(ct);
     }
 

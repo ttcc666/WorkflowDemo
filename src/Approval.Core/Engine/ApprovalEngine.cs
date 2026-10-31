@@ -95,7 +95,7 @@ public sealed partial class ApprovalEngine
 
         var instance = new ApprovalInstance
         {
-            Id = Guid.NewGuid(),
+            Id = request.InstanceId ?? Guid.NewGuid(),
             DefinitionId = definition.Id,
             DefinitionKey = definition.Key,
             DefinitionVersion = definition.Version,

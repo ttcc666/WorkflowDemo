@@ -23,6 +23,8 @@
       { "key": "advance", "label": "预支金额（元）", "type": "Money", "min": 0, "span": 12, "help": "出差前已预支的金额，没有可不填" },
       { "key": "payable", "label": "应付金额（元）", "type": "Formula", "formula": "items_amount_sum - ifnull(advance, 0)", "span": 12,
         "help": "自动计算：明细合计 - 预支金额" },
+      { "key": "invoices", "label": "发票附件", "type": "File", "maxFiles": 10, "accept": ["pdf", "jpg", "jpeg", "png"],
+        "help": "支持 PDF 与图片，单个文件不超过 20 MB" },
       { "key": "tip", "label": "报销须知", "type": "Description", "help": "请在提交后 3 个工作日内将发票原件交至财务部。" },
       { "key": "reason", "label": "报销说明", "type": "TextArea", "maxLength": 500 }
     ]

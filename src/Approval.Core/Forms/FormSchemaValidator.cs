@@ -14,6 +14,9 @@ public static partial class FormSchemaValidator
     [GeneratedRegex(@"^[A-Za-z_][A-Za-z0-9_]*$")]
     private static partial Regex Identifier();
 
+    [GeneratedRegex(@"^[A-Za-z0-9]{1,10}$")]
+    private static partial Regex Extension();
+
     private static readonly HashSet<FormFieldType> OptionTypes = [FormFieldType.Select, FormFieldType.MultiSelect, FormFieldType.Radio];
     private static readonly HashSet<FormFieldType> NumberTypes = [FormFieldType.Number, FormFieldType.Money];
 
@@ -140,6 +143,15 @@ public static partial class FormSchemaValidator
             return;
         }
         if (field.Columns.Count > 0) errors.Add($"{name}不是明细表，不能配置列");
+
+        if (field.Type == FormFieldType.File)
+        {
+            if (field.MaxFiles is < 1 or > 50) errors.Add($"{name}的最多文件数必须在 1 到 50 之间");
+            if (field.Accept.Any(e => !Extension().IsMatch(e))) errors.Add($"{name}的允许类型应为不含点的扩展名，如 pdf、jpg");
+            if (field.DefaultValue is not null) errors.Add($"{name}不支持默认值");
+            return;
+        }
+        if (field.MaxFiles is not null || field.Accept.Count > 0) errors.Add($"{name}不是附件字段，不能设置文件数与类型");
 
         if (field.Type == FormFieldType.Description)
         {

@@ -5,6 +5,7 @@ import FormulaInput from './FormulaInput.vue'
 import OptionsEditor from './OptionsEditor.vue'
 import {
   columnTypes,
+  defaultFileExtensions,
   fieldTypeLabels,
   isValidFieldKey,
   newFieldKey,
@@ -43,7 +44,7 @@ const conditionExample = computed(() => {
   if (optionTypes.has(type) && type !== 'MultiSelect' && options?.[0]) return `${key} == "${options[0].value}"`
   return `${key} == "…"`
 })
-const supportsDefault = computed(() => !['Table', 'Description', 'User', 'Users', 'DateRange', 'Formula'].includes(props.field.type))
+const supportsDefault = computed(() => !['Table', 'Description', 'User', 'Users', 'DateRange', 'Formula', 'File'].includes(props.field.type))
 const isFormula = computed(() => props.field.type === 'Formula')
 const defaultField = computed<FormField>(() => ({ ...props.field, required: false, defaultValue: undefined }))
 
@@ -150,7 +151,21 @@ const columnKeyInvalid = (index: number) => {
         :placeholder="field.type === 'Text' ? '200' : '2000'" @update:model-value="(v) => emit('update', { maxLength: numberOrNull(v) })" />
     </el-form-item>
 
-    <el-form-item v-if="!['Description', 'Table', 'Switch', 'Formula'].includes(field.type)" label="占位提示">
+    <template v-if="field.type === 'File'">
+      <el-form-item label="最多文件数">
+        <el-input-number :model-value="field.maxFiles ?? undefined" :min="1" :max="50" :value-on-clear="null" controls-position="right"
+          placeholder="10" @update:model-value="(v) => emit('update', { maxFiles: numberOrNull(v) })" />
+      </el-form-item>
+      <el-form-item label="允许的类型">
+        <el-select :model-value="field.accept ?? []" multiple filterable allow-create default-first-option
+          placeholder="不限（按系统允许的类型）" style="width: 100%"
+          @update:model-value="(v: string[]) => emit('update', { accept: v.map((e) => e.replace(/^\./, '').toLowerCase()) })">
+          <el-option v-for="e in defaultFileExtensions" :key="e" :label="e" :value="e" />
+        </el-select>
+      </el-form-item>
+    </template>
+
+    <el-form-item v-if="!['Description', 'Table', 'Switch', 'Formula', 'File'].includes(field.type)" label="占位提示">
       <el-input :model-value="field.placeholder ?? ''" maxlength="100" @update:model-value="(v: string) => emit('update', { placeholder: v || null })" />
     </el-form-item>
 

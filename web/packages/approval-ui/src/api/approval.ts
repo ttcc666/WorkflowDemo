@@ -24,7 +24,7 @@ import type {
   TodoItem,
   ValidationResult,
 } from './types'
-import type { FormValues } from '../features/forms/formModel'
+import type { FileValue, FormValues } from '../features/forms/formModel'
 
 const enc = encodeURIComponent
 /** 接口地址，前缀取自配置的 apiBase */
@@ -92,6 +92,19 @@ export const approvalApi = {
     http.post(api(`/tasks/${taskId}/resubmit`), { comment, formData: formData ?? null }),
   transfer: (taskId: string, toUserId: string, comment: string) => http.post(api(`/tasks/${taskId}/transfer`), { toUserId, comment }),
   withdraw: (instanceId: string, comment: string) => http.post(api(`/instances/${instanceId}/withdraw`), { comment }),
+
+  /** 上传附件（未绑定，提交表单后绑定到申请）：文件名放在请求头，请求体为文件内容 */
+  uploadFile: (file: File) =>
+    http.upload<FileValue>(api('/files'), file, { 'X-File-Name': encodeURIComponent(file.name), 'Content-Type': 'application/octet-stream' }),
+  /** 下载附件（带鉴权请求头）并保存 */
+  downloadFile: async (id: string, name: string) => {
+    const url = URL.createObjectURL(await http.blob(api(`/files/${id}`)))
+    const link = document.createElement('a')
+    link.href = url
+    link.download = name
+    link.click()
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
+  },
 
   meta: () => http.get<ApprovalMeta>(api('/meta')),
   definitions: (signal?: AbortSignal) => http.get<ApprovalDefinition[]>(api('/definitions'), signal),

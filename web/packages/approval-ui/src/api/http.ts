@@ -18,16 +18,21 @@ interface RequestOptions {
   body?: unknown
   /** 请求体已是 JSON 字符串（如流程定义），原样发送 */
   rawJson?: string
+  /** 原始请求体（不设置 JSON 类型） */
+  raw?: Blob
+  headers?: Record<string, string>
+  asBlob?: boolean
   signal?: AbortSignal
 }
 
 async function request<T>(method: string, url: string, options: RequestOptions = {}): Promise<T> {
   const config = approvalConfig()
-  const headers: Record<string, string> = { ...config.headers?.() }
-  let body: string | undefined
-  if (options.rawJson !== undefined) body = options.rawJson
+  const headers: Record<string, string> = { ...config.headers?.(), ...options.headers }
+  let body: string | Blob | undefined
+  if (options.raw !== undefined) body = options.raw
+  else if (options.rawJson !== undefined) body = options.rawJson
   else if (options.body !== undefined) body = JSON.stringify(options.body)
-  if (body !== undefined) headers['Content-Type'] = 'application/json'
+  if (typeof body === 'string') headers['Content-Type'] = 'application/json'
 
   const response = await fetch(url, { method, headers, body, signal: options.signal })
 
@@ -48,6 +53,7 @@ async function request<T>(method: string, url: string, options: RequestOptions =
   }
 
   if (response.status === 204) return undefined as T
+  if (options.asBlob) return (await response.blob()) as T
   const text = await response.text()
   return (text ? JSON.parse(text) : undefined) as T
 }
@@ -59,6 +65,10 @@ export const http = {
   postJson: <T = void>(url: string, json: string) => request<T>('POST', url, { rawJson: json }),
   put: <T = void>(url: string, body?: unknown) => request<T>('PUT', url, { body }),
   delete: <T = void>(url: string) => request<T>('DELETE', url),
+  /** 以原始请求体上传（如文件内容），headers 附加在配置的请求头之后 */
+  upload: <T>(url: string, body: Blob, headers: Record<string, string>) => request<T>('POST', url, { raw: body, headers }),
+  /** 下载为 Blob（带配置的请求头，用于需要鉴权的文件下载） */
+  blob: (url: string) => request<Blob>('GET', url, { asBlob: true }),
 }
 
 export function errorMessage(error: unknown): string {

@@ -96,6 +96,21 @@ public static class ApprovalModelBuilderExtensions
             b.HasIndex(x => new { x.UserId, x.UpdatedAt });
         });
 
+        modelBuilder.Entity<ApprovalFile>(b =>
+        {
+            b.ToTable($"{tablePrefix}Files");
+            b.HasKey(x => x.Id);
+            b.Property(x => x.FileName).HasMaxLength(200);
+            b.Property(x => x.ContentType).HasMaxLength(100);
+            b.Property(x => x.Sha256).HasMaxLength(64);
+            b.Property(x => x.StorageKey).HasMaxLength(200);
+            b.Property(x => x.UploadedBy).HasMaxLength(100);
+            b.HasIndex(x => x.InstanceId);
+            b.HasIndex(x => x.DraftId);
+            // 清理未绑定文件：按上传时间
+            b.HasIndex(x => x.UploadedAt);
+        });
+
         modelBuilder.Entity<ApprovalMessage>(b =>
         {
             b.ToTable($"{tablePrefix}Messages");
@@ -127,7 +142,7 @@ public static class ApprovalModelBuilderExtensions
         foreach (var type in new[]
                  {
                      typeof(ApprovalDefinition), typeof(ApprovalInstance), typeof(ApprovalTask), typeof(ApprovalLog),
-                     typeof(ApprovalCarbonCopy), typeof(ApprovalDraft), typeof(ApprovalMessage), typeof(ApprovalOutboxMessage)
+                     typeof(ApprovalCarbonCopy), typeof(ApprovalDraft), typeof(ApprovalFile), typeof(ApprovalMessage), typeof(ApprovalOutboxMessage)
                  })
             modelBuilder.Entity(type).UseUtcDateTimes();
 
