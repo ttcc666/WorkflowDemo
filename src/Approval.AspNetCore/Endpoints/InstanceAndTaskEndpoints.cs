@@ -4,6 +4,7 @@ using Approval.Core.Engine;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Approval.AspNetCore.Endpoints;
 
@@ -40,9 +41,13 @@ internal static class InstanceEndpoints
         group.MapGet("/instances/{id:guid}/definition", async (Guid id, HttpContext http, ApprovalQueryService q, CancellationToken ct) =>
             await q.GetPublicDefinitionAsync(id, await http.GetApprovalViewerAsync(ct), ct) ?? throw NotVisible());
 
-        // 当前用户在该流程中可处理的任务；前端据此显示操作按钮
+        // 当前用户在该流程中可处理的任务；前端据此显示操作按钮。表单审批时同时返回该任务所在节点可在同意时修改的字段
         group.MapGet("/instances/{id:guid}/my-task", async (Guid id, HttpContext http, ApprovalEngine e, CancellationToken ct) =>
-            new { task = await e.FindHandleableTaskAsync(id, http.GetApprovalUserId(), ct) });
+        {
+            var task = await e.FindHandleableTaskAsync(id, http.GetApprovalUserId(), ct);
+            var forms = task is null ? null : http.RequestServices.GetService<ApprovalFormService>();
+            return new { task, editableFields = forms is null ? [] : await forms.GetEditableFieldsAsync(task!, ct) };
+        });
 
         group.MapPost("/instances/{id:guid}/withdraw", async (Guid id, CommentRequest body, HttpContext http, ApprovalEngine e, CancellationToken ct) =>
         {
@@ -62,9 +67,19 @@ internal static class TaskEndpoints
         group.MapGet("/tasks/{id:guid}/can-handle", async (Guid id, HttpContext http, ApprovalEngine e, CancellationToken ct) =>
             new { canHandle = await e.CanHandleAsync(id, http.GetApprovalUserId(), ct) });
 
-        group.MapPost("/tasks/{id:guid}/approve", async (Guid id, CommentRequest body, HttpContext http, ApprovalEngine e, CancellationToken ct) =>
+        // 同意；表单审批可同时修改任务所在节点的可编辑字段（formData 只含这些字段）
+        group.MapPost("/tasks/{id:guid}/approve", async (Guid id, ApproveRequest body, HttpContext http, ApprovalEngine e, CancellationToken ct) =>
         {
-            await e.ApproveAsync(id, http.GetApprovalUserId(), body.Comment, ct);
+            var userId = http.GetApprovalUserId();
+            if (body.FormData is { ValueKind: not (JsonValueKind.Null or JsonValueKind.Undefined) } formData)
+            {
+                if (!formsEnabled) throw new ApprovalException("未启用表单审批，同意时不能修改表单数据");
+                await http.RequestServices.GetRequiredService<ApprovalFormService>().ApproveAsync(id, userId, formData, body.Comment, ct);
+            }
+            else
+            {
+                await e.ApproveAsync(id, userId, body.Comment, ct);
+            }
             return Results.NoContent();
         });
 

@@ -8,13 +8,13 @@ import type {
   ApprovalMessage,
   ApprovalMeta,
   ApprovalStatistics,
-  ApprovalTask,
   DirectoryUser,
   DraftDetail,
   DraftSummary,
   FlowSummary,
   InstanceListItem,
   ListQuery,
+  MyTaskResult,
   OutboxMessage,
   PagedResult,
   ReassignResult,
@@ -22,6 +22,7 @@ import type {
   StartForm,
   StartableFlow,
   TodoItem,
+  ValidationResult,
 } from './types'
 import type { FormValues } from '../features/forms/formModel'
 
@@ -75,10 +76,11 @@ export const approvalApi = {
   instanceDefinition: (id: string, signal?: AbortSignal) => http.get<ApprovalDefinition>(api(`/instances/${id}/definition`), signal),
   byBusiness: (businessType: string, businessKey: string) =>
     http.get<ApprovalInstance[]>(api(`/instances?businessType=${enc(businessType)}&businessKey=${enc(businessKey)}`)),
-  myTask: (instanceId: string, signal?: AbortSignal) =>
-    http.get<{ task: ApprovalTask | null }>(api(`/instances/${instanceId}/my-task`), signal),
+  myTask: (instanceId: string, signal?: AbortSignal) => http.get<MyTaskResult>(api(`/instances/${instanceId}/my-task`), signal),
 
-  approve: (taskId: string, comment: string) => http.post(api(`/tasks/${taskId}/approve`), { comment }),
+  /** formData 仅表单审批可传：只含任务所在节点的可编辑字段，同意时一并修改 */
+  approve: (taskId: string, comment: string, formData?: FormValues) =>
+    http.post(api(`/tasks/${taskId}/approve`), { comment, formData: formData ?? null }),
   /** targetNodeId 为空时驳回并结束流程，否则退回到该节点 */
   reject: (taskId: string, comment: string, targetNodeId?: string) =>
     http.post(api(`/tasks/${taskId}/reject`), { comment, targetNodeId: targetNodeId ?? null }),
@@ -96,7 +98,7 @@ export const approvalApi = {
   latestDefinition: (key: string) => http.get<ApprovalDefinition>(api(`/definitions/${enc(key)}`)),
   definitionById: (id: string, signal?: AbortSignal) => http.get<ApprovalDefinition>(api(`/definitions/by-id/${id}`), signal),
   versions: (key: string, signal?: AbortSignal) => http.get<ApprovalDefinition[]>(api(`/definitions/${enc(key)}/versions`), signal),
-  validate: (flowJson: string) => http.postJson<{ errors: string[] }>(api('/definitions/validate'), flowJson),
+  validate: (flowJson: string) => http.postJson<ValidationResult>(api('/definitions/validate'), flowJson),
   publish: (key: string, name: string, flowJson: string) =>
     http.postJson<{ id: string; key: string; version: number }>(api(`/definitions/${enc(key)}?name=${enc(name)}`), flowJson),
 

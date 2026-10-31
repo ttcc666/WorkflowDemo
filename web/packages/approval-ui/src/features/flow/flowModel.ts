@@ -11,6 +11,8 @@ export type EmptyApproverPolicy = 'Error' | 'AutoApprove'
 export type NotifyEvent = 'Enter' | 'Approved' | 'Rejected' | 'Transferred' | 'Timeout' | 'Completed'
 export type TimeoutAction = 'Remind' | 'AutoApprove' | 'AutoReject'
 export type ActionMode = 'Sync' | 'Async'
+/** 表单字段在节点的权限：可编辑（审批节点，表单审批的审批人同意时可修改）/ 隐藏；未设置为只读 */
+export type FieldAccess = 'Editable' | 'Hidden'
 
 export interface ApproverRule {
   type: string
@@ -68,6 +70,8 @@ export interface FlowNodeDef {
   actions?: ActionStep[]
   notifications?: NotificationRule[]
   timeout?: TimeoutPolicy | null
+  /** 表单字段权限（审批节点：可编辑 / 隐藏；抄送节点：隐藏），字段标识 → 权限 */
+  fieldPermissions?: Record<string, FieldAccess>
   position?: { x: number; y: number } | null
 }
 
@@ -98,6 +102,7 @@ export interface FlowNodeData {
   actions: ActionStep[]
   notifications: NotificationRule[]
   timeout: TimeoutPolicy | null
+  fieldPermissions: Record<string, FieldAccess>
   status?: NodeRunStatus
 }
 
@@ -274,6 +279,7 @@ export function toFlowElements(definition: FlowDefinition): { nodes: FlowNode[];
       actions: clone(def.actions ?? []),
       notifications: clone(def.notifications ?? []),
       timeout: def.timeout ? { ...def.timeout } : null,
+      fieldPermissions: { ...def.fieldPermissions },
     },
   }))
 
@@ -311,6 +317,7 @@ export function toDefinition(nodes: FlowNode[], edges: FlowEdge[], flowNotificat
 
     if (data.type === 'Approval' || data.type === 'Cc') {
       def.approvers = data.approvers.map((r) => ({ type: r.type, value: r.value.trim() }))
+      if (Object.keys(data.fieldPermissions).length) def.fieldPermissions = { ...data.fieldPermissions }
     }
     if (data.type === 'Approval') {
       def.mode = data.mode
@@ -512,7 +519,16 @@ export function createNodeData(type: NodeType): FlowNodeData {
     Join: { name: '合并', approvers: [], actions: [], notifications: [] },
     End: { name: '结束', approvers: [], actions: [], notifications: [] },
   }
-  return { type, mode: 'Any', emptyApproverPolicy: 'Error', allowReturn: true, allowAddSign: true, timeout: null, ...defaults[type] }
+  return {
+    type,
+    mode: 'Any',
+    emptyApproverPolicy: 'Error',
+    allowReturn: true,
+    allowAddSign: true,
+    timeout: null,
+    fieldPermissions: {},
+    ...defaults[type],
+  }
 }
 
 export const defaultTemplates: Record<NotifyEvent, string> = {

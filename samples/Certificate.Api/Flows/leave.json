@@ -4,7 +4,7 @@
   "settings": {
     "startable": true,
     "category": "人事",
-    "description": "员工请假：直属上级审批，超过 3 天再由部门负责人审批，通过后抄送人事与工作交接人",
+    "description": "员工请假：直属上级审批（可调整起止日期与天数），超过 3 天再由部门负责人审批，通过后抄送人事与工作交接人（抄送人看不到请假事由）",
     "titleTemplate": "{申请人}的请假申请（{form.days} 天）"
   },
   "form": {
@@ -23,7 +23,8 @@
   "nodes": {
     "start":   { "name": "提交申请", "type": "Start", "next": "dept", "position": { "x": 250, "y": 0 } },
     "dept":    { "name": "直属上级审批", "type": "Approval", "mode": "Any", "emptyApproverPolicy": "AutoApprove",
-                 "approvers": [{ "type": "Manager", "value": "1" }], "next": "days", "position": { "x": 250, "y": 120 } },
+                 "approvers": [{ "type": "Manager", "value": "1" }], "fieldPermissions": { "period": "Editable", "days": "Editable" },
+                 "next": "days", "position": { "x": 250, "y": 120 } },
     "days":    { "name": "天数判断", "type": "Condition", "position": { "x": 250, "y": 240 }, "branches": [
                    { "priority": 1, "expression": "days > 3", "next": "leader" },
                    { "priority": 99, "expression": null, "next": "cc" } ] },
@@ -31,7 +32,7 @@
                  "approvers": [{ "type": "DeptLeader", "value": "1" }], "next": "cc", "position": { "x": 100, "y": 360 } },
     "cc":      { "name": "抄送人事与交接人", "type": "Cc",
                  "approvers": [{ "type": "Role", "value": "HR" }, { "type": "FormField", "value": "handover" }],
-                 "next": "end", "position": { "x": 250, "y": 480 } },
+                 "fieldPermissions": { "reason": "Hidden" }, "next": "end", "position": { "x": 250, "y": 480 } },
     "end":     { "name": "结束", "type": "End", "position": { "x": 250, "y": 600 } }
   }
 }

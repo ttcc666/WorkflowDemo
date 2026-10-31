@@ -44,16 +44,17 @@ internal static class DefinitionEndpoints
             return await d.ListVersionsAsync(key, ct);
         });
 
-        // 只校验不发布，供设计器实时提示；解析失败也作为校验错误返回
+        // 只校验不发布，供设计器实时提示；解析失败也作为校验错误返回。warnings 为不阻止发布的提示
         group.MapPost("/definitions/validate", async (HttpContext http, ApprovalDefinitionService d, CancellationToken ct) =>
         {
             try
             {
-                return Results.Ok(new { errors = d.Validate(FlowDefinition.Parse(await http.ReadBodyAsStringAsync(ct))) });
+                var flow = FlowDefinition.Parse(await http.ReadBodyAsStringAsync(ct));
+                return Results.Ok(new { errors = d.Validate(flow), warnings = d.Warnings(flow) });
             }
             catch (ApprovalException ex)
             {
-                return Results.Ok(new { errors = new[] { ex.Message } });
+                return Results.Ok(new { errors = new[] { ex.Message }, warnings = Array.Empty<string>() });
             }
         });
 

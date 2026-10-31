@@ -23,6 +23,8 @@ const props = defineProps<{
   /** 表单审批：重新提交时可修改的表单结构与当前数据 */
   resubmitForm?: FormSchema
   formData?: FormValues
+  /** 审批人在申请内容中修改了的字段名称（同意时一并提交） */
+  pendingChanges?: string[]
 }>()
 
 const emit = defineEmits<{
@@ -165,6 +167,10 @@ async function submit() {
     </template>
     <el-alert v-if="action === 'terminate'" type="warning" :closable="false" show-icon class="dialog-help--block"
       title="终止后流程结束、所有待办取消，业务单据按驳回处理，并通知申请人" />
+    <el-alert v-if="action === 'approve' && pendingChanges?.length" type="warning" :closable="false" show-icon class="dialog-help--block"
+      :title="`同意时将一并提交对申请内容的修改：${pendingChanges.join('、')}`" />
+    <el-alert v-else-if="pendingChanges?.length && action !== 'withdraw' && action !== 'terminate'" type="info" :closable="false" show-icon
+      class="dialog-help--block" :title="`对申请内容的修改（${pendingChanges.join('、')}）只在同意时提交，本操作不会保存`" />
     <el-form label-position="top">
       <template v-if="action === 'reject' && allowReturn">
         <el-form-item label="处理方式">

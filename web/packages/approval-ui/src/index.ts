@@ -37,14 +37,17 @@ export { default as FlowViewer } from './features/flow/FlowViewer.vue'
 export { default as DynamicForm } from './features/forms/DynamicForm.vue'
 export { default as FormDesigner } from './features/forms/FormDesigner.vue'
 export {
+  changedFields,
   fieldRules,
   fieldTypes,
   fieldVariables,
   formOfDefinition,
   initialValues,
   parseFormValues,
+  pickValues,
   sumKey,
   validateValue,
+  withoutFields,
 } from './features/forms/formModel'
 
 export * from './utils/labels'

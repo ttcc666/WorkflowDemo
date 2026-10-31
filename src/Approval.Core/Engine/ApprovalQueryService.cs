@@ -1,6 +1,7 @@
 using Approval.Core.Abstractions;
 using Approval.Core.Definitions;
 using Approval.Core.Domain;
+using Approval.Core.Forms;
 using Approval.Core.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -38,7 +39,10 @@ public sealed record InstanceListItem(
     DateTime CreatedAt,
     DateTime? CompletedAt);
 
-/// <summary>审批详情（按查看者过滤，接口返回）：实例、任务、轨迹与查看者的访问级别，不含运行时状态、并发令牌等内部字段。</summary>
+/// <summary>
+/// 审批详情（按查看者过滤，接口返回）：实例、任务、轨迹与查看者的访问级别，不含运行时状态、并发令牌等内部字段。
+/// 参与人看不到的字段（<see cref="HiddenFields"/>，见 <see cref="FlowNode.FieldPermissions"/>）已从表单数据与修改轨迹中去掉。
+/// </summary>
 public sealed record InstanceDetail(
     Guid Id,
     Guid DefinitionId,
@@ -56,7 +60,8 @@ public sealed record InstanceDetail(
     DateTime? CompletedAt,
     IReadOnlyList<ApprovalTask> Tasks,
     IReadOnlyList<ApprovalLog> Logs,
-    ApprovalAccessLevel Access);
+    ApprovalAccessLevel Access,
+    IReadOnlyList<string> HiddenFields);
 
 /// <summary>待办筛选：关键字（标题 / 申请人）、流程标识、只看已超时。</summary>
 public sealed record TodoQuery(string? Keyword = null, string? DefinitionKey = null, bool OverdueOnly = false);
@@ -79,6 +84,7 @@ public sealed class ApprovalQueryService(
     TimeProvider clock)
 {
     private readonly DbContext _db = accessor.Context;
+    private readonly Dictionary<Guid, FlowDefinition> _flows = [];
 
     /// <summary>我的待办：分配给我本人的任务 + 分配给我所在角色的任务，按到达时间排序。</summary>
     public async Task<PagedResult<TodoItem>> GetTodoAsync(string userId, TodoQuery? query = null, PageRequest? page = null,
@@ -195,9 +201,23 @@ public sealed class ApprovalQueryService(
         var access = await accessPolicy.GetAccessAsync(viewer, instance, ct);
         if (!access.CanView) return null;
 
+        // 参与人：在其参与的节点都设为隐藏的字段不返回（表单数据、修改轨迹中的字段差异）
+        var hidden = access.Level == ApprovalAccessLevel.Participant && access.VisibleViaNodes.Count > 0
+            ? FieldVisibility.HiddenFields(await FlowOfAsync(instance.DefinitionId, ct), access.VisibleViaNodes)
+            : FieldVisibility.None;
+
         return new InstanceDetail(instance.Id, instance.DefinitionId, instance.DefinitionKey, instance.DefinitionVersion, instance.BusinessType,
             instance.BusinessKey, instance.Title, instance.InitiatorId, instance.Status, instance.CurrentNodeId, instance.Round,
-            instance.FormDataJson, instance.CreatedAt, instance.CompletedAt, instance.Tasks, instance.Logs, access.Level);
+            FieldVisibility.RemoveFields(instance.FormDataJson, hidden), instance.CreatedAt, instance.CompletedAt, instance.Tasks,
+            FieldVisibility.FilterLogs(instance.Logs, hidden), access.Level, hidden.Order(StringComparer.OrdinalIgnoreCase).ToList());
+    }
+
+    /// <summary>实例绑定版本的流程定义（同一请求内按定义 ID 缓存，按业务查询多条记录时只解析一次）。</summary>
+    private async Task<FlowDefinition> FlowOfAsync(Guid definitionId, CancellationToken ct)
+    {
+        if (_flows.TryGetValue(definitionId, out var flow)) return flow;
+        var definition = await _db.Set<ApprovalDefinition>().AsNoTracking().FirstAsync(d => d.Id == definitionId, ct);
+        return _flows[definitionId] = FlowDefinition.Parse(definition.DefinitionJson);
     }
 
     /// <summary>用户可处理的待办任务：分配给本人或所在角色、流程进行中；不允许自审时排除自己发起的（重新提交任务除外）。</summary>

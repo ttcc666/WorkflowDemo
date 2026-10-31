@@ -41,6 +41,9 @@ const text = computed(() => {
     case 'User':
     case 'Users':
       return userNames.value.join('、') || userIds.value.join('、')
+    // 明细表只显示行数（详情页用表格展示，这里用于修改记录等摘要）
+    case 'Table':
+      return Array.isArray(v) ? `共 ${v.length} 行` : String(v)
     default:
       return String(v)
   }

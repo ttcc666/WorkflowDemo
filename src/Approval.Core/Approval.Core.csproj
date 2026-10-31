@@ -19,4 +19,8 @@
     <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.14" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="Approval.Core.Tests" />
+  </ItemGroup>
+
 </Project>

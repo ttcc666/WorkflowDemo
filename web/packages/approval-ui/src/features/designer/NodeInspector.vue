@@ -10,8 +10,10 @@ import {
 } from '../flow/flowModel'
 import ActionStepsEditor from './ActionStepsEditor.vue'
 import ApproverRulesEditor from './ApproverRulesEditor.vue'
+import FieldPermissionsEditor from './FieldPermissionsEditor.vue'
 import NotificationRulesEditor from './NotificationRulesEditor.vue'
 import TimeoutEditor from './TimeoutEditor.vue'
+import { useDesignerForm } from './designerContext'
 
 /** 节点属性面板：只通过 update 事件提交修改，不直接改 props。 */
 const props = defineProps<{
@@ -28,6 +30,10 @@ const emit = defineEmits<{
 
 const hasApprovers = computed(() => props.data.type === 'Approval' || props.data.type === 'Cc')
 const notifyEvents = computed(() => notifyEventsFor(props.data.type))
+// 字段权限：审批节点（可编辑 / 隐藏）与抄送节点（隐藏），流程有表单时才显示
+const form = useDesignerForm()
+const permissionCount = computed(() => Object.keys(props.data.fieldPermissions).length)
+const showPermissions = computed(() => hasApprovers.value && (form.value.fields.length > 0 || permissionCount.value > 0))
 // 逐级审批等有序审批人只能用于依次审批（发布时也会校验）
 const orderedRule = computed(() =>
   props.data.type === 'Approval' && props.data.mode !== 'Sequential'
@@ -115,6 +121,11 @@ const modeHelp: Record<ApproveMode, string> = {
 
       <el-tab-pane v-if="data.type === 'Approval'" :label="data.timeout ? '时限 ⏱' : '时限'">
         <TimeoutEditor :model-value="data.timeout" @update:model-value="(v) => emit('update', { timeout: v })" />
+      </el-tab-pane>
+
+      <el-tab-pane v-if="showPermissions" :label="`字段权限${permissionCount ? ` (${permissionCount})` : ''}`">
+        <FieldPermissionsEditor :model-value="data.fieldPermissions" :fields="form.fields" :node-type="data.type as 'Approval' | 'Cc'"
+          @update:model-value="(v) => emit('update', { fieldPermissions: v })" />
       </el-tab-pane>
     </el-tabs>
 

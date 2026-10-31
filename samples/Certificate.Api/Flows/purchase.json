@@ -4,7 +4,7 @@
   "settings": {
     "startable": true,
     "category": "行政",
-    "description": "物品采购：逐级审批到第 2 级上级，合计超过 10000 元再由财务审核",
+    "description": "物品采购：逐级审批到第 2 级上级（上级可调整明细与到货日期），合计超过 10000 元再由财务审核",
     "titleTemplate": "{申请人}的采购申请（合计 {form.items_amount_sum} 元）"
   },
   "form": {
@@ -26,7 +26,8 @@
   "nodes": {
     "start":   { "name": "提交申请", "type": "Start", "next": "chain", "position": { "x": 250, "y": 0 } },
     "chain":   { "name": "逐级审批", "type": "Approval", "mode": "Sequential", "emptyApproverPolicy": "AutoApprove",
-                 "approvers": [{ "type": "ManagerChain", "value": "2" }], "next": "amount", "position": { "x": 250, "y": 120 } },
+                 "approvers": [{ "type": "ManagerChain", "value": "2" }], "fieldPermissions": { "expectedDate": "Editable", "items": "Editable" },
+                 "next": "amount", "position": { "x": 250, "y": 120 } },
     "amount":  { "name": "金额判断", "type": "Condition", "position": { "x": 250, "y": 240 }, "branches": [
                    { "priority": 1, "expression": "items_amount_sum > 10000", "next": "finance" },
                    { "priority": 99, "expression": null, "next": "end" } ] },

@@ -140,8 +140,26 @@ public sealed class FlowNode
     /// <summary>处理时限（仅 Approval 节点），为空表示不限时。</summary>
     public TimeoutPolicy? Timeout { get; set; }
 
+    /// <summary>
+    /// 表单字段在本节点的权限：字段标识 → 可编辑 / 隐藏，未列出的字段只读。审批节点可设可编辑与隐藏，抄送节点只能设隐藏。
+    /// 可编辑：表单审批的审批人同意时可修改（合并后整表重新校验与计算）；
+    /// 隐藏：只以设置了隐藏的节点的处理人 / 抄送人身份查看的人看不到该字段（服务端过滤表单数据与修改轨迹）。
+    /// </summary>
+    public Dictionary<string, FieldAccess> FieldPermissions { get; set; } = [];
+
     /// <summary>设计器中的画布坐标，仅用于界面展示，引擎不使用。</summary>
     public NodePosition? Position { get; set; }
+
+    /// <summary>指定权限的字段（字段标识不区分大小写）。</summary>
+    public IReadOnlySet<string> FieldsWith(FieldAccess access) =>
+        FieldPermissions.Where(p => p.Value == access).Select(p => p.Key).ToHashSet(StringComparer.OrdinalIgnoreCase);
+}
+
+/// <summary>表单字段在节点的权限；未设置为只读。</summary>
+public enum FieldAccess
+{
+    Editable,
+    Hidden
 }
 
 public sealed record NodePosition(double X, double Y);

@@ -74,6 +74,9 @@ public sealed class ApprovalDefinitionService(
             Actions = _actions
         });
 
+    /// <summary>不阻止发布的提示，如节点隐藏的字段可能通过标题、通知模板或计算字段间接暴露。</summary>
+    public IReadOnlyList<string> Warnings(FlowDefinition flow) => FlowDefinitionValidator.Warnings(flow);
+
     public async Task<ApprovalDefinition> PublishAsync(string key, string name, FlowDefinition flow, CancellationToken ct = default)
     {
         var errors = Validate(flow);

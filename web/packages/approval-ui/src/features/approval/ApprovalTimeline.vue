@@ -1,11 +1,15 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import type { ApprovalLog, ApprovalTask } from '../../api/types'
+import { computed, shallowReactive } from 'vue'
+import type { ApprovalLog, ApprovalTask, FormFieldChange } from '../../api/types'
+import { sumKey, type FormField, type FormSchema } from '../forms/formModel'
 import { actionLabels, assigneeText, dueText, formatDateTime, taskKindLabels, taskStatusLabels } from '../../utils/labels'
+import FieldChangeValue from './FieldChangeValue.vue'
 
 const props = defineProps<{
   logs: ApprovalLog[]
   tasks: ApprovalTask[]
+  /** 表单结构：修改表单的轨迹按字段类型显示修改前后的值 */
+  form?: FormSchema
   /** 管理员：未完成的任务旁显示“改派” */
   canReassign?: boolean
 }>()
@@ -33,6 +37,34 @@ const actionTypes: Partial<Record<ApprovalLog['action'], TimelineType>> = {
 }
 
 const openTasks = computed(() => props.tasks.filter((t) => t.status === 'Pending' || t.status === 'Waiting' || t.status === 'Suspended'))
+
+/** 修改表单的字段差异（已按当前用户去掉隐藏字段） */
+function changesOf(log: ApprovalLog): FormFieldChange[] {
+  if (log.action !== 'FormEdit' || !log.details) return []
+  try {
+    const parsed: unknown = JSON.parse(log.details)
+    return Array.isArray(parsed) ? (parsed as FormFieldChange[]) : []
+  } catch {
+    return []
+  }
+}
+
+/** 字段定义：明细合计字段按合计列的类型显示（如金额保留两位小数），其他不在表单中的字段按值的类型显示 */
+function fieldOf(change: FormFieldChange): FormField {
+  const key = change.field.toLowerCase()
+  const fields = props.form?.fields ?? []
+  const field = fields.find((f) => f.key.toLowerCase() === key)
+  if (field) return field
+  for (const table of fields.filter((f) => f.type === 'Table')) {
+    const column = table.columns?.find((c) => sumKey(table.key, c.key).toLowerCase() === key)
+    if (column) return { ...column, key: change.field, label: change.label }
+  }
+  const numeric = typeof change.before === 'number' || typeof change.after === 'number'
+  return { key: change.field, label: change.label, type: numeric ? 'Number' : 'Text' }
+}
+
+const expanded = shallowReactive(new Set<string>())
+const toggle = (id: string) => (expanded.has(id) ? expanded.delete(id) : expanded.add(id))
 </script>
 
 <template>
@@ -49,7 +81,24 @@ const openTasks = computed(() => props.tasks.filter((t) => t.status === 'Pending
         <span v-if="log.nodeName && log.action !== 'Submit'" class="timeline-node">· {{ log.nodeName }}</span>
         <span class="timeline-operator">{{ log.operatorId === 'system' ? '系统' : log.operatorId }}</span>
       </div>
-      <div v-if="log.comment" class="timeline-comment">{{ log.comment }}</div>
+      <div v-if="log.comment" class="timeline-comment">
+        {{ log.comment }}
+        <el-button v-if="changesOf(log).length" link type="primary" size="small" class="timeline-toggle" @click="toggle(log.id)">
+          {{ expanded.has(log.id) ? '收起' : '查看修改' }}
+        </el-button>
+        <table v-if="expanded.has(log.id)" class="timeline-changes">
+          <thead>
+            <tr><th>字段</th><th>修改前</th><th>修改后</th></tr>
+          </thead>
+          <tbody>
+            <tr v-for="change in changesOf(log)" :key="change.field">
+              <td>{{ change.label }}</td>
+              <td><FieldChangeValue :field="fieldOf(change)" :value="change.before" /></td>
+              <td><FieldChangeValue :field="fieldOf(change)" :value="change.after" /></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </el-timeline-item>
 
     <el-timeline-item v-for="task in openTasks" :key="task.id" type="warning" hollow placement="top" timestamp="待处理">
@@ -93,5 +142,31 @@ const openTasks = computed(() => props.tasks.filter((t) => t.status === 'Pending
   border-radius: 4px;
   background: #f5f7fa;
   color: #606266;
+}
+
+.timeline-toggle {
+  margin-left: 6px;
+  vertical-align: baseline;
+}
+
+.timeline-changes {
+  width: 100%;
+  margin-top: 6px;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.timeline-changes th,
+.timeline-changes td {
+  padding: 4px 6px;
+  border: 1px solid #ebeef5;
+  text-align: left;
+  vertical-align: top;
+}
+
+.timeline-changes th {
+  background: #fafafa;
+  color: #909399;
+  font-weight: normal;
 }
 </style>

@@ -44,6 +44,8 @@ export function useFlowDesigner() {
   const selectedNodeId = shallowRef<string | null>(null)
   const selectedEdgeId = shallowRef<string | null>(null)
   const errors = shallowRef<string[] | null>(null)
+  /** 校验提示（不阻止发布），随 errors 一起更新 */
+  const warnings = shallowRef<string[]>([])
 
   const history = createHistory()
   let savedSnapshot: string | null = null
@@ -267,8 +269,9 @@ export function useFlowDesigner() {
       ...nodes.value.filter((n) => !n.data?.name.trim()).map((n) => `节点 '${n.id}' 未填写名称`),
       ...checkSchema(form.value),
     ]
-    const { errors: server } = await approvalApi.validate(JSON.stringify(definition))
+    const { errors: server, warnings: serverWarnings } = await approvalApi.validate(JSON.stringify(definition))
     errors.value = [...local, ...server]
+    warnings.value = serverWarnings ?? []
     return { definition, ok: errors.value.length === 0 }
   }
 
@@ -282,6 +285,7 @@ export function useFlowDesigner() {
     selectedEdge,
     dirty,
     errors,
+    warnings,
     canUndo,
     canRedo,
     nodeName,

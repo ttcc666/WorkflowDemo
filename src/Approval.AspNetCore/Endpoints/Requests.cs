@@ -6,6 +6,9 @@ namespace Approval.AspNetCore.Endpoints;
 
 public sealed record CommentRequest(string? Comment);
 
+/// <summary>同意；<see cref="FormData"/> 仅表单审批可传，只能包含任务所在节点的可编辑字段。</summary>
+public sealed record ApproveRequest(string? Comment, JsonElement? FormData);
+
 public sealed record TransferRequest(string ToUserId, string? Comment);
 
 /// <summary>指定 <see cref="TargetNodeId"/> 时退回到该节点（流程继续），否则驳回并结束流程。</summary>

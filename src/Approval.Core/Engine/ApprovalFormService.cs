@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Approval.Core.Abstractions;
 using Approval.Core.Conditions;
 using Approval.Core.Definitions;
@@ -92,7 +93,7 @@ public sealed partial class ApprovalFormService(
                    ?? throw new ApprovalException("任务不存在") { Code = ApprovalErrorCode.NotFound };
         // 跟踪加载：引擎随后在同一 DbContext 中取到同一实体，标题修改随重新提交一起保存
         var instance = await _db.Set<ApprovalInstance>().FirstAsync(i => i.Id == task.InstanceId, ct);
-        if (!string.Equals(instance.BusinessType, BusinessType, StringComparison.OrdinalIgnoreCase))
+        if (!IsFormInstance(instance))
             throw new ApprovalException("该申请的数据由业务单据决定，不能在审批中修改表单");
         if (task.Kind != ApprovalTaskKind.Resubmit || instance.InitiatorId != userId)
             throw new ApprovalException("只有被退回的发起人可以修改表单后重新提交") { Code = ApprovalErrorCode.Forbidden };
@@ -105,16 +106,87 @@ public sealed partial class ApprovalFormService(
         await engine.ResubmitAsync(taskId, userId, comment, json, ct);
     }
 
-    private async Task<string> NormalizeAsync(FormSchema schema, JsonElement data, CancellationToken ct)
+    /// <summary>
+    /// 同意；表单审批可同时修改任务所在节点的可编辑字段（<see cref="FieldAccess.Editable"/>）：formData 只能包含这些字段，
+    /// 与当前数据合并后整表重新校验与计算（条件分支按新值流转、标题随之更新），轨迹记录修改了哪些字段（修改前后的值存入 Details）。
+    /// 其他业务的数据由业务单据决定，传入表单数据会被拒绝。
+    /// </summary>
+    public Task ApproveAsync(Guid taskId, string userId, JsonElement? formData, string? comment = null, CancellationToken ct = default) =>
+        formData is { ValueKind: not (JsonValueKind.Null or JsonValueKind.Undefined) } data
+            ? engine.ApproveWithFormAsync(taskId, userId, comment, (instance, task, flow) => EditAsync(instance, task, flow, data, ct), ct)
+            : engine.ApproveAsync(taskId, userId, comment, ct);
+
+    /// <summary>任务所在节点可在同意时修改的字段（仅表单审批的审批任务）；审批详情页据此显示编辑框。</summary>
+    public async Task<IReadOnlyList<string>> GetEditableFieldsAsync(ApprovalTask task, CancellationToken ct = default)
+    {
+        if (task.Kind == ApprovalTaskKind.Resubmit) return [];
+        var instance = await _db.Set<ApprovalInstance>().AsNoTracking().FirstOrDefaultAsync(i => i.Id == task.InstanceId, ct);
+        if (instance is null || !IsFormInstance(instance)) return [];
+
+        var definition = await _db.Set<ApprovalDefinition>().AsNoTracking().FirstAsync(d => d.Id == instance.DefinitionId, ct);
+        return FieldVisibility.EditableFields(FlowDefinition.Parse(definition.DefinitionJson), task.NodeId).Select(f => f.Key).ToList();
+    }
+
+    /// <summary>审批人修改可编辑字段：合并到当前数据 → 整表校验与计算 → 字段差异；没有实际修改时返回 null。</summary>
+    private async Task<FormEdit?> EditAsync(ApprovalInstance instance, ApprovalTask task, FlowDefinition flow, JsonElement data,
+        CancellationToken ct)
+    {
+        if (!IsFormInstance(instance)) throw new ApprovalException("该申请的数据由业务单据决定，不能在审批中修改表单");
+        if (data.ValueKind != JsonValueKind.Object) throw new ApprovalException("表单数据必须是 JSON 对象");
+
+        var schema = flow.Form ?? new FormSchema();
+        var editable = FieldVisibility.EditableFields(flow, task.NodeId).ToDictionary(f => f.Key, StringComparer.OrdinalIgnoreCase);
+        var merged = JsonNode.Parse(instance.FormDataJson) as JsonObject ?? new JsonObject();
+        var denied = new List<string>();
+        foreach (var property in data.EnumerateObject())
+        {
+            if (editable.TryGetValue(property.Name, out var field)) merged[field.Key] = JsonNode.Parse(property.Value.GetRawText());
+            else denied.Add(schema.Fields.FirstOrDefault(f => string.Equals(f.Key, property.Name, StringComparison.OrdinalIgnoreCase))?.Label
+                            ?? property.Name);
+        }
+        if (denied.Count > 0) throw new ApprovalException($"当前节点不能修改：{string.Join("、", denied)}");
+
+        // 只报告可编辑字段的错误：其他字段是发起时已校验的数据（如人员字段中的用户后来离职），不应阻止审批
+        var normalized = await NormalizeAsync(schema, JsonSerializer.SerializeToElement(merged), ct,
+            editable.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase));
+        var json = KeepNonFormVariables(instance.FormDataJson, normalized);
+        var changes = FieldVisibility.Diff(schema, instance.FormDataJson, json);
+        if (changes.Count == 0) return null;
+
+        // 标题模板可能引用了被修改的字段
+        var definition = await _db.Set<ApprovalDefinition>().AsNoTracking().FirstAsync(d => d.Id == instance.DefinitionId, ct);
+        instance.Title = RenderTitle(flow.Settings ?? new FlowSettings(), definition.Name, instance.InitiatorId, instance.CreatedAt, json);
+        return new FormEdit(json, changes);
+    }
+
+    /// <summary>表单之外的变量（如同步动作的输出变量）原样保留：流程继续流转，后续条件分支可能用到。</summary>
+    private static string KeepNonFormVariables(string original, string normalized)
+    {
+        if (JsonNode.Parse(original) is not JsonObject before) return normalized;
+        var after = JsonNode.Parse(normalized, new JsonNodeOptions { PropertyNameCaseInsensitive = true })!.AsObject();
+        var extra = before.Where(p => !after.ContainsKey(p.Key)).ToList();
+        if (extra.Count == 0) return normalized;
+
+        foreach (var (key, value) in extra) after[key] = value?.DeepClone();
+        return after.ToJsonString(FormData.JsonOptions);
+    }
+
+    private bool IsFormInstance(ApprovalInstance instance) =>
+        string.Equals(instance.BusinessType, BusinessType, StringComparison.OrdinalIgnoreCase);
+
+    /// <param name="reportedFields">只报告这些字段（含其明细单元格）的错误；为空时报告全部。</param>
+    private async Task<string> NormalizeAsync(FormSchema schema, JsonElement data, CancellationToken ct,
+        IReadOnlySet<string>? reportedFields = null)
     {
         var result = FormDataValidator.Validate(schema, data);
-        var errors = result.Errors.ToDictionary(e => e.Key, e => e.Value);
+        bool Reported(string path) => reportedFields is null || reportedFields.Contains(path.Split('.')[0]);
+        var errors = result.Errors.Where(e => Reported(e.Key)).ToDictionary(e => e.Key, e => e.Value);
 
         // 人员字段可能被用作审批人：注册了用户目录时校验用户存在
-        if (directory is not null && result.IsValid)
+        if (directory is not null && errors.Count == 0)
         {
             var values = FormData.Parse(result.Json);
-            foreach (var field in schema.Fields.Where(f => f.Type is FormFieldType.User or FormFieldType.Users))
+            foreach (var field in schema.Fields.Where(f => f.Type is FormFieldType.User or FormFieldType.Users && Reported(f.Key)))
             {
                 var ids = values.GetValueOrDefault(field.Key) switch
                 {

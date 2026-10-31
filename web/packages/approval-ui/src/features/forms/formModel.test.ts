@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  changedFields,
   checkSchema,
   cleanField,
   cleanSettings,
@@ -8,9 +9,11 @@ import {
   newField,
   newFieldKey,
   newRow,
+  pickValues,
   tableSum,
   userFields,
   validateValue,
+  withoutFields,
   type FormField,
   type FormSchema,
 } from './formModel'
@@ -108,5 +111,29 @@ describe('保存前整理与本地检查', () => {
     expect(errors.join('\n')).toMatch(/「甲」的标识只能包含/)
     expect(errors.join('\n')).toMatch(/标识 B 重复/)
     expect(errors.join('\n')).toMatch(/「丙」没有选项/)
+  })
+})
+
+describe('节点字段权限：隐藏字段与可编辑字段', () => {
+  const schema: FormSchema = {
+    fields: [
+      { key: 'amount', label: '金额', type: 'Money' },
+      { key: 'items', label: '明细', type: 'Table', columns: [{ key: 'name', label: '项目', type: 'Text' }] },
+      { key: 'salary', label: '薪资', type: 'Money' },
+    ],
+  }
+
+  it('去掉隐藏字段（不区分大小写），没有隐藏字段时返回原结构', () => {
+    expect(withoutFields(schema, ['SALARY']).fields.map((f) => f.key)).toEqual(['amount', 'items'])
+    expect(withoutFields(schema, [])).toBe(schema)
+  })
+
+  it('只提交可编辑字段，按 JSON 比较找出修改了的字段', () => {
+    const before = { amount: 100, items: [{ name: 'a' }], salary: 1 }
+    const after = { amount: 80, items: [{ name: 'a' }], salary: 2 }
+
+    expect(pickValues(after, ['Amount', 'items'])).toEqual({ amount: 80, items: [{ name: 'a' }] })
+    expect(changedFields(schema, before, after, ['amount', 'items']).map((f) => f.label)).toEqual(['金额'])
+    expect(changedFields(schema, before, { ...before, items: [{ name: 'b' }] }, ['amount', 'items']).map((f) => f.key)).toEqual(['items'])
   })
 })

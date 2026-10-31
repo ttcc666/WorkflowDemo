@@ -371,6 +371,28 @@ export function parseFormValues(json: string | undefined): FormValues {
   }
 }
 
+/** 字段标识不区分大小写（与服务端一致） */
+const keySet = (keys: string[]) => new Set(keys.map((k) => k.toLowerCase()))
+
+/** 去掉指定字段（如当前用户看不到的隐藏字段）后的表单结构 */
+export function withoutFields(schema: FormSchema, keys: string[]): FormSchema {
+  const hidden = keySet(keys)
+  return hidden.size ? { ...schema, fields: schema.fields.filter((f) => !hidden.has(f.key.toLowerCase())) } : schema
+}
+
+/** 取出指定字段的值（同意时只提交可编辑字段） */
+export function pickValues(values: FormValues, keys: string[]): FormValues {
+  const wanted = keySet(keys)
+  return Object.fromEntries(Object.entries(values).filter(([key]) => wanted.has(key.toLowerCase())))
+}
+
+/** 指定字段中值有变化的字段（按 JSON 比较，按表单顺序） */
+export function changedFields(schema: FormSchema | undefined, before: FormValues, after: FormValues, keys: string[]): FormField[] {
+  const wanted = keySet(keys)
+  const json = (value: unknown) => JSON.stringify(value ?? null)
+  return (schema?.fields ?? []).filter((f) => wanted.has(f.key.toLowerCase()) && json(before[f.key]) !== json(after[f.key]))
+}
+
 // ───── 计算字段（与服务端 FormDataValidator 一致：明细列公式逐行 → 合计 → 顶层计算字段） ─────
 
 interface FormulaStep {

@@ -58,7 +58,17 @@ export interface ApprovalLog {
   action: ApprovalAction
   operatorId: string
   comment: string | null
+  /** 结构化附加信息（JSON）：修改表单（FormEdit）时为 {@link FormFieldChange} 数组，已按查看者去掉隐藏字段 */
+  details: string | null
   createdAt: string
+}
+
+/** 审批中修改表单的一个字段：修改前后的值 */
+export interface FormFieldChange {
+  field: string
+  label: string
+  before: unknown
+  after: unknown
 }
 
 export interface ApprovalInstance {
@@ -81,9 +91,23 @@ export interface ApprovalInstance {
   logs: ApprovalLog[]
   /** 当前用户的查看级别：Full（发起人、管理员）/ Participant（处理人、候选人、抄送人） */
   access: ApprovalAccessLevel
+  /** 当前用户看不到的字段（节点字段权限设为隐藏）：已从 formDataJson 与修改轨迹中去掉，展示时应隐藏这些字段 */
+  hiddenFields: string[]
 }
 
 export type ApprovalAccessLevel = 'Participant' | 'Full'
+
+/** 当前用户在流程中可处理的任务；editableFields 为该任务所在节点可在同意时修改的表单字段（仅表单审批） */
+export interface MyTaskResult {
+  task: ApprovalTask | null
+  editableFields: string[]
+}
+
+/** 流程定义校验结果：errors 阻止发布，warnings 为提示（如隐藏字段可能通过标题间接暴露） */
+export interface ValidationResult {
+  errors: string[]
+  warnings: string[]
+}
 
 export interface TodoItem {
   taskId: string

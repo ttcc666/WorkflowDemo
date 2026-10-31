@@ -1,4 +1,6 @@
 using System.Text.Json;
+using Approval.Core.Engine;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Approval.AspNetCore.Tests;
 
@@ -146,5 +148,85 @@ public sealed class FormEndpointTests
         var detail = await host.GetJsonAsync($"/api/approval/instances/{instanceId}", "alice");
         Assert.Equal("alice请假 3 天", detail.GetProperty("title").GetString());
         Assert.Equal(3, JsonDocument.Parse(detail.GetProperty("formDataJson").GetString()!).RootElement.GetProperty("days").GetInt32());
+    }
+
+    /// <summary>审核节点：天数可修改，交接人隐藏。</summary>
+    private static readonly string PermissionFlow = LeaveFlow.Replace(
+        "\"value\": \"Reviewer\" }], \"next\": \"end\"",
+        "\"value\": \"Reviewer\" }], \"fieldPermissions\": { \"days\": \"Editable\", \"handover\": \"Hidden\" }, \"next\": \"end\"");
+
+    [Fact]
+    public async Task 同意时修改可编辑字段_我的任务返回可编辑字段()
+    {
+        await using var host = await StartAsync();
+        await host.PublishAsync("leave", PermissionFlow);
+        var instanceId = (await host.PostJsonAsync("/api/approval/forms/leave/start", "alice", new { formData = new { days = 5, handover = "hana" } }))
+            .GetProperty("instanceId").GetGuid();
+
+        var myTask = await host.GetJsonAsync($"/api/approval/instances/{instanceId}/my-task", "bob");
+        var taskId = myTask.GetProperty("task").GetProperty("id").GetGuid();
+        Assert.Equal(["days"], myTask.GetProperty("editableFields").EnumerateArray().Select(f => f.GetString()));
+        Assert.Empty((await host.GetJsonAsync($"/api/approval/instances/{instanceId}/my-task", "alice")).GetProperty("editableFields").EnumerateArray());
+
+        var denied = await (await host.SendAsync(HttpMethod.Post, $"/api/approval/tasks/{taskId}/approve", "bob",
+            new { formData = new { handover = "bob" } })).ProblemAsync(400);
+        var invalid = await (await host.SendAsync(HttpMethod.Post, $"/api/approval/tasks/{taskId}/approve", "bob",
+            new { formData = new { days = 0 } })).ProblemAsync(400);
+        Assert.Equal("当前节点不能修改：交接人", denied.GetProperty("title").GetString());
+        Assert.Equal("天数不能小于 0.5", invalid.GetProperty("errors").GetProperty("days")[0].GetString());
+
+        await host.PostJsonAsync($"/api/approval/tasks/{taskId}/approve", "bob", new { comment = "改为 3 天", formData = new { days = 3 } });
+
+        var detail = await host.GetJsonAsync($"/api/approval/instances/{instanceId}", "alice");
+        var edit = detail.GetProperty("logs").EnumerateArray().Single(l => l.GetProperty("action").GetString() == "FormEdit");
+        Assert.Equal("alice请假 3 天", detail.GetProperty("title").GetString());
+        Assert.Equal("Approved", detail.GetProperty("status").GetString());
+        Assert.Equal("修改了 天数", edit.GetProperty("comment").GetString());
+        Assert.Equal(5, JsonDocument.Parse(edit.GetProperty("details").GetString()!).RootElement[0].GetProperty("before").GetInt32());
+    }
+
+    [Fact]
+    public async Task 参与人看不到隐藏字段_发起人可见()
+    {
+        await using var host = await StartAsync();
+        await host.PublishAsync("leave", PermissionFlow);
+        var instanceId = (await host.PostJsonAsync("/api/approval/forms/leave/start", "alice", new { formData = new { days = 2, handover = "hana" } }))
+            .GetProperty("instanceId").GetGuid();
+
+        var bob = await host.GetJsonAsync($"/api/approval/instances/{instanceId}", "bob");
+        var alice = await host.GetJsonAsync($"/api/approval/instances/{instanceId}", "alice");
+
+        Assert.Equal(["handover"], bob.GetProperty("hiddenFields").EnumerateArray().Select(f => f.GetString()));
+        Assert.False(JsonDocument.Parse(bob.GetProperty("formDataJson").GetString()!).RootElement.TryGetProperty("handover", out _));
+        Assert.Empty(alice.GetProperty("hiddenFields").EnumerateArray());
+        Assert.Equal("hana", JsonDocument.Parse(alice.GetProperty("formDataJson").GetString()!).RootElement.GetProperty("handover").GetString());
+    }
+
+    [Fact]
+    public async Task 校验接口返回不阻止发布的提示()
+    {
+        await using var host = await StartAsync();
+
+        var result = await host.PostJsonAsync("/api/approval/definitions/validate", "admin",
+            JsonDocument.Parse(PermissionFlow.Replace("{申请人}请假 {form.days} 天", "{申请人} {form.handover}")).RootElement);
+
+        Assert.Empty(result.GetProperty("errors").EnumerateArray());
+        Assert.Contains("标题模板引用了字段 'handover'", Assert.Single(result.GetProperty("warnings").EnumerateArray()).GetString());
+    }
+
+    [Fact]
+    public async Task 未启用表单审批时同意不能修改表单()
+    {
+        await using var host = await ApiHost.StartAsync();
+        await host.PublishAsync("leave", PermissionFlow);
+        await host.RunAsync(sp => sp.GetRequiredService<ApprovalEngine>()
+            .StartAsync(new StartApprovalRequest("leave", DocHandler.Type, "D-1", "alice")));
+        var taskId = (await host.GetJsonAsync("/api/approval/todo", "bob")).GetProperty("items")[0].GetProperty("taskId").GetGuid();
+
+        var problem = await (await host.SendAsync(HttpMethod.Post, $"/api/approval/tasks/{taskId}/approve", "bob",
+            new { formData = new { days = 1 } })).ProblemAsync(400);
+
+        Assert.Contains("未启用表单审批", problem.GetProperty("title").GetString());
+        await host.PostJsonAsync($"/api/approval/tasks/{taskId}/approve", "bob", new { comment = "同意" });
     }
 }

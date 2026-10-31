@@ -204,5 +204,9 @@ public class ApprovalLog
     public ApprovalAction Action { get; set; }
     public required string OperatorId { get; set; }
     public string? Comment { get; set; }
+
+    /// <summary>结构化的附加信息（JSON），如修改表单时的字段差异 <c>[{field, label, before, after}]</c>；轨迹文本只写字段名。</summary>
+    public string? Details { get; set; }
+
     public DateTime CreatedAt { get; set; }
 }

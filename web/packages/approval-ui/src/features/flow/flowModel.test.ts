@@ -67,6 +67,19 @@ describe('toFlowElements / toDefinition', () => {
     expect(nodes.find((n) => n.id === 'cond')?.position).toEqual({ x: 20, y: 40 })
   })
 
+  it('round-trips field permissions of approval nodes and omits empty ones', () => {
+    const flow = structuredClone(certificateFlow)
+    flow.nodes.dept!.fieldPermissions = { amount: 'Editable', salary: 'Hidden' }
+
+    const { nodes, edges } = toFlowElements(flow)
+    expect(nodes.find((n) => n.id === 'leader')?.data?.fieldPermissions).toEqual({})
+
+    const back = toDefinition(nodes, edges)
+    expect(back.nodes.dept!.fieldPermissions).toEqual({ amount: 'Editable', salary: 'Hidden' })
+    expect(back.nodes.leader!.fieldPermissions).toBeUndefined()
+    expect(createNodeData('Cc').fieldPermissions).toEqual({})
+  })
+
   it('auto layout keeps side branch node clear of the straight default-branch edge', () => {
     const { nodes } = toFlowElements(certificateFlow)
     const center = (id: string) => nodes.find((n) => n.id === id)!.position.x + NODE_WIDTH / 2
@@ -151,6 +164,7 @@ describe('computeRunState', () => {
     tasks,
     logs: [],
     access: 'Full',
+    hiddenFields: [],
   })
 
   it('marks done path, active node and skipped branch', () => {
@@ -300,6 +314,7 @@ describe('parallel nodes', () => {
       ],
       logs: [],
       access: 'Full',
+      hiddenFields: [],
     })
     expect(run.status.get('p')).toBe('done')
     expect(run.status.get('b')).toBe('active')

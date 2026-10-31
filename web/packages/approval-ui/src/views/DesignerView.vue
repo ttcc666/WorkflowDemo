@@ -207,7 +207,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', onBeforeUnload)
       />
     </el-card>
 
-    <ValidationResult :errors="designer.errors.value" />
+    <ValidationResult :errors="designer.errors.value" :warnings="designer.warnings.value" />
 
     <el-tabs v-model="tab" class="designer__tabs">
       <el-tab-pane label="流程" name="flow" />

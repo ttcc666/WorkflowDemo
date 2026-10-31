@@ -1,14 +1,19 @@
+using System.Text.Json;
 using Approval.Core.Abstractions;
 using Approval.Core.Actions;
 using Approval.Core.Conditions;
 using Approval.Core.Definitions;
 using Approval.Core.Domain;
+using Approval.Core.Forms;
 using Approval.Core.Notifications;
 using Approval.Core.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace Approval.Core.Engine;
+
+/// <summary>审批中修改表单：修改后的完整表单数据与字段差异（见 <see cref="ApprovalEngine.ApproveWithFormAsync"/>）。</summary>
+internal sealed record FormEdit(string FormDataJson, IReadOnlyList<FormFieldChange> Changes);
 
 /// <summary>
 /// 审批引擎：发起、同意、驳回 / 退回、撤回、转交、加签、超时处理。
@@ -120,6 +125,27 @@ public sealed partial class ApprovalEngine
         await EnsureCanHandleAsync(instance, task, userId, ct);
         if (task.Kind == ApprovalTaskKind.Resubmit) await ResubmitCoreAsync(instance, flow, task, userId, comment, null, ct);
         else await ApproveCoreAsync(instance, flow, task, userId, comment, ApprovalAction.Approve, ct);
+        await CommitAsync(instance, ct);
+    }
+
+    /// <summary>
+    /// 同意并修改表单（表单审批的节点可编辑字段，由 <see cref="ApprovalFormService"/> 调用）：校验处理权限后由 <paramref name="edit"/>
+    /// 计算修改（返回 null 表示没有修改）；表单数据替换为修改后的数据，轨迹先记录修改了哪些字段（差异存入 Details），再记录同意并按新数据流转。
+    /// </summary>
+    internal async Task ApproveWithFormAsync(Guid taskId, string userId, string? comment,
+        Func<ApprovalInstance, ApprovalTask, FlowDefinition, Task<FormEdit?>> edit, CancellationToken ct)
+    {
+        var (instance, task, flow) = await LoadTaskAsync(taskId, ct);
+        await EnsureCanHandleAsync(instance, task, userId, ct);
+        if (task.Kind == ApprovalTaskKind.Resubmit) throw new ApprovalException("退回到发起人的申请请修改后重新提交");
+
+        if (await edit(instance, task, flow) is { } change)
+        {
+            instance.FormDataJson = change.FormDataJson;
+            AddLog(instance, ApprovalAction.FormEdit, userId, FieldVisibility.Summary(change.Changes.Select(c => c.Label)),
+                task.NodeId, task.NodeName, JsonSerializer.Serialize(change.Changes, FormData.JsonOptions));
+        }
+        await ApproveCoreAsync(instance, flow, task, userId, comment, ApprovalAction.Approve, ct);
         await CommitAsync(instance, ct);
     }
 
@@ -644,7 +670,7 @@ public sealed partial class ApprovalEngine
         AddLog(instance, action, operatorId, comment, node?.Id, node?.Name);
 
     private void AddLog(ApprovalInstance instance, ApprovalAction action, string operatorId, string? comment,
-        string? nodeId, string? nodeName) =>
+        string? nodeId, string? nodeName, string? details = null) =>
         _db.Set<ApprovalLog>().Add(new ApprovalLog
         {
             Id = Guid.NewGuid(),
@@ -655,6 +681,7 @@ public sealed partial class ApprovalEngine
             Action = action,
             OperatorId = operatorId,
             Comment = comment,
+            Details = details,
             CreatedAt = Now
         });
 
