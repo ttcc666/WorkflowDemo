@@ -1,7 +1,9 @@
 // 与后端 JSON 对应的类型（camelCase，枚举为字符串）
 
 export type InstanceStatus = 'Running' | 'Approved' | 'Rejected' | 'Withdrawn' | 'Terminated'
-export type TaskStatus = 'Waiting' | 'Pending' | 'Approved' | 'Rejected' | 'Canceled' | 'Transferred'
+export type TaskStatus = 'Waiting' | 'Pending' | 'Approved' | 'Rejected' | 'Canceled' | 'Transferred' | 'Suspended'
+export type TaskKind = 'Approval' | 'Resubmit' | 'AddSignBefore' | 'AddSignAfter' | 'AddSignParallel'
+export type AddSignMode = 'Before' | 'After' | 'Parallel'
 export type AssigneeKind = 'User' | 'Role'
 export type ApprovalAction =
   | 'Submit'
@@ -16,6 +18,9 @@ export type ApprovalAction =
   | 'Remind'
   | 'TimeoutApprove'
   | 'TimeoutReject'
+  | 'Return'
+  | 'AddSign'
+  | 'Resubmit'
 
 export interface ApprovalTask {
   id: string
@@ -24,6 +29,9 @@ export interface ApprovalTask {
   nodeName: string
   assigneeKind: AssigneeKind
   assigneeValue: string
+  kind: TaskKind
+  parentTaskId: string | null
+  round: number
   status: TaskStatus
   order: number
   handledBy: string | null
@@ -56,7 +64,9 @@ export interface ApprovalInstance {
   title: string | null
   initiatorId: string
   status: InstanceStatus
+  /** 并行时为多个节点 ID，逗号分隔 */
   currentNodeId: string | null
+  round: number
   formDataJson: string
   createdAt: string
   completedAt: string | null
@@ -76,6 +86,13 @@ export interface TodoItem {
   assigneeValue: string
   createdAt: string
   dueAt: string | null
+  kind: TaskKind
+}
+
+export interface ReturnTarget {
+  nodeId: string
+  nodeName: string
+  isInitiator: boolean
 }
 
 export interface ApprovalDefinition {

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { TodoItem } from '@/api/types'
-import { assigneeText, businessTypeLabels, dueText, formatDateTime } from '@/utils/labels'
+import { assigneeText, businessTypeLabels, dueText, formatDateTime, taskKindLabels } from '@/utils/labels'
 
 defineProps<{ items: TodoItem[]; loading: boolean }>()
 const emit = defineEmits<{ open: [instanceId: string] }>()
@@ -11,6 +11,9 @@ const emit = defineEmits<{ open: [instanceId: string] }>()
     <el-table-column label="标题" min-width="240">
       <template #default="{ row }">
         <el-link type="primary" underline="never">{{ row.title || row.businessKey }}</el-link>
+        <el-tag v-if="taskKindLabels[row.kind as TodoItem['kind']]" size="small" type="warning" effect="plain" class="kind-tag">
+          {{ taskKindLabels[row.kind as TodoItem['kind']] }}
+        </el-tag>
       </template>
     </el-table-column>
     <el-table-column label="业务类型" width="120">
@@ -38,6 +41,10 @@ const emit = defineEmits<{ open: [instanceId: string] }>()
 </template>
 
 <style scoped>
+.kind-tag {
+  margin-left: 6px;
+}
+
 .muted {
   color: #c0c4cc;
 }

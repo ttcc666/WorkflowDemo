@@ -16,7 +16,8 @@ public sealed record TodoItem(
     AssigneeKind AssigneeKind,
     string AssigneeValue,
     DateTime CreatedAt,
-    DateTime? DueAt);
+    DateTime? DueAt,
+    ApprovalTaskKind Kind);
 
 /// <summary>只读查询：待办、已办、我发起的、审批详情。</summary>
 public sealed class ApprovalQueryService(
@@ -39,10 +40,10 @@ public sealed class ApprovalQueryService(
                   && ((t.AssigneeKind == AssigneeKind.User && t.AssigneeValue == userId)
                       || (t.AssigneeKind == AssigneeKind.Role && roles.Contains(t.AssigneeValue)))
                   // 职责分离：不允许审批自己的申请时，自己发起的申请不出现在待办中
-                  && (!excludeOwn || i.InitiatorId != userId)
+                  && (!excludeOwn || i.InitiatorId != userId || t.Kind == ApprovalTaskKind.Resubmit)
             orderby t.CreatedAt
             select new TodoItem(t.Id, i.Id, i.BusinessType, i.BusinessKey, i.Title, i.InitiatorId,
-                t.NodeName, t.AssigneeKind, t.AssigneeValue, t.CreatedAt, t.DueAt);
+                t.NodeName, t.AssigneeKind, t.AssigneeValue, t.CreatedAt, t.DueAt, t.Kind);
 
         return await query.ToListAsync(ct);
     }

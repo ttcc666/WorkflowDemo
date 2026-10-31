@@ -11,6 +11,10 @@ public enum NodeType
     Condition,
     /// <summary>自动动作：依次执行 <see cref="FlowNode.Actions"/>（HTTP、脚本、注册动作）后进入下一节点。</summary>
     Action,
+    /// <summary>并行分叉：<see cref="FlowNode.Branches"/> 中的所有分支同时进行，必须由一个 <see cref="Join"/> 合并。</summary>
+    Parallel,
+    /// <summary>并行合并：等待对应并行节点的所有分支到达后进入下一节点。</summary>
+    Join,
     End
 }
 
@@ -86,12 +90,18 @@ public sealed class FlowNode
     /// <summary>审批人（Approval 节点）或抄送人（Cc 节点）规则。</summary>
     public List<ApproverRule> Approvers { get; set; } = [];
 
-    /// <summary>条件分支（仅 Condition 节点），按 Priority 升序匹配，Expression 为空表示默认分支。</summary>
+    /// <summary>条件分支（Condition 节点，按 Priority 升序匹配，Expression 为空表示默认分支）；并行分支（Parallel 节点，全部激活）。</summary>
     public List<ConditionBranch> Branches { get; set; } = [];
 
     public string? Next { get; set; }
 
     public EmptyApproverPolicy EmptyApproverPolicy { get; set; } = EmptyApproverPolicy.Error;
+
+    /// <summary>审批节点：驳回时是否允许退回到之前的节点或发起人（否则只能驳回并结束）。</summary>
+    public bool AllowReturn { get; set; } = true;
+
+    /// <summary>审批节点：审批人是否可以加签。</summary>
+    public bool AllowAddSign { get; set; } = true;
 
     /// <summary>动作步骤（仅 Action 节点），按顺序执行。</summary>
     public List<ActionStep> Actions { get; set; } = [];

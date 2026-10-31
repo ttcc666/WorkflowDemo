@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { approvalApi } from '@/api/approval'
 import { errorMessage } from '@/api/http'
+import type { AddSignMode } from '@/api/types'
 import { useCurrentUser } from '@/composables/useCurrentUser'
 import ApprovalActions from '@/features/approval/ApprovalActions.vue'
 import ApprovalSummary from '@/features/approval/ApprovalSummary.vue'
@@ -17,7 +18,7 @@ const router = useRouter()
 const { userId, users } = useCurrentUser()
 
 const instanceId = computed(() => route.params.id as string)
-const { instance, loading, error, definition, myTask, canWithdraw, reload } = useApprovalDetail(instanceId)
+const { instance, loading, error, definition, myTask, canWithdraw, nodeOptions, reload } = useApprovalDetail(instanceId)
 
 const businessPanel = computed(() => (instance.value ? businessPanels[instance.value.businessType] : undefined))
 const formData = computed(() => {
@@ -46,7 +47,11 @@ async function run(action: () => Promise<unknown>, successText: string) {
 
 const taskId = () => myTask.value!.id
 const onApprove = (comment: string) => run(() => approvalApi.approve(taskId(), comment), '已同意')
-const onReject = (comment: string) => run(() => approvalApi.reject(taskId(), comment), '已驳回')
+const onReject = (comment: string, target: string | null) =>
+  run(() => approvalApi.reject(taskId(), comment, target ?? undefined), target ? '已退回' : '已驳回')
+const onAddSign = (userIds: string[], mode: AddSignMode, comment: string) =>
+  run(() => approvalApi.addSign(taskId(), userIds, mode, comment), `已加签 ${userIds.join('、')}`)
+const onResubmit = (comment: string) => run(() => approvalApi.resubmit(taskId(), comment), '已重新提交')
 const onTransfer = (to: string, comment: string) => run(() => approvalApi.transfer(taskId(), to, comment), `已转交给 ${to}`)
 const onWithdraw = (comment: string) => run(() => approvalApi.withdraw(instanceId.value, comment), '已撤回')
 </script>
@@ -65,11 +70,16 @@ const onWithdraw = (comment: string) => run(() => approvalApi.withdraw(instanceI
         :can-withdraw="canWithdraw"
         :users="users"
         :current-user-id="userId"
+        :initiator-id="instance.initiatorId"
+        :allow-return="nodeOptions.allowReturn"
+        :allow-add-sign="nodeOptions.allowAddSign"
         :busy="busy"
         @approve="onApprove"
         @reject="onReject"
         @transfer="onTransfer"
         @withdraw="onWithdraw"
+        @add-sign="onAddSign"
+        @resubmit="onResubmit"
       />
 
       <el-card shadow="never">

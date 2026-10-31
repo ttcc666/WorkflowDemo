@@ -5,10 +5,12 @@ import type {
   ApprovalMessage,
   ApprovalMeta,
   ApprovalTask,
+  AddSignMode,
   DemoUser,
   DemoWebhookState,
   OutboxMessage,
   OutboxStatus,
+  ReturnTarget,
   TodoItem,
 } from './types'
 
@@ -27,7 +29,13 @@ export const approvalApi = {
     http.get<{ task: ApprovalTask | null }>(`${base}/instances/${instanceId}/my-task`, signal),
 
   approve: (taskId: string, comment: string) => http.post(`${base}/tasks/${taskId}/approve`, { comment }),
-  reject: (taskId: string, comment: string) => http.post(`${base}/tasks/${taskId}/reject`, { comment }),
+  /** targetNodeId 为空时驳回并结束流程，否则退回到该节点 */
+  reject: (taskId: string, comment: string, targetNodeId?: string) =>
+    http.post(`${base}/tasks/${taskId}/reject`, { comment, targetNodeId: targetNodeId ?? null }),
+  returnTargets: (taskId: string, signal?: AbortSignal) => http.get<ReturnTarget[]>(`${base}/tasks/${taskId}/return-targets`, signal),
+  addSign: (taskId: string, userIds: string[], mode: AddSignMode, comment: string) =>
+    http.post(`${base}/tasks/${taskId}/add-sign`, { userIds, mode, comment }),
+  resubmit: (taskId: string, comment: string) => http.post(`${base}/tasks/${taskId}/resubmit`, { comment }),
   transfer: (taskId: string, toUserId: string, comment: string) =>
     http.post(`${base}/tasks/${taskId}/transfer`, { toUserId, comment }),
   withdraw: (instanceId: string, comment: string) => http.post(`${base}/instances/${instanceId}/withdraw`, { comment }),

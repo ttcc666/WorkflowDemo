@@ -4,7 +4,7 @@ import type { ApprovalInstance } from '@/api/types'
 
 // ───── 后端流程定义（与 Approval.Core.Definitions.FlowDefinition 对应） ─────
 
-export type NodeType = 'Start' | 'Approval' | 'Cc' | 'Condition' | 'Action' | 'End'
+export type NodeType = 'Start' | 'Approval' | 'Cc' | 'Condition' | 'Action' | 'Parallel' | 'Join' | 'End'
 export type ApproveMode = 'Any' | 'All' | 'Sequential'
 export type EmptyApproverPolicy = 'Error' | 'AutoApprove'
 export type NotifyEvent = 'Enter' | 'Approved' | 'Rejected' | 'Transferred' | 'Timeout' | 'Completed'
@@ -60,6 +60,10 @@ export interface FlowNodeDef {
   branches?: ConditionBranch[]
   next?: string | null
   emptyApproverPolicy?: EmptyApproverPolicy
+  /** 审批节点：驳回时可退回到之前的节点或发起人，默认 true */
+  allowReturn?: boolean
+  /** 审批节点：允许加签，默认 true */
+  allowAddSign?: boolean
   actions?: ActionStep[]
   notifications?: NotificationRule[]
   timeout?: TimeoutPolicy | null
@@ -84,6 +88,8 @@ export interface FlowNodeData {
   mode: ApproveMode
   approvers: ApproverRule[]
   emptyApproverPolicy: EmptyApproverPolicy
+  allowReturn: boolean
+  allowAddSign: boolean
   actions: ActionStep[]
   notifications: NotificationRule[]
   timeout: TimeoutPolicy | null
@@ -112,8 +118,13 @@ export const nodeTypeLabels: Record<NodeType, string> = {
   Cc: '抄送',
   Condition: '条件分支',
   Action: '自动动作',
+  Parallel: '并行分支',
+  Join: '合并',
   End: '结束',
 }
+
+/** 条件节点、并行节点可以有多条出线 */
+export const isMultiOutput = (type: NodeType | undefined) => type === 'Condition' || type === 'Parallel'
 
 export const notifyEventLabels: Record<NotifyEvent, string> = {
   Enter: '到达节点',
@@ -178,6 +189,8 @@ export function approverSummary(data: FlowNodeData) {
   if (data.type === 'Approval') return `${modeLabels[data.mode]} · ${rules || '未设置审批人'}`
   if (data.type === 'Cc') return rules || '未设置抄送人'
   if (data.type === 'Action') return data.actions.map((a) => a.name || a.type).join('，') || '未配置动作'
+  if (data.type === 'Parallel') return '所有分支同时进行'
+  if (data.type === 'Join') return '等待全部分支完成'
   return ''
 }
 
@@ -210,19 +223,23 @@ export function toFlowElements(definition: FlowDefinition): { nodes: FlowNode[];
       mode: def.mode ?? 'Any',
       approvers: (def.approvers ?? []).map((r) => ({ ...r })),
       emptyApproverPolicy: def.emptyApproverPolicy ?? 'Error',
+      allowReturn: def.allowReturn ?? true,
+      allowAddSign: def.allowAddSign ?? true,
       actions: clone(def.actions ?? []),
       notifications: clone(def.notifications ?? []),
       timeout: def.timeout ? { ...def.timeout } : null,
     },
   }))
 
-  const edges: FlowEdge[] = defs.flatMap((def) =>
-    def.type === 'Condition'
-      ? (def.branches ?? []).map((b) => createEdge(def.id, b.next, { priority: b.priority, expression: b.expression?.trim() ? b.expression : null }))
-      : def.next
-        ? [createEdge(def.id, def.next)]
-        : [],
-  )
+  const edges: FlowEdge[] = defs.flatMap((def) => {
+    if (def.type === 'Condition')
+      return (def.branches ?? []).map((b) =>
+        createEdge(def.id, b.next, { priority: b.priority, expression: b.expression?.trim() ? b.expression : null }),
+      )
+    // 并行分支没有条件，连线不带分支数据
+    if (def.type === 'Parallel') return (def.branches ?? []).map((b) => createEdge(def.id, b.next))
+    return def.next ? [createEdge(def.id, def.next)] : []
+  })
 
   // 旧定义（没有保存坐标）自动排版
   const needsLayout = defs.some((d) => !d.position)
@@ -252,6 +269,9 @@ export function toDefinition(nodes: FlowNode[], edges: FlowEdge[], flowNotificat
     if (data.type === 'Approval') {
       def.mode = data.mode
       def.emptyApproverPolicy = data.emptyApproverPolicy
+      // 只保存非默认值，保持定义简洁
+      if (!data.allowReturn) def.allowReturn = false
+      if (!data.allowAddSign) def.allowAddSign = false
       if (data.timeout) def.timeout = { ...data.timeout }
     }
     if (data.type === 'Action') def.actions = clone(data.actions)
@@ -262,6 +282,8 @@ export function toDefinition(nodes: FlowNode[], edges: FlowEdge[], flowNotificat
         expression: e.data?.expression?.trim() ? e.data.expression.trim() : null,
         next: e.target,
       }))
+    } else if (data.type === 'Parallel') {
+      def.branches = outgoing.map((e, i) => ({ priority: i + 1, expression: null, next: e.target }))
     } else if (data.type !== 'End') {
       def.next = outgoing[0]?.target ?? null
     }
@@ -299,7 +321,7 @@ export function checkConnection(nodes: FlowNode[], edges: FlowEdge[], source: st
   const targetType = nodes.find((n) => n.id === target)?.data?.type
   if (sourceType === 'End') return '结束节点不能有后续节点'
   if (targetType === 'Start') return '不能连接到开始节点'
-  if (sourceType === 'Condition' && edges.some((e) => e.source === source && e.target === target))
+  if (isMultiOutput(sourceType) && edges.some((e) => e.source === source && e.target === target))
     return '该分支已存在'
   return null
 }
@@ -310,6 +332,7 @@ export function checkConnection(nodes: FlowNode[], edges: FlowEdge[], source: st
  */
 export function applyConnection(nodes: FlowNode[], edges: FlowEdge[], source: string, target: string): FlowEdge[] {
   const sourceType = nodes.find((n) => n.id === source)?.data?.type
+  if (sourceType === 'Parallel') return [...edges, createEdge(source, target)]
   if (sourceType !== 'Condition') {
     return [...edges.filter((e) => e.source !== source), createEdge(source, target)]
   }
@@ -439,9 +462,11 @@ export function createNodeData(type: NodeType): FlowNodeData {
     Cc: { name: '抄送', approvers: [{ type: 'Initiator', value: '' }], actions: [], notifications: [] },
     Condition: { name: '条件分支', approvers: [], actions: [], notifications: [] },
     Action: { name: '自动动作', approvers: [], actions: [], notifications: [] },
+    Parallel: { name: '并行分支', approvers: [], actions: [], notifications: [] },
+    Join: { name: '合并', approvers: [], actions: [], notifications: [] },
     End: { name: '结束', approvers: [], actions: [], notifications: [] },
   }
-  return { type, mode: 'Any', emptyApproverPolicy: 'Error', timeout: null, ...defaults[type] }
+  return { type, mode: 'Any', emptyApproverPolicy: 'Error', allowReturn: true, allowAddSign: true, timeout: null, ...defaults[type] }
 }
 
 export const defaultTemplates: Record<NotifyEvent, string> = {
@@ -482,28 +507,46 @@ export function computeRunState(definition: FlowDefinition, instance: ApprovalIn
   const running = instance.status === 'Running'
 
   for (const node of Object.values(definition.nodes)) {
-    const tasks = instance.tasks.filter((t) => t.nodeId === node.id)
+    const tasks = latestRound(instance.tasks.filter((t) => t.nodeId === node.id))
     const logged = instance.logs.some((l) => l.nodeId === node.id)
 
     if (node.type === 'Start') status.set(node.id, 'done')
     else if (tasks.some((t) => t.status === 'Rejected')) status.set(node.id, 'rejected')
-    else if (running && tasks.some((t) => t.status === 'Pending' || t.status === 'Waiting')) status.set(node.id, 'active')
+    else if (running && tasks.some((t) => t.status === 'Pending' || t.status === 'Waiting' || t.status === 'Suspended'))
+      status.set(node.id, 'active')
     else if (tasks.some((t) => t.status === 'Approved') || logged) status.set(node.id, 'done')
     else if (node.type === 'End' && instance.status === 'Approved') status.set(node.id, 'done')
   }
 
-  // 条件节点本身不产生任务：只要它的某个分支目标被走到，就视为已经过
+  // 条件、并行、合并节点本身不产生任务：只要某个后续节点被走到，就视为已经过。
+  // 按拓扑逆序多次传播，处理连续的网关（如并行节点后紧跟条件节点）
   const reached = (id: string) => status.has(id)
-  for (const node of Object.values(definition.nodes)) {
-    if (node.type === 'Condition' && (node.branches ?? []).some((b) => reached(b.next))) status.set(node.id, 'done')
+  const gateways = Object.values(definition.nodes).filter((n) => n.type === 'Condition' || n.type === 'Parallel' || n.type === 'Join')
+  for (let changed = true; changed; ) {
+    changed = false
+    for (const node of gateways) {
+      if (!status.has(node.id) && successors(node).some(reached)) {
+        status.set(node.id, 'done')
+        changed = true
+      }
+    }
   }
 
   const visitedEdges = new Set<string>()
   for (const node of Object.values(definition.nodes)) {
     if (status.get(node.id) !== 'done') continue
-    const targets = node.type === 'Condition' ? (node.branches ?? []).map((b) => b.next) : node.next ? [node.next] : []
-    for (const target of targets) if (reached(target)) visitedEdges.add(`${node.id}->${target}`)
+    for (const target of successors(node)) if (reached(target)) visitedEdges.add(`${node.id}->${target}`)
   }
 
   return { status, visitedEdges }
+}
+
+const successors = (node: FlowNodeDef) =>
+  node.type === 'Condition' || node.type === 'Parallel' ? (node.branches ?? []).map((b) => b.next) : node.next ? [node.next] : []
+
+/** 节点被退回后会重新生成任务，只看最近一轮 */
+function latestRound(tasks: ApprovalInstance['tasks']) {
+  if (tasks.length === 0) return tasks
+  const round = Math.max(...tasks.map((t) => t.round ?? 0))
+  return tasks.filter((t) => (t.round ?? 0) === round)
 }

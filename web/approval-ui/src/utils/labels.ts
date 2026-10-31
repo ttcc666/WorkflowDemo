@@ -6,6 +6,7 @@ import type {
   InstanceStatus,
   OutboxStatus,
   RequestStatus,
+  TaskKind,
   TaskStatus,
 } from '@/api/types'
 
@@ -26,6 +27,15 @@ export const taskStatusLabels: Record<TaskStatus, { text: string; type: TagType 
   Rejected: { text: '已驳回', type: 'danger' },
   Canceled: { text: '已取消', type: 'info' },
   Transferred: { text: '已转交', type: 'info' },
+  Suspended: { text: '等待加签', type: 'info' },
+}
+
+export const taskKindLabels: Record<TaskKind, string> = {
+  Approval: '',
+  Resubmit: '待重新提交',
+  AddSignBefore: '前加签',
+  AddSignAfter: '后加签',
+  AddSignParallel: '并加签',
 }
 
 export const actionLabels: Record<ApprovalAction, string> = {
@@ -41,6 +51,9 @@ export const actionLabels: Record<ApprovalAction, string> = {
   Remind: '超时提醒',
   TimeoutApprove: '超时自动同意',
   TimeoutReject: '超时自动驳回',
+  Return: '退回',
+  AddSign: '加签',
+  Resubmit: '重新提交',
 }
 
 export const outboxStatusLabels: Record<OutboxStatus, { text: string; type: TagType }> = {

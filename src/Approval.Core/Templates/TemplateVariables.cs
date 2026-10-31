@@ -19,6 +19,7 @@ public static class TemplateVariables
         new("当前审批人", "assignees", "当前节点的审批人"),
         new("转交给", "transferTo", "转交对象"),
         new("截止时间", "dueAt", "待办处理截止时间"),
+        new("退回到", "returnTo", "驳回时退回到的节点（驳回结束时为空）"),
         new("发起时间", "createdAt", "流程发起时间"),
         new("流程", "flow", "流程标识"),
         new("业务类型", "businessType", "业务类型"),
@@ -36,6 +37,7 @@ public static class TemplateVariables
         public IReadOnlyList<string> Assignees { get; init; } = [];
         public string? TransferTo { get; init; }
         public DateTime? DueAt { get; init; }
+        public string? ReturnTo { get; init; }
     }
 
     public static Dictionary<string, object?> Build(ApprovalInstance instance, IReadOnlyDictionary<string, object?> form,
@@ -59,6 +61,7 @@ public static class TemplateVariables
         Add("当前审批人", "assignees", values?.Assignees ?? []);
         Add("转交给", "transferTo", values?.TransferTo ?? "");
         Add("截止时间", "dueAt", values?.DueAt);
+        Add("退回到", "returnTo", values?.ReturnTo ?? "");
         Add("发起时间", "createdAt", instance.CreatedAt);
         Add("流程", "flow", instance.DefinitionKey);
         Add("业务类型", "businessType", instance.BusinessType);

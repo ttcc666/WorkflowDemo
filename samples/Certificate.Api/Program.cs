@@ -132,7 +132,7 @@ static async Task EnsureSchemaUpToDateAsync(AppDbContext db)
     try
     {
         await db.Set<ApprovalOutboxMessage>().AnyAsync();
-        await db.Set<ApprovalTask>().Select(t => t.NextRemindAt).FirstOrDefaultAsync();
+        await db.Set<ApprovalTask>().Select(t => new { t.NextRemindAt, t.Round }).FirstOrDefaultAsync();
     }
     catch (Microsoft.Data.Sqlite.SqliteException ex)
     {

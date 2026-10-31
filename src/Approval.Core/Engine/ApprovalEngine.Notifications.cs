@@ -21,6 +21,7 @@ public sealed partial class ApprovalEngine
         public string? Comment { get; init; }
         public string? TransferTo { get; init; }
         public DateTime? DueAt { get; init; }
+        public string? ReturnTo { get; init; }
     }
 
     /// <summary>
@@ -43,6 +44,7 @@ public sealed partial class ApprovalEngine
             Comment = info.Comment,
             TransferTo = info.TransferTo,
             DueAt = info.DueAt,
+            ReturnTo = info.ReturnTo,
             Assignees = info.Assignees.Select(Describe).ToList()
         });
 

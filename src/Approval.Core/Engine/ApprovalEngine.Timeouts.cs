@@ -24,7 +24,7 @@ public sealed partial class ApprovalEngine
         {
             // 发起后流程定义不会变化，这里只是防御：没有时限配置则不再处理
             task.NextRemindAt = null;
-            await CommitAsync(ct);
+            await CommitAsync(instance, ct);
             return false;
         }
 
@@ -52,7 +52,7 @@ public sealed partial class ApprovalEngine
                 break;
         }
 
-        await CommitAsync(ct);
+        await CommitAsync(instance, ct);
         return true;
     }
 }

@@ -1,6 +1,7 @@
 import { computed, type Ref } from 'vue'
 import { approvalApi } from '@/api/approval'
 import { useAsyncData } from '@/composables/useAsyncData'
+import type { FlowDefinition } from '@/features/flow/flowModel'
 import { currentUserId } from '@/stores/session'
 
 /** 审批详情：实例（含任务、轨迹）、实例绑定版本的流程定义、当前用户可处理的任务。 */
@@ -19,12 +20,26 @@ export function useApprovalDetail(instanceId: Ref<string>) {
   })
 
   const isInitiator = computed(() => instance.data.value?.initiatorId === currentUserId.value)
-  const canWithdraw = computed(
-    () =>
-      isInitiator.value &&
-      instance.data.value?.status === 'Running' &&
-      !instance.data.value.tasks.some((t) => t.status === 'Approved'),
-  )
+  // 未有人同意时可撤回；被退回到发起人时总是可以撤回（放弃本次申请）
+  const canWithdraw = computed(() => {
+    const value = instance.data.value
+    if (!isInitiator.value || value?.status !== 'Running') return false
+    const returned = value.tasks.some((t) => t.kind === 'Resubmit' && t.status === 'Pending')
+    return returned || !value.tasks.some((t) => t.status === 'Approved')
+  })
+
+  /** 当前待办所在节点的退回 / 加签选项 */
+  const nodeOptions = computed(() => {
+    const nodeId = myTask.data.value?.nodeId
+    let node
+    try {
+      node = nodeId && definition.data.value ? (JSON.parse(definition.data.value.definitionJson) as FlowDefinition).nodes[nodeId] : undefined
+    } catch {
+      node = undefined
+    }
+    const isApproval = node?.type === 'Approval'
+    return { allowReturn: isApproval && node?.allowReturn !== false, allowAddSign: isApproval && node?.allowAddSign !== false }
+  })
 
   async function reload() {
     await Promise.all([instance.reload(), myTask.reload()])
@@ -37,6 +52,7 @@ export function useApprovalDetail(instanceId: Ref<string>) {
     definition: definition.data,
     myTask: myTask.data,
     canWithdraw,
+    nodeOptions,
     reload,
   }
 }

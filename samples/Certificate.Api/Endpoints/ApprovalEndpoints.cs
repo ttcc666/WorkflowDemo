@@ -10,6 +10,10 @@ public sealed record CommentRequest(string? Comment);
 
 public sealed record TransferRequest(string ToUserId, string? Comment);
 
+public sealed record RejectRequest(string? Comment, string? TargetNodeId);
+
+public sealed record AddSignRequest(string[] UserIds, AddSignMode Mode, string? Comment);
+
 /// <summary>通用审批 API：与具体业务无关，所有接入框架的业务共用。</summary>
 public static class ApprovalEndpoints
 {
@@ -60,9 +64,29 @@ public static class ApprovalEndpoints
             return Results.NoContent();
         });
 
-        group.MapPost("/tasks/{id:guid}/reject", async (Guid id, CommentRequest body, HttpContext http, ApprovalEngine e, CancellationToken ct) =>
+        group.MapPost("/tasks/{id:guid}/reject", async (Guid id, RejectRequest body, HttpContext http, ApprovalEngine e, CancellationToken ct) =>
         {
-            await e.RejectAsync(id, CurrentUser.Get(http), body.Comment ?? "", ct);
+            // 指定 targetNodeId 时退回到该节点（流程继续），否则驳回并结束流程
+            if (string.IsNullOrWhiteSpace(body.TargetNodeId))
+                await e.RejectAsync(id, CurrentUser.Get(http), body.Comment ?? "", ct);
+            else
+                await e.ReturnAsync(id, CurrentUser.Get(http), body.Comment ?? "", body.TargetNodeId, ct);
+            return Results.NoContent();
+        });
+
+        group.MapGet("/tasks/{id:guid}/return-targets", (Guid id, HttpContext http, ApprovalEngine e, CancellationToken ct) =>
+            e.GetReturnTargetsAsync(id, CurrentUser.Get(http), ct));
+
+        group.MapPost("/tasks/{id:guid}/add-sign", async (Guid id, AddSignRequest body, HttpContext http, ApprovalEngine e, CancellationToken ct) =>
+        {
+            await e.AddSignAsync(id, CurrentUser.Get(http), body.UserIds, body.Mode, body.Comment, ct);
+            return Results.NoContent();
+        });
+
+        // 退回发起人后重新提交；示例中表单数据由业务单据决定，这里只提交意见
+        group.MapPost("/tasks/{id:guid}/resubmit", async (Guid id, CommentRequest body, HttpContext http, ApprovalEngine e, CancellationToken ct) =>
+        {
+            await e.ResubmitAsync(id, CurrentUser.Get(http), body.Comment, ct: ct);
             return Results.NoContent();
         });
 

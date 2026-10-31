@@ -7,6 +7,8 @@ const items: { type: NodeType; desc: string }[] = [
   { type: 'Approval', desc: '指定角色或人员审批' },
   { type: 'Cc', desc: '通知相关人员，不阻塞流程' },
   { type: 'Condition', desc: '按表单数据走不同分支' },
+  { type: 'Parallel', desc: '多个分支同时进行' },
+  { type: 'Join', desc: '等待并行分支全部完成' },
   { type: 'Action', desc: '调用 HTTP、执行脚本或注册动作' },
   { type: 'End', desc: '流程结束' },
 ]
@@ -31,6 +33,7 @@ function onDragStart(e: DragEvent, type: NodeType) {
       <p>从节点底部圆点拖到另一节点即可连线。</p>
       <p>选中节点或连线后按 Delete 删除；Ctrl+Z 撤销，Ctrl+Y 重做。</p>
       <p>条件节点的每条连线是一个分支，点击连线设置条件。</p>
+      <p>并行分支：从“并行分支”节点连出多条线，各分支最后都连到同一个“合并”节点。</p>
       <p>点击画布空白处可设置流程级通知。</p>
     </div>
   </div>
@@ -75,6 +78,8 @@ function onDragStart(e: DragEvent, type: NodeType) {
 .palette__item--cc { --accent: #6f7ad3; }
 .palette__item--condition { --accent: #13c2c2; }
 .palette__item--action { --accent: #b37feb; }
+.palette__item--parallel,
+.palette__item--join { --accent: #36cfc9; }
 
 .palette__name {
   color: #303133;

@@ -114,13 +114,16 @@ describe('connections', () => {
 })
 
 describe('computeRunState', () => {
-  const task = (nodeId: string, status: ApprovalTask['status']): ApprovalTask => ({
+  const task = (nodeId: string, status: ApprovalTask['status'], round = 0): ApprovalTask => ({
     id: nodeId + status,
     instanceId: 'i',
     nodeId,
     nodeName: nodeId,
     assigneeKind: 'Role',
     assigneeValue: 'x',
+    kind: 'Approval',
+    parentTaskId: null,
+    round,
     status,
     order: 0,
     handledBy: null,
@@ -141,6 +144,7 @@ describe('computeRunState', () => {
     initiatorId: 'alice',
     status,
     currentNodeId: null,
+    round: 0,
     formDataJson: '{}',
     createdAt: '',
     completedAt: null,
@@ -160,6 +164,22 @@ describe('computeRunState', () => {
     expect(status.has('safety')).toBe(false) // 普通证书未走安全审核
     expect(visitedEdges.has('cond->leader')).toBe(true)
     expect(visitedEdges.has('cond->safety')).toBe(false)
+  })
+
+  it('uses the latest round after a return', () => {
+    // 负责人退回到部门审核：部门审核旧任务已同意、新任务待处理；负责人旧任务被驳回
+    const { status } = computeRunState(
+      certificateFlow,
+      instance('Running', [task('dept', 'Approved'), task('leader', 'Rejected'), task('dept', 'Pending', 1)]),
+    )
+    expect(status.get('dept')).toBe('active')
+    expect(status.get('leader')).toBe('rejected')
+
+    const again = computeRunState(
+      certificateFlow,
+      instance('Running', [task('dept', 'Approved'), task('leader', 'Rejected'), task('dept', 'Approved', 1), task('leader', 'Pending', 1)]),
+    )
+    expect(again.status.get('leader')).toBe('active')
   })
 
   it('marks rejected node and finished flow', () => {
@@ -231,5 +251,57 @@ describe('notifications, timeout and actions round-trip', () => {
     expect(back.nodes.act.actions).toEqual(flow.nodes.act.actions)
     expect(back.notifications).toEqual(flow.notifications)
     expect(back.nodes.cond.notifications).toBeUndefined()
+  })
+})
+
+describe('parallel nodes', () => {
+  const parallelFlow: FlowDefinition = {
+    startNodeId: 'start',
+    nodes: {
+      start: { id: 'start', name: '提交', type: 'Start', next: 'p' },
+      p: { id: 'p', name: '并行', type: 'Parallel', branches: [{ priority: 1, expression: null, next: 'a' }, { priority: 2, expression: null, next: 'b' }] },
+      a: { id: 'a', name: 'A', type: 'Approval', approvers: [{ type: 'User', value: 'u' }], next: 'j' },
+      b: { id: 'b', name: 'B', type: 'Approval', approvers: [{ type: 'User', value: 'u' }], next: 'j' },
+      j: { id: 'j', name: '合并', type: 'Join', next: 'end' },
+      end: { id: 'end', name: '结束', type: 'End' },
+    },
+  }
+
+  it('round-trips parallel branches as plain edges', () => {
+    const { nodes, edges } = toFlowElements(parallelFlow)
+    expect(edges.filter((e) => e.source === 'p').map((e) => [e.target, e.data, e.label])).toEqual([
+      ['a', undefined, ''],
+      ['b', undefined, ''],
+    ])
+    const back = toDefinition(nodes, edges)
+    expect(back.nodes.p.branches).toEqual(parallelFlow.nodes.p.branches)
+    expect(back.nodes.p.next).toBeUndefined()
+    expect(back.nodes.j.next).toBe('end')
+  })
+
+  it('parallel node keeps multiple outgoing edges', () => {
+    const { nodes, edges } = toFlowElements(parallelFlow)
+    const withoutB = edges.filter((e) => e.id !== 'p->b')
+    expect(checkConnection(nodes, edges, 'p', 'a')).toBeTruthy() // 重复分支
+    const next = applyConnection(nodes, withoutB, 'p', 'b')
+    expect(next.filter((e) => e.source === 'p')).toHaveLength(2)
+  })
+
+  it('marks gateways passed when a branch is reached', () => {
+    const run = computeRunState(parallelFlow, {
+      id: 'i', definitionId: 'd', definitionKey: 'k', definitionVersion: 1, businessType: 'X', businessKey: 'b', title: null,
+      initiatorId: 'alice', status: 'Running', currentNodeId: 'a,b', round: 0, formDataJson: '{}', createdAt: '', completedAt: null,
+      tasks: [
+        { id: '1', instanceId: 'i', nodeId: 'a', nodeName: 'A', assigneeKind: 'User', assigneeValue: 'u', kind: 'Approval', parentTaskId: null,
+          round: 0, status: 'Approved', order: 0, handledBy: 'u', comment: null, createdAt: '', completedAt: null, dueAt: null, remindCount: 0 },
+        { id: '2', instanceId: 'i', nodeId: 'b', nodeName: 'B', assigneeKind: 'User', assigneeValue: 'u', kind: 'Approval', parentTaskId: null,
+          round: 0, status: 'Pending', order: 0, handledBy: null, comment: null, createdAt: '', completedAt: null, dueAt: null, remindCount: 0 },
+      ],
+      logs: [],
+    })
+    expect(run.status.get('p')).toBe('done')
+    expect(run.status.get('b')).toBe('active')
+    expect(run.status.has('j')).toBe(false)
+    expect(run.visitedEdges.has('p->a')).toBe(true)
   })
 })

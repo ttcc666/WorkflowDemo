@@ -31,7 +31,7 @@ public static class ApprovalModelBuilderExtensions
             b.Property(x => x.BusinessKey).HasMaxLength(100);
             b.Property(x => x.Title).HasMaxLength(500);
             b.Property(x => x.InitiatorId).HasMaxLength(100);
-            b.Property(x => x.CurrentNodeId).HasMaxLength(100);
+            b.Property(x => x.CurrentNodeId).HasMaxLength(500);
             b.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
             b.Property(x => x.ConcurrencyStamp).IsConcurrencyToken();
             b.HasIndex(x => new { x.BusinessType, x.BusinessKey });
@@ -50,6 +50,7 @@ public static class ApprovalModelBuilderExtensions
             b.Property(x => x.HandledBy).HasMaxLength(100);
             b.Property(x => x.AssigneeKind).HasConversion<string>().HasMaxLength(20);
             b.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
+            b.Property(x => x.Kind).HasConversion<string>().HasMaxLength(20);
             // 待办查询：按处理人 + 状态
             b.HasIndex(x => new { x.AssigneeKind, x.AssigneeValue, x.Status });
             // 超时扫描

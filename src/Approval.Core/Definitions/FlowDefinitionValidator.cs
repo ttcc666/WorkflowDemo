@@ -65,6 +65,15 @@ public static partial class FlowDefinitionValidator
                         errors.Add($"条件节点 '{key}' 的分支指向不存在的节点 '{branch.Next}'");
                     break;
 
+                case NodeType.Parallel:
+                    if (node.Next is not null) errors.Add($"并行节点 '{key}' 的后续节点应配置在分支中");
+                    if (node.Branches.Count < 2) errors.Add($"并行节点 '{key}' 至少需要两个分支");
+                    if (node.Branches.Select(b => b.Next).Distinct().Count() != node.Branches.Count)
+                        errors.Add($"并行节点 '{key}' 有重复的分支");
+                    foreach (var branch in node.Branches.Where(b => !nodes.ContainsKey(b.Next)))
+                        errors.Add($"并行节点 '{key}' 的分支指向不存在的节点 '{branch.Next}'");
+                    break;
+
                 case NodeType.Approval or NodeType.Cc:
                     if (node.Approvers.Count == 0)
                         errors.Add($"节点 '{key}' 未配置{(node.Type == NodeType.Cc ? "抄送人" : "审批人")}");
@@ -91,6 +100,7 @@ public static partial class FlowDefinitionValidator
         }
 
         if (errors.Count == 0) CheckReachabilityAndCycles(definition, errors);
+        if (errors.Count == 0) errors.AddRange(FlowStructure.Analyze(definition).Errors);
         return errors;
     }
 
@@ -182,7 +192,7 @@ public static partial class FlowDefinitionValidator
                 return false;
             }
             state[id] = 1;
-            if (Successors(definition.Nodes[id]).Any(next => !Visit(next))) return false;
+            if (FlowStructure.Successors(definition.Nodes[id]).Any(next => !Visit(next))) return false;
             state[id] = 2;
             return true;
         }
@@ -193,8 +203,4 @@ public static partial class FlowDefinitionValidator
             errors.Add($"节点 '{unreachable}' 从开始节点不可达");
     }
 
-    private static IEnumerable<string> Successors(FlowNode node) =>
-        node.Type == NodeType.Condition
-            ? node.Branches.Select(b => b.Next).Distinct()
-            : node.Next is null ? [] : [node.Next];
 }

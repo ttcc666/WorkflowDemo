@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { ApprovalLog, ApprovalTask } from '@/api/types'
-import { actionLabels, assigneeText, dueText, formatDateTime, taskStatusLabels } from '@/utils/labels'
+import { actionLabels, assigneeText, dueText, formatDateTime, taskKindLabels, taskStatusLabels } from '@/utils/labels'
 
 const props = defineProps<{ logs: ApprovalLog[]; tasks: ApprovalTask[] }>()
 
@@ -18,9 +18,12 @@ const actionTypes: Partial<Record<ApprovalLog['action'], TimelineType>> = {
   Remind: 'warning',
   TimeoutApprove: 'success',
   TimeoutReject: 'danger',
+  Return: 'warning',
+  AddSign: 'primary',
+  Resubmit: 'primary',
 }
 
-const openTasks = computed(() => props.tasks.filter((t) => t.status === 'Pending' || t.status === 'Waiting'))
+const openTasks = computed(() => props.tasks.filter((t) => t.status === 'Pending' || t.status === 'Waiting' || t.status === 'Suspended'))
 </script>
 
 <template>
@@ -44,6 +47,7 @@ const openTasks = computed(() => props.tasks.filter((t) => t.status === 'Pending
       <div class="timeline-title">
         <strong>{{ task.nodeName }}</strong>
         <el-tag size="small" :type="taskStatusLabels[task.status].type">{{ taskStatusLabels[task.status].text }}</el-tag>
+        <el-tag v-if="taskKindLabels[task.kind]" size="small" type="warning" effect="plain">{{ taskKindLabels[task.kind] }}</el-tag>
         <span class="timeline-operator">{{ assigneeText(task.assigneeKind, task.assigneeValue) }}</span>
       </div>
       <div v-if="task.dueAt && task.status === 'Pending'" class="timeline-comment">

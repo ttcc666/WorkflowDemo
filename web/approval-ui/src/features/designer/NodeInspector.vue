@@ -62,6 +62,17 @@ const modeHelp: Record<ApproveMode, string> = {
               @update:model-value="(v) => emit('update', { approvers: v })" />
           </el-form-item>
 
+          <el-form-item v-if="data.type === 'Approval'" label="审批人可以">
+            <div class="inspector__switches">
+              <el-checkbox :model-value="data.allowReturn" @update:model-value="(v) => emit('update', { allowReturn: !!v })">
+                退回到之前的节点或发起人
+              </el-checkbox>
+              <el-checkbox :model-value="data.allowAddSign" @update:model-value="(v) => emit('update', { allowAddSign: !!v })">
+                加签（前加签 / 后加签 / 并加签）
+              </el-checkbox>
+            </div>
+          </el-form-item>
+
           <el-form-item v-if="data.type === 'Approval'" label="找不到审批人时">
             <el-select :model-value="data.emptyApproverPolicy"
               @update:model-value="(v) => emit('update', { emptyApproverPolicy: v as FlowNodeData['emptyApproverPolicy'] })">
@@ -69,6 +80,13 @@ const modeHelp: Record<ApproveMode, string> = {
               <el-option label="自动通过" value="AutoApprove" />
             </el-select>
           </el-form-item>
+
+          <div v-if="data.type === 'Parallel'" class="inspector__help">
+            从该节点连出的每条线是一个并行分支，所有分支同时开始。各分支最后必须连到同一个“合并”节点，分支之间不能交叉。
+          </div>
+          <div v-if="data.type === 'Join'" class="inspector__help">
+            等待对应并行节点的所有分支都完成后，再进入下一个节点。
+          </div>
 
           <div v-if="data.type === 'Condition'" class="inspector__help">
             点击从该节点出发的连线，设置分支条件与优先级。条件都不满足时走默认分支。
@@ -118,6 +136,11 @@ const modeHelp: Record<ApproveMode, string> = {
   color: #909399;
   font-size: 12px;
   line-height: 1.5;
+}
+
+.inspector__switches {
+  display: flex;
+  flex-direction: column;
 }
 
 .inspector__remove {

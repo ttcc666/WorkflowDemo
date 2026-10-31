@@ -17,6 +17,8 @@ const typeIcons: Record<NodeType, string> = {
   Cc: '✉',
   Condition: '◆',
   Action: '⚙',
+  Parallel: '⇉',
+  Join: '⇶',
   End: '■',
 }
 
@@ -85,6 +87,8 @@ const cardClass = computed(() => [
 .flow-node--cc { --accent: #6f7ad3; }
 .flow-node--condition { --accent: #13c2c2; }
 .flow-node--action { --accent: #b37feb; }
+.flow-node--parallel,
+.flow-node--join { --accent: #36cfc9; }
 .flow-node--end { --accent: #909399; }
 
 .flow-node--selected {

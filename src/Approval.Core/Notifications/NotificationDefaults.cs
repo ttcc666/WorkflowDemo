@@ -43,6 +43,16 @@ public static class NotificationDefaults
         Content = "【抄送】{标题}，申请人 {申请人}"
     };
 
+    /// <summary>退回发起人时，若没有配置驳回通知规则，默认给发起人发站内信。</summary>
+    public static NotificationRule ReturnedToInitiatorRule { get; } = new()
+    {
+        Events = [NotifyEvent.Rejected],
+        Recipients = [new ApproverRule(AssigneesRecipient, "")],
+        Channels = [InAppChannel.Name],
+        Title = "申请被退回：{标题}",
+        Content = "【退回】{标题} 被 {操作人} 退回：{意见}，请修改后重新提交"
+    };
+
     /// <summary>节点设置了“超时提醒”但没有配置 Timeout 通知规则时，默认给超时待办的处理人发站内信。</summary>
     public static NotificationRule TimeoutRule { get; } = new()
     {
