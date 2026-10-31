@@ -1,6 +1,6 @@
 # 优化计划：数据权限 / 分页 / 组织架构审批人 / 表单增强 / 管理功能
 
-> 状态：**执行中**（2026-10-31 开始；阶段 0、1 已完成）。
+> 状态：**执行中**（2026-10-31 开始；阶段 0–2 已完成）。
 > 对应上次评估中的第 1、2、6、7、8 项。执行时按“阶段 → 清单”逐项完成，每阶段结束运行验证命令，并更新本文件复选框。
 
 ## 0. 背景与现状（执行前必读）
@@ -285,11 +285,11 @@
 - [x] 验证：全部测试、`e2e-v3.ps1`、`e2e-forms.ps1`（脚本中用 alice 查看他人实例的地方需确认仍有权限）。
 
 ### 阶段 2：分页与筛选（第 2 项）
-- [ ] `Paging.cs`；查询服务改造与新增 `GetCarbonCopiedAsync`、`SearchInstancesAsync`、`GetTodoCountAsync`；索引。
-- [ ] 接口改为分页参数与 `PagedResult`；`cc`、`todo/count`；outbox 分页。
-- [ ] 前端 `usePagedList`、表格分页与筛选、“抄送我的”页签、待办角标；`MessageBell` 不变。
-- [ ] 更新 e2e 脚本中对列表返回结构的使用（`(Api GET '/approval/todo' …).items`）。
-- [ ] 测试：分页边界（page 越界、pageSize 上限）、关键字、状态筛选、角色待办计数、抄送我的（角色抄送）。
+- [x] `Paging.cs`；查询服务改造与新增 `GetCarbonCopiedAsync`、`SearchInstancesAsync`、`GetTodoCountAsync`；索引。
+- [x] 接口改为分页参数与 `PagedResult`；`cc`、`todo/count`；outbox 分页。
+- [x] 前端 `usePagedList`、表格分页与筛选、“抄送我的”页签、待办角标；`MessageBell` 不变。
+- [x] 更新 e2e 脚本中对列表返回结构的使用（`(Api GET '/approval/todo' …).items`）。
+- [x] 测试：分页边界（page 越界、pageSize 上限）、关键字、状态筛选、角色待办计数、抄送我的（角色抄送）。
 
 ### 阶段 3：管理功能（第 8 项）
 - [ ] `ApprovalAction` 新值、`OnTerminatedAsync` 默认实现、`ApprovalEngine.Admin.cs`（终止、改派、批量改派）。

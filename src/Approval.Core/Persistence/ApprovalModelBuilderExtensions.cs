@@ -36,6 +36,9 @@ public static class ApprovalModelBuilderExtensions
             b.Property(x => x.ConcurrencyStamp).IsConcurrencyToken();
             b.HasIndex(x => new { x.BusinessType, x.BusinessKey });
             b.HasIndex(x => new { x.InitiatorId, x.Status });
+            // 我发起的、管理员监控：按发起人 / 状态筛选，按发起时间排序
+            b.HasIndex(x => new { x.InitiatorId, x.CreatedAt });
+            b.HasIndex(x => new { x.Status, x.CreatedAt });
             b.HasMany(x => x.Tasks).WithOne().HasForeignKey(x => x.InstanceId).OnDelete(DeleteBehavior.Cascade);
             b.HasMany(x => x.Logs).WithOne().HasForeignKey(x => x.InstanceId).OnDelete(DeleteBehavior.Cascade);
         });
@@ -53,6 +56,8 @@ public static class ApprovalModelBuilderExtensions
             b.Property(x => x.Kind).HasConversion<string>().HasMaxLength(20);
             // 待办查询：按处理人 + 状态
             b.HasIndex(x => new { x.AssigneeKind, x.AssigneeValue, x.Status });
+            // 我已处理：按实际处理人
+            b.HasIndex(x => x.HandledBy);
             // 超时扫描
             b.HasIndex(x => new { x.Status, x.NextRemindAt });
         });

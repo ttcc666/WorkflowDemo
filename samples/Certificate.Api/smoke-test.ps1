@@ -10,7 +10,7 @@ function Call($method, $path, $user, $body) {
 # Invoke-RestMethod 把 JSON 数组作为单个对象输出，这里展开成元素
 function Items($value) { @($value | ForEach-Object { $_ }) }
 function Approve($user, $comment) {
-    $t = (Items (Call GET '/api/approval/todo' $user))[0]
+    $t = (Items (Call GET '/api/approval/todo' $user).items)[0]
     "  $user 审批 [$($t.nodeName)]"
     Call POST "/api/approval/tasks/$($t.taskId)/approve" $user @{ comment = $comment } | Out-Null
 }
@@ -23,8 +23,8 @@ Items (Call GET '/api/approval/definitions' 'admin') | ForEach-Object { "  $($_.
 "== 1. alice 申请新增特种证书：部门 → 质量 → 安全 → 负责人"
 $r1 = Call POST '/api/certificates' 'alice' $certData
 "  审核前证书数: $((Items (Call GET '/api/certificates' 'alice')).Count)（应为 0）"
-"  dan 待办数: $((Items (Call GET '/api/approval/todo' 'dan')).Count)，dave 待办数: $((Items (Call GET '/api/approval/todo' 'dave')).Count)，quinn 待办数: $((Items (Call GET '/api/approval/todo' 'quinn')).Count)（应为 1, 1, 0）"
-$deptTask = (Items (Call GET '/api/approval/todo' 'dan'))[0]
+"  dan 待办数: $((Call GET '/api/approval/todo/count' 'dan').count)，dave 待办数: $((Call GET '/api/approval/todo/count' 'dave').count)，quinn 待办数: $((Call GET '/api/approval/todo/count' 'quinn').count)（应为 1, 1, 0）"
+$deptTask = (Items (Call GET '/api/approval/todo' 'dan').items)[0]
 "  quinn 越权审批部门节点: $(Call POST "/api/approval/tasks/$($deptTask.taskId)/approve" 'quinn' @{ comment = 'x' })"
 "  alice 审批自己的申请: $(Call POST "/api/approval/tasks/$($deptTask.taskId)/approve" 'alice' @{ comment = 'x' })"
 Approve 'dan' '部门审核通过'; Approve 'quinn' '资质齐全'; Approve 'sam' '安全审核通过'; Approve 'leo' '同意'
@@ -37,7 +37,7 @@ $r2 = Call PUT "/api/certificates/$($cert.id)" 'alice' (With $certData @{ holder
 $detail = Call GET "/api/certificate-requests/$($r2.requestId)" 'dan'
 "  变更字段: " + ((Items $detail.changes | ForEach-Object { "$($_.field): $($_.before) -> $($_.after)" }) -join '；')
 Approve 'dave' 'OK'
-$t = (Items (Call GET '/api/approval/todo' 'quinn'))[0]
+$t = (Items (Call GET '/api/approval/todo' 'quinn').items)[0]
 Call POST "/api/approval/tasks/$($t.taskId)/reject" 'quinn' @{ comment = '缺少变更证明材料' } | Out-Null
 "  驳回后证书持有人: $((Call GET "/api/certificates/$($cert.id)" 'alice').holder)（应仍为 张三）"
 "  申请单状态: $((Call GET "/api/certificate-requests/$($r2.requestId)" 'alice').request.status)"

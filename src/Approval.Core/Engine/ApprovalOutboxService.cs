@@ -31,7 +31,7 @@ public sealed class ApprovalOutboxSignal
     public Task<bool> WaitAsync(TimeSpan timeout, CancellationToken ct) => _signal.WaitAsync(timeout, ct);
 }
 
-public sealed record OutboxQuery(OutboxStatus? Status = null, Guid? InstanceId = null, int Take = 100);
+public sealed record OutboxQuery(OutboxStatus? Status = null, Guid? InstanceId = null);
 
 /// <summary>
 /// Outbox 投递：抢占到期消息 → 调用渠道 / 动作 → 成功标记完成，失败按指数退避安排下次重试，超过次数标记失败。
@@ -211,12 +211,13 @@ public sealed class ApprovalOutboxService(
         }
     }
 
-    public Task<List<ApprovalOutboxMessage>> ListAsync(OutboxQuery query, CancellationToken ct = default)
+    /// <summary>投递记录，按创建时间倒序分页。</summary>
+    public Task<PagedResult<ApprovalOutboxMessage>> ListAsync(OutboxQuery query, PageRequest? page = null, CancellationToken ct = default)
     {
         var q = _db.Set<ApprovalOutboxMessage>().AsNoTracking();
         if (query.Status is { } status) q = q.Where(m => m.Status == status);
         if (query.InstanceId is { } instanceId) q = q.Where(m => m.InstanceId == instanceId);
-        return q.OrderByDescending(m => m.CreatedAt).Take(Math.Clamp(query.Take, 1, 500)).ToListAsync(ct);
+        return q.OrderByDescending(m => m.CreatedAt).ThenByDescending(m => m.Id).ToPagedAsync(page ?? new PageRequest(), ct);
     }
 
     /// <summary>手动重试：重新进入待投递状态并立即执行，重新计算重试次数。</summary>

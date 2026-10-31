@@ -190,8 +190,9 @@ public sealed class TestHost : IAsyncDisposable
     public Task<ApprovalInstance> GetInstanceAsync(Guid id) =>
         RunAsync(async sp => (await sp.GetRequiredService<ApprovalQueryService>().GetInstanceAsync(id))!);
 
-    public Task<List<TodoItem>> TodoAsync(string userId) =>
-        RunAsync(sp => sp.GetRequiredService<ApprovalQueryService>().GetTodoAsync(userId));
+    public async Task<List<TodoItem>> TodoAsync(string userId) =>
+        (await RunAsync(sp => sp.GetRequiredService<ApprovalQueryService>().GetTodoAsync(userId, page: new PageRequest(1, PageRequest.MaxPageSize))))
+        .Items.ToList();
 
     /// <summary>取当前用户的唯一待办并同意。</summary>
     public async Task ApproveMyTaskAsync(string userId, string? comment = null)

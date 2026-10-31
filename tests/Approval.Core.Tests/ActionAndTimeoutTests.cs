@@ -84,7 +84,7 @@ public sealed class ActionNodeTests : IAsyncLifetime
 
         var ex = await Assert.ThrowsAsync<ApprovalException>(() => _host.StartAsync("f", "B1", "alice"));
         Assert.Contains("动作 '脚本' 执行失败", ex.Message);
-        Assert.Empty(await _host.RunAsync(sp => sp.GetRequiredService<ApprovalQueryService>().GetStartedByAsync("alice")));
+        Assert.Empty((await _host.RunAsync(sp => sp.GetRequiredService<ApprovalQueryService>().GetStartedByAsync("alice"))).Items);
     }
 
     [Fact]

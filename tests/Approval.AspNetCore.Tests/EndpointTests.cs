@@ -64,8 +64,8 @@ public sealed class EndpointTests
         await host.RunAsync(sp => sp.GetRequiredService<ApprovalEngine>()
             .StartAsync(new StartApprovalRequest("doc", DocHandler.Type, "D-1", "alice") { Title = "文档 D-1" }));
 
-        var todo = Assert.Single((await host.GetJsonAsync("/api/approval/todo", "bob")).EnumerateArray());
-        var started = Assert.Single((await host.GetJsonAsync("/api/approval/started", "alice")).EnumerateArray());
+        var todo = Assert.Single((await host.GetJsonAsync("/api/approval/todo", "bob")).GetProperty("items").EnumerateArray());
+        var started = Assert.Single((await host.GetJsonAsync("/api/approval/started", "alice")).GetProperty("items").EnumerateArray());
 
         Assert.Equal("文档审批", todo.GetProperty("definitionName").GetString());
         Assert.Equal("Role", todo.GetProperty("assigneeKind").GetString());
@@ -93,7 +93,7 @@ public sealed class EndpointTests
         await host.PublishAsync("doc", Flow);
         await host.RunAsync(sp => sp.GetRequiredService<ApprovalEngine>()
             .StartAsync(new StartApprovalRequest("doc", DocHandler.Type, "D-2", "alice")));
-        var taskId = (await host.GetJsonAsync("/api/approval/todo", "bob")).EnumerateArray().Single().GetProperty("taskId").GetGuid();
+        var taskId = (await host.GetJsonAsync("/api/approval/todo", "bob")).GetProperty("items").EnumerateArray().Single().GetProperty("taskId").GetGuid();
 
         var invalid = await host.SendAsync(HttpMethod.Post, $"/api/approval/tasks/{taskId}/add-sign", "bob",
             new { userIds = new[] { "hana" }, mode = "Bogus" });
@@ -101,7 +101,7 @@ public sealed class EndpointTests
             new { userIds = new[] { "hana" }, mode = "Parallel", comment = "请协助" });
 
         Assert.Equal(System.Net.HttpStatusCode.BadRequest, invalid.StatusCode);
-        var signTask = Assert.Single((await host.GetJsonAsync("/api/approval/todo", "hana")).EnumerateArray());
+        var signTask = Assert.Single((await host.GetJsonAsync("/api/approval/todo", "hana")).GetProperty("items").EnumerateArray());
         Assert.Equal("AddSignParallel", signTask.GetProperty("kind").GetString());
     }
 

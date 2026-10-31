@@ -9,9 +9,11 @@ import type {
   ApprovalMeta,
   ApprovalTask,
   DirectoryUser,
+  FlowSummary,
   InstanceListItem,
+  ListQuery,
   OutboxMessage,
-  OutboxStatus,
+  PagedResult,
   ReturnTarget,
   StartForm,
   StartableFlow,
@@ -22,6 +24,16 @@ import type { FormValues } from '../features/forms/formModel'
 const enc = encodeURIComponent
 /** 接口地址，前缀取自配置的 apiBase */
 const api = (path: string) => approvalConfig().apiBase + path
+
+/** 查询字符串：忽略空值（undefined、null、''、false） */
+export function queryString(query: object = {}) {
+  const params = new URLSearchParams()
+  for (const [key, value] of Object.entries(query)) {
+    if (value !== undefined && value !== null && value !== '' && value !== false) params.set(key, String(value))
+  }
+  const text = params.toString()
+  return text ? `?${text}` : ''
+}
 
 export const approvalApi = {
   me: (signal?: AbortSignal) => http.get<ApprovalMe>(api('/me'), signal),
@@ -37,9 +49,15 @@ export const approvalApi = {
   submitForm: (key: string, formData: FormValues, comment: string) =>
     http.post<{ instanceId: string }>(api(`/forms/${enc(key)}/start`), { formData, comment }),
 
-  todo: (signal?: AbortSignal) => http.get<TodoItem[]>(api('/todo'), signal),
-  done: (signal?: AbortSignal) => http.get<InstanceListItem[]>(api('/done'), signal),
-  started: (signal?: AbortSignal) => http.get<InstanceListItem[]>(api('/started'), signal),
+  todo: (query: ListQuery = {}, signal?: AbortSignal) => http.get<PagedResult<TodoItem>>(api(`/todo${queryString(query)}`), signal),
+  todoCount: (signal?: AbortSignal) => http.get<{ count: number }>(api('/todo/count'), signal),
+  done: (query: ListQuery = {}, signal?: AbortSignal) => http.get<PagedResult<InstanceListItem>>(api(`/done${queryString(query)}`), signal),
+  started: (query: ListQuery = {}, signal?: AbortSignal) =>
+    http.get<PagedResult<InstanceListItem>>(api(`/started${queryString(query)}`), signal),
+  /** 抄送我的（含抄送给我所在角色的） */
+  cc: (query: ListQuery = {}, signal?: AbortSignal) => http.get<PagedResult<InstanceListItem>>(api(`/cc${queryString(query)}`), signal),
+  /** 已发布流程的标识与名称（筛选下拉） */
+  flows: (signal?: AbortSignal) => http.get<FlowSummary[]>(api('/flows'), signal),
 
   instance: (id: string, signal?: AbortSignal) => http.get<ApprovalInstance>(api(`/instances/${id}`), signal),
   /** 实例绑定版本的流程定义（公开视图：不含动作参数、通知与时限配置），用于画流程图、展示表单 */
@@ -77,7 +95,7 @@ export const approvalApi = {
   markRead: (id: string) => http.post(api(`/messages/${id}/read`), {}),
   markAllRead: () => http.post(api('/messages/read-all'), {}),
 
-  outbox: (status: OutboxStatus | '', signal?: AbortSignal) =>
-    http.get<OutboxMessage[]>(api(`/outbox${status ? `?status=${status}` : ''}`), signal),
+  outbox: (query: ListQuery = {}, signal?: AbortSignal) =>
+    http.get<PagedResult<OutboxMessage>>(api(`/outbox${queryString(query)}`), signal),
   retryOutbox: (id: string) => http.post(api(`/outbox/${id}/retry`), {}),
 }

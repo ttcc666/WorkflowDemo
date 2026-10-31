@@ -1,27 +1,26 @@
 <script setup lang="ts">
-import { onBeforeUnmount, shallowRef } from 'vue'
+import { onBeforeUnmount } from 'vue'
 import { ElMessage } from 'element-plus'
 import { approvalApi } from '../api/approval'
 import { errorMessage } from '../api/http'
-import type { OutboxMessage, OutboxStatus } from '../api/types'
-import { useAsyncData } from '../composables/useAsyncData'
+import type { OutboxMessage } from '../api/types'
 import { useApprovalUser } from '../composables/useApprovalUser'
+import { usePagedList } from '../composables/usePagedList'
 import { approvalConfig, approvalUserKey } from '../config'
 import { formatDateTime, outboxStatusLabels } from '../utils/labels'
 
-/** 投递记录：外部渠道通知与异步动作的投递状态、重试。宿主可通过 outboxPanel 选项在下方追加面板。 */
+/** 投递记录：外部渠道通知与异步动作的投递状态、重试（分页，状态与页码同步到地址栏）。宿主可通过 outboxPanel 选项在下方追加面板。 */
 const { isAdmin } = useApprovalUser()
 const outboxPanel = approvalConfig().outboxPanel
-const status = shallowRef<OutboxStatus | ''>('')
 
-const outbox = useAsyncData((signal) => approvalApi.outbox(status.value, signal), {
-  watch: [status, approvalUserKey],
-  initial: [],
+const outbox = usePagedList((query, signal) => approvalApi.outbox(query, signal), {
+  routePrefix: '',
+  resetOn: [approvalUserKey],
   notifyError: false,
 })
 
 function refresh() {
-  void outbox.reload()
+  if (isAdmin.value) void outbox.reload()
 }
 const timer = window.setInterval(refresh, 3000)
 onBeforeUnmount(() => window.clearInterval(timer))
@@ -46,13 +45,13 @@ const msg = (r: unknown) => r as OutboxMessage
       <template #header>
         <div class="outbox__header">
           <span>投递记录（Outbox）</span>
-          <el-radio-group v-model="status" size="small">
+          <el-radio-group v-model="outbox.filters.status" size="small" @change="outbox.search">
             <el-radio-button value="">全部</el-radio-button>
             <el-radio-button v-for="(l, s) in outboxStatusLabels" :key="s" :value="s">{{ l.text }}</el-radio-button>
           </el-radio-group>
         </div>
       </template>
-      <el-table :data="outbox.data.value" row-key="id" empty-text="暂无记录" size="small">
+      <el-table :data="outbox.items.value" row-key="id" empty-text="暂无记录" size="small">
         <el-table-column label="类型" width="90">
           <template #default="{ row }">{{ msg(row).kind === 'Action' ? '异步动作' : '通知' }}</template>
         </el-table-column>
@@ -81,6 +80,8 @@ const msg = (r: unknown) => r as OutboxMessage
           </template>
         </el-table-column>
       </el-table>
+      <el-pagination v-model:current-page="outbox.page.value" v-model:page-size="outbox.pageSize.value" :total="outbox.total.value"
+        :page-sizes="[20, 50, 100]" layout="total, sizes, prev, pager, next" background size="small" class="outbox__pager" />
     </el-card>
 
     <component :is="outboxPanel" v-if="outboxPanel" />
@@ -98,6 +99,11 @@ const msg = (r: unknown) => r as OutboxMessage
   display: flex;
   align-items: center;
   justify-content: space-between;
+}
+
+.outbox__pager {
+  justify-content: flex-end;
+  margin-top: 12px;
 }
 
 </style>

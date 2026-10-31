@@ -121,6 +121,38 @@ export interface ReturnTarget {
   isInitiator: boolean
 }
 
+// ───── 分页 ─────
+
+/** 分页结果：total 为满足条件的总条数 */
+export interface PagedResult<T> {
+  items: T[]
+  total: number
+  page: number
+  pageSize: number
+}
+
+/** 列表查询参数（空值不传）：page 从 1 开始，pageSize 默认 20、最大 100；from / to 为发起时间区间（ISO，含 from 不含 to） */
+export interface ListQuery {
+  page?: number
+  pageSize?: number
+  keyword?: string
+  status?: string
+  definitionKey?: string
+  from?: string
+  to?: string
+  initiatorId?: string
+  /** 仅待办：只看已超时 */
+  overdueOnly?: boolean
+  /** 仅投递记录 */
+  instanceId?: string
+}
+
+/** 流程标识与名称（列表的流程筛选） */
+export interface FlowSummary {
+  key: string
+  name: string
+}
+
 export interface ApprovalDefinition {
   id: string
   key: string

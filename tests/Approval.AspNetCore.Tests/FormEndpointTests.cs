@@ -37,7 +37,7 @@ public sealed class FormEndpointTests
         var detail = await host.GetJsonAsync($"/api/approval/instances/{instanceId}", "alice");
         Assert.Equal("alice请假 2 天", detail.GetProperty("title").GetString());
         Assert.Equal("Form", detail.GetProperty("businessType").GetString());
-        Assert.Equal("请假", Assert.Single((await host.GetJsonAsync("/api/approval/todo", "bob")).EnumerateArray())
+        Assert.Equal("请假", Assert.Single((await host.GetJsonAsync("/api/approval/todo", "bob")).GetProperty("items").EnumerateArray())
             .GetProperty("definitionName").GetString());
     }
 
@@ -112,9 +112,9 @@ public sealed class FormEndpointTests
         await host.PublishAsync("leave", LeaveFlow);
         var instanceId = (await host.PostJsonAsync("/api/approval/forms/leave/start", "alice", new { formData = new { days = 5 } }))
             .GetProperty("instanceId").GetGuid();
-        var task = (await host.GetJsonAsync("/api/approval/todo", "bob")).EnumerateArray().Single().GetProperty("taskId").GetGuid();
+        var task = (await host.GetJsonAsync("/api/approval/todo", "bob")).GetProperty("items").EnumerateArray().Single().GetProperty("taskId").GetGuid();
         await host.PostJsonAsync($"/api/approval/tasks/{task}/reject", "bob", new { comment = "天数太多", targetNodeId = "start" });
-        var resubmit = (await host.GetJsonAsync("/api/approval/todo", "alice")).EnumerateArray().Single();
+        var resubmit = (await host.GetJsonAsync("/api/approval/todo", "alice")).GetProperty("items").EnumerateArray().Single();
         Assert.Equal("Resubmit", resubmit.GetProperty("kind").GetString());
 
         await host.PostJsonAsync($"/api/approval/tasks/{resubmit.GetProperty("taskId").GetGuid()}/resubmit", "alice",

@@ -18,6 +18,9 @@ public sealed record ApprovalMetadata(
     IReadOnlyList<TemplateVariableInfo> TemplateVariables,
     IReadOnlyDictionary<NotifyEvent, string> DefaultTemplates);
 
+/// <summary>流程标识与名称（最新发布版本）。</summary>
+public sealed record FlowSummary(string Key, string Name);
+
 /// <summary>流程定义管理：校验、发布新版本、查询。</summary>
 public sealed class ApprovalDefinitionService(
     ApprovalDbContextAccessor accessor,
@@ -92,6 +95,15 @@ public sealed class ApprovalDefinitionService(
             .Where(d => d.IsPublished && d.Version == _db.Set<ApprovalDefinition>()
                 .Where(x => x.Key == d.Key && x.IsPublished).Max(x => x.Version))
             .OrderBy(d => d.Key)
+            .ToListAsync(ct);
+
+    /// <summary>已发布流程的标识与名称（列表筛选下拉使用，不含定义内容）。</summary>
+    public Task<List<FlowSummary>> ListFlowsAsync(CancellationToken ct = default) =>
+        _db.Set<ApprovalDefinition>().AsNoTracking()
+            .Where(d => d.IsPublished && d.Version == _db.Set<ApprovalDefinition>()
+                .Where(x => x.Key == d.Key && x.IsPublished).Max(x => x.Version))
+            .OrderBy(d => d.Key)
+            .Select(d => new FlowSummary(d.Key, d.Name))
             .ToListAsync(ct);
 
     public Task<ApprovalDefinition?> GetLatestAsync(string key, CancellationToken ct = default) =>

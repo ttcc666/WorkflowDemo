@@ -17,6 +17,9 @@ internal static class DefinitionEndpoints
         // 设计器元数据：审批人类型、通知接收人类型、动作（含参数描述）、渠道、模板变量（不含敏感配置，所有登录用户可读）
         group.MapGet("/meta", (ApprovalDefinitionService d) => d.Metadata);
 
+        // 流程标识与名称（列表的流程筛选），所有登录用户可读
+        group.MapGet("/flows", (ApprovalDefinitionService d, CancellationToken ct) => d.ListFlowsAsync(ct));
+
         group.MapGet("/definitions", async (HttpContext http, ApprovalDefinitionService d, CancellationToken ct) =>
         {
             await EnsureReaderAsync(http, ct);
@@ -93,10 +96,11 @@ internal static class MessageEndpoints
         if (!options.EnableOutboxEndpoints) return;
 
         // 投递记录（Outbox）：仅管理员
-        group.MapGet("/outbox", async (OutboxStatus? status, Guid? instanceId, HttpContext http, ApprovalOutboxService o, CancellationToken ct) =>
+        group.MapGet("/outbox", async (OutboxStatus? status, Guid? instanceId, int? page, int? pageSize, HttpContext http,
+            ApprovalOutboxService o, CancellationToken ct) =>
         {
             await http.EnsureApprovalAdminAsync("仅管理员可查看投递记录", ct);
-            return await o.ListAsync(new OutboxQuery(status, instanceId), ct);
+            return await o.ListAsync(new OutboxQuery(status, instanceId), new PageRequest(page, pageSize), ct);
         });
 
         group.MapPost("/outbox/{id:guid}/retry", async (Guid id, HttpContext http, ApprovalOutboxService o, ApprovalOutboxSignal signal,

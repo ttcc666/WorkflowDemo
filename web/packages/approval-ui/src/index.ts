@@ -21,13 +21,14 @@ export const ApprovalUI: Plugin<[ApprovalUIOptions?]> = {
 export { approvalConfig, approvalUserKey, configureApprovalUI, type ApprovalUIOptions } from './config'
 export { approvalRouteNames, createApprovalRoutes } from './routes'
 
-export { approvalApi } from './api/approval'
+export { approvalApi, queryString } from './api/approval'
 export { ApiError, errorMessage, http } from './api/http'
 export type * from './api/types'
 
 export { useApprovalUser } from './composables/useApprovalUser'
 export { useAsyncData } from './composables/useAsyncData'
 export { useDirectory } from './composables/useDirectory'
+export { emptyFilters, toListQuery, usePagedList, type ListFilters, type PagedList, type UsePagedListOptions } from './composables/usePagedList'
 
 export { default as MessageBell } from './components/MessageBell.vue'
 export { default as UserPicker } from './components/UserPicker.vue'

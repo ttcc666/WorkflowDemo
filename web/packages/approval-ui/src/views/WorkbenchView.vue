@@ -3,35 +3,48 @@ import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { approvalApi } from '../api/approval'
 import { useAsyncData } from '../composables/useAsyncData'
+import { usePagedList } from '../composables/usePagedList'
 import { approvalUserKey } from '../config'
 import { approvalRouteNames } from '../routes'
+import ListFilterBar from '../features/workbench/ListFilterBar.vue'
 import TodoTable from '../features/workbench/TodoTable.vue'
 import InstanceTable from '../features/workbench/InstanceTable.vue'
 
-type Tab = 'todo' | 'done' | 'started'
+type Tab = 'todo' | 'done' | 'started' | 'cc'
+const tabs: Tab[] = ['todo', 'done', 'started', 'cc']
 
 const route = useRoute()
 const router = useRouter()
 
 const tab = computed<Tab>({
-  get: () => (['todo', 'done', 'started'].includes(route.query.tab as string) ? (route.query.tab as Tab) : 'todo'),
+  get: () => (tabs.includes(route.query.tab as Tab) ? (route.query.tab as Tab) : 'todo'),
   set: (value) => router.replace({ query: { ...route.query, tab: value } }),
 })
 
-// 切换用户后各列表自动刷新
-const todo = useAsyncData((s) => approvalApi.todo(s), { watch: [approvalUserKey], initial: [] })
-const done = useAsyncData((s) => approvalApi.done(s), { watch: [approvalUserKey], initial: [] })
-const started = useAsyncData((s) => approvalApi.started(s), { watch: [approvalUserKey], initial: [] })
+// 各列表的页码与筛选同步到路由 query（键带列表前缀）；切换用户后回到第一页重新加载
+const listOptions = (prefix: string) => ({ routePrefix: prefix, resetOn: [approvalUserKey] })
+const todo = usePagedList((q, s) => approvalApi.todo(q, s), listOptions('todo_'))
+const done = usePagedList((q, s) => approvalApi.done(q, s), listOptions('done_'))
+const started = usePagedList((q, s) => approvalApi.started(q, s), listOptions('started_'))
+const cc = usePagedList((q, s) => approvalApi.cc(q, s), listOptions('cc_'))
+
+const todoCount = useAsyncData(async (signal) => (await approvalApi.todoCount(signal)).count, {
+  watch: [approvalUserKey],
+  initial: 0,
+  notifyError: false,
+})
+const flows = useAsyncData((signal) => approvalApi.flows(signal), { initial: [], notifyError: false })
 
 function refresh() {
-  void todo.reload()
-  void done.reload()
-  void started.reload()
+  void todoCount.reload()
+  void { todo, done, started, cc }[tab.value].reload()
 }
 
 function open(instanceId: string) {
   void router.push({ name: approvalRouteNames.detail, params: { id: instanceId } })
 }
+
+const pageSizes = [10, 20, 50, 100]
 </script>
 
 <template>
@@ -46,15 +59,31 @@ function open(instanceId: string) {
     <el-tabs v-model="tab">
       <el-tab-pane name="todo">
         <template #label>
-          <el-badge :value="todo.data.value?.length ?? 0" :hidden="!todo.data.value?.length" :offset="[8, 2]">我的待办</el-badge>
+          <el-badge :value="todoCount.data.value ?? 0" :hidden="!todoCount.data.value" :offset="[8, 2]">我的待办</el-badge>
         </template>
-        <TodoTable :items="todo.data.value ?? []" :loading="todo.loading.value" @open="open" />
+        <ListFilterBar v-model="todo.filters" :flows="flows.data.value ?? []" overdue @search="todo.search" @reset="todo.reset" />
+        <TodoTable :items="todo.items.value" :loading="todo.loading.value" @open="open" />
+        <el-pagination v-model:current-page="todo.page.value" v-model:page-size="todo.pageSize.value" :total="todo.total.value"
+          :page-sizes="pageSizes" layout="total, sizes, prev, pager, next" background size="small" class="workbench__pager" />
       </el-tab-pane>
       <el-tab-pane label="我已处理" name="done">
-        <InstanceTable :items="done.data.value ?? []" :loading="done.loading.value" empty-text="暂无已处理的审批" @open="open" />
+        <ListFilterBar v-model="done.filters" :flows="flows.data.value ?? []" status dates @search="done.search" @reset="done.reset" />
+        <InstanceTable :items="done.items.value" :loading="done.loading.value" empty-text="暂无已处理的审批" @open="open" />
+        <el-pagination v-model:current-page="done.page.value" v-model:page-size="done.pageSize.value" :total="done.total.value"
+          :page-sizes="pageSizes" layout="total, sizes, prev, pager, next" background size="small" class="workbench__pager" />
       </el-tab-pane>
       <el-tab-pane label="我发起的" name="started">
-        <InstanceTable :items="started.data.value ?? []" :loading="started.loading.value" empty-text="暂无发起的审批" @open="open" />
+        <ListFilterBar v-model="started.filters" :flows="flows.data.value ?? []" status dates keyword-placeholder="标题"
+          @search="started.search" @reset="started.reset" />
+        <InstanceTable :items="started.items.value" :loading="started.loading.value" empty-text="暂无发起的审批" @open="open" />
+        <el-pagination v-model:current-page="started.page.value" v-model:page-size="started.pageSize.value" :total="started.total.value"
+          :page-sizes="pageSizes" layout="total, sizes, prev, pager, next" background size="small" class="workbench__pager" />
+      </el-tab-pane>
+      <el-tab-pane label="抄送我的" name="cc">
+        <ListFilterBar v-model="cc.filters" :flows="flows.data.value ?? []" status dates @search="cc.search" @reset="cc.reset" />
+        <InstanceTable :items="cc.items.value" :loading="cc.loading.value" empty-text="暂无抄送给我的审批" @open="open" />
+        <el-pagination v-model:current-page="cc.page.value" v-model:page-size="cc.pageSize.value" :total="cc.total.value"
+          :page-sizes="pageSizes" layout="total, sizes, prev, pager, next" background size="small" class="workbench__pager" />
       </el-tab-pane>
     </el-tabs>
   </el-card>
@@ -65,5 +94,10 @@ function open(instanceId: string) {
   display: flex;
   align-items: center;
   justify-content: space-between;
+}
+
+.workbench__pager {
+  justify-content: flex-end;
+  margin-top: 12px;
 }
 </style>

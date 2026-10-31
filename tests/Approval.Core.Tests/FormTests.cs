@@ -265,7 +265,7 @@ public sealed class FormTests
 
         Assert.Equal(ApprovalErrorCode.Validation, ex.Code);
         Assert.Equal(["leaveType", "days"], ex.Errors.Keys);
-        Assert.Empty(await host.RunAsync(sp => sp.GetRequiredService<ApprovalQueryService>().GetStartedByAsync("alice")));
+        Assert.Empty((await host.RunAsync(sp => sp.GetRequiredService<ApprovalQueryService>().GetStartedByAsync("alice"))).Items);
     }
 
     [Fact]

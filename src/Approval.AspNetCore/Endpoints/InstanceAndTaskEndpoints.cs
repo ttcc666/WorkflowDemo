@@ -7,19 +7,26 @@ using Microsoft.AspNetCore.Routing;
 
 namespace Approval.AspNetCore.Endpoints;
 
-/// <summary>工作台与实例：待办、已办、我发起的、详情、撤回。</summary>
+/// <summary>工作台与实例：待办、已办、我发起的、抄送我的（分页 + 筛选）、详情、撤回。</summary>
 internal static class InstanceEndpoints
 {
     public static void Map(RouteGroupBuilder group)
     {
-        group.MapGet("/todo", (HttpContext http, ApprovalQueryService q, CancellationToken ct) =>
-            q.GetTodoAsync(http.GetApprovalUserId(), ct));
+        group.MapGet("/todo", ([AsParameters] TodoListRequest request, HttpContext http, ApprovalQueryService q, CancellationToken ct) =>
+            q.GetTodoAsync(http.GetApprovalUserId(), request.ToQuery(), request.ToPage(), ct));
 
-        group.MapGet("/done", (HttpContext http, ApprovalQueryService q, CancellationToken ct) =>
-            q.GetDoneAsync(http.GetApprovalUserId(), ct));
+        // 工作台角标：只取数量
+        group.MapGet("/todo/count", async (HttpContext http, ApprovalQueryService q, CancellationToken ct) =>
+            new { count = await q.GetTodoCountAsync(http.GetApprovalUserId(), ct) });
 
-        group.MapGet("/started", (HttpContext http, ApprovalQueryService q, CancellationToken ct) =>
-            q.GetStartedByAsync(http.GetApprovalUserId(), ct));
+        group.MapGet("/done", ([AsParameters] InstanceListRequest request, HttpContext http, ApprovalQueryService q, CancellationToken ct) =>
+            q.GetDoneAsync(http.GetApprovalUserId(), request.ToQuery(), request.ToPage(), ct));
+
+        group.MapGet("/started", ([AsParameters] InstanceListRequest request, HttpContext http, ApprovalQueryService q, CancellationToken ct) =>
+            q.GetStartedByAsync(http.GetApprovalUserId(), request.ToQuery(), request.ToPage(), ct));
+
+        group.MapGet("/cc", ([AsParameters] InstanceListRequest request, HttpContext http, ApprovalQueryService q, CancellationToken ct) =>
+            q.GetCarbonCopiedAsync(http.GetApprovalUserId(), request.ToQuery(), request.ToPage(), ct));
 
         // 详情、按业务查询、实例的流程定义：只对有关的人可见（IApprovalAccessPolicy），无权时与不存在一样返回 404
         group.MapGet("/instances/{id:guid}", async (Guid id, HttpContext http, ApprovalQueryService q, CancellationToken ct) =>
