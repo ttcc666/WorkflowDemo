@@ -9,6 +9,7 @@ TestResults/
 
 # 前端
 node_modules/
+web/packages/*/dist/
 samples/Certificate.Api/wwwroot/
 
 # 本地测试产物

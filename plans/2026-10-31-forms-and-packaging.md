@@ -1,6 +1,6 @@
 # B 表单设计器 + 通用发起页 / C 封装为可复用包 — 开发计划
 
-> 状态：**执行中**。阶段 0、1、2 已完成（每阶段完成后本地提交，不推送）。
+> 状态：**执行中**。阶段 0–3 已完成（每阶段完成后本地提交，不推送）。
 > 执行时按“阶段 → 清单”逐项完成，每个阶段结束运行该阶段的验证命令；本文件的复选框随进度更新。
 
 ## 0. 背景与现状（执行前必读）
@@ -208,14 +208,16 @@ web/
 - 补充：`/me` 返回 `formsEnabled`；未调用 `AddFormApprovals()` 时不映射表单接口；`Flows/*.json` 顶层 `name` 作为演示流程名称；e2e 脚本 `output/e2e/e2e-forms.ps1`。
 
 ### 阶段 3：前端 workspace 重构（C-前端）
-- [ ] 建立 `web/package.json`、`pnpm-workspace.yaml`；用 `git mv` 迁移文件（保留历史），通用代码 → `packages/approval-ui/src`，证书 / 布局 / 演示用户 → `apps/demo/src`。
-- [ ] `config.ts`（provide/inject + 模块级默认值供非组件代码使用）；`http.ts` 改为读取配置的 `apiBase`、`headers()`、`onUnauthorized`。
-- [ ] `useApprovalUser`（`/me`）替换 `useCurrentUser` 中的通用部分；用户 / 角色列表改用 `directory` 接口；`UserPicker` 组件。
-- [ ] 列表显示 `definitionName`；删除 `businessTypeLabels`；业务面板改由配置注入。
-- [ ] `createApprovalRoutes()`、`ApprovalUI` 插件、`index.ts` 导出；示例应用接入。
-- [ ] 库构建：`vite build`（lib 模式，external peer）+ `vue-tsc -p tsconfig.lib.json --declaration --emitDeclarationOnly`；`pnpm --filter @approval/ui build` 产出 `dist`。
-- [ ] 迁移现有测试（`flowModel.test.ts`、`history.test.ts`）到库包；示例构建输出仍到 `wwwroot`。
-- [ ] 验证：`cd web; pnpm install; pnpm -r typecheck; pnpm -r test; pnpm build`；浏览器回归证书流程、设计器、投递记录。
+- [x] 建立 `web/package.json`、`pnpm-workspace.yaml`；用 `git mv` 迁移文件（保留历史），通用代码 → `packages/approval-ui/src`，证书 / 布局 / 演示用户 → `apps/demo/src`。
+- [x] `config.ts`（provide/inject + 模块级默认值供非组件代码使用）；`http.ts` 改为读取配置的 `apiBase`、`headers()`、`onUnauthorized`。
+- [x] `useApprovalUser`（`/me`）替换 `useCurrentUser` 中的通用部分；用户 / 角色列表改用 `directory` 接口；`UserPicker` 组件。
+- [x] 列表显示 `definitionName`；删除 `businessTypeLabels`；业务面板改由配置注入。
+- [x] `createApprovalRoutes()`、`ApprovalUI` 插件、`index.ts` 导出；示例应用接入。
+- [x] 库构建：`vite build`（lib 模式，external peer）+ `vue-tsc -p tsconfig.lib.json --declaration --emitDeclarationOnly`；`pnpm --filter @approval/ui build` 产出 `dist`。
+- [x] 迁移现有测试（`flowModel.test.ts`、`history.test.ts`）到库包；示例构建输出仍到 `wwwroot`。
+- [x] 验证：`cd web; pnpm install; pnpm -r typecheck; pnpm -r test; pnpm build`；浏览器回归证书流程、设计器、投递记录。
+
+- 补充：库内部改用相对路径导入（宿主的 `@` 别名指向宿主 src）；配置为模块级（`configureApprovalUI`），`userKey` 驱动切换用户时刷新；演示 Webhook 面板经 `outboxPanel` 选项注入；`UserPicker` 基于用户目录远程搜索。
 
 ### 阶段 4：表单前端（B-前端）
 - [ ] `formModel.ts` + 测试（规则生成、key 生成、合计字段、默认值）。

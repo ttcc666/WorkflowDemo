@@ -1,0 +1,11 @@
+{
+  "name": "approval-web",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm --filter approval-demo dev",
+    "build": "pnpm --filter approval-demo build",
+    "build:lib": "pnpm --filter @approval/ui build",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test"
+  }
+}
