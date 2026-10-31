@@ -83,7 +83,10 @@ public sealed partial class ApprovalFormService
         var draft = await FindDraftAsync(userId, id, ct, tracking: false);
         var (definition, flow) = await LoadStartableAsync(draft.DefinitionKey, userId, ct);
         using var document = JsonDocument.Parse(draft.FormDataJson);
-        var json = FormDataValidator.NormalizeLenient(flow.Form ?? new FormSchema(), document.RootElement);
+        var schema = flow.Form ?? new FormSchema();
+        // 附件项按上传记录补全名称、大小（规范化只保留 ID）
+        var (json, _) = await files.ResolveAsync(schema, FormDataValidator.NormalizeLenient(schema, document.RootElement), userId, null,
+            draft.Id, lenient: true, ct);
         return new DraftDetail(draft.Id, draft.DefinitionKey, definition.Name, json, draft.Comment, draft.CreatedAt, draft.UpdatedAt,
             Adjusted: json != draft.FormDataJson);
     }

@@ -195,6 +195,11 @@ public sealed class FileTests : IAsyncLifetime
         await _host.RunAsync(sp => forms(sp).SaveDraftAsync("alice", "expense", draft.Id, Form(kept), null));
         Assert.Null((await ReloadAsync(dropped.Id)).DraftId);
 
+        // 重新打开草稿：附件保留名称等元数据，未被误判为“流程已更新”
+        var opened = await _host.RunAsync(sp => forms(sp).GetDraftAsync("alice", draft.Id));
+        Assert.Equal("kept.pdf", JsonDocument.Parse(opened.FormDataJson).RootElement.GetProperty("invoices")[0].GetProperty("name").GetString());
+        Assert.False(opened.Adjusted);
+
         var instance = await _host.RunAsync(sp => forms(sp).StartAsync("expense", "alice", Form(kept), draftId: draft.Id));
         Assert.Equal((instance.Id, (Guid?)null), ((await ReloadAsync(kept.Id)).InstanceId!.Value, (await ReloadAsync(kept.Id)).DraftId));
 
