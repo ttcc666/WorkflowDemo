@@ -62,6 +62,9 @@ public interface IApprovalBusinessHandler
     Task OnRejectedAsync(ApprovalInstance instance, CancellationToken ct);
 
     Task OnWithdrawnAsync(ApprovalInstance instance, CancellationToken ct) => Task.CompletedTask;
+
+    /// <summary>管理员终止流程。默认按驳回处理（关闭单据、解锁），需要区分时重写。</summary>
+    Task OnTerminatedAsync(ApprovalInstance instance, CancellationToken ct) => OnRejectedAsync(instance, ct);
 }
 
 /// <summary>条件分支表达式求值。</summary>

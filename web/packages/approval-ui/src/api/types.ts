@@ -25,6 +25,9 @@ export type ApprovalAction =
   | 'Return'
   | 'AddSign'
   | 'Resubmit'
+  | 'Terminate'
+  | 'Reassign'
+  | 'FormEdit'
 
 export interface ApprovalTask {
   id: string
@@ -97,6 +100,8 @@ export interface TodoItem {
   createdAt: string
   dueAt: string | null
   kind: TaskKind
+  /** 待办均为 Pending；离职交接预览中还有 Waiting（尚未轮到）、Suspended（等待加签） */
+  status: TaskStatus
 }
 
 /** 列表项（我已处理、我发起的），不含任务与轨迹 */
@@ -151,6 +156,69 @@ export interface ListQuery {
 export interface FlowSummary {
   key: string
   name: string
+}
+
+// ───── 管理：改派与统计 ─────
+
+export interface ReassignSkip {
+  taskId: string
+  instanceId: string
+  title: string | null
+  nodeName: string
+  reason: string
+}
+
+/** 离职交接（批量改派）结果 */
+export interface ReassignResult {
+  count: number
+  skipped: ReassignSkip[]
+}
+
+/** 状态分布与耗时（分钟，只统计已结束的流程） */
+export interface FlowStatistics {
+  definitionKey: string
+  definitionName: string
+  total: number
+  running: number
+  approved: number
+  rejected: number
+  withdrawn: number
+  terminated: number
+  averageMinutes: number | null
+  p90Minutes: number | null
+}
+
+export interface NodeStatistics {
+  definitionKey: string
+  definitionName: string
+  nodeId: string
+  nodeName: string
+  handled: number
+  averageMinutes: number
+  overdue: number
+}
+
+export interface BacklogItem {
+  assigneeKind: AssigneeKind
+  assigneeValue: string
+  count: number
+  overdue: number
+  oldestCreatedAt: string
+}
+
+export interface ApprovalStatistics {
+  from: string
+  to: string
+  summary: FlowStatistics
+  /** 通过率（%）= 通过 /（通过 + 驳回 + 终止），没有已结束流程时为 null */
+  approvalRate: number | null
+  overdueTasks: number
+  /** 流程数超过上限时只统计了最早的部分 */
+  truncated: boolean
+  flows: FlowStatistics[]
+  nodes: NodeStatistics[]
+  /** 当前待办积压前 10 的处理人 */
+  backlog: BacklogItem[]
 }
 
 export interface ApprovalDefinition {

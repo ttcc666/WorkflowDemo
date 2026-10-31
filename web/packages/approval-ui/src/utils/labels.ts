@@ -51,6 +51,9 @@ export const actionLabels: Record<ApprovalAction, string> = {
   Return: '退回',
   AddSign: '加签',
   Resubmit: '重新提交',
+  Terminate: '终止流程',
+  Reassign: '改派',
+  FormEdit: '修改表单',
 }
 
 export const outboxStatusLabels: Record<OutboxStatus, { text: string; type: TagType }> = {
@@ -81,4 +84,12 @@ export function dueText(dueAt: string, now = Date.now()) {
   const minutes = Math.round(Math.abs(diff) / 60000)
   const span = minutes >= 1440 ? `${Math.floor(minutes / 1440)} 天` : minutes >= 60 ? `${Math.floor(minutes / 60)} 小时` : `${minutes} 分钟`
   return diff < 0 ? { overdue: true, text: `已超时 ${span}` } : { overdue: false, text: `剩余 ${span}` }
+}
+
+/** 时长（分钟）的简短描述：45 分钟、2.5 小时、3.2 天。 */
+export function durationText(minutes: number | null | undefined) {
+  if (minutes === null || minutes === undefined) return '-'
+  if (minutes < 60) return `${Math.round(minutes)} 分钟`
+  if (minutes < 1440) return `${Math.round(minutes / 6) / 10} 小时`
+  return `${Math.round(minutes / 144) / 10} 天`
 }

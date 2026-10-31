@@ -7,11 +7,13 @@ import DynamicForm from '../forms/DynamicForm.vue'
 import { initialValues, type FormSchema, type FormValues } from '../forms/formModel'
 import { assigneeText, taskKindLabels } from '../../utils/labels'
 
-type ActionKind = 'approve' | 'reject' | 'transfer' | 'withdraw' | 'addSign' | 'resubmit'
+type ActionKind = 'approve' | 'reject' | 'transfer' | 'withdraw' | 'addSign' | 'resubmit' | 'terminate'
 
 const props = defineProps<{
   myTask: ApprovalTask | null | undefined
   canWithdraw: boolean
+  /** 管理员：流程进行中时可终止 */
+  canTerminate?: boolean
   currentUserId: string
   initiatorId: string
   /** 当前任务所在节点的选项（来自流程定义） */
@@ -32,6 +34,7 @@ const emit = defineEmits<{
   addSign: [userIds: string[], mode: AddSignMode, comment: string]
   /** formData 仅在可修改表单时传出 */
   resubmit: [comment: string, formData?: FormValues]
+  terminate: [reason: string]
 }>()
 
 const titles: Record<ActionKind, string> = {
@@ -41,6 +44,7 @@ const titles: Record<ActionKind, string> = {
   withdraw: '撤回申请',
   addSign: '加签',
   resubmit: '重新提交',
+  terminate: '终止流程',
 }
 
 const addSignModes: { value: AddSignMode; label: string; help: string }[] = [
@@ -70,7 +74,12 @@ const excludedUsers = computed(() => [props.currentUserId, props.initiatorId])
 const returnTargets = shallowRef<ReturnTarget[]>([])
 const loadingTargets = shallowRef(false)
 
-const commentRequired = computed(() => action.value === 'reject')
+const commentRequired = computed(() => action.value === 'reject' || action.value === 'terminate')
+const commentLabel = computed(() => {
+  if (action.value === 'terminate') return '终止原因'
+  if (action.value === 'reject') return form.rejectMode === 'return' ? '退回原因' : '驳回原因'
+  return '意见'
+})
 const canSubmit = computed(() => {
   if (commentRequired.value && !form.comment.trim()) return false
   if (action.value === 'transfer') return !!form.toUserId
@@ -118,6 +127,9 @@ async function submit() {
     case 'resubmit':
       emit('resubmit', comment, editingForm.value ? resubmitData.value : undefined)
       break
+    case 'terminate':
+      emit('terminate', comment)
+      break
     default:
       emit('withdraw', comment)
   }
@@ -126,7 +138,7 @@ async function submit() {
 </script>
 
 <template>
-  <div v-if="myTask || canWithdraw" class="approval-actions">
+  <div v-if="myTask || canWithdraw || canTerminate" class="approval-actions">
     <template v-if="myTask && isResubmit">
       <span class="approval-actions__hint">申请已被退回，请修改后<strong>重新提交</strong>，或撤回本次申请</span>
       <el-button type="primary" :loading="busy" @click="open('resubmit')">重新提交</el-button>
@@ -143,6 +155,7 @@ async function submit() {
     </template>
     <span v-else class="approval-actions__hint" />
     <el-button v-if="canWithdraw" :loading="busy" @click="open('withdraw')">撤回申请</el-button>
+    <el-button v-if="canTerminate" type="danger" plain :loading="busy" @click="open('terminate')">终止流程</el-button>
   </div>
 
   <el-dialog v-model="dialogVisible" :title="titles[action]" :width="editingForm ? '820px' : '520px'" append-to-body>
@@ -150,6 +163,8 @@ async function submit() {
       <div class="dialog-help dialog-help--block">修改申请内容后重新提交，流程将从第一个审批节点重新开始。</div>
       <DynamicForm ref="resubmitFormRef" v-model="resubmitData" :schema="resubmitForm" />
     </template>
+    <el-alert v-if="action === 'terminate'" type="warning" :closable="false" show-icon class="dialog-help--block"
+      title="终止后流程结束、所有待办取消，业务单据按驳回处理，并通知申请人" />
     <el-form label-position="top">
       <template v-if="action === 'reject' && allowReturn">
         <el-form-item label="处理方式">
@@ -182,14 +197,14 @@ async function submit() {
         </el-form-item>
       </template>
 
-      <el-form-item :label="commentRequired ? (form.rejectMode === 'return' ? '退回原因' : '驳回原因') : '意见'" :required="commentRequired">
+      <el-form-item :label="commentLabel" :required="commentRequired">
         <el-input v-model="form.comment" type="textarea" :rows="4" maxlength="500" show-word-limit
           :placeholder="commentRequired ? '请填写原因' : '选填'" />
       </el-form-item>
     </el-form>
     <template #footer>
       <el-button @click="dialogVisible = false">取消</el-button>
-      <el-button :type="action === 'reject' ? 'danger' : 'primary'" :disabled="!canSubmit" @click="submit">确定</el-button>
+      <el-button :type="action === 'reject' || action === 'terminate' ? 'danger' : 'primary'" :disabled="!canSubmit" @click="submit">确定</el-button>
     </template>
   </el-dialog>
 </template>

@@ -174,33 +174,10 @@ public sealed partial class ApprovalEngine
         if (OpenTasks(CurrentTasksOf(instance, task.NodeId)).Any(t => t.AssigneeKind == AssigneeKind.User && t.AssigneeValue == toUserId))
             throw new ApprovalException("对方已是该节点的审批人");
 
-        CompleteTask(task, ApprovalTaskStatus.Transferred, userId, comment);
+        // 转交不重置时限（含提醒进度），加签关系跟随新任务
+        HandOver(instance, task, toUserId, userId, comment);
         AddLog(instance, ApprovalAction.Transfer, userId, $"转交给 {toUserId}" + (comment is null ? "" : $"：{comment}"),
             task.NodeId, task.NodeName);
-
-        var transferred = new ApprovalTask
-        {
-            Id = Guid.NewGuid(),
-            InstanceId = instance.Id,
-            NodeId = task.NodeId,
-            NodeName = task.NodeName,
-            AssigneeKind = AssigneeKind.User,
-            AssigneeValue = toUserId,
-            Kind = task.Kind,
-            Round = task.Round,
-            Order = task.Order,
-            Status = ApprovalTaskStatus.Pending,
-            CreatedAt = Now,
-            // 转交不重置时限，避免通过转交拖延
-            DueAt = task.DueAt,
-            NextRemindAt = task.NextRemindAt,
-            RemindCount = task.RemindCount,
-            LastRemindedAt = task.LastRemindedAt
-        };
-        AddTask(instance, transferred);
-        // 加签关系跟随转交：原任务的加签任务改挂到新任务下
-        transferred.ParentTaskId = task.ParentTaskId;
-        foreach (var child in instance.Tasks.Where(t => t.ParentTaskId == task.Id)) child.ParentTaskId = transferred.Id;
 
         var target = new Assignee(AssigneeKind.User, toUserId);
         Notify(NotificationKind.TaskCreated, instance, [target]);
@@ -516,7 +493,7 @@ public sealed partial class ApprovalEngine
 
     private DateTime? DueAtFor(FlowNode node) => node.Timeout is { Minutes: > 0 } timeout ? Now.AddMinutes(timeout.Minutes) : null;
 
-    /// <param name="node">结束时所在的节点：通过时为结束节点，驳回时为驳回所在节点，撤回时为当前审批节点。</param>
+    /// <param name="node">结束时所在的节点：通过时为结束节点，驳回时为驳回所在节点，撤回 / 终止时为当前审批节点。</param>
     private async Task FinishAsync(ApprovalInstance instance, FlowDefinition flow, FlowNode? node, InstanceStatus status, EventInfo info,
         CancellationToken ct)
     {
@@ -534,6 +511,7 @@ public sealed partial class ApprovalEngine
                 InstanceStatus.Approved => handler.OnApprovedAsync(instance, ct),
                 InstanceStatus.Rejected => handler.OnRejectedAsync(instance, ct),
                 InstanceStatus.Withdrawn => handler.OnWithdrawnAsync(instance, ct),
+                InstanceStatus.Terminated => handler.OnTerminatedAsync(instance, ct),
                 _ => Task.CompletedTask
             };
             await callback;

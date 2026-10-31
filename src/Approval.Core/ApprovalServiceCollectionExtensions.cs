@@ -46,6 +46,7 @@ public static class ApprovalServiceCollectionExtensions
         services.AddScoped<ApprovalDefinitionService>();
         services.AddScoped<ApprovalMessageService>();
         services.AddScoped<ApprovalOutboxService>();
+        services.AddScoped<ApprovalStatisticsService>();
 
         // 后台任务：注册为单例以便宿主 / 测试直接调用 DispatchOnceAsync、ScanOnceAsync
         services.AddSingleton<ApprovalOutboxSignal>();

@@ -71,6 +71,7 @@ public static class ApprovalAspNetCoreExtensions
         DefinitionEndpoints.Map(group);
         MessageEndpoints.Map(group, options);
         DirectoryEndpoints.Map(group, formBusinessType);
+        AdminEndpoints.Map(group);
         if (formsEnabled) FormEndpoints.Map(group);
         return group;
     }

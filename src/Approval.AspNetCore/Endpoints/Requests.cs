@@ -18,6 +18,12 @@ public sealed record ResubmitRequest(string? Comment, JsonElement? FormData);
 
 public sealed record StartFormRequest(JsonElement FormData, string? Comment);
 
+/// <summary>终止流程等需要填写原因的管理操作。</summary>
+public sealed record ReasonRequest(string? Reason);
+
+/// <summary>改派（单个待办或某人的全部待办）。</summary>
+public sealed record ReassignRequest(string ToUserId, string? Reason);
+
 /// <summary>待办列表的查询字符串：page（从 1 开始）、pageSize（默认 20，最大 100）、keyword、definitionKey、overdueOnly。</summary>
 public sealed record TodoListRequest(int? Page, int? PageSize, string? Keyword, string? DefinitionKey, bool? OverdueOnly)
 {

@@ -20,7 +20,8 @@ public sealed record TodoItem(
     string AssigneeValue,
     DateTime CreatedAt,
     DateTime? DueAt,
-    ApprovalTaskKind Kind);
+    ApprovalTaskKind Kind,
+    ApprovalTaskStatus Status);
 
 /// <summary>流程列表项（我已处理、我发起的、抄送我的、管理员监控）：不含任务与轨迹，带流程名称。</summary>
 public sealed record InstanceListItem(
@@ -99,10 +100,26 @@ public sealed class ApprovalQueryService(
                   && (!overdueOnly || (t.DueAt != null && t.DueAt < now))
             orderby t.CreatedAt, t.Id
             select new TodoItem(t.Id, i.Id, i.DefinitionKey, d.Name, i.BusinessType, i.BusinessKey, i.Title, i.InitiatorId,
-                t.NodeName, t.AssigneeKind, t.AssigneeValue, t.CreatedAt, t.DueAt, t.Kind);
+                t.NodeName, t.AssigneeKind, t.AssigneeValue, t.CreatedAt, t.DueAt, t.Kind, t.Status);
 
         return await items.ToPagedAsync(page ?? new PageRequest(), ct);
     }
+
+    /// <summary>
+    /// 指派给某人（用户任务，不含角色任务）的未完成任务：待处理、尚未轮到、等待加签，流程进行中，不含退回发起人的申请。
+    /// 用于离职交接前预览（管理员，接口层校验权限）。
+    /// </summary>
+    public Task<PagedResult<TodoItem>> GetOpenUserTasksAsync(string userId, PageRequest? page = null, CancellationToken ct = default) =>
+        (from t in _db.Set<ApprovalTask>().AsNoTracking()
+         join i in _db.Set<ApprovalInstance>().AsNoTracking() on t.InstanceId equals i.Id
+         join d in _db.Set<ApprovalDefinition>().AsNoTracking() on i.DefinitionId equals d.Id
+         where t.AssigneeKind == AssigneeKind.User && t.AssigneeValue == userId && t.Kind != ApprovalTaskKind.Resubmit
+               && (t.Status == ApprovalTaskStatus.Pending || t.Status == ApprovalTaskStatus.Waiting || t.Status == ApprovalTaskStatus.Suspended)
+               && i.Status == InstanceStatus.Running
+         orderby t.CreatedAt, t.Id
+         select new TodoItem(t.Id, i.Id, i.DefinitionKey, d.Name, i.BusinessType, i.BusinessKey, i.Title, i.InitiatorId,
+             t.NodeName, t.AssigneeKind, t.AssigneeValue, t.CreatedAt, t.DueAt, t.Kind, t.Status))
+        .ToPagedAsync(page ?? new PageRequest(), ct);
 
     /// <summary>待办数量（工作台角标）。</summary>
     public async Task<int> GetTodoCountAsync(string userId, CancellationToken ct = default) =>

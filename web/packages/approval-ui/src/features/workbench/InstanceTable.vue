@@ -28,5 +28,11 @@ const emit = defineEmits<{ open: [instanceId: string] }>()
     <el-table-column label="完成时间" width="170">
       <template #default="{ row }">{{ formatDateTime(row.completedAt) }}</template>
     </el-table-column>
+    <!-- 可选的操作列（如管理员监控中的“终止”），按钮需阻止冒泡以免触发打开详情 -->
+    <el-table-column v-if="$slots.actions" label="操作" width="100" fixed="right">
+      <template #default="{ row }">
+        <slot name="actions" :row="row as InstanceListItem" />
+      </template>
+    </el-table-column>
   </el-table>
 </template>

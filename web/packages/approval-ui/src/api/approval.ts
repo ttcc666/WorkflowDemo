@@ -7,6 +7,7 @@ import type {
   ApprovalMe,
   ApprovalMessage,
   ApprovalMeta,
+  ApprovalStatistics,
   ApprovalTask,
   DirectoryUser,
   FlowSummary,
@@ -14,6 +15,7 @@ import type {
   ListQuery,
   OutboxMessage,
   PagedResult,
+  ReassignResult,
   ReturnTarget,
   StartForm,
   StartableFlow,
@@ -98,4 +100,18 @@ export const approvalApi = {
   outbox: (query: ListQuery = {}, signal?: AbortSignal) =>
     http.get<PagedResult<OutboxMessage>>(api(`/outbox${queryString(query)}`), signal),
   retryOutbox: (id: string) => http.post(api(`/outbox/${id}/retry`), {}),
+
+  // ───── 管理（仅管理员）─────
+  adminInstances: (query: ListQuery = {}, signal?: AbortSignal) =>
+    http.get<PagedResult<InstanceListItem>>(api(`/admin/instances${queryString(query)}`), signal),
+  terminate: (instanceId: string, reason: string) => http.post(api(`/admin/instances/${instanceId}/terminate`), { reason }),
+  reassign: (taskId: string, toUserId: string, reason: string) =>
+    http.post(api(`/admin/tasks/${taskId}/reassign`), { toUserId, reason }),
+  /** 某人的未完成待办（离职交接预览） */
+  userTasks: (userId: string, query: ListQuery = {}, signal?: AbortSignal) =>
+    http.get<PagedResult<TodoItem>>(api(`/admin/users/${enc(userId)}/tasks${queryString(query)}`), signal),
+  reassignUser: (userId: string, toUserId: string, reason: string) =>
+    http.post<ReassignResult>(api(`/admin/users/${enc(userId)}/reassign`), { toUserId, reason }),
+  statistics: (query: { from?: string; to?: string; definitionKey?: string }, signal?: AbortSignal) =>
+    http.get<ApprovalStatistics>(api(`/admin/statistics${queryString(query)}`), signal),
 }

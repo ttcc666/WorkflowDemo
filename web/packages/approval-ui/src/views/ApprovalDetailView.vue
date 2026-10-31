@@ -4,20 +4,21 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { approvalApi } from '../api/approval'
 import { errorMessage } from '../api/http'
-import type { AddSignMode } from '../api/types'
+import type { AddSignMode, ApprovalTask } from '../api/types'
 import { useApprovalUser } from '../composables/useApprovalUser'
 import DynamicForm from '../features/forms/DynamicForm.vue'
 import { formOfDefinition, parseFormValues } from '../features/forms/formModel'
 import ApprovalActions from '../features/approval/ApprovalActions.vue'
 import ApprovalSummary from '../features/approval/ApprovalSummary.vue'
 import ApprovalTimeline from '../features/approval/ApprovalTimeline.vue'
+import ReassignDialog from '../features/approval/ReassignDialog.vue'
 import { businessPanelOf } from '../features/approval/businessPanels'
 import { useApprovalDetail } from '../features/approval/useApprovalDetail'
 import FlowViewer from '../features/flow/FlowViewer.vue'
 
 const route = useRoute()
 const router = useRouter()
-const { userId, formBusinessType } = useApprovalUser()
+const { userId, formBusinessType, isAdmin } = useApprovalUser()
 
 const instanceId = computed(() => route.params.id as string)
 const { instance, loading, error, notFound, definition, myTask, canWithdraw, nodeOptions, reload } = useApprovalDetail(instanceId)
@@ -64,6 +65,18 @@ const onResubmit = (comment: string, data?: Record<string, unknown>) =>
   run(() => approvalApi.resubmit(taskId(), comment, data), '已重新提交')
 const onTransfer = (to: string, comment: string) => run(() => approvalApi.transfer(taskId(), to, comment), `已转交给 ${to}`)
 const onWithdraw = (comment: string) => run(() => approvalApi.withdraw(instanceId.value, comment), '已撤回')
+
+// ───── 管理员：终止流程、改派待办 ─────
+const canAdminister = computed(() => isAdmin.value && instance.value?.status === 'Running')
+const onTerminate = (reason: string) => run(() => approvalApi.terminate(instanceId.value, reason), '已终止流程')
+const reassignVisible = shallowRef(false)
+const reassignTask = shallowRef<ApprovalTask | null>(null)
+function openReassign(task: ApprovalTask) {
+  reassignTask.value = task
+  reassignVisible.value = true
+}
+const onReassign = (task: ApprovalTask, to: string, reason: string) =>
+  run(() => approvalApi.reassign(task.id, to, reason), `已改派给 ${to}`)
 </script>
 
 <template>
@@ -80,6 +93,7 @@ const onWithdraw = (comment: string) => run(() => approvalApi.withdraw(instanceI
       <ApprovalActions
         :my-task="myTask"
         :can-withdraw="canWithdraw"
+        :can-terminate="canAdminister"
         :current-user-id="userId"
         :initiator-id="instance.initiatorId"
         :allow-return="nodeOptions.allowReturn"
@@ -93,6 +107,7 @@ const onWithdraw = (comment: string) => run(() => approvalApi.withdraw(instanceI
         @withdraw="onWithdraw"
         @add-sign="onAddSign"
         @resubmit="onResubmit"
+        @terminate="onTerminate"
       />
 
       <el-card shadow="never">
@@ -114,10 +129,12 @@ const onWithdraw = (comment: string) => run(() => approvalApi.withdraw(instanceI
         </el-col>
         <el-col :span="10" class="detail-col">
           <el-card shadow="never" header="审批轨迹">
-            <ApprovalTimeline :logs="instance.logs" :tasks="instance.tasks" />
+            <ApprovalTimeline :logs="instance.logs" :tasks="instance.tasks" :can-reassign="canAdminister" @reassign="openReassign" />
           </el-card>
         </el-col>
       </el-row>
+
+      <ReassignDialog v-model:visible="reassignVisible" :task="reassignTask" :initiator-id="instance.initiatorId" @confirm="onReassign" />
     </template>
   </div>
 </template>

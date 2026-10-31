@@ -7,13 +7,14 @@ export const approvalRouteNames = {
   definitions: 'approval-definitions',
   designer: 'approval-designer',
   outbox: 'approval-outbox',
+  monitor: 'approval-monitor',
   start: 'approval-start',
   startForm: 'approval-start-form',
 } as const
 
 /**
  * 审批页面路由，挂载到宿主布局的 children 中：
- * `workbench`、`approvals/:id`、`start`、`start/:key`、`definitions`、`designer/:key`、`outbox`。
+ * `workbench`、`approvals/:id`、`start`、`start/:key`、`definitions`、`designer/:key`、`outbox`、`monitor`。
  * 页面按需加载（设计器依赖 Vue Flow，体积较大）。
  */
 export function createApprovalRoutes(): RouteRecordRaw[] {
@@ -25,5 +26,6 @@ export function createApprovalRoutes(): RouteRecordRaw[] {
     { path: 'definitions', name: approvalRouteNames.definitions, component: () => import('./views/DefinitionsView.vue') },
     { path: 'designer/:key', name: approvalRouteNames.designer, component: () => import('./views/DesignerView.vue') },
     { path: 'outbox', name: approvalRouteNames.outbox, component: () => import('./views/OutboxView.vue') },
+    { path: 'monitor', name: approvalRouteNames.monitor, component: () => import('./views/MonitorView.vue') },
   ]
 }

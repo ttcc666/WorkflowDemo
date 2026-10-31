@@ -3,7 +3,13 @@ import { computed } from 'vue'
 import type { ApprovalLog, ApprovalTask } from '../../api/types'
 import { actionLabels, assigneeText, dueText, formatDateTime, taskKindLabels, taskStatusLabels } from '../../utils/labels'
 
-const props = defineProps<{ logs: ApprovalLog[]; tasks: ApprovalTask[] }>()
+const props = defineProps<{
+  logs: ApprovalLog[]
+  tasks: ApprovalTask[]
+  /** 管理员：未完成的任务旁显示“改派” */
+  canReassign?: boolean
+}>()
+const emit = defineEmits<{ reassign: [task: ApprovalTask] }>()
 
 type TimelineType = 'primary' | 'success' | 'warning' | 'danger' | 'info'
 const actionTypes: Partial<Record<ApprovalLog['action'], TimelineType>> = {
@@ -21,6 +27,9 @@ const actionTypes: Partial<Record<ApprovalLog['action'], TimelineType>> = {
   Return: 'warning',
   AddSign: 'primary',
   Resubmit: 'primary',
+  Terminate: 'danger',
+  Reassign: 'warning',
+  FormEdit: 'primary',
 }
 
 const openTasks = computed(() => props.tasks.filter((t) => t.status === 'Pending' || t.status === 'Waiting' || t.status === 'Suspended'))
@@ -49,6 +58,7 @@ const openTasks = computed(() => props.tasks.filter((t) => t.status === 'Pending
         <el-tag size="small" :type="taskStatusLabels[task.status].type">{{ taskStatusLabels[task.status].text }}</el-tag>
         <el-tag v-if="taskKindLabels[task.kind]" size="small" type="warning" effect="plain">{{ taskKindLabels[task.kind] }}</el-tag>
         <span class="timeline-operator">{{ assigneeText(task.assigneeKind, task.assigneeValue) }}</span>
+        <el-button v-if="canReassign && task.kind !== 'Resubmit'" link type="primary" size="small" @click="emit('reassign', task)">改派</el-button>
       </div>
       <div v-if="task.dueAt && task.status === 'Pending'" class="timeline-comment">
         截止 {{ formatDateTime(task.dueAt) }}（{{ dueText(task.dueAt).text }}<template v-if="task.remindCount">，已提醒 {{ task.remindCount }} 次</template>）

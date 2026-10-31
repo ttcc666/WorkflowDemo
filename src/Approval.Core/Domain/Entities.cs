@@ -58,7 +58,13 @@ public enum ApprovalAction
     Return,
     AddSign,
     /// <summary>退回发起人后重新提交。</summary>
-    Resubmit
+    Resubmit,
+    /// <summary>管理员终止流程。</summary>
+    Terminate,
+    /// <summary>管理员把待办改派给其他人（含离职交接的批量改派）。</summary>
+    Reassign,
+    /// <summary>审批人在节点修改了可编辑的表单字段。</summary>
+    FormEdit
 }
 
 /// <summary>流程定义的一个版本。发布新版本不影响已发起的实例。所有时间字段均为 UTC。</summary>
