@@ -1,6 +1,6 @@
+using Approval.AspNetCore;
 using Approval.Core.Engine;
 using Certificate.Api.Certificates;
-using Certificate.Api.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 
 namespace Certificate.Api.Endpoints;
@@ -31,19 +31,19 @@ public static class CertificateEndpoints
 
         group.MapPost("/", async (CertificateData data, HttpContext http, CertificateService s, CancellationToken ct) =>
         {
-            var request = await s.SubmitCreateAsync(data, CurrentUser.Get(http), ct);
+            var request = await s.SubmitCreateAsync(data, http.GetApprovalUserId(), ct);
             return Results.Accepted($"/api/certificate-requests/{request.Id}", new { requestId = request.Id });
         });
 
         group.MapPut("/{id:guid}", async (Guid id, CertificateData data, HttpContext http, CertificateService s, CancellationToken ct) =>
         {
-            var request = await s.SubmitUpdateAsync(id, data, CurrentUser.Get(http), ct);
+            var request = await s.SubmitUpdateAsync(id, data, http.GetApprovalUserId(), ct);
             return Results.Accepted($"/api/certificate-requests/{request.Id}", new { requestId = request.Id });
         });
 
         group.MapPost("/{id:guid}/revoke", async (Guid id, RevokeRequest body, HttpContext http, CertificateService s, CancellationToken ct) =>
         {
-            var request = await s.SubmitRevokeAsync(id, body.Reason, CurrentUser.Get(http), ct);
+            var request = await s.SubmitRevokeAsync(id, body.Reason, http.GetApprovalUserId(), ct);
             return Results.Accepted($"/api/certificate-requests/{request.Id}", new { requestId = request.Id });
         });
 

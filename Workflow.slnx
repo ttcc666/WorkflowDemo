@@ -3,9 +3,11 @@
     <Project Path="samples/Certificate.Api/Certificate.Api.csproj" />
   </Folder>
   <Folder Name="/src/">
+    <Project Path="src/Approval.AspNetCore/Approval.AspNetCore.csproj" />
     <Project Path="src/Approval.Core/Approval.Core.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/Approval.AspNetCore.Tests/Approval.AspNetCore.Tests.csproj" />
     <Project Path="tests/Approval.Core.Tests/Approval.Core.Tests.csproj" />
   </Folder>
 </Solution>

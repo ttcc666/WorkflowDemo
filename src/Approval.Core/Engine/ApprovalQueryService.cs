@@ -8,6 +8,8 @@ namespace Approval.Core.Engine;
 public sealed record TodoItem(
     Guid TaskId,
     Guid InstanceId,
+    string DefinitionKey,
+    string DefinitionName,
     string BusinessType,
     string BusinessKey,
     string? Title,
@@ -18,6 +20,21 @@ public sealed record TodoItem(
     DateTime CreatedAt,
     DateTime? DueAt,
     ApprovalTaskKind Kind);
+
+/// <summary>列表项（我已处理、我发起的）：不含任务与轨迹，带流程名称。</summary>
+public sealed record InstanceListItem(
+    Guid Id,
+    string DefinitionKey,
+    string DefinitionName,
+    int DefinitionVersion,
+    string BusinessType,
+    string BusinessKey,
+    string? Title,
+    string InitiatorId,
+    InstanceStatus Status,
+    string? CurrentNodeId,
+    DateTime CreatedAt,
+    DateTime? CompletedAt);
 
 /// <summary>只读查询：待办、已办、我发起的、审批详情。</summary>
 public sealed class ApprovalQueryService(
@@ -36,30 +53,25 @@ public sealed class ApprovalQueryService(
         var query =
             from t in _db.Set<ApprovalTask>().AsNoTracking()
             join i in _db.Set<ApprovalInstance>().AsNoTracking() on t.InstanceId equals i.Id
+            join d in _db.Set<ApprovalDefinition>().AsNoTracking() on i.DefinitionId equals d.Id
             where t.Status == ApprovalTaskStatus.Pending && i.Status == InstanceStatus.Running
                   && ((t.AssigneeKind == AssigneeKind.User && t.AssigneeValue == userId)
                       || (t.AssigneeKind == AssigneeKind.Role && roles.Contains(t.AssigneeValue)))
                   // 职责分离：不允许审批自己的申请时，自己发起的申请不出现在待办中
                   && (!excludeOwn || i.InitiatorId != userId || t.Kind == ApprovalTaskKind.Resubmit)
             orderby t.CreatedAt
-            select new TodoItem(t.Id, i.Id, i.BusinessType, i.BusinessKey, i.Title, i.InitiatorId,
+            select new TodoItem(t.Id, i.Id, i.DefinitionKey, d.Name, i.BusinessType, i.BusinessKey, i.Title, i.InitiatorId,
                 t.NodeName, t.AssigneeKind, t.AssigneeValue, t.CreatedAt, t.DueAt, t.Kind);
 
         return await query.ToListAsync(ct);
     }
 
     /// <summary>我处理过的流程。</summary>
-    public Task<List<ApprovalInstance>> GetDoneAsync(string userId, CancellationToken ct = default) =>
-        _db.Set<ApprovalInstance>().AsNoTracking()
-            .Where(i => i.Tasks.Any(t => t.HandledBy == userId))
-            .OrderByDescending(i => i.CreatedAt)
-            .ToListAsync(ct);
+    public Task<List<InstanceListItem>> GetDoneAsync(string userId, CancellationToken ct = default) =>
+        ToListItems(_db.Set<ApprovalInstance>().Where(i => i.Tasks.Any(t => t.HandledBy == userId)), ct);
 
-    public Task<List<ApprovalInstance>> GetStartedByAsync(string userId, CancellationToken ct = default) =>
-        _db.Set<ApprovalInstance>().AsNoTracking()
-            .Where(i => i.InitiatorId == userId)
-            .OrderByDescending(i => i.CreatedAt)
-            .ToListAsync(ct);
+    public Task<List<InstanceListItem>> GetStartedByAsync(string userId, CancellationToken ct = default) =>
+        ToListItems(_db.Set<ApprovalInstance>().Where(i => i.InitiatorId == userId), ct);
 
     /// <summary>审批详情（含任务与轨迹）。</summary>
     public Task<ApprovalInstance?> GetInstanceAsync(Guid instanceId, CancellationToken ct = default) =>
@@ -71,6 +83,14 @@ public sealed class ApprovalQueryService(
             .Where(i => i.BusinessType == businessType && i.BusinessKey == businessKey)
             .OrderByDescending(i => i.CreatedAt)
             .ToListAsync(ct);
+
+    private Task<List<InstanceListItem>> ToListItems(IQueryable<ApprovalInstance> instances, CancellationToken ct) =>
+        (from i in instances.AsNoTracking()
+         join d in _db.Set<ApprovalDefinition>().AsNoTracking() on i.DefinitionId equals d.Id
+         orderby i.CreatedAt descending
+         select new InstanceListItem(i.Id, i.DefinitionKey, d.Name, i.DefinitionVersion, i.BusinessType, i.BusinessKey, i.Title,
+             i.InitiatorId, i.Status, i.CurrentNodeId, i.CreatedAt, i.CompletedAt))
+        .ToListAsync(ct);
 
     private IQueryable<ApprovalInstance> WithDetails() =>
         _db.Set<ApprovalInstance>().AsNoTracking()

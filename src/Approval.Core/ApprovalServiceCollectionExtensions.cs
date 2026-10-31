@@ -71,6 +71,13 @@ public sealed class ApprovalBuilder(IServiceCollection services)
         return this;
     }
 
+    /// <summary>注册用户目录（用户选择器、角色列表），可选。</summary>
+    public ApprovalBuilder AddUserDirectory<T>() where T : class, IApprovalUserDirectory
+    {
+        Services.AddScoped<IApprovalUserDirectory, T>();
+        return this;
+    }
+
     /// <summary>注册业务回调，每个 BusinessType 一个。</summary>
     public ApprovalBuilder AddBusinessHandler<T>() where T : class, IApprovalBusinessHandler
     {

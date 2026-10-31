@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\Approval.Core\Approval.Core.csproj" />
+    <ProjectReference Include="..\..\src\Approval.AspNetCore\Approval.AspNetCore.csproj" />
   </ItemGroup>
 
   <ItemGroup>

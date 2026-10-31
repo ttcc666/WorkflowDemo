@@ -13,6 +13,22 @@ public interface IApprovalIdentityProvider
     Task<IReadOnlyList<string>> GetRolesAsync(string userId, CancellationToken ct);
 }
 
+public sealed record ApprovalUser(string Id, string Name, IReadOnlyList<string> Roles);
+
+/// <summary>
+/// 用户目录（可选）：供前端用户选择器（转交、加签、表单人员字段）与设计器角色下拉使用。
+/// 未注册时相关接口返回 501，前端可改为手动输入。
+/// </summary>
+public interface IApprovalUserDirectory
+{
+    /// <summary>按 ID / 名称模糊搜索；keyword 为空时返回前 take 个用户。</summary>
+    Task<IReadOnlyList<ApprovalUser>> SearchUsersAsync(string? keyword, int take, CancellationToken ct);
+
+    Task<IReadOnlyList<ApprovalUser>> GetUsersAsync(IReadOnlyCollection<string> ids, CancellationToken ct);
+
+    Task<IReadOnlyList<string>> ListRolesAsync(CancellationToken ct);
+}
+
 public sealed record Assignee(AssigneeKind Kind, string Value);
 
 public sealed class ApproverResolveContext

@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Approval.AspNetCore;
 using Approval.Core;
 using Approval.Core.Abstractions;
 using Approval.Core.Domain;
@@ -12,18 +13,18 @@ using Microsoft.EntityFrameworkCore;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddDbContext<AppDbContext>(o => o.UseSqlite(builder.Configuration.GetConnectionString("Default")));
-builder.Services.ConfigureHttpJsonOptions(o =>
-{
-    o.SerializerOptions.Converters.Add(new JsonStringEnumConverter());
-    o.SerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
-});
-builder.Services.AddProblemDetails();
-builder.Services.AddExceptionHandler<ApprovalExceptionHandler>();
+builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles);
 
-// 接入审批框架：宿主只需提供 DbContext、用户角色体系和业务回调
+// 审批接口（/api/approval/*）、ProblemDetails 异常映射、字符串枚举
+builder.Services.AddApprovalAspNetCore();
+
+// 接入审批框架：宿主只需提供 DbContext、用户角色体系、当前用户和业务回调
 builder.Services.AddSingleton<DemoIdentityProvider>();
 builder.Services.AddSingleton<IApprovalIdentityProvider>(sp => sp.GetRequiredService<DemoIdentityProvider>());
 builder.Services.AddSingleton<IApprovalContactProvider>(sp => sp.GetRequiredService<DemoIdentityProvider>());
+builder.Services.AddSingleton<IApprovalUserDirectory>(sp => sp.GetRequiredService<DemoIdentityProvider>());
+// 演示用请求头识别用户；接入真实认证后删除这一行，默认从 Claims 读取
+builder.Services.AddSingleton<IApprovalCurrentUser, DemoCurrentUser>();
 builder.Services.AddSingleton<DemoWebhookReceiver>();
 builder.Services.ConfigureHttpClientDefaults(b => b.ConfigurePrimaryHttpMessageHandler(() =>
     new SocketsHttpHandler { Proxy = new LoopbackBypassProxy(HttpClient.DefaultProxy) }));
@@ -75,7 +76,6 @@ app.UseStaticFiles();
 app.MapApprovalEndpoints();
 app.MapCertificateEndpoints();
 app.MapGet("/api/demo/users", (DemoIdentityProvider identity) => identity.ListUsers()).WithTags("Demo");
-app.MapGet("/api/demo/roles", (DemoIdentityProvider identity) => identity.ListRoles()).WithTags("Demo");
 
 // 演示用外部系统：接收 Webhook 通知与 HTTP 动作请求
 var webhook = app.MapGroup("/api/demo/webhook").WithTags("Demo");

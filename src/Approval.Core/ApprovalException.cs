@@ -13,5 +13,21 @@ public enum ApprovalErrorCode
     Forbidden,
     /// <summary>并发冲突（例如会签时多人同时提交），调用方可重新加载后重试。</summary>
     Conflict,
-    InvalidDefinition
+    InvalidDefinition,
+    /// <summary>未识别当前用户（未登录）。</summary>
+    Unauthorized,
+    /// <summary>输入校验失败，详见 <see cref="ApprovalValidationException.Errors"/>。</summary>
+    Validation
+}
+
+/// <summary>输入校验失败（如表单数据），<see cref="Errors"/> 为“字段 → 错误信息”。</summary>
+public sealed class ApprovalValidationException : ApprovalException
+{
+    public ApprovalValidationException(IReadOnlyDictionary<string, string[]> errors, string message = "提交的数据有误") : base(message)
+    {
+        Errors = errors;
+        Code = ApprovalErrorCode.Validation;
+    }
+
+    public IReadOnlyDictionary<string, string[]> Errors { get; }
 }
