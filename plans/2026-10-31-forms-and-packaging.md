@@ -1,6 +1,6 @@
 # B 表单设计器 + 通用发起页 / C 封装为可复用包 — 开发计划
 
-> 状态：**执行中**。阶段 0–3 已完成（每阶段完成后本地提交，不推送）。
+> 状态：**执行中**。阶段 0–4 已完成（每阶段完成后本地提交，不推送）。
 > 执行时按“阶段 → 清单”逐项完成，每个阶段结束运行该阶段的验证命令；本文件的复选框随进度更新。
 
 ## 0. 背景与现状（执行前必读）
@@ -220,13 +220,15 @@ web/
 - 补充：库内部改用相对路径导入（宿主的 `@` 别名指向宿主 src）；配置为模块级（`configureApprovalUI`），`userKey` 驱动切换用户时刷新；演示 Webhook 面板经 `outboxPanel` 选项注入；`UserPicker` 基于用户目录远程搜索。
 
 ### 阶段 4：表单前端（B-前端）
-- [ ] `formModel.ts` + 测试（规则生成、key 生成、合计字段、默认值）。
-- [ ] `DynamicForm.vue`、`UserPicker` 接入、Table 字段。
-- [ ] `FormDesigner.vue`、`FieldInspector.vue`、`FlowSettingsPanel.vue`；设计器三页签；`useFlowDesigner` 纳入 form / settings（快照、撤销、dirty）。
-- [ ] 设计器联动：FormField 审批人下拉、条件可用字段、通知模板 form 变量。
-- [ ] 发起中心与发起页（路由、菜单项“发起申请”）；服务端字段错误回显。
-- [ ] 审批详情：表单只读展示（注册为内置业务面板 `Form`）；重新提交可编辑表单。
-- [ ] 验证：typecheck / test / build。
+- [x] `formModel.ts` + 测试（规则生成、key 生成、合计字段、默认值）。
+- [x] `DynamicForm.vue`、`UserPicker` 接入、Table 字段。
+- [x] `FormDesigner.vue`、`FieldInspector.vue`、`FlowSettingsPanel.vue`；设计器三页签；`useFlowDesigner` 纳入 form / settings（快照、撤销、dirty）。
+- [x] 设计器联动：FormField 审批人下拉、条件可用字段、通知模板 form 变量。
+- [x] 发起中心与发起页（路由、菜单项“发起申请”）；服务端字段错误回显。
+- [x] 审批详情：表单只读展示（注册为内置业务面板 `Form`）；重新提交可编辑表单。
+- [x] 验证：typecheck / test / build。
+
+- 补充：`/me` 增加 `formBusinessType`（前端据此判断重新提交时能否改表单）；设计器通过 provide/inject（`designerContext.ts`）向审批人、条件、通知面板共享表单结构；示例 `/start/{**key}` 路由回退（流程标识含点）。
 
 ### 阶段 5：联调、文档、打包
 - [ ] 浏览器端到端（admin 新建流程 → 设计表单 → 设置可发起 → 发布；alice 在发起中心提交请假 3 天与 5 天分别走不同分支；退回 alice 修改天数重新提交；报销明细合计 > 5000 走并行；证书业务回归；控制台 0 错误）。

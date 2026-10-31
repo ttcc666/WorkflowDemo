@@ -32,6 +32,7 @@ export function useApprovalUser() {
     roles: computed(() => me.value?.roles ?? []),
     isAdmin: computed(() => me.value?.isAdmin ?? false),
     formsEnabled: computed(() => me.value?.formsEnabled ?? false),
+    formBusinessType: computed(() => me.value?.formBusinessType ?? null),
     reload: load,
   }
 }

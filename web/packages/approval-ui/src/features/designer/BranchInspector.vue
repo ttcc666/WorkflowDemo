@@ -1,5 +1,8 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { BranchData } from '../flow/flowModel'
+import { fieldVariables, numberTypes, optionTypes } from '../forms/formModel'
+import { useDesignerForm } from './designerContext'
 
 const props = defineProps<{
   data: BranchData
@@ -16,7 +19,25 @@ function toggleDefault(isDefault: boolean) {
   emit('update', isDefault ? { expression: null } : { expression: '' })
 }
 
-const examples = ['certType == "Special"', 'amount > 5000 && amount <= 20000', 'operation == "Revoke"']
+// 流程带表单时按表单字段给出可用变量与示例，否则显示通用示例
+const form = useDesignerForm()
+const variables = computed(() => fieldVariables(form.value).filter((v) => v.type !== 'Table' && v.type !== 'Users'))
+const examples = computed(() => {
+  if (!variables.value.length) return ['certType == "Special"', 'amount > 5000 && amount <= 20000', 'operation == "Revoke"']
+  const result: string[] = []
+  for (const v of variables.value) {
+    if (numberTypes.has(v.type)) result.push(`${v.name} > 3`)
+    const field = form.value.fields.find((f) => f.key === v.name)
+    if (field && optionTypes.has(field.type) && field.type !== 'MultiSelect' && field.options?.[0]) result.push(`${v.name} == "${field.options[0].value}"`)
+    if (v.type === 'Switch') result.push(`${v.name} == true`)
+  }
+  return result.slice(0, 4)
+})
+
+function appendVariable(name: string) {
+  const current = props.data.expression ?? ''
+  emit('update', { expression: current ? `${current} ${name}` : name })
+}
 </script>
 
 <template>
@@ -35,7 +56,14 @@ const examples = ['certType == "Special"', 'amount > 5000 && amount <= 20000', '
           <el-input :model-value="data.expression" type="textarea" :rows="3" placeholder='如 certType == "Special"'
             @update:model-value="(v: string) => emit('update', { expression: v })" />
           <div class="inspector__help">
-            可引用发起时传入的表单字段，支持 ==、!=、&gt;、&lt;、&amp;&amp;、||。示例：
+            <template v-if="variables.length">
+              可用字段：
+              <el-tooltip v-for="v in variables" :key="v.name" :content="v.label" placement="top">
+                <code class="example example--field" @click="appendVariable(v.name)">{{ v.name }}</code>
+              </el-tooltip>
+              <br />
+            </template>
+            可引用表单字段，支持 ==、!=、&gt;、&lt;、&amp;&amp;、||。示例：
             <code v-for="e in examples" :key="e" class="example" @click="emit('update', { expression: e })">{{ e }}</code>
           </div>
         </el-form-item>
@@ -77,6 +105,11 @@ const examples = ['certType == "Special"', 'amount > 5000 && amount <= 20000', '
   background: #f4f4f5;
   color: #606266;
   cursor: pointer;
+}
+
+.example--field {
+  background: #f0f9eb;
+  color: #529b2e;
 }
 
 .inspector__remove {

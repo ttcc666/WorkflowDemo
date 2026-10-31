@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { computed, reactive, shallowRef } from 'vue'
+import { computed, reactive, ref, shallowRef, useTemplateRef } from 'vue'
 import { approvalApi } from '../../api/approval'
 import type { AddSignMode, ApprovalTask, ReturnTarget } from '../../api/types'
 import UserPicker from '../../components/UserPicker.vue'
+import DynamicForm from '../forms/DynamicForm.vue'
+import { initialValues, type FormSchema, type FormValues } from '../forms/formModel'
 import { assigneeText, taskKindLabels } from '../../utils/labels'
 
 type ActionKind = 'approve' | 'reject' | 'transfer' | 'withdraw' | 'addSign' | 'resubmit'
@@ -16,6 +18,9 @@ const props = defineProps<{
   allowReturn: boolean
   allowAddSign: boolean
   busy: boolean
+  /** 表单审批：重新提交时可修改的表单结构与当前数据 */
+  resubmitForm?: FormSchema
+  formData?: FormValues
 }>()
 
 const emit = defineEmits<{
@@ -25,7 +30,8 @@ const emit = defineEmits<{
   transfer: [toUserId: string, comment: string]
   withdraw: [comment: string]
   addSign: [userIds: string[], mode: AddSignMode, comment: string]
-  resubmit: [comment: string]
+  /** formData 仅在可修改表单时传出 */
+  resubmit: [comment: string, formData?: FormValues]
 }>()
 
 const titles: Record<ActionKind, string> = {
@@ -55,6 +61,10 @@ const form = reactive({
 })
 
 const isResubmit = computed(() => props.myTask?.kind === 'Resubmit')
+// 重新提交时编辑的表单数据（深层响应，DynamicForm 就地修改）
+const resubmitData = ref<FormValues>({})
+const resubmitFormRef = useTemplateRef<InstanceType<typeof DynamicForm>>('resubmitFormRef')
+const editingForm = computed(() => action.value === 'resubmit' && !!props.resubmitForm)
 // 转交 / 加签对象不能是自己和发起人
 const excludedUsers = computed(() => [props.currentUserId, props.initiatorId])
 const returnTargets = shallowRef<ReturnTarget[]>([])
@@ -72,6 +82,7 @@ const canSubmit = computed(() => {
 async function open(kind: ActionKind) {
   action.value = kind
   Object.assign(form, { comment: '', toUserId: null, rejectMode: 'end', targetNodeId: '', signers: [], signMode: 'Before' })
+  if (kind === 'resubmit' && props.resubmitForm) resubmitData.value = initialValues(props.resubmitForm, props.formData)
   dialogVisible.value = true
 
   if (kind === 'reject' && props.allowReturn && props.myTask) {
@@ -88,8 +99,9 @@ async function open(kind: ActionKind) {
 
 const targetLabel = (t: ReturnTarget) => (t.isInitiator ? '发起人（修改后重新提交）' : t.nodeName)
 
-function submit() {
+async function submit() {
   const comment = form.comment.trim()
+  if (editingForm.value && !(await resubmitFormRef.value?.validate())) return
   switch (action.value) {
     case 'approve':
       emit('approve', comment)
@@ -104,7 +116,7 @@ function submit() {
       emit('addSign', form.signers ?? [], form.signMode, comment)
       break
     case 'resubmit':
-      emit('resubmit', comment)
+      emit('resubmit', comment, editingForm.value ? resubmitData.value : undefined)
       break
     default:
       emit('withdraw', comment)
@@ -133,7 +145,11 @@ function submit() {
     <el-button v-if="canWithdraw" :loading="busy" @click="open('withdraw')">撤回申请</el-button>
   </div>
 
-  <el-dialog v-model="dialogVisible" :title="titles[action]" width="520px" append-to-body>
+  <el-dialog v-model="dialogVisible" :title="titles[action]" :width="editingForm ? '820px' : '520px'" append-to-body>
+    <template v-if="editingForm && resubmitForm">
+      <div class="dialog-help dialog-help--block">修改申请内容后重新提交，流程将从第一个审批节点重新开始。</div>
+      <DynamicForm ref="resubmitFormRef" v-model="resubmitData" :schema="resubmitForm" />
+    </template>
     <el-form label-position="top">
       <template v-if="action === 'reject' && allowReturn">
         <el-form-item label="处理方式">
@@ -195,6 +211,10 @@ function submit() {
   gap: 6px;
   margin-right: auto;
   color: #606266;
+}
+
+.dialog-help--block {
+  margin: 0 0 12px;
 }
 
 .dialog-help {

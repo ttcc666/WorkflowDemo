@@ -89,7 +89,9 @@ public sealed class FormEndpointTests
         Assert.Equal("Number", form.GetProperty("form").GetProperty("fields")[0].GetProperty("type").GetString());
         await (await host.SendAsync(HttpMethod.Get, "/api/approval/forms/hidden", "alice")).ProblemAsync(404);
         await (await host.SendAsync(HttpMethod.Get, "/api/approval/forms/hr", "alice")).ProblemAsync(403);
-        Assert.True((await host.GetJsonAsync("/api/approval/me", "alice")).GetProperty("formsEnabled").GetBoolean());
+        var me = await host.GetJsonAsync("/api/approval/me", "alice");
+        Assert.True(me.GetProperty("formsEnabled").GetBoolean());
+        Assert.Equal("Form", me.GetProperty("formBusinessType").GetString());
     }
 
     [Fact]

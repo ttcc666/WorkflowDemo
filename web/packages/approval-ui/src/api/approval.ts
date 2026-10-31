@@ -13,8 +13,11 @@ import type {
   OutboxMessage,
   OutboxStatus,
   ReturnTarget,
+  StartForm,
+  StartableFlow,
   TodoItem,
 } from './types'
+import type { FormValues } from '../features/forms/formModel'
 
 const enc = encodeURIComponent
 /** 接口地址，前缀取自配置的 apiBase */
@@ -27,6 +30,12 @@ export const approvalApi = {
   usersByIds: (ids: string[], signal?: AbortSignal) =>
     http.get<DirectoryUser[]>(api(`/directory/users?ids=${ids.map(enc).join(',')}`), signal),
   roles: (signal?: AbortSignal) => http.get<string[]>(api('/directory/roles'), signal),
+
+  startableForms: (signal?: AbortSignal) => http.get<StartableFlow[]>(api('/forms/startable'), signal),
+  startForm: (key: string, signal?: AbortSignal) => http.get<StartForm>(api(`/forms/${enc(key)}`), signal),
+  /** 发起表单审批；校验失败抛出 ApiError（errors 为字段错误） */
+  submitForm: (key: string, formData: FormValues, comment: string) =>
+    http.post<{ instanceId: string }>(api(`/forms/${enc(key)}/start`), { formData, comment }),
 
   todo: (signal?: AbortSignal) => http.get<TodoItem[]>(api('/todo'), signal),
   done: (signal?: AbortSignal) => http.get<InstanceListItem[]>(api('/done'), signal),

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, shallowRef, useTemplateRef, watch } from 'vue'
+import { computed, onBeforeUnmount, provide, shallowRef, useTemplateRef, watch } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { approvalApi } from '../api/approval'
@@ -13,6 +13,9 @@ import NodeInspector from '../features/designer/NodeInspector.vue'
 import NodePalette from '../features/designer/NodePalette.vue'
 import NotificationRulesEditor from '../features/designer/NotificationRulesEditor.vue'
 import ValidationResult from '../features/designer/ValidationResult.vue'
+import { designerFormKey } from '../features/designer/designerContext'
+import FlowSettingsPanel from '../features/forms/FlowSettingsPanel.vue'
+import FormDesigner from '../features/forms/FormDesigner.vue'
 import { useFlowDesigner } from '../features/designer/useFlowDesigner'
 import FlowCanvas from '../features/flow/FlowCanvas.vue'
 import { newFlowDefinition, notifyEventsFor, type FlowDefinition, type NodeType } from '../features/flow/flowModel'
@@ -26,6 +29,11 @@ const directory = useDirectory()
 void directory.loadRoles()
 const designer = useFlowDesigner()
 const canvas = useTemplateRef<InstanceType<typeof FlowCanvas>>('canvas')
+
+/** 流程（画布）/ 表单 / 设置 三个页签；画布用 v-show 保持状态 */
+const tab = shallowRef<'flow' | 'form' | 'settings'>('flow')
+provide(designerFormKey, computed(() => designer.form.value))
+const fieldCount = computed(() => designer.form.value.fields.length)
 
 const flowKey = computed(() => route.params.key as string)
 const fromId = computed(() => route.query.from as string | undefined)
@@ -194,7 +202,22 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', onBeforeUnload)
 
     <ValidationResult :errors="designer.errors.value" />
 
-    <div class="designer__body">
+    <el-tabs v-model="tab" class="designer__tabs">
+      <el-tab-pane label="流程" name="flow" />
+      <el-tab-pane :label="fieldCount ? `表单（${fieldCount}）` : '表单'" name="form" />
+      <el-tab-pane label="发起设置" name="settings" />
+    </el-tabs>
+
+    <div v-if="tab === 'form'" class="designer__form">
+      <FormDesigner :model-value="designer.form.value" @update:model-value="designer.updateForm" />
+    </div>
+
+    <el-card v-if="tab === 'settings'" shadow="never" class="designer__settings">
+      <FlowSettingsPanel :model-value="designer.settings.value" :form="designer.form.value" :roles="directory.roles.value"
+        @update:model-value="designer.updateSettings" />
+    </el-card>
+
+    <div v-show="tab === 'flow'" class="designer__body">
       <aside class="designer__side">
         <NodePalette @add="addNode" />
       </aside>
@@ -265,6 +288,20 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', onBeforeUnload)
 
 :deep(.designer__toolbar-body) {
   padding: 10px 16px;
+}
+
+.designer__tabs :deep(.el-tabs__header) {
+  margin: 0;
+}
+
+.designer__form {
+  flex: 1;
+  min-height: 0;
+}
+
+.designer__settings {
+  flex: 1;
+  overflow-y: auto;
 }
 
 .designer__body {

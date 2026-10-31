@@ -8,7 +8,9 @@ import {
   type NotificationRule,
   type NotifyEvent,
 } from '../flow/flowModel'
+import { fieldVariables } from '../forms/formModel'
 import ApproverRulesEditor from './ApproverRulesEditor.vue'
+import { useDesignerForm } from './designerContext'
 
 /** 通知规则列表：触发事件 × 接收人 × 渠道 × 消息模板。 */
 const props = defineProps<{
@@ -26,6 +28,8 @@ const recipientHelp: Record<string, string> = {
   Approvers: '已审批过的人：本流程中已同意过的所有人',
 }
 const shownVariables = computed(() => props.variables.filter((v) => !v.name.includes('.')))
+const form = useDesignerForm()
+const formVariables = computed(() => fieldVariables(form.value).filter((v) => v.type !== 'Users'))
 
 function update(index: number, patch: Partial<NotificationRule>) {
   rules.value = rules.value.map((r, i) => (i === index ? { ...r, ...patch } : r))
@@ -93,7 +97,10 @@ function insertVariable(index: number, name: string) {
         <el-tooltip v-for="v in shownVariables" :key="v.name" :content="`${v.description}，也可写 {${v.alias}}`" placement="top">
           <el-tag size="small" effect="plain" class="notify__var" @click="insertVariable(index, v.name)">{{ v.name }}</el-tag>
         </el-tooltip>
-        <el-tooltip content="表单字段，如 {form.certNo}" placement="top">
+        <el-tooltip v-for="v in formVariables" :key="v.name" :content="`表单：${v.label}`" placement="top">
+          <el-tag size="small" effect="plain" type="success" class="notify__var" @click="insertVariable(index, `form.${v.name}`)">form.{{ v.name }}</el-tag>
+        </el-tooltip>
+        <el-tooltip v-if="!formVariables.length" content="表单字段，如 {form.certNo}" placement="top">
           <el-tag size="small" effect="plain" type="info" class="notify__var" @click="insertVariable(index, 'form.')">form.字段</el-tag>
         </el-tooltip>
       </div>

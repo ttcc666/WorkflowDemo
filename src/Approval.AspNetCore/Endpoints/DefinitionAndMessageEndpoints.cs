@@ -96,9 +96,10 @@ internal static class DirectoryEndpoints
 {
     private const int MaxTake = 200;
 
-    public static void Map(RouteGroupBuilder group, bool formsEnabled)
+    public static void Map(RouteGroupBuilder group, string? formBusinessType)
     {
-        // 前端据此显示菜单与按钮：isAdmin（流程管理、投递记录）、formsEnabled（发起申请）
+        // 前端据此显示菜单与按钮：isAdmin（流程管理、投递记录）、formsEnabled（发起申请）、
+        // formBusinessType（该业务类型的申请被退回后可修改表单重新提交）
         group.MapGet("/me", async (HttpContext http, IApprovalIdentityProvider identity, CancellationToken ct) =>
         {
             var userId = http.GetApprovalUserId();
@@ -110,7 +111,8 @@ internal static class DirectoryEndpoints
                 name = user?.Name ?? userId,
                 roles = await identity.GetRolesAsync(userId, ct),
                 isAdmin = await http.IsApprovalAdminAsync(ct),
-                formsEnabled
+                formsEnabled = formBusinessType is not null,
+                formBusinessType
             };
         });
 

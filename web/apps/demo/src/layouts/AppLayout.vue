@@ -1,23 +1,26 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { MessageBell } from '@approval/ui'
+import { MessageBell, useApprovalUser } from '@approval/ui'
 import UserSwitcher from '@/components/UserSwitcher.vue'
 
 const route = useRoute()
 
 // 审批页面来自 @approval/ui（createApprovalRoutes），证书管理为示例业务
-const menus = [
+const { formsEnabled } = useApprovalUser()
+const menus = computed(() => [
   { path: '/workbench', title: '审批工作台' },
+  ...(formsEnabled.value ? [{ path: '/start', title: '发起申请' }] : []),
   { path: '/certificates', title: '证书管理' },
   { path: '/definitions', title: '流程定义' },
   { path: '/outbox', title: '投递记录' },
-]
+])
 
 // 详情页、设计器归属到对应菜单高亮
 const activeMenu = computed(() => {
   if (route.path.startsWith('/designer')) return '/definitions'
   if (route.path.startsWith('/approvals')) return '/workbench'
+  if (route.path.startsWith('/start')) return '/start'
   return route.path
 })
 </script>

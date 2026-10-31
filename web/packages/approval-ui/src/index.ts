@@ -33,5 +33,17 @@ export { default as MessageBell } from './components/MessageBell.vue'
 export { default as UserPicker } from './components/UserPicker.vue'
 export { default as ApprovalTimeline } from './features/approval/ApprovalTimeline.vue'
 export { default as FlowViewer } from './features/flow/FlowViewer.vue'
+export { default as DynamicForm } from './features/forms/DynamicForm.vue'
+export { default as FormDesigner } from './features/forms/FormDesigner.vue'
+export {
+  fieldRules,
+  fieldTypes,
+  fieldVariables,
+  formOfDefinition,
+  initialValues,
+  parseFormValues,
+  sumKey,
+  validateValue,
+} from './features/forms/formModel'
 
 export * from './utils/labels'

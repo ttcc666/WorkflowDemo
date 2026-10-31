@@ -22,6 +22,7 @@ import {
   type NodeType,
   type NotificationRule,
 } from '../flow/flowModel'
+import { checkSchema, cleanSchema, cleanSettings, cloneField, type FlowSettings, type FormSchema } from '../forms/formModel'
 import { createHistory } from './history'
 
 type Point = { x: number; y: number }
@@ -37,6 +38,9 @@ export function useFlowDesigner() {
   const edges = ref([]) as Ref<FlowEdge[]>
   /** 流程级通知规则（对所有审批节点生效，以及流程结束） */
   const flowNotifications = ref<NotificationRule[]>([])
+  /** 表单结构与发起设置（“表单”“设置”页签），与流程一起发布 */
+  const form = ref<FormSchema>({ fields: [] })
+  const settings = ref<FlowSettings>({})
   const selectedNodeId = shallowRef<string | null>(null)
   const selectedEdgeId = shallowRef<string | null>(null)
   const errors = shallowRef<string[] | null>(null)
@@ -53,7 +57,16 @@ export function useFlowDesigner() {
 
   // ───── 历史记录 ─────
 
-  const snapshot = () => JSON.stringify(toDefinition(nodes.value, edges.value, flowNotifications.value))
+  /** 当前编辑内容对应的流程定义（发布、校验、快照都使用它） */
+  function buildDefinition(): FlowDefinition {
+    const definition = toDefinition(nodes.value, edges.value, flowNotifications.value)
+    const cleanedSettings = cleanSettings(settings.value)
+    if (cleanedSettings) definition.settings = cleanedSettings
+    if (form.value.fields.length) definition.form = cleanSchema(form.value)
+    return definition
+  }
+
+  const snapshot = () => JSON.stringify(buildDefinition())
 
   function syncHistoryState() {
     canUndo.value = history.canUndo
@@ -88,6 +101,8 @@ export function useFlowDesigner() {
     nodes.value = elements.nodes
     edges.value = elements.edges
     flowNotifications.value = definition.notifications ?? []
+    form.value = definition.form ?? { fields: [] }
+    settings.value = definition.settings ?? {}
     if (selectedNodeId.value && !nodes.value.some((n) => n.id === selectedNodeId.value)) selectedNodeId.value = null
     if (selectedEdgeId.value && !edges.value.some((e) => e.id === selectedEdgeId.value)) selectedEdgeId.value = null
     errors.value = null
@@ -109,6 +124,8 @@ export function useFlowDesigner() {
     nodes.value = elements.nodes
     edges.value = elements.edges
     flowNotifications.value = JSON.parse(JSON.stringify(definition.notifications ?? [])) as NotificationRule[]
+    form.value = cloneField(definition.form) ?? { fields: [] }
+    settings.value = cloneField(definition.settings) ?? {}
     clearSelection()
     errors.value = null
     history.reset(snapshot())
@@ -196,6 +213,16 @@ export function useFlowDesigner() {
     markChanged('flow:notifications')
   }
 
+  function updateForm(schema: FormSchema) {
+    form.value = schema
+    markChanged('form')
+  }
+
+  function updateSettings(value: FlowSettings) {
+    settings.value = value
+    markChanged('settings')
+  }
+
   function updateBranch(edgeId: string, patch: Partial<BranchData>) {
     const edge = edges.value.find((e) => e.id === edgeId)
     if (!edge?.data) return
@@ -235,8 +262,11 @@ export function useFlowDesigner() {
 
   /** 前端补充检查（后端不校验的展示类问题）+ 后端结构校验。 */
   async function validate() {
-    const definition = toDefinition(nodes.value, edges.value, flowNotifications.value)
-    const local = nodes.value.filter((n) => !n.data?.name.trim()).map((n) => `节点 '${n.id}' 未填写名称`)
+    const definition = buildDefinition()
+    const local = [
+      ...nodes.value.filter((n) => !n.data?.name.trim()).map((n) => `节点 '${n.id}' 未填写名称`),
+      ...checkSchema(form.value),
+    ]
     const { errors: server } = await approvalApi.validate(JSON.stringify(definition))
     errors.value = [...local, ...server]
     return { definition, ok: errors.value.length === 0 }
@@ -246,6 +276,8 @@ export function useFlowDesigner() {
     nodes,
     edges,
     flowNotifications,
+    form,
+    settings,
     selectedNode,
     selectedEdge,
     dirty,
@@ -263,6 +295,8 @@ export function useFlowDesigner() {
     connect,
     updateNode,
     updateFlowNotifications,
+    updateForm,
+    updateSettings,
     updateBranch,
     removeNode,
     removeEdge,

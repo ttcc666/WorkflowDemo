@@ -64,12 +64,13 @@ public static class ApprovalAspNetCoreExtensions
 
         // 表单审批为可选能力：未调用 AddFormApprovals() 时不映射相关接口（避免把未注册的服务参数推断为请求体）
         var formsEnabled = app.ServiceProvider.GetService<IServiceProviderIsService>()?.IsService(typeof(ApprovalFormService)) == true;
+        var formBusinessType = formsEnabled ? app.ServiceProvider.GetService<ApprovalFormOptions>()?.BusinessType : null;
 
         InstanceEndpoints.Map(group);
         TaskEndpoints.Map(group, formsEnabled);
         DefinitionEndpoints.Map(group);
         MessageEndpoints.Map(group, options);
-        DirectoryEndpoints.Map(group, formsEnabled);
+        DirectoryEndpoints.Map(group, formBusinessType);
         if (formsEnabled) FormEndpoints.Map(group);
         return group;
     }

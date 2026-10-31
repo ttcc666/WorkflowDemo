@@ -6,6 +6,8 @@ import { approvalApi } from '../api/approval'
 import { errorMessage } from '../api/http'
 import type { AddSignMode } from '../api/types'
 import { useApprovalUser } from '../composables/useApprovalUser'
+import DynamicForm from '../features/forms/DynamicForm.vue'
+import { formOfDefinition, parseFormValues } from '../features/forms/formModel'
 import ApprovalActions from '../features/approval/ApprovalActions.vue'
 import ApprovalSummary from '../features/approval/ApprovalSummary.vue'
 import ApprovalTimeline from '../features/approval/ApprovalTimeline.vue'
@@ -15,12 +17,19 @@ import FlowViewer from '../features/flow/FlowViewer.vue'
 
 const route = useRoute()
 const router = useRouter()
-const { userId } = useApprovalUser()
+const { userId, formBusinessType } = useApprovalUser()
 
 const instanceId = computed(() => route.params.id as string)
 const { instance, loading, error, definition, myTask, canWithdraw, nodeOptions, reload } = useApprovalDetail(instanceId)
 
 const businessPanel = computed(() => (instance.value ? businessPanelOf(instance.value.businessType) : undefined))
+// 定义带表单时按实例绑定版本的表单结构展示；表单审批被退回时可修改后重新提交
+const formSchema = computed(() => formOfDefinition(definition.value?.definitionJson).form)
+const formValues = computed(() => parseFormValues(instance.value?.formDataJson))
+const resubmitForm = computed(() =>
+  formSchema.value && instance.value?.businessType === formBusinessType.value ? formSchema.value : undefined,
+)
+
 const formData = computed(() => {
   try {
     return JSON.stringify(JSON.parse(instance.value?.formDataJson ?? '{}'), null, 2)
@@ -51,7 +60,8 @@ const onReject = (comment: string, target: string | null) =>
   run(() => approvalApi.reject(taskId(), comment, target ?? undefined), target ? '已退回' : '已驳回')
 const onAddSign = (userIds: string[], mode: AddSignMode, comment: string) =>
   run(() => approvalApi.addSign(taskId(), userIds, mode, comment), `已加签 ${userIds.join('、')}`)
-const onResubmit = (comment: string) => run(() => approvalApi.resubmit(taskId(), comment), '已重新提交')
+const onResubmit = (comment: string, data?: Record<string, unknown>) =>
+  run(() => approvalApi.resubmit(taskId(), comment, data), '已重新提交')
 const onTransfer = (to: string, comment: string) => run(() => approvalApi.transfer(taskId(), to, comment), `已转交给 ${to}`)
 const onWithdraw = (comment: string) => run(() => approvalApi.withdraw(instanceId.value, comment), '已撤回')
 </script>
@@ -73,6 +83,8 @@ const onWithdraw = (comment: string) => run(() => approvalApi.withdraw(instanceI
         :allow-return="nodeOptions.allowReturn"
         :allow-add-sign="nodeOptions.allowAddSign"
         :busy="busy"
+        :resubmit-form="resubmitForm"
+        :form-data="formValues"
         @approve="onApprove"
         @reject="onReject"
         @transfer="onTransfer"
@@ -90,6 +102,7 @@ const onWithdraw = (comment: string) => run(() => approvalApi.withdraw(instanceI
           <el-card shadow="never" header="申请内容">
             <!-- 审批状态变化后重新挂载，刷新业务单据状态 -->
             <component :is="businessPanel" v-if="businessPanel" :key="instance.status" :business-key="instance.businessKey" />
+            <DynamicForm v-else-if="formSchema" :key="instance.formDataJson" :model-value="formValues" :schema="formSchema" readonly />
             <pre v-else class="form-data">{{ formData }}</pre>
           </el-card>
           <el-card shadow="never" header="流程图">

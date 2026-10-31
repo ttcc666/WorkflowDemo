@@ -1,5 +1,8 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import UserPicker from '../../components/UserPicker.vue'
+import { userFields } from '../forms/formModel'
+import { useDesignerForm } from './designerContext'
 import { approverTypeLabels, valuelessApproverTypes, type ApproverRule } from '../flow/flowModel'
 
 /** 审批人 / 通知接收人规则列表：类型 + 参数（角色、用户、表单字段）。 */
@@ -15,6 +18,10 @@ const props = withDefaults(
 )
 
 const rules = defineModel<ApproverRule[]>({ required: true })
+
+// 流程带表单时，“表单字段”从人员字段中选择
+const form = useDesignerForm()
+const personFields = computed(() => userFields(form.value))
 
 function update(index: number, patch: Partial<ApproverRule>) {
   rules.value = rules.value.map((r, i) => (i === index ? { ...r, ...patch } : r))
@@ -38,6 +45,10 @@ const splitIds = (value: string) => value.split(',').map((s) => s.trim()).filter
       </el-select>
       <UserPicker v-else-if="rule.type === 'User'" :model-value="splitIds(rule.value)" class="rule__value" multiple
         placeholder="选择用户" @update:model-value="(v) => update(index, { value: ((v as string[] | null) ?? []).join(',') })" />
+      <el-select v-else-if="rule.type === 'FormField' && personFields.length" :model-value="rule.value" class="rule__value"
+        placeholder="选择人员字段" @update:model-value="(v: string) => update(index, { value: v })">
+        <el-option v-for="f in personFields" :key="f.key" :label="`${f.label}（${f.key}）`" :value="f.key" />
+      </el-select>
       <el-input v-else-if="!valuelessApproverTypes.has(rule.type)" :model-value="rule.value" class="rule__value"
         :placeholder="rule.type === 'FormField' ? '字段名，如 reviewerId' : '参数'"
         @update:model-value="(v: string) => update(index, { value: v })" />

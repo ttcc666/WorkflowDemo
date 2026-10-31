@@ -1,6 +1,7 @@
 import dagre from '@dagrejs/dagre'
 import type { Edge, Node } from '@vue-flow/core'
 import type { ApprovalInstance } from '../../api/types'
+import type { FlowSettings, FormSchema } from '../forms/formModel'
 
 // ───── 后端流程定义（与 Approval.Core.Definitions.FlowDefinition 对应） ─────
 
@@ -72,6 +73,10 @@ export interface FlowNodeDef {
 
 export interface FlowDefinition {
   startNodeId: string
+  /** 发起设置（发起中心、发起角色、标题模板） */
+  settings?: FlowSettings
+  /** 表单结构 */
+  form?: FormSchema
   /** 流程级通知：对所有审批节点生效，以及流程结束 */
   notifications?: NotificationRule[]
   nodes: Record<string, FlowNodeDef>

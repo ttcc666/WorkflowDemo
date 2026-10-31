@@ -103,9 +103,10 @@ webhook.MapPost("/{**path}", async (string? path, HttpRequest request, DemoWebho
 });
 
 // 前端路由回退到 index.html。默认回退会跳过“像文件名”的路径，
-// 而流程标识含点（如 /designer/certificate.update），需单独声明；未知 API 返回 404 而不是页面
+// 而流程标识含点（如 /designer/certificate.update、/start/hr.leave），需单独声明；未知 API 返回 404 而不是页面
 app.Map("/api/{**rest}", () => Results.NotFound());
 app.MapFallbackToFile("/designer/{**key}", "index.html");
+app.MapFallbackToFile("/start/{**key}", "index.html");
 app.MapFallbackToFile("index.html");
 
 app.Run();

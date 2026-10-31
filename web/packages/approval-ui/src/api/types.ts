@@ -1,5 +1,9 @@
 // 与后端 JSON 对应的类型（camelCase，枚举为字符串）
 
+import type { FlowSettings, FormSchema } from '../features/forms/formModel'
+
+export type { FlowSettings, FormField, FormFieldOption, FormFieldType, FormSchema, FormValues } from '../features/forms/formModel'
+
 export type InstanceStatus = 'Running' | 'Approved' | 'Rejected' | 'Withdrawn' | 'Terminated'
 export type TaskStatus = 'Waiting' | 'Pending' | 'Approved' | 'Rejected' | 'Canceled' | 'Transferred' | 'Suspended'
 export type TaskKind = 'Approval' | 'Resubmit' | 'AddSignBefore' | 'AddSignAfter' | 'AddSignParallel'
@@ -211,6 +215,27 @@ export interface ApprovalMe {
   isAdmin: boolean
   /** 后端启用了表单审批（AddFormApprovals） */
   formsEnabled: boolean
+  /** 表单审批的业务类型（该类型的申请被退回后可修改表单重新提交），未启用时为 null */
+  formBusinessType: string | null
+}
+
+// ───── 表单审批 ─────
+
+export interface StartableFlow {
+  key: string
+  name: string
+  version: number
+  category: string | null
+  description: string | null
+}
+
+export interface StartForm {
+  definitionId: string
+  key: string
+  name: string
+  version: number
+  settings: FlowSettings
+  form: FormSchema
 }
 
 export interface DirectoryUser {
