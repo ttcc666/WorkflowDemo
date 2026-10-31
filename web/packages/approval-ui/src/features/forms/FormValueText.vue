@@ -34,6 +34,10 @@ const text = computed(() => {
       return (v as string[]).join(' 至 ')
     case 'Money':
       return Number(v).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    case 'Formula': {
+      const digits = props.field.precision ?? 2
+      return Number(v).toLocaleString('zh-CN', { minimumFractionDigits: digits, maximumFractionDigits: digits })
+    }
     case 'User':
     case 'Users':
       return userNames.value.join('、') || userIds.value.join('、')

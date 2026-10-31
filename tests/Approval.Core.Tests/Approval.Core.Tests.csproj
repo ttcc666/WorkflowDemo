@@ -21,6 +21,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- 与前端 formula.test.ts 共用的公式测试用例 -->
+    <None Include="..\shared\formula-cases.json" Link="formula-cases.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\src\Approval.Core\Approval.Core.csproj" />
   </ItemGroup>
 

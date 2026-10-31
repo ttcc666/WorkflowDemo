@@ -31,6 +31,12 @@ const userValue = computed({
   get: () => (model.value as string | string[] | null | undefined) ?? null,
   set: (v: string | string[] | null) => (model.value = v ?? (props.field.type === 'Users' ? [] : null)),
 })
+// 计算字段只读显示，值由公式自动计算
+const formulaText = computed(() => {
+  const value = typeof model.value === 'number' ? model.value : null
+  const digits = props.field.precision ?? 2
+  return value === null ? '' : value.toLocaleString('zh-CN', { minimumFractionDigits: digits, maximumFractionDigits: digits })
+})
 </script>
 
 <template>
@@ -58,10 +64,17 @@ const userValue = computed({
   <el-switch v-else-if="field.type === 'Switch'" :model-value="model === true" :size="size" @update:model-value="(v) => (model = v === true)" />
   <UserPicker v-else-if="field.type === 'User' || field.type === 'Users'" v-model="userValue" :multiple="field.type === 'Users'"
     :placeholder="placeholder ?? '搜索人员'" :size="size" />
+  <el-input v-else-if="field.type === 'Formula'" :model-value="formulaText" disabled placeholder="自动计算" :size="size"
+    class="field-input--formula" :title="field.formula ?? ''" />
 </template>
 
 <style scoped>
 .field-input--full {
   width: 100%;
+}
+
+.field-input--formula :deep(.el-input__inner) {
+  color: #303133;
+  -webkit-text-fill-color: #303133;
 }
 </style>

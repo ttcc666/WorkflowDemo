@@ -20,6 +20,9 @@
           { "key": "date", "label": "发生日期", "type": "Date", "required": true },
           { "key": "amount", "label": "金额（元）", "type": "Money", "required": true, "min": 0.01, "sum": true },
           { "key": "remark", "label": "备注", "type": "Text", "maxLength": 200 } ] },
+      { "key": "advance", "label": "预支金额（元）", "type": "Money", "min": 0, "span": 12, "help": "出差前已预支的金额，没有可不填" },
+      { "key": "payable", "label": "应付金额（元）", "type": "Formula", "formula": "items_amount_sum - ifnull(advance, 0)", "span": 12,
+        "help": "自动计算：明细合计 - 预支金额" },
       { "key": "tip", "label": "报销须知", "type": "Description", "help": "请在提交后 3 个工作日内将发票原件交至财务部。" },
       { "key": "reason", "label": "报销说明", "type": "TextArea", "maxLength": 500 }
     ]

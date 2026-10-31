@@ -1,5 +1,7 @@
 // 表单结构（与 Approval.Core.Forms.FormSchema / FlowSettings 对应）与表单工具函数
 
+import { parseFormula, roundTo, type ParsedFormula } from './formula'
+
 export type FormFieldType =
   | 'Text'
   | 'TextArea'
@@ -15,6 +17,7 @@ export type FormFieldType =
   | 'Users'
   | 'Table'
   | 'Description'
+  | 'Formula'
 
 export interface FormFieldOption {
   label: string
@@ -41,6 +44,8 @@ export interface FormField {
   columns?: FormField[]
   /** 明细表数值列：合计写入顶层字段 {表格}_{列}_sum */
   sum?: boolean
+  /** 计算字段的公式，如 `qty * price`、`items_amount_sum - ifnull(advance, 0)` */
+  formula?: string | null
 }
 
 export interface FormSchema {
@@ -70,6 +75,7 @@ export const fieldTypes: FieldTypeMeta[] = [
   { type: 'TextArea', label: '多行文本', icon: '¶', group: '基础' },
   { type: 'Number', label: '数字', icon: '#', group: '基础' },
   { type: 'Money', label: '金额', icon: '¥', group: '基础' },
+  { type: 'Formula', label: '计算字段', icon: 'ƒ', group: '基础' },
   { type: 'Date', label: '日期', icon: '📅', group: '基础' },
   { type: 'DateRange', label: '日期区间', icon: '⇔', group: '基础' },
   { type: 'Select', label: '下拉选择', icon: '▾', group: '选择' },
@@ -85,10 +91,13 @@ export const fieldTypes: FieldTypeMeta[] = [
 export const fieldTypeLabels = Object.fromEntries(fieldTypes.map((t) => [t.type, t.label])) as Record<FormFieldType, string>
 
 /** 明细表列支持的类型 */
-export const columnTypes: FormFieldType[] = ['Text', 'Number', 'Money', 'Date', 'Select']
+export const columnTypes: FormFieldType[] = ['Text', 'Number', 'Money', 'Date', 'Select', 'Formula']
 
 export const optionTypes = new Set<FormFieldType>(['Select', 'MultiSelect', 'Radio'])
+/** 可填写的数值类型（最小 / 最大值、小数位数） */
 export const numberTypes = new Set<FormFieldType>(['Number', 'Money'])
+/** 数值类型（可合计、可被公式引用） */
+export const numericTypes = new Set<FormFieldType>(['Number', 'Money', 'Formula'])
 export const textTypes = new Set<FormFieldType>(['Text', 'TextArea'])
 export const userTypes = new Set<FormFieldType>(['User', 'Users'])
 const arrayTypes = new Set<FormFieldType>(['MultiSelect', 'Users', 'Table'])
@@ -124,6 +133,7 @@ export function newField(type: FormFieldType, existingKeys: Iterable<string>): F
     ]
   }
   if (type === 'Money') field.precision = 2
+  if (type === 'Formula') field.formula = ''
   if (type === 'Table') {
     field.span = 24
     field.columns = [
@@ -171,6 +181,13 @@ export function tableSum(rows: unknown, columnKey: string) {
   return Math.round(total * 1e6) / 1e6
 }
 
+/** 公式中可引用的数值：顶层数值字段（含计算字段）与明细合计字段 */
+export function numericVariables(schema: FormSchema | undefined): { name: string; label: string }[] {
+  return fieldVariables(schema)
+    .filter((v) => numericTypes.has(v.type))
+    .map(({ name, label }) => ({ name, label }))
+}
+
 /** 可在条件表达式与模板中引用的字段（含明细合计字段） */
 export function fieldVariables(schema: FormSchema | undefined): { name: string; label: string; type: FormFieldType }[] {
   const result: { name: string; label: string; type: FormFieldType }[] = []
@@ -212,7 +229,7 @@ const formatNumber = (n: number) => String(n)
 
 /** 返回字段值的错误信息（无错误时为 null），供 Element Plus 规则与单元测试使用 */
 export function validateValue(field: FormField, value: unknown): string | null {
-  if (field.type === 'Description') return null
+  if (field.type === 'Description' || field.type === 'Formula') return null
   if (field.type === 'Switch') return field.required && value !== true ? requiredMessage(field) : null
   if (isEmpty(value)) return field.required ? requiredMessage(field) : null
 
@@ -243,7 +260,7 @@ export function validateValue(field: FormField, value: unknown): string | null {
 }
 
 export function fieldRules(field: FormField): FieldRule[] {
-  if (field.type === 'Description') return []
+  if (field.type === 'Description' || field.type === 'Formula') return []
   return [
     {
       // required 只用于显示星号；实际校验在 validator 中完成，与服务端提示一致
@@ -272,8 +289,17 @@ export function cleanField(field: FormField, isColumn = false): FormField {
   if (numberTypes.has(field.type)) {
     if (field.min !== null && field.min !== undefined) result.min = field.min
     if (field.max !== null && field.max !== undefined) result.max = field.max
+  }
+  if (numericTypes.has(field.type)) {
     if (field.precision !== null && field.precision !== undefined) result.precision = field.precision
     if (isColumn && field.sum) result.sum = true
+  }
+  if (field.type === 'Formula') {
+    // 值由公式计算：不保存必填、默认值、占位提示
+    result.formula = (field.formula ?? '').trim()
+    delete result.required
+    delete result.defaultValue
+    delete result.placeholder
   }
   if (textTypes.has(field.type) && field.maxLength) result.maxLength = field.maxLength
   if (field.type === 'Table') {
@@ -306,6 +332,10 @@ export function checkSchema(schema: FormSchema): string[] {
     if (!field.label.trim()) errors.push(`${owner}字段 ${field.key} 缺少名称`)
     if (field.type !== 'Description' && !isValidFieldKey(field.key)) errors.push(`${name}的标识只能包含字母、数字和下划线，且不能以数字开头`)
     if (optionTypes.has(field.type) && !(field.options ?? []).length) errors.push(`${name}没有选项`)
+    if (field.type === 'Formula') {
+      const { error } = parseFormula(field.formula)
+      if (error) errors.push(`${name}的公式有误：${error}`)
+    }
   }
   for (const field of schema.fields) {
     check(field, '表单字段')
@@ -339,4 +369,88 @@ export function parseFormValues(json: string | undefined): FormValues {
   } catch {
     return {}
   }
+}
+
+// ───── 计算字段（与服务端 FormDataValidator 一致：明细列公式逐行 → 合计 → 顶层计算字段） ─────
+
+interface FormulaStep {
+  field: FormField
+  formula: ParsedFormula
+}
+
+/** 解析一组字段中的公式并按依赖排序（先算被依赖的）；公式无效或存在循环引用时不计算 */
+export function formulaOrder(fields: FormField[]): FormulaStep[] {
+  const parsed = new Map<string, FormulaStep>()
+  for (const field of fields) {
+    if (field.type !== 'Formula') continue
+    const { formula } = parseFormula(field.formula)
+    if (formula) parsed.set(field.key.toLowerCase(), { field, formula })
+  }
+
+  const order: FormulaStep[] = []
+  const state = new Map<string, 'visiting' | 'done'>()
+  const visit = (step: FormulaStep): boolean => {
+    const key = step.field.key.toLowerCase()
+    const current = state.get(key)
+    if (current) return current === 'done'
+    state.set(key, 'visiting')
+    for (const name of step.formula.identifiers) {
+      const dependency = parsed.get(name.toLowerCase())
+      if (dependency && !visit(dependency)) return false
+    }
+    state.set(key, 'done')
+    order.push(step)
+    return true
+  }
+  for (const step of parsed.values()) if (!visit(step)) return []
+  return order
+}
+
+function toNumber(value: unknown): number | null {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null
+  if (typeof value === 'string' && value.trim() !== '' && Number.isFinite(Number(value))) return Number(value)
+  return null
+}
+
+/** 不区分大小写取值（与服务端一致） */
+function lookup(values: FormValues, name: string): unknown {
+  if (name in values) return values[name]
+  const key = Object.keys(values).find((k) => k.toLowerCase() === name.toLowerCase())
+  return key === undefined ? undefined : values[key]
+}
+
+function compute(step: FormulaStep, variable: (name: string) => number | null) {
+  const result = step.formula.evaluate(variable)
+  return result === null ? null : roundTo(result, step.field.precision ?? 2)
+}
+
+/** 计算全部公式并写回 values（明细行的计算列、顶层计算字段），返回是否有变化；提交后服务端会重新计算 */
+export function applyFormulas(schema: FormSchema | undefined, values: FormValues): boolean {
+  let changed = false
+  const set = (target: FormValues, key: string, value: number | null) => {
+    if (target[key] !== value) {
+      target[key] = value
+      changed = true
+    }
+  }
+
+  const fields = schema?.fields ?? []
+  const sums = new Map<string, number>()
+  for (const table of fields.filter((f) => f.type === 'Table')) {
+    const columns = table.columns ?? []
+    const steps = formulaOrder(columns)
+    const rows = Array.isArray(values[table.key]) ? (values[table.key] as FormValues[]) : []
+    for (const row of rows) {
+      for (const column of columns) if (column.type === 'Formula' && !steps.some((s) => s.field === column)) set(row, column.key, null)
+      for (const step of steps) set(row, step.field.key, compute(step, (name) => toNumber(lookup(row, name))))
+    }
+    for (const column of columns.filter((c) => c.sum)) sums.set(sumKey(table.key, column.key).toLowerCase(), tableSum(rows, column.key))
+  }
+
+  const steps = formulaOrder(fields)
+  for (const field of fields) if (field.type === 'Formula' && !steps.some((s) => s.field === field)) set(values, field.key, null)
+  for (const step of steps) {
+    set(values, step.field.key, compute(step, (name) => toNumber(lookup(values, name)) ?? sums.get(name.toLowerCase()) ?? null))
+  }
+  return changed
 }

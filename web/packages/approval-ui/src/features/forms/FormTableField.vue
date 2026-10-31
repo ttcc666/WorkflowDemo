@@ -20,8 +20,10 @@ const maxRows = computed(() => props.field.maxRows ?? 100)
 const add = () => (rows.value = [...rows.value, newRow(props.field)])
 const remove = (index: number) => (rows.value = rows.value.filter((_, i) => i !== index))
 const errorOf = (path: string) => props.errors?.[path]?.[0] ?? ''
-const formatSum = (column: FormField) =>
-  tableSum(rows.value, column.key).toLocaleString('zh-CN', { minimumFractionDigits: column.type === 'Money' ? 2 : 0, maximumFractionDigits: 6 })
+const formatSum = (column: FormField) => {
+  const digits = column.type === 'Money' ? 2 : column.type === 'Formula' ? (column.precision ?? 2) : 0
+  return tableSum(rows.value, column.key).toLocaleString('zh-CN', { minimumFractionDigits: digits, maximumFractionDigits: Math.max(digits, 6) })
+}
 </script>
 
 <template>

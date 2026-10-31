@@ -18,7 +18,7 @@ public static partial class FormSchemaValidator
     private static readonly HashSet<FormFieldType> NumberTypes = [FormFieldType.Number, FormFieldType.Money];
 
     private static readonly HashSet<FormFieldType> ColumnTypes =
-        [FormFieldType.Text, FormFieldType.Number, FormFieldType.Money, FormFieldType.Date, FormFieldType.Select];
+        [FormFieldType.Text, FormFieldType.Number, FormFieldType.Money, FormFieldType.Date, FormFieldType.Select, FormFieldType.Formula];
 
     /// <summary>标题模板中可用的非表单变量。</summary>
     public static readonly IReadOnlySet<string> TitleVariables =
@@ -42,14 +42,21 @@ public static partial class FormSchemaValidator
             }
 
             // 明细合计字段写入顶层，不能与普通字段同名
+            var sumKeys = new List<string>();
             foreach (var table in form.Fields.Where(f => f.Type == FormFieldType.Table))
             {
                 foreach (var column in table.Columns.Where(c => c.Sum))
                 {
                     var sumKey = FormField.SumKey(table.Key, column.Key);
                     if (!keys.Add(sumKey)) errors.Add($"合计字段 '{sumKey}' 与已有字段重名");
+                    sumKeys.Add(sumKey);
                 }
+                // 明细列的公式按行计算，只能引用本行的数值列
+                FormulaPlan.Build(table.Columns, [], $"明细表「{table.Label}」的列", errors);
             }
+
+            // 计算字段：公式语法、引用（数值字段、明细合计、其他计算字段）、循环引用
+            FormulaPlan.Build(form.Fields, sumKeys, "表单", errors);
 
             // 审批人 / 通知接收人按表单字段取人时，字段必须是人员类型
             var rules = definition.Nodes.Values
@@ -105,7 +112,19 @@ public static partial class FormSchemaValidator
             if (field.Min > field.Max) errors.Add($"{name}的最小值不能大于最大值");
             if (field.Precision is < 0 or > 6) errors.Add($"{name}的小数位数必须在 0 到 6 之间");
         }
-        else if (field.Sum) errors.Add($"{name}不是数值列，不能合计");
+        else if (field.Sum && !FormField.IsNumeric(field.Type)) errors.Add($"{name}不是数值列，不能合计");
+
+        if (field.Type == FormFieldType.Formula)
+        {
+            // 值由公式计算：不能填写，因此不支持必填、默认值与范围
+            if (string.IsNullOrWhiteSpace(field.Formula)) errors.Add($"{name}没有填写公式");
+            if (field.Precision is < 0 or > 6) errors.Add($"{name}的小数位数必须在 0 到 6 之间");
+            if (field.Required || field.DefaultValue is { ValueKind: not (JsonValueKind.Null or JsonValueKind.Undefined) } || field.Min is not null
+                || field.Max is not null)
+                errors.Add($"{name}是计算字段，不能设置必填、默认值或范围");
+            return;
+        }
+        if (!string.IsNullOrWhiteSpace(field.Formula)) errors.Add($"{name}不是计算字段，不能设置公式");
 
         if (field.MaxLength is < 1 or > FormDataValidator.MaxTextLength)
             errors.Add($"{name}的最大长度必须在 1 到 {FormDataValidator.MaxTextLength} 之间");

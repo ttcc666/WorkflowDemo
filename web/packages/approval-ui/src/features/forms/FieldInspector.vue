@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import FormFieldInput from './FormFieldInput.vue'
+import FormulaInput from './FormulaInput.vue'
 import OptionsEditor from './OptionsEditor.vue'
 import {
   columnTypes,
@@ -8,6 +9,7 @@ import {
   isValidFieldKey,
   newFieldKey,
   numberTypes,
+  numericTypes,
   optionTypes,
   textTypes,
   type FormField,
@@ -20,6 +22,8 @@ const props = defineProps<{
   /** 其他字段的标识，用于检查重复 */
   otherKeys: string[]
   isColumn?: boolean
+  /** 计算字段可引用的数值（其他数值字段与明细合计） */
+  formulaVariables?: { name: string; label: string }[]
 }>()
 
 const emit = defineEmits<{ update: [patch: Partial<FormField>] }>()
@@ -39,7 +43,8 @@ const conditionExample = computed(() => {
   if (optionTypes.has(type) && type !== 'MultiSelect' && options?.[0]) return `${key} == "${options[0].value}"`
   return `${key} == "…"`
 })
-const supportsDefault = computed(() => !['Table', 'Description', 'User', 'Users', 'DateRange'].includes(props.field.type))
+const supportsDefault = computed(() => !['Table', 'Description', 'User', 'Users', 'DateRange', 'Formula'].includes(props.field.type))
+const isFormula = computed(() => props.field.type === 'Formula')
 const defaultField = computed<FormField>(() => ({ ...props.field, required: false, defaultValue: undefined }))
 
 const numberOrNull = (v: number | null | undefined) => (v === undefined || v === null || Number.isNaN(v) ? null : v)
@@ -54,9 +59,10 @@ function updateColumn(index: number, patch: Partial<FormField>) {
 
 function changeColumnType(index: number, type: FormFieldType) {
   const column = columns.value[index]!
-  const patch: Partial<FormField> = { type, sum: numberTypes.has(type) ? column.sum : false, defaultValue: undefined }
+  const patch: Partial<FormField> = { type, sum: numericTypes.has(type) ? column.sum : false, defaultValue: undefined }
   if (optionTypes.has(type) && !column.options?.length) patch.options = [{ label: '选项一', value: 'option1' }]
   if (type === 'Money') patch.precision = 2
+  if (type === 'Formula') Object.assign(patch, { formula: column.formula ?? '', required: false })
   updateColumn(index, patch)
 }
 
@@ -65,6 +71,9 @@ function addColumn() {
 }
 
 const removeColumn = (index: number) => emit('update', { columns: columns.value.filter((_, i) => i !== index) })
+/** 明细列公式只能引用本行的其他数值列 */
+const columnVariables = (index: number) =>
+  columns.value.filter((c, i) => i !== index && numericTypes.has(c.type)).map((c) => ({ name: c.key, label: c.label }))
 const columnKeyInvalid = (index: number) => {
   const key = columns.value[index]!.key
   return !isValidFieldKey(key) || columns.value.some((c, i) => i !== index && c.key.toLowerCase() === key.toLowerCase())
@@ -88,7 +97,17 @@ const columnKeyInvalid = (index: number) => {
       </div>
     </el-form-item>
 
-    <el-form-item v-if="field.type !== 'Description'">
+    <el-form-item v-if="isFormula" label="公式" required>
+      <FormulaInput :model-value="field.formula ?? ''" :variables="formulaVariables ?? []"
+        placeholder="如 items_amount_sum - ifnull(advance, 0)" @update:model-value="(v) => emit('update', { formula: v })" />
+    </el-form-item>
+
+    <el-form-item v-if="isFormula" label="小数位数">
+      <el-input-number :model-value="field.precision ?? undefined" :min="0" :max="6" :value-on-clear="null" controls-position="right"
+        placeholder="2" @update:model-value="(v) => emit('update', { precision: numberOrNull(v) })" />
+    </el-form-item>
+
+    <el-form-item v-if="field.type !== 'Description' && !isFormula">
       <el-checkbox :model-value="!!field.required" @update:model-value="(v) => emit('update', { required: v === true })">
         {{ field.type === 'Switch' ? '必须打开（如“我已阅读并同意”）' : '必填' }}
       </el-checkbox>
@@ -131,7 +150,7 @@ const columnKeyInvalid = (index: number) => {
         :placeholder="field.type === 'Text' ? '200' : '2000'" @update:model-value="(v) => emit('update', { maxLength: numberOrNull(v) })" />
     </el-form-item>
 
-    <el-form-item v-if="field.type !== 'Description' && field.type !== 'Table' && field.type !== 'Switch'" label="占位提示">
+    <el-form-item v-if="!['Description', 'Table', 'Switch', 'Formula'].includes(field.type)" label="占位提示">
       <el-input :model-value="field.placeholder ?? ''" maxlength="100" @update:model-value="(v: string) => emit('update', { placeholder: v || null })" />
     </el-form-item>
 
@@ -161,8 +180,8 @@ const columnKeyInvalid = (index: number) => {
               </el-select>
             </div>
             <div class="column__line">
-              <el-checkbox :model-value="!!column.required" @update:model-value="(v) => updateColumn(index, { required: v === true })">必填</el-checkbox>
-              <el-checkbox v-if="numberTypes.has(column.type)" :model-value="!!column.sum"
+              <el-checkbox v-if="column.type !== 'Formula'" :model-value="!!column.required" @update:model-value="(v) => updateColumn(index, { required: v === true })">必填</el-checkbox>
+              <el-checkbox v-if="numericTypes.has(column.type)" :model-value="!!column.sum"
                 @update:model-value="(v) => updateColumn(index, { sum: v === true })">合计</el-checkbox>
               <el-popover v-if="optionTypes.has(column.type)" trigger="click" width="320" placement="left">
                 <template #reference>
@@ -172,6 +191,8 @@ const columnKeyInvalid = (index: number) => {
               </el-popover>
               <el-button link type="danger" size="small" class="column__remove" @click="removeColumn(index)">删除</el-button>
             </div>
+            <FormulaInput v-if="column.type === 'Formula'" :model-value="column.formula ?? ''" :variables="columnVariables(index)"
+              placeholder="按行计算，如 qty * price" class="column__formula" @update:model-value="(v) => updateColumn(index, { formula: v })" />
           </div>
           <el-button link type="primary" size="small" @click="addColumn">+ 添加列</el-button>
           <div class="field-inspector__help">数值列勾选“合计”后，合计值可在条件中使用：<code>{{ field.key }}_列标识_sum &gt; 5000</code></div>
@@ -239,6 +260,10 @@ const columnKeyInvalid = (index: number) => {
 
 .column__remove {
   margin-left: auto;
+}
+
+.column__formula {
+  margin-top: 4px;
 }
 
 .column__key--error :deep(.el-input__wrapper) {

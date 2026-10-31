@@ -19,7 +19,7 @@
           { "key": "name", "label": "物品名称", "type": "Text", "required": true, "maxLength": 100 },
           { "key": "qty", "label": "数量", "type": "Number", "required": true, "min": 1, "precision": 0 },
           { "key": "price", "label": "单价（元）", "type": "Money", "required": true, "min": 0.01 },
-          { "key": "amount", "label": "金额（元）", "type": "Money", "required": true, "min": 0.01, "sum": true } ] },
+          { "key": "amount", "label": "金额（元）", "type": "Formula", "formula": "qty * price", "sum": true } ] },
       { "key": "reason", "label": "采购说明", "type": "TextArea", "required": true, "maxLength": 500 }
     ]
   },

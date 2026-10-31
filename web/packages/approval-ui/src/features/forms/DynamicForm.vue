@@ -1,14 +1,15 @@
 <script setup lang="ts">
-import { useTemplateRef } from 'vue'
+import { useTemplateRef, watch } from 'vue'
 import type { FormInstance } from 'element-plus'
 import FormFieldInput from './FormFieldInput.vue'
 import FormTableField from './FormTableField.vue'
 import FormValueText from './FormValueText.vue'
-import { fieldRules, type FormField, type FormSchema, type FormValues } from './formModel'
+import { applyFormulas, fieldRules, type FormField, type FormSchema, type FormValues } from './formModel'
 
 /**
  * 按表单结构渲染表单：填写（发起、重新提交、设计器预览）或只读展示（审批详情）。
  * errors 为服务端返回的字段错误（字段路径 → 错误），显示在对应表单项下。
+ * 填写时计算字段随输入实时计算（提交后以服务端计算为准）。
  */
 const props = defineProps<{
   schema: FormSchema
@@ -18,6 +19,11 @@ const props = defineProps<{
 
 const model = defineModel<FormValues>({ required: true })
 const formRef = useTemplateRef<FormInstance>('form')
+
+// 只在有变化时写回，写回触发的下一次回调不再修改，不会循环
+watch([() => props.schema, model], () => {
+  if (!props.readonly) applyFormulas(props.schema, model.value)
+}, { deep: true, immediate: true })
 
 const spanOf = (field: FormField) => (field.type === 'Table' || field.type === 'Description' ? 24 : (field.span ?? 24))
 const errorOf = (key: string) => props.errors?.[key]?.[0] ?? ''

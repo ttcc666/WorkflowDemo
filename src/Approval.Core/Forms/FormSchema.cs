@@ -52,7 +52,9 @@ public enum FormFieldType
     /// <summary>明细表，值为对象数组；列由 <see cref="FormField.Columns"/> 定义。</summary>
     Table,
     /// <summary>说明文字（<see cref="FormField.Label"/> 为标题、<see cref="FormField.Help"/> 为正文），没有值。</summary>
-    Description
+    Description,
+    /// <summary>计算字段：值由 <see cref="FormField.Formula"/> 在服务端计算（忽略提交的值），可作为明细列按行计算。</summary>
+    Formula
 }
 
 public sealed class FormField
@@ -84,8 +86,14 @@ public sealed class FormField
 
     public decimal? Max { get; set; }
 
-    /// <summary>数值字段的小数位数；Money 默认 2，Number 默认不限制。</summary>
+    /// <summary>数值字段的小数位数；Money、Formula 默认 2，Number 默认不限制。</summary>
     public int? Precision { get; set; }
+
+    /// <summary>
+    /// 计算字段的公式（见 <see cref="Forms.Formula"/>），如 <c>items_amount_sum - ifnull(advance, 0)</c>；
+    /// 明细列的公式按行计算，只能引用本行的数值列，如 <c>qty * price</c>。
+    /// </summary>
+    public string? Formula { get; set; }
 
     /// <summary>文本最大长度；默认单行 200、多行 2000，上限 4000。</summary>
     public int? MaxLength { get; set; }
@@ -93,13 +101,16 @@ public sealed class FormField
     /// <summary>明细表最多行数，默认 100。</summary>
     public int? MaxRows { get; set; }
 
-    /// <summary>明细表的列（仅支持 Text / Number / Money / Date / Select）。</summary>
+    /// <summary>明细表的列（仅支持 Text / Number / Money / Date / Select / Formula）。</summary>
     public List<FormField> Columns { get; set; } = [];
 
     /// <summary>明细表数值列：合计写入顶层字段 <c>{表格}_{列}_sum</c>，可用于条件与模板。</summary>
     public bool Sum { get; set; }
 
     public static string SumKey(string tableKey, string columnKey) => $"{tableKey}_{columnKey}_sum";
+
+    /// <summary>数值类字段（可参与合计与公式）。</summary>
+    public static bool IsNumeric(FormFieldType type) => type is FormFieldType.Number or FormFieldType.Money or FormFieldType.Formula;
 }
 
 public sealed record FormFieldOption(string Label, string Value);

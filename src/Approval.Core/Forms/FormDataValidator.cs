@@ -13,7 +13,8 @@ public sealed record FormValidationResult(string Json, IReadOnlyDictionary<strin
 
 /// <summary>
 /// 按 <see cref="FormSchema"/> 校验并规范化表单数据（服务端不信任前端）：
-/// 去掉未定义的字段、转换类型（数字字符串 → 数字）、检查必填 / 选项 / 范围 / 长度 / 行数，并计算明细合计。
+/// 去掉未定义的字段、转换类型（数字字符串 → 数字）、检查必填 / 选项 / 范围 / 长度 / 行数，
+/// 并按依赖顺序计算：明细列公式（逐行）→ 明细合计 → 顶层计算字段（忽略提交的计算值）。
 /// 未填写的可选字段写为 null（数组类为空数组、开关为 false），保证条件表达式中变量始终存在。
 /// 明细单元格的错误路径为 <c>表格.行号.列</c>（如 <c>items.0.amount</c>），与前端表单项的 prop 一致。
 /// </summary>
@@ -49,14 +50,28 @@ public static class FormDataValidator
         foreach (var property in data.EnumerateObject()) input[property.Name] = property.Value;
 
         var errors = new Dictionary<string, List<string>>();
-        var output = new JsonObject();
+        // 公式按字段标识取值，不区分大小写
+        var output = new JsonObject(new JsonNodeOptions { PropertyNameCaseInsensitive = true });
+        var sumKeys = new List<string>();
         foreach (var field in schema.Fields.Where(f => f.Type != FormFieldType.Description))
         {
             JsonElement? value = input.TryGetValue(field.Key, out var v) ? v : null;
             output[field.Key] = Normalize(field, value, field.Key, errors);
-            if (field.Type == FormFieldType.Table) AddSums(field, output);
+            if (field.Type == FormFieldType.Table) sumKeys.AddRange(AddSums(field, output));
         }
+
+        // 顶层计算字段：发布时已校验公式与循环引用，这里按依赖顺序计算
+        foreach (var step in FormulaPlan.Build(schema.Fields, sumKeys, "", null))
+            output[step.Field.Key] = Compute(step, output);
         return (output, errors);
+    }
+
+    /// <summary>计算公式并按字段精度（默认 2 位）四舍五入；结果为空时返回 null。</summary>
+    private static JsonNode? Compute(FormulaPlan.Step step, JsonObject values)
+    {
+        var result = step.Formula.Evaluate(name => values[name] is JsonValue v && v.TryGetValue<decimal>(out var d) ? d : null);
+        // 除以 1.000…0 去掉多余的尾随 0（如 7.0 → 7）
+        return result is { } value ? JsonValue.Create(Forms.Formula.Round(value, step.Field.Precision ?? 2) / 1.0000000000000000000000000000m) : null;
     }
 
     /// <summary>校验失败时抛出 <see cref="ApprovalValidationException"/>，否则返回规范化后的 JSON。</summary>
@@ -74,6 +89,9 @@ public static class FormDataValidator
             if (!errors.TryGetValue(path, out var list)) errors[path] = list = [];
             list.Add(message);
         }
+
+        // 计算字段的值由服务端计算，忽略提交的值
+        if (field.Type == FormFieldType.Formula) return null;
 
         if (field.Type == FormFieldType.Switch)
         {
@@ -176,6 +194,7 @@ public static class FormDataValidator
         var maxRows = field.MaxRows ?? DefaultMaxRows;
         if (element.GetArrayLength() > maxRows) { error($"{field.Label}最多 {maxRows} 行"); return rows; }
 
+        var formulas = FormulaPlan.Build(field.Columns, [], "", null);
         var index = 0;
         foreach (var row in element.EnumerateArray())
         {
@@ -184,12 +203,14 @@ public static class FormDataValidator
             var cells = new Dictionary<string, JsonElement>(StringComparer.OrdinalIgnoreCase);
             foreach (var property in row.EnumerateObject()) cells[property.Name] = property.Value;
 
-            var normalized = new JsonObject();
+            var normalized = new JsonObject(new JsonNodeOptions { PropertyNameCaseInsensitive = true });
             foreach (var column in field.Columns)
             {
                 JsonElement? cell = cells.TryGetValue(column.Key, out var c) ? c : null;
                 normalized[column.Key] = Normalize(column, cell, $"{path}.{index}.{column.Key}", errors);
             }
+            // 明细列公式按行计算（只引用本行的数值列）
+            foreach (var step in formulas) normalized[step.Field.Key] = Compute(step, normalized);
             rows.Add(normalized);
             index++;
         }
@@ -198,16 +219,21 @@ public static class FormDataValidator
         return rows;
     }
 
-    private static void AddSums(FormField table, JsonObject output)
+    /// <summary>写入明细合计字段，返回合计字段名。</summary>
+    private static List<string> AddSums(FormField table, JsonObject output)
     {
         var rows = output[table.Key] as JsonArray ?? [];
+        var keys = new List<string>();
         foreach (var column in table.Columns.Where(c => c.Sum))
         {
             var sum = rows.OfType<JsonObject>()
                 .Select(r => r[column.Key] is JsonValue v && v.TryGetValue<decimal>(out var d) ? d : 0m)
                 .Sum();
-            output[FormField.SumKey(table.Key, column.Key)] = JsonValue.Create(sum);
+            var key = FormField.SumKey(table.Key, column.Key);
+            output[key] = JsonValue.Create(sum);
+            keys.Add(key);
         }
+        return keys;
     }
 
     private static string RequiredMessage(FormField field) => field.Type switch

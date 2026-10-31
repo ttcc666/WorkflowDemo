@@ -2,7 +2,7 @@
 import { computed, ref, shallowRef } from 'vue'
 import DynamicForm from './DynamicForm.vue'
 import FieldInspector from './FieldInspector.vue'
-import { cloneField, fieldTypeLabels, fieldTypes, initialValues, newField, newFieldKey, type FormField, type FormFieldType, type FormSchema, type FormValues } from './formModel'
+import { cloneField, fieldTypeLabels, fieldTypes, initialValues, newField, newFieldKey, numericVariables, type FormField, type FormFieldType, type FormSchema, type FormValues } from './formModel'
 
 /**
  * 表单设计器：左侧字段类型（点击或拖入添加）、中间字段列表（拖拽排序、复制、删除）、右侧字段属性；可切换预览。
@@ -21,6 +21,10 @@ const dropIndex = shallowRef<number | null>(null)
 const fields = computed(() => schema.value.fields)
 const selectedField = computed(() => (selected.value === null ? undefined : fields.value[selected.value]))
 const otherKeys = computed(() => fields.value.filter((_, i) => i !== selected.value && fields.value[i]!.type !== 'Description').map((f) => f.key))
+// 计算字段可引用的数值（不含自身）
+const formulaVariables = computed(() =>
+  numericVariables(schema.value).filter((v) => v.name.toLowerCase() !== selectedField.value?.key.toLowerCase()),
+)
 const groups = computed(() => [...new Set(fieldTypes.map((t) => t.group))].map((g) => ({ name: g, types: fieldTypes.filter((t) => t.group === g) })))
 
 function setFields(next: FormField[]) {
@@ -140,7 +144,8 @@ function togglePreview() {
     </section>
 
     <aside class="form-designer__inspector">
-      <FieldInspector v-if="selectedField" :key="selected ?? -1" :field="selectedField" :other-keys="otherKeys" @update="update" />
+      <FieldInspector v-if="selectedField" :key="selected ?? -1" :field="selectedField" :other-keys="otherKeys"
+        :formula-variables="formulaVariables" @update="update" />
       <div v-else class="form-designer__hint">选择一个字段编辑属性。表单字段可用于条件分支（如 <code>days &gt; 3</code>）、审批人（人员字段）和消息模板。</div>
     </aside>
   </div>
