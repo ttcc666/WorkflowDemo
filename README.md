@@ -145,7 +145,7 @@ app.MapApprovalEndpoints()             // 默认前缀 /api/approval，返回 Ro
 | `ApprovalAspNetCoreOptions` | `AdminPolicy`（授权策略，优先）或 `AdminRole`（默认 `Admin`）控制发布流程与投递记录；`UseStringEnums`（默认添加 `JsonStringEnumConverter`，前端依赖字符串枚举）；`EnableOutboxEndpoints` |
 | 宿主自有接口 | `http.GetApprovalUserId()` 获取当前用户、`http.EnsureApprovalAdminAsync()` 校验管理员 |
 
-接口一览：`me`、`directory/users|roles`、`todo`、`done`、`started`、`instances/*`、`tasks/{id}/approve|reject|transfer|add-sign|resubmit|return-targets`、`definitions/*`、`meta`、`forms/startable`、`forms/{key}`、`forms/{key}/start`、`messages/*`、`outbox/*`。错误统一为 ProblemDetails：`title` 为中文提示，`code` 为错误码（`NotFound`、`Forbidden`、`Unauthorized`、`Conflict`、`Validation`…），表单校验失败为 400 且 `errors` 为“字段路径 → 错误”（明细单元格如 `items.0.amount`）。
+接口一览：`me`、`directory/users|roles`、`todo`、`todo/count`、`done`、`started`、`cc`、`flows`、`instances/*`（含 `instances/{id}/definition`、`instances/{id}/my-task`）、`tasks/{id}/approve|reject|transfer|add-sign|resubmit|return-targets`、`definitions/*`、`meta`、`forms/*`（发起、草稿）、`files`、`messages/*`、`outbox/*`、`admin/*`。错误统一为 ProblemDetails：`title` 为中文提示，`code` 为错误码（`NotFound`、`Forbidden`、`Unauthorized`、`Conflict`、`Validation`…），表单校验失败为 400 且 `errors` 为“字段路径 → 错误”（明细单元格如 `items.0.amount`）。
 
 **前端（Vue 3 + Element Plus + vue-router）**
 
@@ -166,7 +166,39 @@ const router = createRouter({
 })
 ```
 
-页面路由：`workbench`、`approvals/:id`、`start`、`start/:key`、`definitions`、`designer/:key`、`outbox`（路由名见 `approvalRouteNames`）。组件 `MessageBell`、`UserPicker`、`DynamicForm`、`FormDesigner`、`FlowViewer`、`ApprovalTimeline` 可单独使用。宿主托管前端时，含点号的流程标识（如 `/designer/hr.leave`）需单独声明回退路由，见示例 `Program.cs`。
+页面路由：`workbench`、`approvals/:id`、`start`、`start/:key`、`definitions`、`designer/:key`、`outbox`、`monitor`（路由名见 `approvalRouteNames`）。组件 `MessageBell`、`UserPicker`、`DynamicForm`、`FormDesigner`、`FlowViewer`、`ApprovalTimeline` 可单独使用。宿主托管前端时，含点号的流程标识（如 `/designer/hr.leave`）需单独声明回退路由，见示例 `Program.cs`。
+
+## 数据权限、分页与管理
+
+**查看权限**（`IApprovalAccessPolicy`，默认 `DefaultApprovalAccessPolicy`）：发起人与管理员看全部；任务的处理人 / 候选人（含角色成员、已转交或加签的人）与抄送对象（含角色成员）作为“参与人”查看。无权查看与不存在一样返回 **404**，不暴露实例是否存在。宿主可继承默认实现追加规则：
+
+```csharp
+public sealed class AuditorPolicy(ApprovalDbContextAccessor db, IApprovalIdentityProvider identity) : DefaultApprovalAccessPolicy(db, identity)
+{
+    public override async Task<ApprovalAccess> GetAccessAsync(ApprovalViewer viewer, ApprovalInstance instance, CancellationToken ct) =>
+        await Identity.IsInRoleAsync(viewer.UserId, "Auditor", ct) ? ApprovalAccess.Full : await base.GetAccessAsync(viewer, instance, ct);
+}
+builder.Services.AddApprovalWorkflow<AppDbContext>().AddAccessPolicy<AuditorPolicy>();
+```
+
+- 完整流程定义（含 HTTP 动作参数、通知配置）**仅管理员**（及 `ApprovalAspNetCoreOptions.DefinitionReaders` 中的角色）可读；查看实例的人通过 `instances/{id}/definition` 取公开视图（去掉动作参数、通知、时限与发起角色）。
+- `ApprovalQueryService.GetInstanceAsync` / `GetByBusinessAsync` **不做权限判断**，供宿主后台使用；接口请用 `GetInstanceForViewerAsync` / `GetByBusinessForViewerAsync`。业务单据自身接口的权限由宿主负责。
+
+**分页**：`todo`、`done`、`started`、`cc`、`admin/instances`、`outbox` 返回 `{ items, total, page, pageSize }`；参数 `page`（从 1 开始）、`pageSize`（默认 20，最大 100）、`keyword`（标题 / 申请人）、`status`、`definitionKey`、`from` / `to`（发起时间，ISO 8601），待办另有 `overdueOnly`。
+
+**组织架构审批人**：实现 `IApprovalOrganizationProvider`（部门、部门负责人、上级部门、直属上级）并调用 `AddOrganizationProvider<T>()` 后，设计器出现三种审批人：`DeptLeader`（值 `1` 为本部门负责人，`2` 为上级部门负责人…）、`Manager`（第 N 级上级）、`ManagerChain`（逐级审批 1 到 N 级上级，节点须为依次审批，去重并跳过发起人）。默认以发起人为基准，`2@payee` 表示以表单人员字段 `payee` 为基准。
+
+**管理接口**（`/api/approval/admin/*`，仅管理员）：
+
+| 接口 | 说明 |
+|---|---|
+| `GET admin/instances` | 全部实例（分页筛选，可按发起人） |
+| `POST admin/instances/{id}/terminate` `{ reason }` | 终止：待办取消、通知申请人，业务回调 `OnTerminatedAsync`（默认等同驳回） |
+| `POST admin/tasks/{id}/reassign` `{ toUserId, reason }` | 改派待办（角色任务可改派给具体用户），时限不重置 |
+| `GET admin/users/{userId}/tasks`、`POST admin/users/{userId}/reassign` | 离职交接：预览并批量改派某人的全部待办，返回改派数与跳过原因 |
+| `GET admin/statistics?from&to&definitionKey` | 统计：各流程数量与状态、平均 / P90 耗时、节点处理时长、超时数、待办积压前 10（时间范围最多 366 天，内存聚合） |
+
+前端“流程监控”页（路由 `monitor`）提供实例、统计与离职交接三个页签；审批详情中管理员可终止流程、改派待办。
 
 ## 表单审批
 
@@ -188,14 +220,18 @@ const router = createRouter({
 
 | 能力 | 说明 |
 |---|---|
-| 字段类型 | `Text`、`TextArea`、`Number`、`Money`、`Date`、`DateRange`、`Select`、`MultiSelect`、`Radio`、`Switch`、`User`、`Users`、`Table`（明细，列支持 Text / Number / Money / Date / Select）、`Description`（说明文字） |
+| 字段类型 | `Text`、`TextArea`、`Number`、`Money`、`Date`、`DateRange`、`Select`、`MultiSelect`、`Radio`、`Switch`、`User`、`Users`、`Table`（明细，列支持 Text / Number / Money / Date / Select / Formula）、`Formula`（计算字段）、`File`（附件）、`Description`（说明文字） |
 | 服务端校验 | 必填、类型、选项、范围、精度、长度、行数；剔除未定义字段、数字字符串转数字；人员字段校验用户存在（注册了用户目录时）。前端规则与服务端一致 |
 | 条件分支 | 直接写字段标识：`days > 3`、`leaveType == "annual"`；明细合计为 `{表格}_{列}_sum`，如 `items_amount_sum > 5000` |
 | 审批人 / 通知 | 审批人规则“表单字段”选择人员字段（如交接人）；消息模板与动作参数可用 `{form.days}` |
 | 发起控制 | 只有 `startable` 的流程出现在发起中心（默认关闭，业务审批的流程不会混入）；`initiatorRoles` 限制发起角色（服务端校验） |
 | 退回修改 | 退回发起人后，发起人可修改表单重新提交（按实例绑定版本校验，标题随之更新）；业务审批的数据由业务单据决定，不能在审批中修改 |
+| 草稿 | `PUT forms/{key}/draft` 保存（不校验必填，只做结构规范化；每人最多 50 份、单份 256 KB），发起页 30 秒自动保存；打开时按最新表单调整；从草稿提交后同一事务删除草稿 |
+| 计算字段 | `"formula": "items_amount_sum - ifnull(advance, 0)"`，明细列可写 `qty * price` 按行计算。语法：数字、字段、`+ - * / ()`、`round(x, n)`、`min`、`max`、`abs`、`if(条件, 是, 否)`（比较只能用在 if 中）、`ifnull(x, 默认)`；除以 0 或空值参与运算结果为空。服务端按依赖顺序重新计算（忽略提交的值），发布时检查语法、引用与循环；C# 与前端两份实现共用 `tests/shared/formula-cases.json` |
+| 节点字段权限 | 审批节点 `"fieldPermissions": { "days": "Editable", "salary": "Hidden" }`，抄送节点可设 `Hidden`。可编辑：表单审批的审批人同意时一并提交（`tasks/{id}/approve` 带 `formData`，只能含可编辑字段），整表重新校验与计算、条件按新值流转，轨迹记录修改前后的值（`ApprovalLogs.Details`）。隐藏：只以设置了隐藏的节点参与的人看不到该字段，服务端从表单数据、修改记录中去掉（`hiddenFields` 告知前端），附件也不能下载；发起人、管理员可见。标题、通知模板、计算字段引用隐藏字段可能间接暴露，校验接口会给出提示（`warnings`） |
+| 附件 | `"type": "File", "maxFiles": 10, "accept": ["pdf", "jpg"]`。`POST files` 上传：请求体为文件内容，文件名放在请求头 `X-File-Name`（URL 编码；自定义请求头可防跨站伪造上传）；返回 `{ id, name, size, contentType }`。提交时校验文件属于本人（或已属于该申请）并绑定；`GET files/{id}` 下载：上传者，或能查看所属审批且附件不在隐藏字段中，一律 `attachment` + `nosniff`。配置 `ApprovalOptions.Files`：`RootPath`（默认 `App_Data/approval-files`，相对内容根目录，勿放在 wwwroot）、`MaxFileSizeMb`（20）、`AllowedExtensions`（常见办公文档与图片）、`UnboundRetention`（未绑定文件 24 小时后由后台清理）；`AddFileStore<T>()` 可替换为对象存储 |
 
-示例中的 `Flows/leave.json`（请假：超过 3 天走负责人，抄送人事与交接人）和 `Flows/expense.json`（报销：明细合计超过 5000 走财务 + 负责人并行会审）演示了以上能力。
+示例中的 `Flows/leave.json`（请假：直属上级可调整天数，超过 3 天走部门负责人，抄送人事与交接人且抄送人看不到请假事由）、`Flows/expense.json`（报销：发票附件、应付金额 = 合计 - 预支，财务可核对预支金额，合计超过 5000 走财务 + 负责人并行会审）和 `Flows/purchase.json`（采购：逐级审批到第 2 级上级，上级可调整明细）演示了以上能力。
 
 ## 动作、通知与超时
 
@@ -297,7 +333,10 @@ cd web; pnpm build:lib                                            # @approval/ui
 - 旧版 `IApprovalNotifier` 仍保留（提交后同步调用、失败只记日志），新代码请使用通知规则 + 渠道（Outbox 可靠投递）。
 - 同步 HTTP 动作在事务提交前执行，若随后提交失败外部调用已发生，有副作用的调用请使用异步模式。
 - 动作失败时的数据回滚只针对数据库：已经发出的外部调用无法撤回（异步动作请用 `IdempotencyKey` 保证重试幂等）。数据库执行策略开启自动重试（如 SQL Server `EnableRetryOnFailure`）时异步投递不使用事务，仅撤销未保存的修改；同步动作不应自行 SaveChanges（会连同审批的中间状态一起提交）。
-- 表结构有变化（`ApprovalMessages`、`ApprovalOutbox` 表，`ApprovalTasks` 的时限、`Kind`、`ParentTaskId`、`Round` 列，`ApprovalInstances` 的 `StateJson`、`Round` 列）：旧演示库需删除 `.db` 文件重建，正式项目请生成 EF Core 迁移。
+- 表结构有变化（`ApprovalMessages`、`ApprovalOutbox`、`ApprovalCarbonCopies`、`ApprovalDrafts`、`ApprovalFiles` 表，`ApprovalLogs.Details` 列，`ApprovalTasks` 的时限、`Kind`、`ParentTaskId`、`Round` 列，`ApprovalInstances` 的 `StateJson`、`Round` 列及新索引）：全部为新增，旧演示库需删除 `.db` 文件重建，正式项目请生成 EF Core 迁移（`dotnet ef migrations add ApprovalV2`）。
+- 列表接口已改为分页结构 `{ items, total, page, pageSize }`，完整流程定义改为仅管理员可读，旧调用方需相应调整。
 - 示例使用 `EnsureCreated` 建库，正式项目请改用 EF Core Migrations。
-- 表单审批暂不支持：附件上传、审批人在某节点编辑部分字段、公式 / 计算字段（仅明细合计）、草稿保存；表单版本跟随流程版本。
+- 表单版本跟随流程版本；暂不支持跳转到任意节点、流程迁移到新版本。
+- 附件不提供在线预览、病毒扫描与内容类型嗅探（只按扩展名白名单）；IIS 等反向代理的请求大小限制需另行配置。
+- 统计在内存中聚合，数据量大时请改用宿主自己的报表；隐藏字段为展示层控制，不是字段级加密，审计日志暂不支持导出。
 - 包未发布到 nuget.org / npm，可用 `output/packages` 下的本地包或 workspace 引用。
