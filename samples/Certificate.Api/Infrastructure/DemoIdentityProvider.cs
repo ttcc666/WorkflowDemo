@@ -6,11 +6,11 @@ using Approval.AspNetCore;
 namespace Certificate.Api.Infrastructure;
 
 /// <summary>
-/// 仅供演示：用户与角色来自配置 DemoUsers。
+/// 仅供演示：用户、角色与组织架构来自配置 DemoUsers、Departments。
 /// 生产环境请替换为对接组织架构 / 认证系统的实现。
 /// </summary>
 public sealed class DemoIdentityProvider(IConfiguration configuration)
-    : IApprovalIdentityProvider, IApprovalContactProvider, IApprovalUserDirectory
+    : IApprovalIdentityProvider, IApprovalContactProvider, IApprovalUserDirectory, IApprovalOrganizationProvider
 {
     // 配置系统会丢弃空数组，因此用对象列表表示用户，没有角色的用户也能保留
     private sealed class DemoUser
@@ -18,9 +18,21 @@ public sealed class DemoIdentityProvider(IConfiguration configuration)
         public string Id { get; set; } = "";
         public string? Name { get; set; }
         public string[] Roles { get; set; } = [];
+        public string? Department { get; set; }
+        public string? Manager { get; set; }
+    }
+
+    private sealed class DemoDepartment
+    {
+        public string Id { get; set; } = "";
+        public string Name { get; set; } = "";
+        public string? ParentId { get; set; }
+        public string[] Leaders { get; set; } = [];
     }
 
     private List<DemoUser> All => configuration.GetSection("DemoUsers").Get<List<DemoUser>>() ?? [];
+
+    private List<DemoDepartment> Departments => configuration.GetSection("Departments").Get<List<DemoDepartment>>() ?? [];
 
     private Dictionary<string, string[]> Users => All.ToDictionary(u => u.Id, u => u.Roles);
 
@@ -60,6 +72,23 @@ public sealed class DemoIdentityProvider(IConfiguration configuration)
     /// <summary>演示：邮箱为 {用户}@example.com，企业微信 / 钉钉 UserId 与用户 ID 相同。</summary>
     public Task<string?> GetContactAsync(string userId, string channel, CancellationToken ct) =>
         Task.FromResult<string?>(channel == "Email" ? $"{userId}@example.com" : userId);
+
+    // ───── IApprovalOrganizationProvider：部门负责人、上级（审批人类型 DeptLeader / Manager / ManagerChain） ─────
+
+    public Task<ApprovalDepartment?> GetDepartmentAsync(string userId, CancellationToken ct) =>
+        Task.FromResult(FindDepartment(All.FirstOrDefault(u => u.Id == userId)?.Department));
+
+    public Task<IReadOnlyList<string>> GetDepartmentLeadersAsync(string departmentId, CancellationToken ct) =>
+        Task.FromResult<IReadOnlyList<string>>(Departments.FirstOrDefault(d => d.Id == departmentId)?.Leaders ?? []);
+
+    public Task<ApprovalDepartment?> GetParentDepartmentAsync(string departmentId, CancellationToken ct) =>
+        Task.FromResult(FindDepartment(Departments.FirstOrDefault(d => d.Id == departmentId)?.ParentId));
+
+    public Task<string?> GetManagerAsync(string userId, CancellationToken ct) =>
+        Task.FromResult(All.FirstOrDefault(u => u.Id == userId)?.Manager);
+
+    private ApprovalDepartment? FindDepartment(string? id) =>
+        Departments.FirstOrDefault(d => d.Id == id) is { } d ? new ApprovalDepartment(d.Id, d.Name, d.ParentId) : null;
 }
 
 /// <summary>

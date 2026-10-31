@@ -1,6 +1,9 @@
 using System.Text.RegularExpressions;
+using Approval.Core.Abstractions;
 using Approval.Core.Actions;
+using Approval.Core.Forms;
 using Approval.Core.Notifications;
+using Approval.Core.Resolvers;
 
 namespace Approval.Core.Definitions;
 
@@ -8,6 +11,9 @@ namespace Approval.Core.Definitions;
 public sealed class FlowValidationContext
 {
     public required IReadOnlySet<string> ApproverTypes { get; init; }
+
+    /// <summary>审批人类型描述（参数类型、是否有序），用于校验规则参数与审批方式。</summary>
+    public IReadOnlyDictionary<string, ApproverTypeDescriptor>? ApproverDescriptors { get; init; }
 
     /// <summary>可用的通知渠道（含站内信 InApp）。</summary>
     public IReadOnlySet<string>? Channels { get; init; }
@@ -42,7 +48,8 @@ public static partial class FlowDefinitionValidator
         if (!nodes.Values.Any(n => n.Type == NodeType.End))
             errors.Add("流程至少需要一个 End 节点");
 
-        ValidateNotifications(errors, "流程级通知", definition.Notifications, null, context);
+        var userFields = UserFieldsOf(definition);
+        ValidateNotifications(errors, "流程级通知", definition.Notifications, null, context, userFields);
         Forms.FormSchemaValidator.Validate(definition, errors);
 
         foreach (var (key, node) in nodes)
@@ -76,11 +83,20 @@ public static partial class FlowDefinitionValidator
                     break;
 
                 case NodeType.Approval or NodeType.Cc:
+                {
+                    var noun = node.Type == NodeType.Cc ? "抄送人" : "审批人";
                     if (node.Approvers.Count == 0)
-                        errors.Add($"节点 '{key}' 未配置{(node.Type == NodeType.Cc ? "抄送人" : "审批人")}");
+                        errors.Add($"节点 '{key}' 未配置{noun}");
                     foreach (var rule in node.Approvers.Where(r => !context.ApproverTypes.Contains(r.Type)))
                         errors.Add($"节点 '{key}' 使用了未注册的审批人类型 '{rule.Type}'");
+                    foreach (var rule in node.Approvers) ValidateRuleValue(errors, $"节点 '{key}' 的{noun}", rule, context, userFields);
+
+                    // 逐级审批等有序审批人按顺序生成任务，只有依次审批才有意义
+                    var ordered = node.Approvers.Select(r => context.ApproverDescriptors?.GetValueOrDefault(r.Type)).FirstOrDefault(d => d?.Ordered == true);
+                    if (node.Type == NodeType.Approval && ordered is not null && node.Mode != ApproveMode.Sequential)
+                        errors.Add($"节点 '{key}' 的审批人「{ordered.DisplayName}」需按顺序审批，审批方式请改为依次审批");
                     goto default;
+                }
 
                 case NodeType.Action:
                     if (node.Actions.Count == 0) errors.Add($"动作节点 '{key}' 未配置任何动作");
@@ -96,7 +112,7 @@ public static partial class FlowDefinitionValidator
 
             if (node.Type != NodeType.Action && node.Actions.Count > 0)
                 errors.Add($"节点 '{key}' 不是动作节点，不能配置动作");
-            ValidateNotifications(errors, $"节点 '{key}'", node.Notifications, node.Type, context);
+            ValidateNotifications(errors, $"节点 '{key}'", node.Notifications, node.Type, context, userFields);
             if (node.Timeout is { } timeout) ValidateTimeout(errors, key, node, timeout);
         }
 
@@ -105,8 +121,36 @@ public static partial class FlowDefinitionValidator
         return errors;
     }
 
+    /// <summary>表单中的人员字段（User / Users）；没有表单时为 null（字段可能来自业务数据，不做检查）。</summary>
+    private static HashSet<string>? UserFieldsOf(FlowDefinition definition) =>
+        definition.Form?.Fields.Where(f => f.Type is FormFieldType.User or FormFieldType.Users)
+            .Select(f => f.Key).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>按审批人类型描述校验参数：用户 / 角色不能为空，级数为 1–10，<c>@字段</c> 须为表单人员字段。</summary>
+    private static void ValidateRuleValue(List<string> errors, string owner, ApproverRule rule, FlowValidationContext context,
+        HashSet<string>? userFields)
+    {
+        if (context.ApproverDescriptors?.GetValueOrDefault(rule.Type) is not { } descriptor) return;
+
+        var name = $"{owner}「{descriptor.DisplayName}」";
+        switch (descriptor.ValueKind)
+        {
+            case ApproverValueKind.User or ApproverValueKind.Role when string.IsNullOrWhiteSpace(rule.Value):
+            case ApproverValueKind.FormUserField when string.IsNullOrWhiteSpace(rule.Value) && userFields is null:
+                errors.Add($"{name}未设置");
+                break;
+
+            case ApproverValueKind.Level:
+                if (!ApproverLevel.TryParse(rule.Value, out var level))
+                    errors.Add($"{name}的级数 '{rule.Value}' 无效：应为 1–{ApproverLevel.Max} 的整数，可写 N@表单人员字段");
+                else if (level.Field is { } field && userFields is not null && !userFields.Contains(field))
+                    errors.Add($"{name}以表单字段 '{field}' 为基准，但表单中没有该人员字段（User / Users）");
+                break;
+        }
+    }
+
     private static void ValidateNotifications(List<string> errors, string owner, List<NotificationRule> rules, NodeType? nodeType,
-        FlowValidationContext context)
+        FlowValidationContext context, HashSet<string>? userFields)
     {
         var allowedEvents = NotificationDefaults.AllowedEvents(nodeType);
         for (var i = 0; i < rules.Count; i++)
@@ -128,6 +172,7 @@ public static partial class FlowDefinitionValidator
                          !context.ApproverTypes.Contains(r.Type) &&
                          !NotificationDefaults.NotificationRecipientTypes.Contains(r.Type, StringComparer.OrdinalIgnoreCase)))
                 errors.Add($"{name}使用了未注册的接收人类型 '{recipient.Type}'");
+            foreach (var recipient in rule.Recipients) ValidateRuleValue(errors, $"{name}的接收人", recipient, context, userFields);
 
             if (rule.Channels.Count == 0) errors.Add($"{name}未选择发送渠道");
             if (context.Channels is not null)

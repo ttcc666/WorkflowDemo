@@ -114,6 +114,20 @@ public sealed class ApprovalBuilder(IServiceCollection services)
         return this;
     }
 
+    /// <summary>
+    /// 注册组织架构（部门、负责人、汇报关系），并启用审批人类型 DeptLeader（部门负责人）、Manager（第 N 级上级）、
+    /// ManagerChain（逐级审批）。宿主已自行注册 T（如与身份提供者共用的单例）时沿用其生命周期。
+    /// </summary>
+    public ApprovalBuilder AddOrganizationProvider<T>() where T : class, IApprovalOrganizationProvider
+    {
+        Services.TryAddScoped<T>();
+        Services.AddScoped<IApprovalOrganizationProvider>(sp => sp.GetRequiredService<T>());
+        Services.AddScoped<IApproverResolver, DeptLeaderApproverResolver>();
+        Services.AddScoped<IApproverResolver, ManagerApproverResolver>();
+        Services.AddScoped<IApproverResolver, ManagerChainApproverResolver>();
+        return this;
+    }
+
     /// <summary>注册自定义动作（设计器中自动出现）；Type 与内置动作同名时覆盖内置实现。</summary>
     public ApprovalBuilder AddActionHandler<T>() where T : class, IApprovalActionHandler
     {

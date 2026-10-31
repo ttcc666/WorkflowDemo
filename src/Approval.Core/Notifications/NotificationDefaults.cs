@@ -1,3 +1,4 @@
+using Approval.Core.Abstractions;
 using Approval.Core.Definitions;
 
 namespace Approval.Core.Notifications;
@@ -12,6 +13,16 @@ public static class NotificationDefaults
     public const string ApproversRecipient = "Approvers";
 
     public static IReadOnlyList<string> NotificationRecipientTypes { get; } = [AssigneesRecipient, ApproversRecipient];
+
+    /// <summary>通知专用接收人类型的描述（设计器显示）。</summary>
+    public static IReadOnlyList<ApproverTypeDescriptor> NotificationRecipientDescriptors { get; } =
+    [
+        new(AssigneesRecipient, "当前审批人", ApproverValueKind.None)
+        {
+            Help = "到达节点时为新待办的处理人，转交时为转交对象，超时为超时待办的处理人"
+        },
+        new(ApproversRecipient, "已审批过的人", ApproverValueKind.None) { Help = "本流程中已同意过的所有人" }
+    ];
 
     public static IReadOnlyDictionary<NotifyEvent, string> Titles { get; } = new Dictionary<NotifyEvent, string>
     {

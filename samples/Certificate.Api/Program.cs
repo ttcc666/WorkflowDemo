@@ -46,7 +46,9 @@ var approval = builder.Services
         o.TimeoutScanInterval = approvalConfig.GetValue("TimeoutScanInterval", o.TimeoutScanInterval);
     })
     .AddBusinessHandler<CertificateApprovalHandler>()
-    // 表单审批：设置了“可发起”的流程（如 Flows/leave.json、expense.json）可在发起中心直接填写表单发起
+    // 组织架构：审批人可选“部门负责人”“上级”“逐级上级”（演示数据见 appsettings.json 的 Departments 与 DemoUsers）
+    .AddOrganizationProvider<DemoIdentityProvider>()
+    // 表单审批：设置了“可发起”的流程（如 Flows/leave.json、expense.json、purchase.json）可在发起中心直接填写表单发起
     .AddFormApprovals()
     .AddActionHandler<CertificateExpiryCheckAction>()
     // 演示：Webhook 发到本服务的模拟接收端（/api/demo/webhook），可在“投递记录”页模拟失败观察重试

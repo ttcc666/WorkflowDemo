@@ -267,9 +267,24 @@ export interface TemplateVariableMeta {
   description: string
 }
 
+/** 审批人规则参数的类型：设计器据此生成参数控件 */
+export type ApproverValueKind = 'None' | 'User' | 'Role' | 'FormUserField' | 'Level' | 'Text'
+
+/** 审批人 / 通知接收人类型描述 */
+export interface ApproverTypeMeta {
+  type: string
+  displayName: string
+  valueKind: ApproverValueKind
+  help: string | null
+  /** Text 类型的可选值 */
+  options: string[] | null
+  /** 返回有序列表（如逐级审批），审批节点须为依次审批 */
+  ordered: boolean
+}
+
 export interface ApprovalMeta {
-  approverTypes: string[]
-  recipientTypes: string[]
+  approverTypes: ApproverTypeMeta[]
+  recipientTypes: ApproverTypeMeta[]
   actions: ActionMeta[]
   channels: ChannelMeta[]
   templateVariables: TemplateVariableMeta[]

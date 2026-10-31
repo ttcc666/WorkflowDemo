@@ -38,15 +38,69 @@ public sealed class ApproverResolveContext
     public required IReadOnlyDictionary<string, object?> FormData { get; init; }
 }
 
+/// <summary>审批人规则参数的类型，设计器据此生成参数控件。</summary>
+public enum ApproverValueKind
+{
+    /// <summary>无参数（如发起人）。</summary>
+    None,
+    /// <summary>用户 ID，逗号分隔。</summary>
+    User,
+    /// <summary>角色名，逗号分隔。</summary>
+    Role,
+    /// <summary>表单人员字段（User / Users）的标识。</summary>
+    FormUserField,
+    /// <summary>级数 N（1–10），可写 <c>N@字段</c> 表示以表单人员字段中的人为基准（默认以发起人为基准）。</summary>
+    Level,
+    /// <summary>自由文本（自定义解析器的默认值）。</summary>
+    Text
+}
+
+/// <summary>审批人类型描述：显示名、参数类型与说明。</summary>
+/// <param name="Type">与 <see cref="IApproverResolver.Type"/> 一致。</param>
+public sealed record ApproverTypeDescriptor(string Type, string DisplayName, ApproverValueKind ValueKind)
+{
+    public string? Help { get; init; }
+
+    /// <summary>参数的可选值（Text 类型时显示为下拉）。</summary>
+    public IReadOnlyList<string>? Options { get; init; }
+
+    /// <summary>返回按顺序审批的人员列表（如逐级审批），审批节点必须为依次审批（发布时校验）。</summary>
+    public bool Ordered { get; init; }
+}
+
 /// <summary>
 /// 审批人解析器，按 <see cref="Type"/> 与流程定义中的 <see cref="ApproverRule.Type"/> 匹配。
-/// 宿主可注册自定义解析器，如“发起人部门负责人”“发起人第 N 级上级”。
+/// 宿主可注册自定义解析器，如“项目经理”“合同归口部门负责人”；组织架构类（部门负责人、上级）见 <see cref="IApprovalOrganizationProvider"/>。
 /// </summary>
 public interface IApproverResolver
 {
     string Type { get; }
 
+    /// <summary>设计器中的显示名与参数控件，默认为文本参数。</summary>
+    ApproverTypeDescriptor Descriptor => new(Type, Type, ApproverValueKind.Text);
+
     Task<IReadOnlyList<Assignee>> ResolveAsync(string value, ApproverResolveContext context, CancellationToken ct);
+}
+
+public sealed record ApprovalDepartment(string Id, string Name, string? ParentId);
+
+/// <summary>
+/// 组织架构（可选）：对接 HR / 钉钉 / 企业微信的部门与汇报关系。注册后（<c>AddOrganizationProvider&lt;T&gt;()</c>）
+/// 可使用审批人类型 DeptLeader（部门负责人）、Manager（第 N 级上级）、ManagerChain（逐级审批）。
+/// </summary>
+public interface IApprovalOrganizationProvider
+{
+    /// <summary>用户所在（主）部门；不属于任何部门时返回 null。</summary>
+    Task<ApprovalDepartment?> GetDepartmentAsync(string userId, CancellationToken ct);
+
+    /// <summary>部门负责人（可多人，按或签 / 会签由节点审批方式决定）。</summary>
+    Task<IReadOnlyList<string>> GetDepartmentLeadersAsync(string departmentId, CancellationToken ct);
+
+    /// <summary>上级部门；顶级部门返回 null。</summary>
+    Task<ApprovalDepartment?> GetParentDepartmentAsync(string departmentId, CancellationToken ct);
+
+    /// <summary>直属上级；没有时返回 null。</summary>
+    Task<string?> GetManagerAsync(string userId, CancellationToken ct);
 }
 
 /// <summary>

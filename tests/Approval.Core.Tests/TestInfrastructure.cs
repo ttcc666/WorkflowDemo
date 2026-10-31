@@ -48,6 +48,37 @@ public sealed class FakeIdentityProvider : IApprovalIdentityProvider
         Task.FromResult<IReadOnlyList<string>>(UserRoles.TryGetValue(userId, out var roles) ? roles.ToList() : []);
 }
 
+/// <summary>内存组织架构：部门树（负责人）与直属上级。</summary>
+public sealed class FakeOrganization : IApprovalOrganizationProvider
+{
+    public Dictionary<string, (string Name, string? Parent, string[] Leaders)> Departments { get; } = [];
+    public Dictionary<string, string> UserDepartments { get; } = [];
+    public Dictionary<string, string> Managers { get; } = [];
+
+    public void AddDepartment(string id, string? parent, params string[] leaders) => Departments[id] = (id, parent, leaders);
+
+    /// <summary>用户所在部门与直属上级。</summary>
+    public void AddUser(string userId, string? department, string? manager = null)
+    {
+        if (department is not null) UserDepartments[userId] = department;
+        if (manager is not null) Managers[userId] = manager;
+    }
+
+    private ApprovalDepartment? Department(string? id) =>
+        id is not null && Departments.TryGetValue(id, out var d) ? new ApprovalDepartment(id, d.Name, d.Parent) : null;
+
+    public Task<ApprovalDepartment?> GetDepartmentAsync(string userId, CancellationToken ct) =>
+        Task.FromResult(Department(UserDepartments.GetValueOrDefault(userId)));
+
+    public Task<IReadOnlyList<string>> GetDepartmentLeadersAsync(string departmentId, CancellationToken ct) =>
+        Task.FromResult<IReadOnlyList<string>>(Departments.TryGetValue(departmentId, out var d) ? d.Leaders : []);
+
+    public Task<ApprovalDepartment?> GetParentDepartmentAsync(string departmentId, CancellationToken ct) =>
+        Task.FromResult(Departments.TryGetValue(departmentId, out var d) ? Department(d.Parent) : null);
+
+    public Task<string?> GetManagerAsync(string userId, CancellationToken ct) => Task.FromResult(Managers.GetValueOrDefault(userId));
+}
+
 public sealed class RecordingBusinessHandler : IApprovalBusinessHandler
 {
     public const string Type = "Certificate";
@@ -134,6 +165,7 @@ public sealed class TestHost : IAsyncDisposable
     private readonly ServiceProvider _provider;
 
     public FakeIdentityProvider Identity { get; } = new();
+    public FakeOrganization Organization { get; } = new();
     public RecordingBusinessHandler Handler { get; } = new();
     public RecordingNotifier Notifier { get; } = new();
     public RecordingChannel Channel { get; } = new();
@@ -151,6 +183,7 @@ public sealed class TestHost : IAsyncDisposable
         services.AddLogging();
         services.AddDbContext<TestDbContext>(o => o.UseSqlite(_connection));
         services.AddSingleton<IApprovalIdentityProvider>(Identity);
+        services.AddSingleton(Organization);
         services.AddSingleton<IApprovalBusinessHandler>(Handler);
         services.AddSingleton<IApprovalNotifier>(Notifier);
         services.AddSingleton<IApprovalChannel>(Channel);

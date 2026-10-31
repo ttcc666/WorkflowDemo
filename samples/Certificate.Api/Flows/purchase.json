@@ -1,0 +1,37 @@
+{
+  "name": "采购申请",
+  "startNodeId": "start",
+  "settings": {
+    "startable": true,
+    "category": "行政",
+    "description": "物品采购：逐级审批到第 2 级上级，合计超过 10000 元再由财务审核",
+    "titleTemplate": "{申请人}的采购申请（合计 {form.items_amount_sum} 元）"
+  },
+  "form": {
+    "fields": [
+      { "key": "purpose", "label": "采购用途", "type": "Select", "required": true, "span": 12,
+        "options": [
+          { "label": "办公用品", "value": "office" }, { "label": "IT 设备", "value": "it" },
+          { "label": "生产物料", "value": "material" }, { "label": "其他", "value": "other" } ] },
+      { "key": "expectedDate", "label": "期望到货日期", "type": "Date", "span": 12 },
+      { "key": "items", "label": "采购明细", "type": "Table", "required": true, "maxRows": 50,
+        "columns": [
+          { "key": "name", "label": "物品名称", "type": "Text", "required": true, "maxLength": 100 },
+          { "key": "qty", "label": "数量", "type": "Number", "required": true, "min": 1, "precision": 0 },
+          { "key": "price", "label": "单价（元）", "type": "Money", "required": true, "min": 0.01 },
+          { "key": "amount", "label": "金额（元）", "type": "Money", "required": true, "min": 0.01, "sum": true } ] },
+      { "key": "reason", "label": "采购说明", "type": "TextArea", "required": true, "maxLength": 500 }
+    ]
+  },
+  "nodes": {
+    "start":   { "name": "提交申请", "type": "Start", "next": "chain", "position": { "x": 250, "y": 0 } },
+    "chain":   { "name": "逐级审批", "type": "Approval", "mode": "Sequential", "emptyApproverPolicy": "AutoApprove",
+                 "approvers": [{ "type": "ManagerChain", "value": "2" }], "next": "amount", "position": { "x": 250, "y": 120 } },
+    "amount":  { "name": "金额判断", "type": "Condition", "position": { "x": 250, "y": 240 }, "branches": [
+                   { "priority": 1, "expression": "items_amount_sum > 10000", "next": "finance" },
+                   { "priority": 99, "expression": null, "next": "end" } ] },
+    "finance": { "name": "财务审核", "type": "Approval", "mode": "Any",
+                 "approvers": [{ "type": "Role", "value": "Finance" }], "next": "end", "position": { "x": 100, "y": 360 } },
+    "end":     { "name": "结束", "type": "End", "position": { "x": 250, "y": 480 } }
+  }
+}

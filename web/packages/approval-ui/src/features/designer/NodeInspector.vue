@@ -28,6 +28,12 @@ const emit = defineEmits<{
 
 const hasApprovers = computed(() => props.data.type === 'Approval' || props.data.type === 'Cc')
 const notifyEvents = computed(() => notifyEventsFor(props.data.type))
+// 逐级审批等有序审批人只能用于依次审批（发布时也会校验）
+const orderedRule = computed(() =>
+  props.data.type === 'Approval' && props.data.mode !== 'Sequential'
+    ? props.meta.approverTypes.find((t) => t.ordered && props.data.approvers.some((r) => r.type === t.type))
+    : undefined,
+)
 const modeHelp: Record<ApproveMode, string> = {
   Any: '任意一人同意即通过；角色由角色内任意成员处理',
   All: '所有人都同意才通过；角色会展开为全部成员',
@@ -59,6 +65,10 @@ const modeHelp: Record<ApproveMode, string> = {
           <el-form-item v-if="hasApprovers" :label="data.type === 'Cc' ? '抄送人' : '审批人'" required>
             <ApproverRulesEditor :model-value="data.approvers" :types="meta.approverTypes" :roles="roles"
               @update:model-value="(v) => emit('update', { approvers: v })" />
+            <el-alert v-if="orderedRule" type="warning" :closable="false" show-icon class="inspector__alert"
+              :title="`「${orderedRule.displayName}」需按顺序逐级审批`">
+              <el-button link type="primary" size="small" @click="emit('update', { mode: 'Sequential' })">改为依次审批</el-button>
+            </el-alert>
           </el-form-item>
 
           <el-form-item v-if="data.type === 'Approval'" label="审批人可以">
@@ -140,6 +150,10 @@ const modeHelp: Record<ApproveMode, string> = {
 .inspector__switches {
   display: flex;
   flex-direction: column;
+}
+
+.inspector__alert {
+  margin-top: 6px;
 }
 
 .inspector__remove {

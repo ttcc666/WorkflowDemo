@@ -1,6 +1,6 @@
 # 优化计划：数据权限 / 分页 / 组织架构审批人 / 表单增强 / 管理功能
 
-> 状态：**执行中**（2026-10-31 开始；阶段 0–3 已完成）。
+> 状态：**执行中**（2026-10-31 开始；阶段 0–4 已完成）。
 > 对应上次评估中的第 1、2、6、7、8 项。执行时按“阶段 → 清单”逐项完成，每阶段结束运行验证命令，并更新本文件复选框。
 
 ## 0. 背景与现状（执行前必读）
@@ -298,12 +298,12 @@
 - [x] 测试：终止（并行进行中、加签进行中、已结束实例报错）、改派（角色任务改派、改派后原处理人不能处理、时限不重置）、批量改派（跳过发起人自审的情况）、统计数字（构造固定时钟数据）、非管理员 403。
 
 ### 阶段 4：组织架构审批人（第 6 项）
-- [ ] `IApprovalOrganizationProvider`、3 个解析器、`AddOrganizationProvider<T>()`。
-- [ ] `ApproverTypeDescriptor`、`IApproverResolver.Descriptor` 默认实现、`meta` 返回描述（**前端类型同步修改**）。
-- [ ] 有序解析器与依次审批校验；Level 值校验；`@field` 基准。
-- [ ] 示例组织数据、`DemoIdentityProvider` 实现、`leave.json` 改造、新增 `purchase.json`。
-- [ ] 前端 `ApproverRulesEditor` 按 ValueKind 渲染、摘要文案。
-- [ ] 测试：各级部门负责人、无上级部门时为空（Error / AutoApprove 两种策略）、第 N 级上级、逐级审批顺序与去重、`@field` 基准、Level 值非法时发布失败、ManagerChain 在或签节点发布失败。
+- [x] `IApprovalOrganizationProvider`、3 个解析器、`AddOrganizationProvider<T>()`。
+- [x] `ApproverTypeDescriptor`、`IApproverResolver.Descriptor` 默认实现、`meta` 返回描述（**前端类型同步修改**）。
+- [x] 有序解析器与依次审批校验；Level 值校验；`@field` 基准。
+- [x] 示例组织数据、`DemoIdentityProvider` 实现、`leave.json` 改造、新增 `purchase.json`。
+- [x] 前端 `ApproverRulesEditor` 按 ValueKind 渲染、摘要文案。
+- [x] 测试：各级部门负责人、无上级部门时为空（Error / AutoApprove 两种策略）、第 N 级上级、逐级审批顺序与去重、`@field` 基准、Level 值非法时发布失败、ManagerChain 在或签节点发布失败。
 
 ### 阶段 5：表单增强（第 7 项）
 - [ ] 7a 草稿：实体、服务、接口、前端（保存、自动保存、草稿列表、提交删除草稿）；测试：保存不校验必填、每人上限、提交后删除、他人草稿 404、流程更新后打开。

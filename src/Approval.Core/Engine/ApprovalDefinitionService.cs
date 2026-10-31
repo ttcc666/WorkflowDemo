@@ -9,10 +9,10 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Approval.Core.Engine;
 
-/// <summary>设计器所需的元数据：已注册的审批人类型、动作、渠道、模板变量。</summary>
+/// <summary>设计器所需的元数据：已注册的审批人类型（含参数类型描述）、通知接收人类型、动作、渠道、模板变量。</summary>
 public sealed record ApprovalMetadata(
-    IReadOnlyList<string> ApproverTypes,
-    IReadOnlyList<string> RecipientTypes,
+    IReadOnlyList<ApproverTypeDescriptor> ApproverTypes,
+    IReadOnlyList<ApproverTypeDescriptor> RecipientTypes,
     IReadOnlyList<ApprovalActionDescriptor> Actions,
     IReadOnlyList<ChannelInfo> Channels,
     IReadOnlyList<TemplateVariableInfo> TemplateVariables,
@@ -29,11 +29,22 @@ public sealed class ApprovalDefinitionService(
     IEnumerable<IApprovalChannel> channels,
     TimeProvider clock)
 {
+    /// <summary>内置审批人类型在设计器中的顺序，其余（自定义）按类型名排在后面。</summary>
+    private static readonly string[] BuiltInOrder = ["Role", "User", "FormField", "Initiator", "DeptLeader", "Manager", "ManagerChain"];
+
     private readonly DbContext _db = accessor.Context;
 
-    /// <summary>已注册的审批人类型（供设计器下拉选择）。</summary>
-    public IReadOnlyList<string> ApproverTypes { get; } =
-        resolvers.Select(r => r.Type).Distinct(StringComparer.OrdinalIgnoreCase).Order().ToList();
+    // 同名时后注册的覆盖先注册的，与引擎一致；描述的类型名以解析器为准
+    private readonly Dictionary<string, ApproverTypeDescriptor> _approverTypes =
+        resolvers.GroupBy(r => r.Type, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.Last().Descriptor with { Type = g.Key }, StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>已注册的审批人类型（供设计器选择，按参数类型生成控件）。</summary>
+    public IReadOnlyList<ApproverTypeDescriptor> ApproverTypes =>
+        _approverTypes.Values
+            .OrderBy(d => Array.IndexOf(BuiltInOrder, d.Type) is var i and >= 0 ? i : BuiltInOrder.Length)
+            .ThenBy(d => d.Type, StringComparer.OrdinalIgnoreCase)
+            .ToList();
 
     // 同名时后注册的覆盖先注册的，与引擎一致
     private readonly Dictionary<string, IApprovalActionHandler> _actions =
@@ -48,7 +59,7 @@ public sealed class ApprovalDefinitionService(
 
     public ApprovalMetadata Metadata => new(
         ApproverTypes,
-        [.. NotificationDefaults.NotificationRecipientTypes, .. ApproverTypes],
+        [.. NotificationDefaults.NotificationRecipientDescriptors, .. ApproverTypes],
         _actions.Values.Select(a => a.Descriptor).ToList(),
         _channels,
         TemplateVariables.Catalog,
@@ -57,7 +68,8 @@ public sealed class ApprovalDefinitionService(
     public IReadOnlyList<string> Validate(FlowDefinition flow) =>
         FlowDefinitionValidator.Validate(flow, new FlowValidationContext
         {
-            ApproverTypes = ApproverTypes.ToHashSet(StringComparer.OrdinalIgnoreCase),
+            ApproverTypes = _approverTypes.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase),
+            ApproverDescriptors = _approverTypes,
             Channels = _channels.Select(c => c.Name).ToHashSet(StringComparer.OrdinalIgnoreCase),
             Actions = _actions
         });

@@ -8,6 +8,8 @@ public sealed class UserApproverResolver : IApproverResolver
 {
     public string Type => "User";
 
+    public ApproverTypeDescriptor Descriptor { get; } = new("User", "指定用户", ApproverValueKind.User);
+
     public Task<IReadOnlyList<Assignee>> ResolveAsync(string value, ApproverResolveContext context, CancellationToken ct) =>
         Task.FromResult<IReadOnlyList<Assignee>>(SplitIds(value).Select(id => new Assignee(AssigneeKind.User, id)).ToList());
 
@@ -20,6 +22,8 @@ public sealed class RoleApproverResolver : IApproverResolver
 {
     public string Type => "Role";
 
+    public ApproverTypeDescriptor Descriptor { get; } = new("Role", "角色", ApproverValueKind.Role);
+
     public Task<IReadOnlyList<Assignee>> ResolveAsync(string value, ApproverResolveContext context, CancellationToken ct) =>
         Task.FromResult<IReadOnlyList<Assignee>>(
             UserApproverResolver.SplitIds(value).Select(role => new Assignee(AssigneeKind.Role, role)).ToList());
@@ -29,6 +33,8 @@ public sealed class RoleApproverResolver : IApproverResolver
 public sealed class FormFieldApproverResolver : IApproverResolver
 {
     public string Type => "FormField";
+
+    public ApproverTypeDescriptor Descriptor { get; } = new("FormField", "表单人员字段", ApproverValueKind.FormUserField);
 
     public Task<IReadOnlyList<Assignee>> ResolveAsync(string value, ApproverResolveContext context, CancellationToken ct)
     {
@@ -47,6 +53,8 @@ public sealed class FormFieldApproverResolver : IApproverResolver
 public sealed class InitiatorApproverResolver : IApproverResolver
 {
     public string Type => "Initiator";
+
+    public ApproverTypeDescriptor Descriptor { get; } = new("Initiator", "发起人", ApproverValueKind.None);
 
     public Task<IReadOnlyList<Assignee>> ResolveAsync(string value, ApproverResolveContext context, CancellationToken ct) =>
         Task.FromResult<IReadOnlyList<Assignee>>([new Assignee(AssigneeKind.User, context.Instance.InitiatorId)]);

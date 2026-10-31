@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { ChannelMeta, TemplateVariableMeta } from '../../api/types'
+import type { ApproverTypeMeta, ChannelMeta, TemplateVariableMeta } from '../../api/types'
 import {
   defaultNotification,
   defaultTemplates,
@@ -16,17 +16,17 @@ import { useDesignerForm } from './designerContext'
 const props = defineProps<{
   events: NotifyEvent[]
   channels: ChannelMeta[]
-  recipientTypes: string[]
+  recipientTypes: ApproverTypeMeta[]
   variables: TemplateVariableMeta[]
   roles: string[]
 }>()
 
 const rules = defineModel<NotificationRule[]>({ required: true })
 
-const recipientHelp: Record<string, string> = {
-  Assignees: '当前审批人：到达节点时为新待办的处理人，转交时为转交对象，超时为超时待办的处理人',
-  Approvers: '已审批过的人：本流程中已同意过的所有人',
-}
+// 通知专用接收人类型的说明（来自元数据）
+const recipientHelp = computed<Record<string, string>>(() =>
+  Object.fromEntries(props.recipientTypes.filter((t) => t.valueKind === 'None' && t.help).map((t) => [t.type, `${t.displayName}：${t.help}`])),
+)
 const shownVariables = computed(() => props.variables.filter((v) => !v.name.includes('.')))
 const form = useDesignerForm()
 const formVariables = computed(() => fieldVariables(form.value).filter((v) => v.type !== 'Users'))
