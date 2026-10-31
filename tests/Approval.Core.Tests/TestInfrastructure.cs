@@ -1,0 +1,215 @@
+using System.Net;
+using Approval.Core.Abstractions;
+using Approval.Core.Actions;
+using Approval.Core.Background;
+using Approval.Core.Domain;
+using Approval.Core.Notifications;
+using Approval.Core.Persistence;
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Time.Testing;
+
+namespace Approval.Core.Tests;
+
+public sealed class TestDbContext(DbContextOptions<TestDbContext> options) : DbContext(options)
+{
+    protected override void OnModelCreating(ModelBuilder modelBuilder) => modelBuilder.ConfigureApproval();
+}
+
+/// <summary>用户 → 角色的内存映射。</summary>
+public sealed class FakeIdentityProvider : IApprovalIdentityProvider
+{
+    public Dictionary<string, HashSet<string>> UserRoles { get; } = [];
+
+    public void Add(string userId, params string[] roles)
+    {
+        if (!UserRoles.TryGetValue(userId, out var set)) UserRoles[userId] = set = [];
+        set.UnionWith(roles);
+    }
+
+    public Task<bool> IsInRoleAsync(string userId, string role, CancellationToken ct) =>
+        Task.FromResult(UserRoles.TryGetValue(userId, out var roles) && roles.Contains(role));
+
+    public Task<IReadOnlyList<string>> GetUserIdsInRoleAsync(string role, CancellationToken ct) =>
+        Task.FromResult<IReadOnlyList<string>>(UserRoles.Where(kv => kv.Value.Contains(role)).Select(kv => kv.Key).Order().ToList());
+
+    public Task<IReadOnlyList<string>> GetRolesAsync(string userId, CancellationToken ct) =>
+        Task.FromResult<IReadOnlyList<string>>(UserRoles.TryGetValue(userId, out var roles) ? roles.ToList() : []);
+}
+
+public sealed class RecordingBusinessHandler : IApprovalBusinessHandler
+{
+    public const string Type = "Certificate";
+
+    public List<(string Event, string BusinessKey)> Calls { get; } = [];
+
+    /// <summary>设置后，审批通过回调抛出异常，用于验证事务回滚。</summary>
+    public bool FailOnApproved { get; set; }
+
+    public string BusinessType => Type;
+
+    public Task OnApprovedAsync(ApprovalInstance instance, CancellationToken ct)
+    {
+        if (FailOnApproved) throw new InvalidOperationException("业务回调失败");
+        Calls.Add(("Approved", instance.BusinessKey));
+        return Task.CompletedTask;
+    }
+
+    public Task OnRejectedAsync(ApprovalInstance instance, CancellationToken ct)
+    {
+        Calls.Add(("Rejected", instance.BusinessKey));
+        return Task.CompletedTask;
+    }
+
+    public Task OnWithdrawnAsync(ApprovalInstance instance, CancellationToken ct)
+    {
+        Calls.Add(("Withdrawn", instance.BusinessKey));
+        return Task.CompletedTask;
+    }
+}
+
+public sealed class RecordingNotifier : IApprovalNotifier
+{
+    public List<ApprovalNotification> Notifications { get; } = [];
+
+    public Task NotifyAsync(ApprovalNotification notification, CancellationToken ct)
+    {
+        Notifications.Add(notification);
+        return Task.CompletedTask;
+    }
+}
+
+/// <summary>记录收到的消息；FailTimes &gt; 0 时前几次发送抛异常，用于验证重试。</summary>
+public sealed class RecordingChannel : IApprovalChannel
+{
+    public const string ChannelName = "Test";
+
+    public List<ChannelMessage> Sent { get; } = [];
+    public int Attempts { get; private set; }
+    public int FailTimes { get; set; }
+
+    public string Name => ChannelName;
+    public string DisplayName => "测试渠道";
+
+    public Task SendAsync(ChannelMessage message, CancellationToken ct)
+    {
+        Attempts++;
+        if (Attempts <= FailTimes) throw new HttpRequestException("渠道暂时不可用");
+        Sent.Add(message);
+        return Task.CompletedTask;
+    }
+}
+
+/// <summary>替代真实网络的 HTTP 处理器：记录请求，按 Respond 返回响应。</summary>
+public sealed class StubHttpHandler : HttpMessageHandler
+{
+    public List<(HttpRequestMessage Request, string? Body)> Requests { get; } = [];
+
+    public Func<HttpRequestMessage, HttpResponseMessage> Respond { get; set; } =
+        _ => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("{}") };
+
+    protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+    {
+        var body = request.Content is null ? null : await request.Content.ReadAsStringAsync(ct);
+        Requests.Add((request, body));
+        return Respond(request);
+    }
+}
+
+/// <summary>每个测试一个独立的 SQLite 内存库。</summary>
+public sealed class TestHost : IAsyncDisposable
+{
+    private readonly SqliteConnection _connection;
+    private readonly ServiceProvider _provider;
+
+    public FakeIdentityProvider Identity { get; } = new();
+    public RecordingBusinessHandler Handler { get; } = new();
+    public RecordingNotifier Notifier { get; } = new();
+    public RecordingChannel Channel { get; } = new();
+    public StubHttpHandler Http { get; } = new();
+
+    /// <summary>可控时钟，用于超时与重试测试。</summary>
+    public FakeTimeProvider Clock { get; } = new(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero));
+
+    public TestHost(Action<ApprovalOptions>? configure = null, Action<ApprovalBuilder>? build = null)
+    {
+        _connection = new SqliteConnection("DataSource=:memory:");
+        _connection.Open();
+
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddDbContext<TestDbContext>(o => o.UseSqlite(_connection));
+        services.AddSingleton<IApprovalIdentityProvider>(Identity);
+        services.AddSingleton<IApprovalBusinessHandler>(Handler);
+        services.AddSingleton<IApprovalNotifier>(Notifier);
+        services.AddSingleton<IApprovalChannel>(Channel);
+        services.AddSingleton<TimeProvider>(Clock);
+        var builder = services.AddApprovalWorkflow<TestDbContext>(o =>
+        {
+            o.Http.AllowedHosts.Add("api.example.com");
+            configure?.Invoke(o);
+        });
+        build?.Invoke(builder);
+        services.ConfigureHttpClientDefaults(b => b.ConfigurePrimaryHttpMessageHandler(() => Http));
+
+        _provider = services.BuildServiceProvider();
+        using var scope = _provider.CreateScope();
+        scope.ServiceProvider.GetRequiredService<TestDbContext>().Database.EnsureCreated();
+    }
+
+    /// <summary>模拟一次独立的 HTTP 请求（新的 DI 作用域和 DbContext）。</summary>
+    public AsyncServiceScope NewScope() => _provider.CreateAsyncScope();
+
+    public async Task<T> RunAsync<T>(Func<IServiceProvider, Task<T>> action)
+    {
+        await using var scope = NewScope();
+        return await action(scope.ServiceProvider);
+    }
+
+    public Task RunAsync(Func<IServiceProvider, Task> action) =>
+        RunAsync<object?>(async sp => { await action(sp); return null; });
+
+    public Task PublishAsync(string key, string flowJson) =>
+        RunAsync(sp => sp.GetRequiredService<ApprovalDefinitionService>().PublishAsync(key, key, flowJson));
+
+    public Task<ApprovalInstance> StartAsync(string key, string businessKey, string initiator, object? form = null) =>
+        RunAsync(sp => sp.GetRequiredService<ApprovalEngine>().StartAsync(
+            new StartApprovalRequest(key, RecordingBusinessHandler.Type, businessKey, initiator) { FormData = form, Title = $"证书 {businessKey}" }));
+
+    public Task<ApprovalInstance> GetInstanceAsync(Guid id) =>
+        RunAsync(async sp => (await sp.GetRequiredService<ApprovalQueryService>().GetInstanceAsync(id))!);
+
+    public Task<List<TodoItem>> TodoAsync(string userId) =>
+        RunAsync(sp => sp.GetRequiredService<ApprovalQueryService>().GetTodoAsync(userId));
+
+    /// <summary>取当前用户的唯一待办并同意。</summary>
+    public async Task ApproveMyTaskAsync(string userId, string? comment = null)
+    {
+        var todo = Assert.Single(await TodoAsync(userId));
+        await RunAsync(sp => sp.GetRequiredService<ApprovalEngine>().ApproveAsync(todo.TaskId, userId, comment));
+    }
+
+    public Task ApproveAsync(Guid taskId, string userId) =>
+        RunAsync(sp => sp.GetRequiredService<ApprovalEngine>().ApproveAsync(taskId, userId));
+
+    public Task<List<ApprovalMessage>> MessagesAsync(string? userId = null) =>
+        RunAsync(sp => sp.GetRequiredService<TestDbContext>().Set<ApprovalMessage>()
+            .Where(m => userId == null || m.UserId == userId).OrderBy(m => m.CreatedAt).ToListAsync());
+
+    public Task<List<ApprovalOutboxMessage>> OutboxAsync() =>
+        RunAsync(sp => sp.GetRequiredService<TestDbContext>().Set<ApprovalOutboxMessage>().OrderBy(m => m.CreatedAt).ToListAsync());
+
+    public Task<List<ApprovalLog>> LogsAsync(Guid instanceId) =>
+        RunAsync(sp => sp.GetRequiredService<TestDbContext>().Set<ApprovalLog>()
+            .Where(l => l.InstanceId == instanceId).OrderBy(l => l.Sequence).ToListAsync());
+
+    public Task DispatchOutboxAsync() => _provider.GetRequiredService<ApprovalOutboxDispatcher>().DispatchOnceAsync();
+
+    public Task<int> ScanTimeoutsAsync() => _provider.GetRequiredService<ApprovalTimeoutScanner>().ScanOnceAsync();
+
+    public async ValueTask DisposeAsync()
+    {
+        await _provider.DisposeAsync();
+        await _connection.DisposeAsync();
+    }
+}

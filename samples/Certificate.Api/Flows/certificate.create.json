@@ -1,0 +1,58 @@
+{
+  "startNodeId": "start",
+  "notifications": [
+    { "events": ["Completed"], "recipients": [{ "type": "Initiator", "value": "" }], "channels": ["InApp", "Webhook"],
+      "title": "审批{结果}：{标题}", "content": "【{结果}】{标题}，证书编号 {form.certNo}" },
+    { "events": ["Rejected"], "recipients": [{ "type": "Initiator", "value": "" }], "channels": ["InApp"],
+      "content": "【已驳回】{标题}，{操作人} 在 {节点} 驳回：{意见}" }
+  ],
+  "nodes": {
+    "start":    { "name": "提交申请", "type": "Start", "next": "precheck" },
+    "precheck": { "name": "自动预检", "type": "Action", "next": "dept",
+                  "actions": [
+                    { "type": "CertificateExpiryCheck", "name": "有效期检查", "mode": "Sync", "outputVariable": "expiry",
+                      "parameters": { "warnDays": "30" } },
+                    { "type": "Script", "name": "计算有效年限", "mode": "Sync",
+                      "parameters": { "script": "const days = (new Date(form.expireDate) - new Date(form.issueDate)) / 86400000;\nform.validYears = Math.round(days / 365 * 10) / 10;\nlog('有效年限', form.validYears);" } }
+                  ] },
+    "dept":     { "name": "部门审核", "type": "Approval", "mode": "Any",
+                  "approvers": [{ "type": "Role", "value": "DeptReviewer" }], "next": "quality",
+                  "timeout": { "minutes": 1440, "action": "Remind", "repeatMinutes": 240, "maxReminders": 3 },
+                  "notifications": [
+                    { "events": ["Enter"], "recipients": [{ "type": "Assignees", "value": "" }], "channels": ["InApp", "Webhook"],
+                      "title": "待审批：{标题}", "content": "【待审批】{标题}，申请人 {申请人}，证书编号 {form.certNo}" },
+                    { "events": ["Timeout"], "recipients": [{ "type": "Assignees", "value": "" }], "channels": ["InApp"],
+                      "content": "【催办】{标题} 已超过处理时限（截止 {截止时间}），请尽快处理" }
+                  ] },
+    "quality":  { "name": "质量审核", "type": "Approval", "mode": "Any",
+                  "approvers": [{ "type": "Role", "value": "QualityManager" }], "next": "cond",
+                  "notifications": [
+                    { "events": ["Enter"], "recipients": [{ "type": "Assignees", "value": "" }], "channels": ["InApp"],
+                      "content": "【待审批】{标题}，申请人 {申请人}" }
+                  ] },
+    "cond":     { "name": "需要安全审核？", "type": "Condition", "branches": [
+                    { "priority": 1, "expression": "certType == \"Special\" || expiry.nearExpiry == true", "next": "safety" },
+                    { "priority": 99, "expression": null, "next": "leader" } ] },
+    "safety":   { "name": "安全审核", "type": "Approval", "mode": "Any",
+                  "approvers": [{ "type": "Role", "value": "SafetyOfficer" }], "next": "leader",
+                  "notifications": [
+                    { "events": ["Enter"], "recipients": [{ "type": "Assignees", "value": "" }], "channels": ["InApp"],
+                      "content": "【待审批】{标题}，申请人 {申请人}（特种或临期证书）" }
+                  ] },
+    "leader":   { "name": "负责人审批", "type": "Approval", "mode": "Any",
+                  "approvers": [{ "type": "Role", "value": "Leader" }], "next": "archive",
+                  "notifications": [
+                    { "events": ["Enter"], "recipients": [{ "type": "Assignees", "value": "" }], "channels": ["InApp"],
+                      "content": "【待审批】{标题}，申请人 {申请人}" }
+                  ] },
+    "archive":  { "name": "同步档案系统", "type": "Action", "next": "cc",
+                  "actions": [
+                    { "type": "Http", "name": "推送档案", "mode": "Async",
+                      "parameters": { "method": "POST", "url": "{appBaseUrl}/api/demo/webhook/archive",
+                                      "body": "{\"certNo\": \"{form.certNo}\", \"title\": \"{标题}\", \"instanceId\": \"{实例ID}\"}" } }
+                  ] },
+    "cc":       { "name": "抄送申请人", "type": "Cc",
+                  "approvers": [{ "type": "Initiator", "value": "" }], "next": "end" },
+    "end":      { "name": "结束", "type": "End" }
+  }
+}
