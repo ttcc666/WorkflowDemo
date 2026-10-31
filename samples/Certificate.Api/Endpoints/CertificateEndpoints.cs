@@ -47,8 +47,10 @@ public static class CertificateEndpoints
             return Results.Accepted($"/api/certificate-requests/{request.Id}", new { requestId = request.Id });
         });
 
-        // 申请详情：变更前后对比 + 审批轨迹，审核人据此判断改了什么
-        app.MapGet("/api/certificate-requests/{id:guid}", async (Guid id, AppDbContext db, ApprovalQueryService q, CancellationToken ct) =>
+        // 申请详情：变更前后对比 + 审批轨迹，审核人据此判断改了什么。
+        // 审批记录按审批的查看规则过滤（无权时为 null）；申请单本身属于业务数据，其权限由业务自行决定（演示中不限制）
+        app.MapGet("/api/certificate-requests/{id:guid}", async (Guid id, HttpContext http, AppDbContext db, ApprovalQueryService q,
+            CancellationToken ct) =>
         {
             var request = await db.CertificateRequests.AsNoTracking().FirstOrDefaultAsync(r => r.Id == id, ct);
             if (request is null) return Results.NotFound();
@@ -56,7 +58,8 @@ public static class CertificateEndpoints
             var current = request.CertificateId is { } certId
                 ? await db.Certificates.AsNoTracking().FirstOrDefaultAsync(c => c.Id == certId, ct)
                 : null;
-            var approvals = await q.GetByBusinessAsync(CertificateService.BusinessType, id.ToString(), ct);
+            var approvals = await q.GetByBusinessForViewerAsync(CertificateService.BusinessType, id.ToString(),
+                await http.GetApprovalViewerAsync(ct), ct);
 
             return Results.Ok(new
             {

@@ -134,12 +134,13 @@ static async Task InitializeAsync(WebApplication app)
     }
 }
 
-// EnsureCreated 不会给已存在的库补新表；旧版本创建的演示库缺少通知相关表时给出明确提示
+// EnsureCreated 不会给已存在的库补新表；旧版本创建的演示库缺少新表 / 新列时给出明确提示
 static async Task EnsureSchemaUpToDateAsync(AppDbContext db)
 {
     try
     {
         await db.Set<ApprovalOutboxMessage>().AnyAsync();
+        await db.Set<ApprovalCarbonCopy>().AnyAsync();
         await db.Set<ApprovalTask>().Select(t => new { t.NextRemindAt, t.Round }).FirstOrDefaultAsync();
     }
     catch (Microsoft.Data.Sqlite.SqliteException ex)

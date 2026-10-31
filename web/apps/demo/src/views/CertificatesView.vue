@@ -43,7 +43,7 @@ async function openRequest(requestId: string) {
   try {
     const instanceId = await findApprovalInstanceId(requestId)
     if (instanceId) await router.push({ name: 'approval-detail', params: { id: instanceId } })
-    else ElMessage.warning('未找到对应的审批')
+    else ElMessage.warning('未找到对应的审批，或你无权查看')
   } catch (e) {
     ElMessage.error(errorMessage(e))
   }

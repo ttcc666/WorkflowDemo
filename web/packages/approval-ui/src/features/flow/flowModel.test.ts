@@ -150,6 +150,7 @@ describe('computeRunState', () => {
     completedAt: null,
     tasks,
     logs: [],
+    access: 'Full',
   })
 
   it('marks done path, active node and skipped branch', () => {
@@ -298,6 +299,7 @@ describe('parallel nodes', () => {
           round: 0, status: 'Pending', order: 0, handledBy: null, comment: null, createdAt: '', completedAt: null, dueAt: null, remindCount: 0 },
       ],
       logs: [],
+      access: 'Full',
     })
     expect(run.status.get('p')).toBe('done')
     expect(run.status.get('b')).toBe('active')

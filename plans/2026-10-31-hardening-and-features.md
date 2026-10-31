@@ -1,6 +1,6 @@
 # 优化计划：数据权限 / 分页 / 组织架构审批人 / 表单增强 / 管理功能
 
-> 状态：**待执行**（用户要求写好计划，在下一会话执行）。
+> 状态：**执行中**（2026-10-31 开始；阶段 0、1 已完成）。
 > 对应上次评估中的第 1、2、6、7、8 项。执行时按“阶段 → 清单”逐项完成，每阶段结束运行验证命令，并更新本文件复选框。
 
 ## 0. 背景与现状（执行前必读）
@@ -271,18 +271,18 @@
 ## 4. 实施清单
 
 ### 阶段 0：准备
-- [ ] 确认是否提交上次未提交的修复（建议 `fix: discard partial data changes when actions fail`）；确认沿用“每阶段本地提交、不推送”。
-- [ ] 基线：`dotnet test -c Release`（96 + 14）、`cd web; pnpm typecheck; pnpm test`（32）。
+- [x] 确认是否提交上次未提交的修复（建议 `fix: discard partial data changes when actions fail`）；确认沿用“每阶段本地提交、不推送”。
+- [x] 基线：`dotnet test -c Release`（96 + 14）、`cd web; pnpm typecheck; pnpm test`（32）。
 
 ### 阶段 1：数据权限（第 1 项）
-- [ ] `ApprovalCarbonCopy` 实体、表、索引；引擎抄送写入；测试：抄送用户 / 角色记录、退回后再次抄送记录新 Round。
-- [ ] `IApprovalAccessPolicy` + 默认实现 + `AddAccessPolicy<T>()`；`GetInstanceForViewerAsync`、`GetByBusinessForViewerAsync`。
-- [ ] `FlowDefinition.ToPublicView()`；定义接口改为仅管理员；`instances/{id}/definition`。
-- [ ] 示例证书申请详情接口改用带权限的查询。
-- [ ] 前端详情改用公开定义；非管理员隐藏流程定义菜单与设计器入口；无权提示。
-- [ ] 测试（Core）：发起人、用户处理人、角色候选人、实际处理人（转交后原处理人仍可看）、加签人、抄送用户 / 角色、无关用户、自定义策略覆盖。
-- [ ] 测试（AspNetCore）：无关用户 404、管理员 200、按业务查询被过滤、非管理员读定义 403、公开视图不含动作参数。
-- [ ] 验证：全部测试、`e2e-v3.ps1`、`e2e-forms.ps1`（脚本中用 alice 查看他人实例的地方需确认仍有权限）。
+- [x] `ApprovalCarbonCopy` 实体、表、索引；引擎抄送写入；测试：抄送用户 / 角色记录、退回后再次抄送记录新 Round。
+- [x] `IApprovalAccessPolicy` + 默认实现 + `AddAccessPolicy<T>()`；`GetInstanceForViewerAsync`、`GetByBusinessForViewerAsync`。
+- [x] `FlowDefinition.ToPublicView()`；定义接口改为仅管理员；`instances/{id}/definition`。
+- [x] 示例证书申请详情接口改用带权限的查询。
+- [x] 前端详情改用公开定义；非管理员隐藏流程定义菜单与设计器入口；无权提示。
+- [x] 测试（Core）：发起人、用户处理人、角色候选人、实际处理人（转交后原处理人仍可看）、加签人、抄送用户 / 角色、无关用户、自定义策略覆盖。
+- [x] 测试（AspNetCore）：无关用户 404、管理员 200、按业务查询被过滤、非管理员读定义 403、公开视图不含动作参数。
+- [x] 验证：全部测试、`e2e-v3.ps1`、`e2e-forms.ps1`（脚本中用 alice 查看他人实例的地方需确认仍有权限）。
 
 ### 阶段 2：分页与筛选（第 2 项）
 - [ ] `Paging.cs`；查询服务改造与新增 `GetCarbonCopiedAsync`、`SearchInstancesAsync`、`GetTodoCountAsync`；索引。

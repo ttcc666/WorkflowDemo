@@ -81,6 +81,28 @@ public sealed class FlowDefinition
     }
 
     public string ToJson() => JsonSerializer.Serialize(this, JsonOptions);
+
+    /// <summary>
+    /// 公开视图（给实例的查看者画流程图、展示表单）：去掉动作参数与输出变量（HTTP 请求头、令牌等）、通知规则、时限策略和发起角色，
+    /// 保留节点、连线、名称、类型、坐标与表单结构。完整定义仅管理员可读。
+    /// </summary>
+    public FlowDefinition ToPublicView()
+    {
+        var view = Parse(ToJson());
+        view.Notifications = [];
+        if (view.Settings is { } settings) settings.InitiatorRoles = [];
+        foreach (var node in view.Nodes.Values)
+        {
+            node.Notifications = [];
+            node.Timeout = null;
+            foreach (var step in node.Actions)
+            {
+                step.Parameters = [];
+                step.OutputVariable = null;
+            }
+        }
+        return view;
+    }
 }
 
 public sealed class FlowNode

@@ -20,7 +20,7 @@ const router = useRouter()
 const { userId, formBusinessType } = useApprovalUser()
 
 const instanceId = computed(() => route.params.id as string)
-const { instance, loading, error, definition, myTask, canWithdraw, nodeOptions, reload } = useApprovalDetail(instanceId)
+const { instance, loading, error, notFound, definition, myTask, canWithdraw, nodeOptions, reload } = useApprovalDetail(instanceId)
 
 const businessPanel = computed(() => (instance.value ? businessPanelOf(instance.value.businessType) : undefined))
 // 定义带表单时按实例绑定版本的表单结构展示；表单审批被退回时可修改后重新提交
@@ -72,7 +72,9 @@ const onWithdraw = (comment: string) => run(() => approvalApi.withdraw(instanceI
       <template #content>审批详情</template>
     </el-page-header>
 
-    <el-result v-if="error && !instance" icon="error" title="加载失败" :sub-title="error" />
+    <el-result v-if="notFound" icon="warning" title="无权查看或不存在"
+      sub-title="只有发起人、审批人、抄送人和管理员可以查看该审批" />
+    <el-result v-else-if="error && !instance" icon="error" title="加载失败" :sub-title="error" />
 
     <template v-if="instance">
       <ApprovalActions

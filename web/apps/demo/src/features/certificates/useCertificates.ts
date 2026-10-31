@@ -25,7 +25,7 @@ export function useCertificates() {
   }
 }
 
-/** 申请单对应的审批实例 ID（BusinessKey = 申请单 ID）；驳回后重提会有多条，取最新。 */
+/** 申请单对应的审批实例 ID（BusinessKey = 申请单 ID）；驳回后重提会有多条，取最新。只返回当前用户有权查看的审批。 */
 export async function findApprovalInstanceId(requestId: string) {
   const instances = await approvalApi.byBusiness(CERTIFICATE_BUSINESS_TYPE, requestId)
   return instances[0]?.id

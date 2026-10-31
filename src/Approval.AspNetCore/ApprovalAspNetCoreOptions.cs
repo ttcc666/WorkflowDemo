@@ -11,6 +11,12 @@ public sealed class ApprovalAspNetCoreOptions
     /// <summary>未设置 <see cref="AdminPolicy"/> 时，经 <c>IApprovalIdentityProvider.IsInRoleAsync</c> 判断的管理员角色。</summary>
     public string AdminRole { get; set; } = "Admin";
 
+    /// <summary>
+    /// 除管理员外可读取完整流程定义（含动作参数、通知配置）的角色，如流程设计员；默认为空（仅管理员）。
+    /// 发布流程仍需管理员。实例的查看者通过 <c>instances/{id}/definition</c> 读取去掉敏感配置的公开视图。
+    /// </summary>
+    public List<string> DefinitionReaders { get; } = [];
+
     /// <summary>是否映射投递记录（Outbox）接口。</summary>
     public bool EnableOutboxEndpoints { get; set; } = true;
 

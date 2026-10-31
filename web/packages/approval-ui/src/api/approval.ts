@@ -42,6 +42,8 @@ export const approvalApi = {
   started: (signal?: AbortSignal) => http.get<InstanceListItem[]>(api('/started'), signal),
 
   instance: (id: string, signal?: AbortSignal) => http.get<ApprovalInstance>(api(`/instances/${id}`), signal),
+  /** 实例绑定版本的流程定义（公开视图：不含动作参数、通知与时限配置），用于画流程图、展示表单 */
+  instanceDefinition: (id: string, signal?: AbortSignal) => http.get<ApprovalDefinition>(api(`/instances/${id}/definition`), signal),
   byBusiness: (businessType: string, businessKey: string) =>
     http.get<ApprovalInstance[]>(api(`/instances?businessType=${enc(businessType)}&businessKey=${enc(businessKey)}`)),
   myTask: (instanceId: string, signal?: AbortSignal) =>

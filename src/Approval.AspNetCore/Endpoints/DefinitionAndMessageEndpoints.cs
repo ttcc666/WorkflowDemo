@@ -9,24 +9,37 @@ using Microsoft.AspNetCore.Routing;
 
 namespace Approval.AspNetCore.Endpoints;
 
-/// <summary>流程定义：设计器元数据、列表、版本、校验、发布。</summary>
+/// <summary>流程定义：设计器元数据、列表、版本、校验、发布。完整定义含动作参数与通知配置，仅管理员（及 DefinitionReaders）可读。</summary>
 internal static class DefinitionEndpoints
 {
     public static void Map(RouteGroupBuilder group)
     {
-        // 设计器元数据：审批人类型、通知接收人类型、动作（含参数描述）、渠道、模板变量
+        // 设计器元数据：审批人类型、通知接收人类型、动作（含参数描述）、渠道、模板变量（不含敏感配置，所有登录用户可读）
         group.MapGet("/meta", (ApprovalDefinitionService d) => d.Metadata);
 
-        group.MapGet("/definitions", (ApprovalDefinitionService d, CancellationToken ct) => d.ListLatestAsync(ct));
+        group.MapGet("/definitions", async (HttpContext http, ApprovalDefinitionService d, CancellationToken ct) =>
+        {
+            await EnsureReaderAsync(http, ct);
+            return await d.ListLatestAsync(ct);
+        });
 
-        group.MapGet("/definitions/by-id/{id:guid}", async (Guid id, ApprovalDefinitionService d, CancellationToken ct) =>
-            await d.GetByIdAsync(id, ct) is { } definition ? Results.Ok(definition) : Results.NotFound());
+        group.MapGet("/definitions/by-id/{id:guid}", async (Guid id, HttpContext http, ApprovalDefinitionService d, CancellationToken ct) =>
+        {
+            await EnsureReaderAsync(http, ct);
+            return await d.GetByIdAsync(id, ct) is { } definition ? Results.Ok(definition) : Results.NotFound();
+        });
 
-        group.MapGet("/definitions/{key}", async (string key, ApprovalDefinitionService d, CancellationToken ct) =>
-            await d.GetLatestAsync(key, ct) is { } definition ? Results.Ok(definition) : Results.NotFound());
+        group.MapGet("/definitions/{key}", async (string key, HttpContext http, ApprovalDefinitionService d, CancellationToken ct) =>
+        {
+            await EnsureReaderAsync(http, ct);
+            return await d.GetLatestAsync(key, ct) is { } definition ? Results.Ok(definition) : Results.NotFound();
+        });
 
-        group.MapGet("/definitions/{key}/versions", (string key, ApprovalDefinitionService d, CancellationToken ct) =>
-            d.ListVersionsAsync(key, ct));
+        group.MapGet("/definitions/{key}/versions", async (string key, HttpContext http, ApprovalDefinitionService d, CancellationToken ct) =>
+        {
+            await EnsureReaderAsync(http, ct);
+            return await d.ListVersionsAsync(key, ct);
+        });
 
         // 只校验不发布，供设计器实时提示；解析失败也作为校验错误返回
         group.MapPost("/definitions/validate", async (HttpContext http, ApprovalDefinitionService d, CancellationToken ct) =>
@@ -48,6 +61,12 @@ internal static class DefinitionEndpoints
             var definition = await d.PublishAsync(key, string.IsNullOrWhiteSpace(name) ? key : name, await http.ReadBodyAsStringAsync(ct), ct);
             return Results.Ok(new { definition.Id, definition.Key, definition.Version });
         });
+    }
+
+    private static async Task EnsureReaderAsync(HttpContext http, CancellationToken ct)
+    {
+        if (!await http.CanReadApprovalDefinitionsAsync(ct))
+            throw new ApprovalException("仅管理员可查看流程定义") { Code = ApprovalErrorCode.Forbidden };
     }
 }
 
@@ -98,7 +117,7 @@ internal static class DirectoryEndpoints
 
     public static void Map(RouteGroupBuilder group, string? formBusinessType)
     {
-        // 前端据此显示菜单与按钮：isAdmin（流程管理、投递记录）、formsEnabled（发起申请）、
+        // 前端据此显示菜单与按钮：isAdmin（发布流程、投递记录）、canViewDefinitions（流程定义与设计器）、formsEnabled（发起申请）、
         // formBusinessType（该业务类型的申请被退回后可修改表单重新提交）
         group.MapGet("/me", async (HttpContext http, IApprovalIdentityProvider identity, CancellationToken ct) =>
         {
@@ -111,6 +130,7 @@ internal static class DirectoryEndpoints
                 name = user?.Name ?? userId,
                 roles = await identity.GetRolesAsync(userId, ct),
                 isAdmin = await http.IsApprovalAdminAsync(ct),
+                canViewDefinitions = await http.CanReadApprovalDefinitionsAsync(ct),
                 formsEnabled = formBusinessType is not null,
                 formBusinessType
             };

@@ -6,14 +6,14 @@ import UserSwitcher from '@/components/UserSwitcher.vue'
 
 const route = useRoute()
 
-// 审批页面来自 @approval/ui（createApprovalRoutes），证书管理为示例业务
-const { formsEnabled } = useApprovalUser()
+// 审批页面来自 @approval/ui（createApprovalRoutes），证书管理为示例业务；流程定义、投递记录仅管理员可见
+const { formsEnabled, isAdmin, canViewDefinitions } = useApprovalUser()
 const menus = computed(() => [
   { path: '/workbench', title: '审批工作台' },
   ...(formsEnabled.value ? [{ path: '/start', title: '发起申请' }] : []),
   { path: '/certificates', title: '证书管理' },
-  { path: '/definitions', title: '流程定义' },
-  { path: '/outbox', title: '投递记录' },
+  ...(canViewDefinitions.value ? [{ path: '/definitions', title: '流程定义' }] : []),
+  ...(isAdmin.value ? [{ path: '/outbox', title: '投递记录' }] : []),
 ])
 
 // 详情页、设计器归属到对应菜单高亮

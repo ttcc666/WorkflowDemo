@@ -19,7 +19,7 @@ async function load() {
   }
 }
 
-/** 当前用户（来自后端 /me）：用户 ID、名称、角色、是否管理员、是否启用表单审批。 */
+/** 当前用户（来自后端 /me）：用户 ID、名称、角色、是否管理员、能否查看流程定义、是否启用表单审批。 */
 export function useApprovalUser() {
   if (!started) {
     started = true
@@ -31,6 +31,7 @@ export function useApprovalUser() {
     userId: computed(() => me.value?.userId ?? ''),
     roles: computed(() => me.value?.roles ?? []),
     isAdmin: computed(() => me.value?.isAdmin ?? false),
+    canViewDefinitions: computed(() => me.value?.canViewDefinitions ?? false),
     formsEnabled: computed(() => me.value?.formsEnabled ?? false),
     formBusinessType: computed(() => me.value?.formBusinessType ?? null),
     reload: load,

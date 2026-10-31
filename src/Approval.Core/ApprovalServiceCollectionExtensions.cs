@@ -42,6 +42,7 @@ public static class ApprovalServiceCollectionExtensions
 
         services.AddScoped<ApprovalEngine>();
         services.AddScoped<ApprovalQueryService>();
+        services.TryAddScoped<IApprovalAccessPolicy, DefaultApprovalAccessPolicy>();
         services.AddScoped<ApprovalDefinitionService>();
         services.AddScoped<ApprovalMessageService>();
         services.AddScoped<ApprovalOutboxService>();
@@ -75,6 +76,13 @@ public sealed class ApprovalBuilder(IServiceCollection services)
     public ApprovalBuilder AddUserDirectory<T>() where T : class, IApprovalUserDirectory
     {
         Services.AddScoped<IApprovalUserDirectory, T>();
+        return this;
+    }
+
+    /// <summary>替换审批的查看规则（默认 <see cref="DefaultApprovalAccessPolicy"/>，可继承后追加规则）。</summary>
+    public ApprovalBuilder AddAccessPolicy<T>() where T : class, IApprovalAccessPolicy
+    {
+        Services.Replace(ServiceDescriptor.Scoped<IApprovalAccessPolicy, T>());
         return this;
     }
 

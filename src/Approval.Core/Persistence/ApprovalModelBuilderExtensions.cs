@@ -69,6 +69,18 @@ public static class ApprovalModelBuilderExtensions
             b.HasIndex(x => new { x.OperatorId, x.Action });
         });
 
+        modelBuilder.Entity<ApprovalCarbonCopy>(b =>
+        {
+            b.ToTable($"{tablePrefix}CarbonCopies");
+            b.HasKey(x => x.Id);
+            b.Property(x => x.NodeId).HasMaxLength(100);
+            b.Property(x => x.AssigneeValue).HasMaxLength(100);
+            b.Property(x => x.AssigneeKind).HasConversion<string>().HasMaxLength(20);
+            b.HasOne<ApprovalInstance>().WithMany().HasForeignKey(x => x.InstanceId).OnDelete(DeleteBehavior.Cascade);
+            // “抄送我的”：按接收人查询
+            b.HasIndex(x => new { x.AssigneeKind, x.AssigneeValue });
+        });
+
         modelBuilder.Entity<ApprovalMessage>(b =>
         {
             b.ToTable($"{tablePrefix}Messages");
@@ -100,7 +112,7 @@ public static class ApprovalModelBuilderExtensions
         foreach (var type in new[]
                  {
                      typeof(ApprovalDefinition), typeof(ApprovalInstance), typeof(ApprovalTask), typeof(ApprovalLog),
-                     typeof(ApprovalMessage), typeof(ApprovalOutboxMessage)
+                     typeof(ApprovalCarbonCopy), typeof(ApprovalMessage), typeof(ApprovalOutboxMessage)
                  })
             modelBuilder.Entity(type).UseUtcDateTimes();
 

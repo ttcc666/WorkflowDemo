@@ -21,11 +21,17 @@ internal static class InstanceEndpoints
         group.MapGet("/started", (HttpContext http, ApprovalQueryService q, CancellationToken ct) =>
             q.GetStartedByAsync(http.GetApprovalUserId(), ct));
 
-        group.MapGet("/instances/{id:guid}", async (Guid id, ApprovalQueryService q, CancellationToken ct) =>
-            await q.GetInstanceAsync(id, ct) is { } instance ? Results.Ok(instance) : Results.NotFound());
+        // 详情、按业务查询、实例的流程定义：只对有关的人可见（IApprovalAccessPolicy），无权时与不存在一样返回 404
+        group.MapGet("/instances/{id:guid}", async (Guid id, HttpContext http, ApprovalQueryService q, CancellationToken ct) =>
+            await q.GetInstanceForViewerAsync(id, await http.GetApprovalViewerAsync(ct), ct) ?? throw NotVisible());
 
-        group.MapGet("/instances", (string businessType, string businessKey, ApprovalQueryService q, CancellationToken ct) =>
-            q.GetByBusinessAsync(businessType, businessKey, ct));
+        group.MapGet("/instances", async (string businessType, string businessKey, HttpContext http, ApprovalQueryService q,
+                CancellationToken ct) =>
+            await q.GetByBusinessForViewerAsync(businessType, businessKey, await http.GetApprovalViewerAsync(ct), ct));
+
+        // 实例绑定版本的流程定义公开视图（画流程图、展示表单），不含动作参数、通知与时限配置
+        group.MapGet("/instances/{id:guid}/definition", async (Guid id, HttpContext http, ApprovalQueryService q, CancellationToken ct) =>
+            await q.GetPublicDefinitionAsync(id, await http.GetApprovalViewerAsync(ct), ct) ?? throw NotVisible());
 
         // 当前用户在该流程中可处理的任务；前端据此显示操作按钮
         group.MapGet("/instances/{id:guid}/my-task", async (Guid id, HttpContext http, ApprovalEngine e, CancellationToken ct) =>
@@ -37,6 +43,8 @@ internal static class InstanceEndpoints
             return Results.NoContent();
         });
     }
+
+    private static ApprovalException NotVisible() => new("审批不存在或无权查看") { Code = ApprovalErrorCode.NotFound };
 }
 
 /// <summary>任务操作：同意、驳回 / 退回、转交、加签、重新提交。</summary>

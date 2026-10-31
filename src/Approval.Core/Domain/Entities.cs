@@ -155,6 +155,23 @@ public class ApprovalTask
     public DateTime? LastRemindedAt { get; set; }
 }
 
+/// <summary>抄送记录：抄送节点的每个接收人一条，用于“抄送我的”列表与查看权限判断。角色抄送在查看时按角色成员判断。</summary>
+public class ApprovalCarbonCopy
+{
+    public Guid Id { get; set; }
+    public Guid InstanceId { get; set; }
+    public required string NodeId { get; set; }
+    public AssigneeKind AssigneeKind { get; set; }
+
+    /// <summary>用户 ID 或角色名，取决于 <see cref="AssigneeKind"/>。</summary>
+    public required string AssigneeValue { get; set; }
+
+    /// <summary>抄送时实例的 <see cref="ApprovalInstance.Round"/>（退回后再次经过抄送节点会新增记录）。</summary>
+    public int Round { get; set; }
+
+    public DateTime CreatedAt { get; set; }
+}
+
 /// <summary>审批轨迹，只追加不修改。</summary>
 public class ApprovalLog
 {

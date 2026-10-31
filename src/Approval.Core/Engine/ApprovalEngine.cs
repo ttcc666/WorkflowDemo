@@ -368,6 +368,7 @@ public sealed partial class ApprovalEngine
                     var recipients = await ResolveAssigneesAsync(instance, node, form, expandRoles: false, ct);
                     if (recipients.Count > 0)
                     {
+                        foreach (var recipient in recipients) AddCarbonCopy(instance, node, recipient);
                         AddLog(instance, node, ApprovalAction.Cc, SystemOperator,
                             "抄送：" + string.Join("、", recipients.Select(Describe)));
                         Notify(NotificationKind.Cc, instance, recipients);
@@ -648,6 +649,18 @@ public sealed partial class ApprovalEngine
         _db.Set<ApprovalTask>().Add(task);
         instance.Tasks.Add(task);
     }
+
+    private void AddCarbonCopy(ApprovalInstance instance, FlowNode node, Assignee recipient) =>
+        _db.Set<ApprovalCarbonCopy>().Add(new ApprovalCarbonCopy
+        {
+            Id = Guid.NewGuid(),
+            InstanceId = instance.Id,
+            NodeId = node.Id,
+            AssigneeKind = recipient.Kind,
+            AssigneeValue = recipient.Value,
+            Round = instance.Round,
+            CreatedAt = Now
+        });
 
     private void AddLog(ApprovalInstance instance, FlowNode? node, ApprovalAction action, string operatorId, string? comment) =>
         AddLog(instance, action, operatorId, comment, node?.Id, node?.Name);

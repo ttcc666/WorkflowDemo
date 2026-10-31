@@ -24,7 +24,7 @@ import { approvalRouteNames } from '../routes'
 
 const route = useRoute()
 const router = useRouter()
-const { isAdmin } = useApprovalUser()
+const { me, isAdmin, canViewDefinitions } = useApprovalUser()
 const directory = useDirectory()
 void directory.loadRoles()
 const designer = useFlowDesigner()
@@ -40,9 +40,15 @@ const fromId = computed(() => route.query.from as string | undefined)
 const name = shallowRef('')
 const version = shallowRef<number | null>(null)
 
-// 加载：?from=<定义ID> 基于历史版本编辑；否则取最新版本；不存在则新建
+// 加载：?from=<定义ID> 基于历史版本编辑；否则取最新版本；不存在则新建。完整定义仅管理员（及 DefinitionReaders）可读。
+// 首次确认有权查看后才加载；之后切换用户不重新加载，避免丢失未发布的修改（演示中切换到 admin 发布）
+const canLoad = shallowRef(false)
+watch(canViewDefinitions, (value) => {
+  if (value) canLoad.value = true
+}, { immediate: true })
 const loader = useAsyncData(
   async (signal) => {
+    if (!canLoad.value) return undefined
     try {
       return fromId.value ? await approvalApi.definitionById(fromId.value, signal) : await approvalApi.latestDefinition(flowKey.value)
     } catch (e) {
@@ -50,7 +56,7 @@ const loader = useAsyncData(
       throw e
     }
   },
-  { watch: [flowKey, fromId] },
+  { watch: [flowKey, fromId, canLoad] },
 )
 
 watch(loader.data, (definition) => {
@@ -179,7 +185,8 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', onBeforeUnload)
 </script>
 
 <template>
-  <div v-loading="loader.loading.value" class="designer">
+  <el-alert v-if="me && !canViewDefinitions" type="warning" :closable="false" show-icon title="流程设计仅管理员可用" />
+  <div v-else v-loading="loader.loading.value" class="designer">
     <el-card shadow="never" body-class="designer__toolbar-body">
       <DesignerToolbar
         v-model:name="name"

@@ -76,7 +76,11 @@ export interface ApprovalInstance {
   completedAt: string | null
   tasks: ApprovalTask[]
   logs: ApprovalLog[]
+  /** 当前用户的查看级别：Full（发起人、管理员）/ Participant（处理人、候选人、抄送人） */
+  access: ApprovalAccessLevel
 }
+
+export type ApprovalAccessLevel = 'Participant' | 'Full'
 
 export interface TodoItem {
   taskId: string
@@ -213,6 +217,8 @@ export interface ApprovalMe {
   name: string
   roles: string[]
   isAdmin: boolean
+  /** 可查看完整流程定义（流程定义列表、设计器）：管理员或后端 DefinitionReaders 中的角色 */
+  canViewDefinitions: boolean
   /** 后端启用了表单审批（AddFormApprovals） */
   formsEnabled: boolean
   /** 表单审批的业务类型（该类型的申请被退回后可修改表单重新提交），未启用时为 null */
