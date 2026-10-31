@@ -42,9 +42,9 @@ Call POST "/api/approval/tasks/$($t.taskId)/reject" 'quinn' @{ comment = '缺少
 "  驳回后证书持有人: $((Call GET "/api/certificates/$($cert.id)" 'alice').holder)（应仍为 张三）"
 "  申请单状态: $((Call GET "/api/certificate-requests/$($r2.requestId)" 'alice').request.status)"
 
-"== 3. alice 注销证书：质量审核 → 负责人会签（leo + lily）"
+"== 3. alice 注销证书：质量 + 安全并行会审 → 负责人会签（leo + lily）"
 $r3 = Call POST "/api/certificates/$($cert.id)/revoke" 'alice' @{ reason = '人员离职' }
-Approve 'quinn' 'OK'; Approve 'leo' '同意'
+Approve 'quinn' 'OK'; Approve 'sam' 'OK'; Approve 'leo' '同意'
 "  一位负责人同意后证书状态: $((Call GET "/api/certificates/$($cert.id)" 'alice').status)（应仍为 Active）"
 Approve 'lily' '同意'
 "  两位负责人同意后证书状态: $((Call GET "/api/certificates/$($cert.id)" 'alice').status)（应为 Revoked）"

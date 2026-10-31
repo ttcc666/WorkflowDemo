@@ -1,6 +1,6 @@
 # B 表单设计器 + 通用发起页 / C 封装为可复用包 — 开发计划
 
-> 状态：**执行中**。阶段 0–4 已完成（每阶段完成后本地提交，不推送）。
+> 状态：**已完成**（阶段 0–5，每阶段完成后本地提交，未推送）。
 > 执行时按“阶段 → 清单”逐项完成，每个阶段结束运行该阶段的验证命令；本文件的复选框随进度更新。
 
 ## 0. 背景与现状（执行前必读）
@@ -231,18 +231,20 @@ web/
 - 补充：`/me` 增加 `formBusinessType`（前端据此判断重新提交时能否改表单）；设计器通过 provide/inject（`designerContext.ts`）向审批人、条件、通知面板共享表单结构；示例 `/start/{**key}` 路由回退（流程标识含点）。
 
 ### 阶段 5：联调、文档、打包
-- [ ] 浏览器端到端（admin 新建流程 → 设计表单 → 设置可发起 → 发布；alice 在发起中心提交请假 3 天与 5 天分别走不同分支；退回 alice 修改天数重新提交；报销明细合计 > 5000 走并行；证书业务回归；控制台 0 错误）。
-- [ ] `dotnet pack src/Approval.Core src/Approval.AspNetCore -c Release -o output/packages` 成功；`pnpm --filter @approval/ui build` 成功。
-- [ ] README：新增“接入你的系统”（后端 3 步：AddApprovalWorkflow + 身份 / 目录 / 当前用户 + MapApprovalEndpoints；前端：安装 `@approval/ui`、插件配置、挂载路由）、“表单审批”（字段类型、合计字段、条件写法）；更新目录结构与运行命令（`cd web; pnpm install; pnpm build`）。
-- [ ] 全量检查：乱码扫描、`git diff --check`、所有测试与构建；向用户报告（中文，按 改了什么 / 如何验证 / 注意事项 / 下一步）。
+- [x] 浏览器端到端（admin 新建流程 → 设计表单 → 设置可发起 → 发布；alice 在发起中心提交请假 3 天与 5 天分别走不同分支；退回 alice 修改天数重新提交；报销明细合计 > 5000 走并行；证书业务回归；控制台 0 错误）。
+- [x] `dotnet pack src/Approval.Core src/Approval.AspNetCore -c Release -o output/packages` 成功；`pnpm --filter @approval/ui build` 成功。
+- [x] README：新增“接入你的系统”（后端 3 步：AddApprovalWorkflow + 身份 / 目录 / 当前用户 + MapApprovalEndpoints；前端：安装 `@approval/ui`、插件配置、挂载路由）、“表单审批”（字段类型、合计字段、条件写法）；更新目录结构与运行命令（`cd web; pnpm install; pnpm build`）。
+- [x] 全量检查：乱码扫描、`git diff --check`、所有测试与构建；向用户报告（中文，按 改了什么 / 如何验证 / 注意事项 / 下一步）。
+
+- 补充：`smoke-test.ps1` 第 3 步按当前注销流程（质量 + 安全并行会审）更新；NuGet 包元数据（PackageId、Version、Description）；`pnpm pack` 验证 npm 包使用 `publishConfig` 的 dist 导出。
 
 ## 5. 验证命令汇总
 
 ```powershell
 cd D:\Study\CSharp\Workflow
 dotnet test -c Release                              # Core + AspNetCore 测试
-cd web; pnpm install; pnpm -r typecheck; pnpm -r test; pnpm build
-cd ..; dotnet pack src/Approval.Core src/Approval.AspNetCore -c Release -o output/packages
+cd web; pnpm install; pnpm typecheck; pnpm test; pnpm build; pnpm build:lib
+cd ..; dotnet pack src/Approval.Core -c Release -o output/packages; dotnet pack src/Approval.AspNetCore -c Release -o output/packages
 # 运行（新库）：
 Remove-Item output/e2e/v4.db* -ErrorAction SilentlyContinue
 $env:ConnectionStrings__Default='Data Source=D:\Study\CSharp\Workflow\output\e2e\v4.db'

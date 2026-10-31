@@ -32,6 +32,13 @@ const keyError = computed(() => {
 })
 
 const isNumber = computed(() => numberTypes.has(props.field.type))
+const conditionExample = computed(() => {
+  const { key, type, options } = props.field
+  if (numberTypes.has(type)) return `${key} > 3`
+  if (type === 'Switch') return `${key} == true`
+  if (optionTypes.has(type) && type !== 'MultiSelect' && options?.[0]) return `${key} == "${options[0].value}"`
+  return `${key} == "…"`
+})
 const supportsDefault = computed(() => !['Table', 'Description', 'User', 'Users', 'DateRange'].includes(props.field.type))
 const defaultField = computed<FormField>(() => ({ ...props.field, required: false, defaultValue: undefined }))
 
@@ -74,7 +81,11 @@ const columnKeyInvalid = (index: number) => {
 
     <el-form-item v-if="field.type !== 'Description'" label="字段标识" required :error="keyError">
       <el-input :model-value="field.key" maxlength="50" @update:model-value="(v: string) => emit('update', { key: v.trim() })" />
-      <div class="field-inspector__help">用于条件分支与消息模板，如 <code>{{ field.key }} &gt; 3</code>、<code>{form.{{ field.key }}}</code>；发布后不建议修改。</div>
+      <div class="field-inspector__help">
+        <template v-if="field.type === 'Table'">明细表通过合计列用于条件分支（见下方“列”）；</template>
+        <template v-else>用于条件分支与消息模板，如 <code>{{ conditionExample }}</code>、<code>{form.{{ field.key }}}</code>；</template>
+        发布后不建议修改。
+      </div>
     </el-form-item>
 
     <el-form-item v-if="field.type !== 'Description'">

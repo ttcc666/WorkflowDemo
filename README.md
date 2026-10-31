@@ -1,40 +1,53 @@
 # Approval.Core — 通用审批流程框架
 
-一个面向“业务单据 + 多角色审核”场景的轻量审批引擎。业务模块只需提供业务回调即可接入，审批的定义、流转、待办、轨迹由框架统一处理。
+一个面向“业务单据 + 多角色审核”场景的轻量审批引擎。两种接入方式：
+
+- **表单审批（零代码）**：在设计器里画流程、设计表单、打开“在发起中心显示”，用户即可在“发起申请”中填写表单发起，如请假、报销、用品申领。
+- **业务审批**：业务模块（如证书管理）保存自己的单据，调用引擎发起审批，在回调中让审批结果生效。
+
+审批的定义、流转、待办、轨迹、通知由框架统一处理。
 
 ```
-src/Approval.Core            框架本体（只依赖 EF Core Relational + DynamicExpresso）
-tests/Approval.Core.Tests    单元测试（SQLite 内存库）
-samples/Certificate.Api      示例：证书新增 / 变更 / 注销的多角色审核
-web/approval-ui              前端：Vue 3 + Element Plus + Vue Flow（审批工作台、证书管理、流程设计器）
+src/Approval.Core                 框架本体（EF Core Relational + DynamicExpresso + Jint），不依赖 ASP.NET
+src/Approval.AspNetCore           ASP.NET Core 集成：MapApprovalEndpoints() 提供全部审批接口、当前用户与用户目录抽象
+tests/Approval.Core.Tests         引擎单元测试（SQLite 内存库）
+tests/Approval.AspNetCore.Tests   接口集成测试（TestServer）
+samples/Certificate.Api           示例宿主：证书审核（业务审批）+ 请假 / 报销（表单审批）
+web/packages/approval-ui          前端组件库 @approval/ui：工作台、审批详情、流程设计器、表单设计器、发起中心
+web/apps/demo                     示例前端：接入 @approval/ui + 证书管理页面 + 演示用户切换
 ```
 
 ## 前端界面
 
 | 页面 | 功能 |
 |---|---|
-| 审批工作台 `/workbench` | 我的待办（含角色任务）、我已处理、我发起的 |
-| 审批详情 `/approvals/:id` | 同意 / 驳回或退回到指定节点 / 转交 / 加签 / 撤回 / 退回后重新提交；业务内容（证书显示变更前后对比）；按实例版本绘制的只读流程图，高亮已完成、进行中、已驳回节点和走过的路径；审批轨迹 |
+| 审批工作台 `/workbench` | 我的待办（含角色任务）、我已处理、我发起的（显示流程名称） |
+| 发起申请 `/start` | 按分类列出可发起的表单流程；填写表单提交，服务端字段错误回显到表单项 |
+| 审批详情 `/approvals/:id` | 同意 / 驳回或退回到指定节点 / 转交 / 加签 / 撤回 / 退回后重新提交（表单审批可修改表单）；申请内容（表单审批显示表单，证书显示变更前后对比）；按实例版本绘制的只读流程图，高亮已完成、进行中、已驳回节点和走过的路径；审批轨迹 |
 | 证书管理 `/certificates` | 申请新增 / 变更 / 注销，审核中的证书加锁提示，申请记录 |
 | 流程定义 `/definitions` | 流程列表、新建、版本历史（可基于任一历史版本编辑） |
-| 流程设计器 `/designer/:key` | 从左侧面板拖放节点到任意位置、拖到连线上自动插入（A→新节点→B）、撤销 / 重做（Ctrl+Z / Ctrl+Y）；属性面板配置审批人、审批方式、条件分支、动作步骤、节点通知、处理时限；流程级通知；自动排版、服务端校验、发布新版本（仅 Admin） |
+| 流程设计器 `/designer/:key` | 三个页签：**流程**（画布）/ **表单**（字段拖入与排序、属性、明细表、预览）/ **发起设置**（发起中心、分类、发起角色、标题模板）。画布：从左侧面板拖放节点到任意位置、拖到连线上自动插入（A→新节点→B）、撤销 / 重做（Ctrl+Z / Ctrl+Y）；属性面板配置审批人、审批方式、条件分支、动作步骤、节点通知、处理时限；流程级通知；自动排版、服务端校验、发布新版本（仅 Admin） |
 | 站内信（右上角铃铛） | 未读数、消息列表、点击跳转审批详情 |
 | 投递记录 `/outbox` | 外部渠道通知与异步动作的投递状态、重试次数、错误、手动重试；演示用 Webhook 接收端可模拟故障（仅 Admin） |
 
 ```
-web/approval-ui/src
-├─ api/                 后端接口与类型
+web/packages/approval-ui/src         @approval/ui
+├─ index.ts / config.ts / routes.ts  插件、配置（apiBase、headers、businessPanels…）、createApprovalRoutes()
+├─ api/                              审批接口与类型
+├─ components/                       MessageBell、UserPicker（基于用户目录的远程搜索）
+├─ composables/                      useApprovalUser（/me）、useDirectory、useAsyncData
 ├─ features/
-│  ├─ flow/             流程模型转换（flowModel.ts，含单元测试）、画布、节点卡片、只读流程图
-│  ├─ designer/         设计器状态（useFlowDesigner）与面板组件
-│  ├─ approval/         审批详情：操作栏、轨迹、业务面板注册表（businessPanels.ts）
-│  ├─ certificates/     证书业务组件
-│  ├─ definitions/      流程定义列表
-│  └─ workbench/        工作台列表
-└─ views/               路由页面（只做组合）
+│  ├─ flow/      流程模型（flowModel.ts，含单元测试）、画布、节点卡片、只读流程图
+│  ├─ designer/  设计器状态（useFlowDesigner，撤销 / 重做）与面板
+│  ├─ forms/     表单模型（formModel.ts，含单元测试）、DynamicForm、FormDesigner、字段属性、发起设置
+│  ├─ approval/  审批详情：操作栏、轨迹
+│  └─ workbench/ definitions/
+└─ views/                            路由页面（只做组合）
+
+web/apps/demo/src                    示例宿主：main.ts（插件配置）、router.ts、布局、证书业务、演示用户切换
 ```
 
-**接入新业务的前端部分**：在 `features/approval/businessPanels.ts` 注册 `BusinessType → 详情组件`（组件接收 `businessKey`），审批详情页即可展示该业务的单据内容；未注册的业务显示原始表单数据。
+**接入新业务的前端部分**：在插件选项 `businessPanels` 中注册 `BusinessType → 详情组件`（组件接收 `businessKey`），审批详情页即可展示该业务的单据内容；表单审批自动按表单展示；其他未注册的业务显示原始表单数据。
 
 ## 核心概念
 
@@ -105,7 +118,84 @@ public sealed class ContractApprovalHandler(AppDbContext db) : IApprovalBusiness
 }
 ```
 
-通用审批接口（待办、同意、驳回、转交、撤回、详情）所有业务共用，参见 `samples/Certificate.Api/Endpoints/ApprovalEndpoints.cs`。
+通用审批接口（待办、同意、驳回、转交、撤回、详情等）所有业务共用，由 `Approval.AspNetCore` 提供，见下一节。
+
+## 接入你的系统
+
+**后端（ASP.NET Core）**
+
+```csharp
+builder.Services.AddScoped<IApprovalIdentityProvider, MyIdentityProvider>();     // 用户 → 角色（必需）
+builder.Services.AddScoped<IApprovalUserDirectory, MyUserDirectory>();           // 用户搜索 / 角色列表（可选，前端用户选择器使用）
+builder.Services.AddApprovalAspNetCore(o => o.AdminPolicy = "ApprovalAdmin");   // 当前用户默认取 Claims（NameIdentifier / sub）
+builder.Services
+    .AddApprovalWorkflow<AppDbContext>()
+    .AddFormApprovals()                                  // 可选：启用表单审批（发起中心）
+    .AddBusinessHandler<ContractApprovalHandler>();      // 可选：业务审批
+
+app.UseExceptionHandler();             // 宿主自有接口抛出的 ApprovalException 也转为 ProblemDetails
+app.MapApprovalEndpoints()             // 默认前缀 /api/approval，返回 RouteGroupBuilder
+   .RequireAuthorization();            // 可继续追加授权、CORS 等约定
+```
+
+| 扩展点 | 说明 |
+|---|---|
+| `IApprovalCurrentUser` | 从请求识别当前用户；默认 `ClaimsApprovalCurrentUser`，示例用请求头实现 `DemoCurrentUser`。返回 null 时接口返回 401 |
+| `IApprovalUserDirectory` | `SearchUsersAsync` / `GetUsersAsync` / `ListRolesAsync`；未注册时 `directory/*` 返回 501，前端选择器可手动输入用户 ID |
+| `ApprovalAspNetCoreOptions` | `AdminPolicy`（授权策略，优先）或 `AdminRole`（默认 `Admin`）控制发布流程与投递记录；`UseStringEnums`（默认添加 `JsonStringEnumConverter`，前端依赖字符串枚举）；`EnableOutboxEndpoints` |
+| 宿主自有接口 | `http.GetApprovalUserId()` 获取当前用户、`http.EnsureApprovalAdminAsync()` 校验管理员 |
+
+接口一览：`me`、`directory/users|roles`、`todo`、`done`、`started`、`instances/*`、`tasks/{id}/approve|reject|transfer|add-sign|resubmit|return-targets`、`definitions/*`、`meta`、`forms/startable`、`forms/{key}`、`forms/{key}/start`、`messages/*`、`outbox/*`。错误统一为 ProblemDetails：`title` 为中文提示，`code` 为错误码（`NotFound`、`Forbidden`、`Unauthorized`、`Conflict`、`Validation`…），表单校验失败为 400 且 `errors` 为“字段路径 → 错误”（明细单元格如 `items.0.amount`）。
+
+**前端（Vue 3 + Element Plus + vue-router）**
+
+```ts
+import { ApprovalUI, createApprovalRoutes } from '@approval/ui'
+import '@approval/ui/style.css'        // 以 dist 方式安装时引入；workspace 源码方式不需要
+
+app.use(ElementPlus).use(ApprovalUI, {
+  apiBase: '/api/approval',
+  headers: () => ({ Authorization: `Bearer ${getToken()}` }),
+  onUnauthorized: () => router.push('/login'),
+  businessPanels: { Contract: defineAsyncComponent(() => import('./ContractPanel.vue')) },   // 审批详情中的业务单据（props：businessKey）
+})
+
+const router = createRouter({
+  history: createWebHistory(),
+  routes: [{ path: '/', component: MyLayout, children: [...createApprovalRoutes(), /* 你的页面 */] }],
+})
+```
+
+页面路由：`workbench`、`approvals/:id`、`start`、`start/:key`、`definitions`、`designer/:key`、`outbox`（路由名见 `approvalRouteNames`）。组件 `MessageBell`、`UserPicker`、`DynamicForm`、`FormDesigner`、`FlowViewer`、`ApprovalTimeline` 可单独使用。宿主托管前端时，含点号的流程标识（如 `/designer/hr.leave`）需单独声明回退路由，见示例 `Program.cs`。
+
+## 表单审批
+
+流程定义 JSON 中的 `form` 与 `settings` 随流程版本一起发布，进行中的实例按发起时的版本展示与校验：
+
+```jsonc
+{
+  "settings": { "startable": true, "category": "人事", "initiatorRoles": [], "titleTemplate": "{申请人}的请假申请（{form.days} 天）" },
+  "form": { "fields": [
+    { "key": "days", "label": "天数", "type": "Number", "required": true, "min": 0.5, "max": 30, "precision": 1, "span": 12 },
+    { "key": "handover", "label": "交接人", "type": "User", "span": 12 },
+    { "key": "items", "label": "明细", "type": "Table", "maxRows": 50, "columns": [
+      { "key": "name", "label": "项目", "type": "Text", "required": true },
+      { "key": "amount", "label": "金额", "type": "Money", "required": true, "sum": true } ] }
+  ] },
+  "startNodeId": "start", "nodes": { "...": "..." }
+}
+```
+
+| 能力 | 说明 |
+|---|---|
+| 字段类型 | `Text`、`TextArea`、`Number`、`Money`、`Date`、`DateRange`、`Select`、`MultiSelect`、`Radio`、`Switch`、`User`、`Users`、`Table`（明细，列支持 Text / Number / Money / Date / Select）、`Description`（说明文字） |
+| 服务端校验 | 必填、类型、选项、范围、精度、长度、行数；剔除未定义字段、数字字符串转数字；人员字段校验用户存在（注册了用户目录时）。前端规则与服务端一致 |
+| 条件分支 | 直接写字段标识：`days > 3`、`leaveType == "annual"`；明细合计为 `{表格}_{列}_sum`，如 `items_amount_sum > 5000` |
+| 审批人 / 通知 | 审批人规则“表单字段”选择人员字段（如交接人）；消息模板与动作参数可用 `{form.days}` |
+| 发起控制 | 只有 `startable` 的流程出现在发起中心（默认关闭，业务审批的流程不会混入）；`initiatorRoles` 限制发起角色（服务端校验） |
+| 退回修改 | 退回发起人后，发起人可修改表单重新提交（按实例绑定版本校验，标题随之更新）；业务审批的数据由业务单据决定，不能在审批中修改 |
+
+示例中的 `Flows/leave.json`（请假：超过 3 天走负责人，抄送人事与交接人）和 `Flows/expense.json`（报销：明细合计超过 5000 走财务 + 负责人并行会审）演示了以上能力。
 
 ## 动作、通知与超时
 
@@ -179,19 +269,24 @@ cd D:\Study\CSharp\Workflow
 dotnet test                                                        # 后端单元测试
 
 # 方式一：构建前端后由后端托管（打开 http://localhost:5199）
-cd web/approval-ui; pnpm install; pnpm build; cd ../..
+cd web; pnpm install; pnpm build; cd ..          # 示例前端构建到 samples/Certificate.Api/wwwroot
 dotnet run --project samples/Certificate.Api --urls http://localhost:5199
 
 # 方式二：前端开发模式（热更新，打开 http://localhost:5173，/api 代理到 5199）
 dotnet run --project samples/Certificate.Api --urls http://localhost:5199
-cd web/approval-ui; pnpm dev
+cd web; pnpm dev
 
-# 前端检查
-cd web/approval-ui; pnpm typecheck; pnpm test
+# 前端检查（workspace 内所有包）
+cd web; pnpm typecheck; pnpm test
+
+# 打包
+dotnet pack src/Approval.Core -c Release -o output/packages
+dotnet pack src/Approval.AspNetCore -c Release -o output/packages
+cd web; pnpm build:lib                                            # @approval/ui → web/packages/approval-ui/dist（ES 模块 + d.ts + css）
 ./samples/Certificate.Api/smoke-test.ps1                           # 接口层端到端演示
 ```
 
-示例用请求头 `X-User-Id` 模拟登录用户，用户和角色配置在 `appsettings.json` 的 `DemoUsers` 中，前端右上角可切换演示用户（发布流程需切换到 `admin`），**仅供演示**。
+示例用请求头 `X-User-Id` 模拟登录用户（`DemoCurrentUser`），用户、姓名和角色配置在 `appsettings.json` 的 `DemoUsers` 中，前端右上角可切换演示用户（发布流程需切换到 `admin`；表单审批可用 `hana` 人事、`fiona` 财务），**仅供演示**。
 
 ## 已知限制 / 后续扩展
 
@@ -202,3 +297,5 @@ cd web/approval-ui; pnpm typecheck; pnpm test
 - 同步 HTTP 动作在事务提交前执行，若随后提交失败外部调用已发生，有副作用的调用请使用异步模式。
 - 表结构有变化（`ApprovalMessages`、`ApprovalOutbox` 表，`ApprovalTasks` 的时限、`Kind`、`ParentTaskId`、`Round` 列，`ApprovalInstances` 的 `StateJson`、`Round` 列）：旧演示库需删除 `.db` 文件重建，正式项目请生成 EF Core 迁移。
 - 示例使用 `EnsureCreated` 建库，正式项目请改用 EF Core Migrations。
+- 表单审批暂不支持：附件上传、审批人在某节点编辑部分字段、公式 / 计算字段（仅明细合计）、草稿保存；表单版本跟随流程版本。
+- 包未发布到 nuget.org / npm，可用 `output/packages` 下的本地包或 workspace 引用。

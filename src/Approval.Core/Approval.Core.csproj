@@ -1,9 +1,13 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <PackageId>Approval.Core</PackageId>
+    <Version>0.1.0</Version>
+    <Description>通用审批流程引擎：多版本流程定义、或签 / 会签 / 依次审批、条件与并行分支、退回 / 转交 / 加签、表单审批、通知与 Outbox 可靠投递、超时处理。基于 EF Core，与宿主业务同一事务。</Description>
+    <PackageTags>approval;workflow;efcore</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>
