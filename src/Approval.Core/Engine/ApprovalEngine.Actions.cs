@@ -3,6 +3,7 @@ using Approval.Core.Actions;
 using Approval.Core.Conditions;
 using Approval.Core.Definitions;
 using Approval.Core.Domain;
+using Approval.Core.Persistence;
 using Approval.Core.Templates;
 using Microsoft.Extensions.Logging;
 
@@ -30,6 +31,8 @@ public sealed partial class ApprovalEngine
                 continue;
             }
 
+            // 动作可通过注入的 DbContext 修改数据：失败后继续流转时撤销其做了一半的修改，避免随审批一起提交
+            var checkpoint = step.ContinueOnError ? ChangeTrackerCheckpoint.Create(_db) : null;
             ApprovalActionResult result;
             try
             {
@@ -47,6 +50,7 @@ public sealed partial class ApprovalEngine
                 if (!step.ContinueOnError)
                     throw new ApprovalException($"节点 '{node.Name}' 的动作 '{label}' 执行失败：{ex.Message}", ex);
 
+                checkpoint!.Rollback();
                 _logger.LogWarning(ex, "动作执行失败（已配置失败继续）：{Flow} {Node} {Step}", instance.DefinitionKey, node.Id, label);
                 AddLog(instance, node, ApprovalAction.Action, SystemOperator, Truncate($"{label}：执行失败（已忽略）：{ex.Message}", 1000));
                 continue;

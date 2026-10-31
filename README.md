@@ -215,6 +215,7 @@ flowchart LR
 |---|---|
 | 动作节点 `Action` | 依次执行步骤：内置 `Http`（主机白名单防 SSRF、`Idempotency-Key`）、`Script`（Jint 沙箱，限制时间 / 内存 / 语句数 / 递归，无 .NET 访问）、宿主注册的动作（`AddActionHandler<T>()`，设计器按参数描述自动生成表单） |
 | 同步 / 异步 | 同步在审批事务内执行，失败回滚（可选“失败继续”），输出写入表单变量供后续条件使用，如 `risk.body.level == "high"`；异步写入 Outbox 由后台执行并重试 |
+| 动作的数据修改 | 注册动作可注入宿主 DbContext 修改业务数据，**不要自行调用 SaveChanges**：同步动作的修改随审批一起提交；异步动作的修改与投递结果在同一事务提交。动作失败时，其做了一半的修改会被撤销（“失败继续”时也是），只记录失败信息；异步动作自行 SaveChanges 的部分也会随事务回滚 |
 | 参数模板 | `{标题}`、`{申请人}`、`{form.certNo}`、`{appBaseUrl}` 等；`{x\|json}` / `{x\|url}` 指定转义，HTTP 请求体默认按 JSON 转义；脚本代码不做替换（防注入） |
 | 节点通知 | 事件：到达节点、同意、驳回、转交、超时提醒、流程结束；接收人：当前审批人、申请人、已审批过的人、角色、用户、表单字段；渠道：站内信（内置）+ 已注册渠道；模板同上 |
 | 可靠发送 | 站内信与 Outbox 与审批数据同一事务提交；后台任务投递，失败按 `BaseRetryDelay × 2^(n-1)` 重试，超过次数标记失败可手动重试；多实例通过租约 + 并发令牌防重复 |
@@ -295,6 +296,7 @@ cd web; pnpm build:lib                                            # @approval/ui
 - `SingleRunningInstancePerBusiness` 是应用层检查，极端并发下如需严格保证，可在数据库层加唯一约束。
 - 旧版 `IApprovalNotifier` 仍保留（提交后同步调用、失败只记日志），新代码请使用通知规则 + 渠道（Outbox 可靠投递）。
 - 同步 HTTP 动作在事务提交前执行，若随后提交失败外部调用已发生，有副作用的调用请使用异步模式。
+- 动作失败时的数据回滚只针对数据库：已经发出的外部调用无法撤回（异步动作请用 `IdempotencyKey` 保证重试幂等）。数据库执行策略开启自动重试（如 SQL Server `EnableRetryOnFailure`）时异步投递不使用事务，仅撤销未保存的修改；同步动作不应自行 SaveChanges（会连同审批的中间状态一起提交）。
 - 表结构有变化（`ApprovalMessages`、`ApprovalOutbox` 表，`ApprovalTasks` 的时限、`Kind`、`ParentTaskId`、`Round` 列，`ApprovalInstances` 的 `StateJson`、`Round` 列）：旧演示库需删除 `.db` 文件重建，正式项目请生成 EF Core 迁移。
 - 示例使用 `EnsureCreated` 建库，正式项目请改用 EF Core Migrations。
 - 表单审批暂不支持：附件上传、审批人在某节点编辑部分字段、公式 / 计算字段（仅明细合计）、草稿保存；表单版本跟随流程版本。

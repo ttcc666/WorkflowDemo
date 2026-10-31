@@ -13,7 +13,18 @@ namespace Approval.Core.Tests;
 
 public sealed class TestDbContext(DbContextOptions<TestDbContext> options) : DbContext(options)
 {
-    protected override void OnModelCreating(ModelBuilder modelBuilder) => modelBuilder.ConfigureApproval();
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        modelBuilder.ConfigureApproval();
+        modelBuilder.Entity<TestRecord>().HasIndex(x => x.Name).IsUnique();
+    }
+}
+
+/// <summary>宿主业务表（动作通过 DbContext 写入，用于验证失败时的回滚）。</summary>
+public sealed class TestRecord
+{
+    public Guid Id { get; set; }
+    public required string Name { get; set; }
 }
 
 /// <summary>用户 → 角色的内存映射。</summary>
