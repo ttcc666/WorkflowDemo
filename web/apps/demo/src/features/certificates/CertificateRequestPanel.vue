@@ -1,16 +1,19 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { certificateApi } from '@/api/certificates'
 import type { CertificateData } from '@/api/types'
-import { useAsyncData } from '@approval/ui'
+import { useAsyncData, approvalUserKey } from '@approval/ui'
 import { formatDateTime } from '@approval/ui'
 import { certificateFieldLabels, certTypeLabels, operationLabels, requestStatusLabels } from '@/utils/labels'
 
 /** 审批详情中的证书申请内容：变更前后对比。由 businessPanels 按 BusinessType=Certificate 加载。 */
 const props = defineProps<{ businessKey: string }>()
+const router = useRouter()
 
 const { data: detail, loading } = useAsyncData((signal) => certificateApi.requestDetail(props.businessKey, signal), {
-  watch: [() => props.businessKey],
+  watch: [() => props.businessKey, approvalUserKey],
+  resetOnReload: true,
 })
 
 const fieldOrder = Object.keys(certificateFieldLabels)
@@ -31,7 +34,7 @@ const rows = computed(() => {
     return {
       field,
       label: certificateFieldLabels[field],
-      before: d.request.operation === 'Create' ? '—' : display(field, change ? change.before : d.request.snapshot[camel]),
+      before: d.request.operation === 'Create' ? '—' : !d.request.hasHistoricalBaseline ? '历史基线未记录' : display(field, d.request.beforeSnapshot?.[camel]),
       after: display(field, d.request.snapshot[camel]),
       changed: d.request.operation === 'Update' && !!change,
     }
@@ -44,6 +47,9 @@ const status = computed(() => (detail.value ? requestStatusLabels[detail.value.r
 <template>
   <div v-loading="loading">
     <template v-if="detail">
+      <el-alert v-if="!detail.request.hasHistoricalBaseline" type="info" :closable="false" title="该历史申请未记录提交前基线，无法还原当时的变更对比。" />
+      <el-button v-if="detail.request.canReapply" type="primary" plain class="request-alert"
+        @click="router.push({ name: 'certificates', query: { reapply: detail.request.id } })">修改后重新申请</el-button>
       <el-descriptions :column="3" size="small" class="request-meta">
         <el-descriptions-item label="申请类型">
           <el-tag size="small" effect="plain">{{ operationLabels[detail.request.operation] }}证书</el-tag>
@@ -60,7 +66,7 @@ const status = computed(() => (detail.value ? requestStatusLabels[detail.value.r
 
       <el-table :data="rows" size="small" border :row-class-name="({ row }) => (row.changed ? 'row-changed' : '')">
         <el-table-column prop="label" label="字段" width="110" />
-        <el-table-column v-if="detail.request.operation !== 'Create'" prop="before" label="当前值" />
+        <el-table-column v-if="detail.request.operation !== 'Create'" prop="before" label="提交前" />
         <el-table-column prop="after" :label="detail.request.operation === 'Update' ? '变更后' : '申请内容'">
           <template #default="{ row }">
             <span :class="{ 'value-changed': row.changed }">{{ row.after }}</span>

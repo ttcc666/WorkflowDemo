@@ -30,23 +30,40 @@ public class DefaultApprovalAccessPolicy(ApprovalDbContextAccessor accessor, IAp
         // 角色一次取全，再在查询中判断，避免逐个任务调用 IsInRoleAsync
         var roles = (await Identity.GetRolesAsync(userId, ct)).ToList();
 
-        var taskNodes = await Db.Set<ApprovalTask>().AsNoTracking()
-            .Where(t => t.InstanceId == instanceId
-                        && (t.HandledBy == userId
-                            || (t.AssigneeKind == AssigneeKind.User && t.AssigneeValue == userId)
-                            || (t.AssigneeKind == AssigneeKind.Role && roles.Contains(t.AssigneeValue))))
+        var taskNodes = await ParticipatingTasks(userId, roles)
+            .Where(t => t.InstanceId == instanceId)
             .Select(t => t.NodeId)
             .Distinct()
             .ToListAsync(ct);
 
-        var ccNodes = await Db.Set<ApprovalCarbonCopy>().AsNoTracking()
-            .Where(c => c.InstanceId == instanceId
-                        && ((c.AssigneeKind == AssigneeKind.User && c.AssigneeValue == userId)
-                            || (c.AssigneeKind == AssigneeKind.Role && roles.Contains(c.AssigneeValue))))
+        var ccNodes = await ParticipatingCopies(userId, roles)
+            .Where(c => c.InstanceId == instanceId)
             .Select(c => c.NodeId)
             .Distinct()
             .ToListAsync(ct);
 
         return [.. taskNodes, .. ccNodes];
     }
+
+    /// <summary>默认规则的批量可见范围，供宿主在数据库内分页。扩展查看规则时应同时重写此方法。</summary>
+    public virtual async Task<IQueryable<ApprovalInstance>> VisibleInstancesAsync(ApprovalViewer viewer, CancellationToken ct)
+    {
+        var instances = Db.Set<ApprovalInstance>().AsNoTracking();
+        if (viewer.IsAdmin) return instances;
+        var roles = (await Identity.GetRolesAsync(viewer.UserId, ct)).ToList();
+        var tasks = ParticipatingTasks(viewer.UserId, roles);
+        var copies = ParticipatingCopies(viewer.UserId, roles);
+        return instances.Where(i => i.InitiatorId == viewer.UserId
+            || tasks.Any(t => t.InstanceId == i.Id) || copies.Any(c => c.InstanceId == i.Id));
+    }
+
+    private IQueryable<ApprovalTask> ParticipatingTasks(string userId, List<string> roles) =>
+        Db.Set<ApprovalTask>().AsNoTracking().Where(t => t.HandledBy == userId
+            || (t.AssigneeKind == AssigneeKind.User && t.AssigneeValue == userId)
+            || (t.AssigneeKind == AssigneeKind.Role && roles.Contains(t.AssigneeValue)));
+
+    private IQueryable<ApprovalCarbonCopy> ParticipatingCopies(string userId, List<string> roles) =>
+        Db.Set<ApprovalCarbonCopy>().AsNoTracking().Where(c =>
+            (c.AssigneeKind == AssigneeKind.User && c.AssigneeValue == userId)
+            || (c.AssigneeKind == AssigneeKind.Role && roles.Contains(c.AssigneeValue)));
 }

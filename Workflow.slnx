@@ -9,5 +9,6 @@
   <Folder Name="/tests/">
     <Project Path="tests/Approval.AspNetCore.Tests/Approval.AspNetCore.Tests.csproj" />
     <Project Path="tests/Approval.Core.Tests/Approval.Core.Tests.csproj" />
+    <Project Path="tests/Certificate.Api.Tests/Certificate.Api.Tests.csproj" />
   </Folder>
 </Solution>

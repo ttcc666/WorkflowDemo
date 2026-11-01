@@ -78,6 +78,7 @@ public sealed partial class ApprovalFormService(
         return await engine.StartAsync(new StartApprovalRequest(definition.Key, BusinessType, Guid.NewGuid().ToString("N"), userId)
         {
             InstanceId = instanceId,
+            DefinitionId = definition.Id,
             Title = RenderTitle(flow.Settings!, definition.Name, userId, clock.GetUtcNow().UtcDateTime, json),
             FormData = json,
             Comment = comment
@@ -221,9 +222,12 @@ public sealed partial class ApprovalFormService(
         var template = string.IsNullOrWhiteSpace(settings.TitleTemplate) ? "{流程名} - {申请人}" : settings.TitleTemplate;
         var variables = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
         {
-            ["流程名"] = flowName, ["flowName"] = flowName,
-            ["申请人"] = userId, ["initiator"] = userId,
-            ["发起时间"] = createdAt, ["createdAt"] = createdAt
+            ["流程名"] = flowName,
+            ["flowName"] = flowName,
+            ["申请人"] = userId,
+            ["initiator"] = userId,
+            ["发起时间"] = createdAt,
+            ["createdAt"] = createdAt
         };
         var form = FormData.Parse(formJson);
         variables["form"] = form;

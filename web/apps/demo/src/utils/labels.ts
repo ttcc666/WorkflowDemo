@@ -19,11 +19,12 @@ export const requestStatusLabels: Record<RequestStatus, { text: string; type: Ta
   Approved: { text: '已生效', type: 'success' },
   Rejected: { text: '已驳回', type: 'danger' },
   Withdrawn: { text: '已撤回', type: 'info' },
+  Terminated: { text: '已终止', type: 'info' },
 }
 
 export const certificateFieldLabels: Record<string, string> = {
-  CertNo: '证书编号',
-  Name: '证书名称',
+  CertNo: '注册证编号',
+  Name: '注册证名称',
   Holder: '持有人',
   CertType: '证书类型',
   IssueDate: '发证日期',

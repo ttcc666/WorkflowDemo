@@ -131,6 +131,12 @@ public sealed class FlowNode
     /// <summary>审批节点：审批人是否可以加签。</summary>
     public bool AllowAddSign { get; set; } = true;
 
+    /// <summary>是否允许处理人转交；管理员改派仍由独立授权和资格规则控制。</summary>
+    public bool AllowTransfer { get; set; } = true;
+
+    /// <summary>处理、改派和加签时重新核对原审批人规则与用户目录，避免岗位任务变为任意用户任务。</summary>
+    public bool RequireQualifiedAssignee { get; set; }
+
     /// <summary>动作步骤（仅 Action 节点），按顺序执行。</summary>
     public List<ActionStep> Actions { get; set; } = [];
 

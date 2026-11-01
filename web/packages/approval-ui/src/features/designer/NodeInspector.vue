@@ -85,6 +85,12 @@ const modeHelp: Record<ApproveMode, string> = {
               <el-checkbox :model-value="data.allowAddSign" @update:model-value="(v) => emit('update', { allowAddSign: !!v })">
                 加签（前加签 / 后加签 / 并加签）
               </el-checkbox>
+              <el-checkbox :model-value="data.allowTransfer" @update:model-value="(v) => emit('update', { allowTransfer: !!v })">
+                转交
+              </el-checkbox>
+              <el-checkbox :model-value="data.requireQualifiedAssignee" @update:model-value="(v) => emit('update', { requireQualifiedAssignee: !!v })">
+                处理及改派时必须符合原岗位资格
+              </el-checkbox>
             </div>
           </el-form-item>
 

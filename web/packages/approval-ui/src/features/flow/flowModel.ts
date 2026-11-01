@@ -67,6 +67,8 @@ export interface FlowNodeDef {
   allowReturn?: boolean
   /** 审批节点：允许加签，默认 true */
   allowAddSign?: boolean
+  allowTransfer?: boolean
+  requireQualifiedAssignee?: boolean
   actions?: ActionStep[]
   notifications?: NotificationRule[]
   timeout?: TimeoutPolicy | null
@@ -99,6 +101,8 @@ export interface FlowNodeData {
   emptyApproverPolicy: EmptyApproverPolicy
   allowReturn: boolean
   allowAddSign: boolean
+  allowTransfer: boolean
+  requireQualifiedAssignee: boolean
   actions: ActionStep[]
   notifications: NotificationRule[]
   timeout: TimeoutPolicy | null
@@ -276,6 +280,8 @@ export function toFlowElements(definition: FlowDefinition): { nodes: FlowNode[];
       emptyApproverPolicy: def.emptyApproverPolicy ?? 'Error',
       allowReturn: def.allowReturn ?? true,
       allowAddSign: def.allowAddSign ?? true,
+      allowTransfer: def.allowTransfer ?? true,
+      requireQualifiedAssignee: def.requireQualifiedAssignee ?? false,
       actions: clone(def.actions ?? []),
       notifications: clone(def.notifications ?? []),
       timeout: def.timeout ? { ...def.timeout } : null,
@@ -325,6 +331,8 @@ export function toDefinition(nodes: FlowNode[], edges: FlowEdge[], flowNotificat
       // 只保存非默认值，保持定义简洁
       if (!data.allowReturn) def.allowReturn = false
       if (!data.allowAddSign) def.allowAddSign = false
+      if (!data.allowTransfer) def.allowTransfer = false
+      if (data.requireQualifiedAssignee) def.requireQualifiedAssignee = true
       if (data.timeout) def.timeout = { ...data.timeout }
     }
     if (data.type === 'Action') def.actions = clone(data.actions)
@@ -525,6 +533,8 @@ export function createNodeData(type: NodeType): FlowNodeData {
     emptyApproverPolicy: 'Error',
     allowReturn: true,
     allowAddSign: true,
+    allowTransfer: true,
+    requireQualifiedAssignee: false,
     timeout: null,
     fieldPermissions: {},
     ...defaults[type],

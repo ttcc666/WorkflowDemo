@@ -1,91 +1,32 @@
 <script setup lang="ts">
-import { shallowRef } from 'vue'
-import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
-import { errorMessage } from '@approval/ui'
-import type { Certificate, CertificateData } from '@/api/types'
 import CertificateFormDialog from '@/features/certificates/CertificateFormDialog.vue'
 import CertificateHistoryDrawer from '@/features/certificates/CertificateHistoryDrawer.vue'
 import CertificateTable from '@/features/certificates/CertificateTable.vue'
+import CertificateDiagnosticsPanel from '@/features/certificates/CertificateDiagnosticsPanel.vue'
 import RevokeDialog from '@/features/certificates/RevokeDialog.vue'
-import { findApprovalInstanceId, useCertificates } from '@/features/certificates/useCertificates'
+import { useCertificateWorkbench } from '@/features/certificates/useCertificateWorkbench'
 
-const router = useRouter()
-const { certificates, loading, reload, submitCreate, submitUpdate, submitRevoke } = useCertificates()
-
-const selected = shallowRef<Certificate | null>(null)
-const formVisible = shallowRef(false)
-const revokeVisible = shallowRef(false)
-const historyVisible = shallowRef(false)
-const submitting = shallowRef(false)
-
-function openCreate() {
-  selected.value = null
-  formVisible.value = true
-}
-
-function openEdit(certificate: Certificate) {
-  selected.value = certificate
-  formVisible.value = true
-}
-
-function openRevoke(certificate: Certificate) {
-  selected.value = certificate
-  revokeVisible.value = true
-}
-
-function openHistory(certificate: Certificate) {
-  selected.value = certificate
-  historyVisible.value = true
-}
-
-async function openRequest(requestId: string) {
-  try {
-    const instanceId = await findApprovalInstanceId(requestId)
-    if (instanceId) await router.push({ name: 'approval-detail', params: { id: instanceId } })
-    else ElMessage.warning('未找到对应的审批，或你无权查看')
-  } catch (e) {
-    ElMessage.error(errorMessage(e))
-  }
-}
-
-async function submit(action: () => Promise<string>, close: () => void) {
-  submitting.value = true
-  try {
-    const requestId = await action()
-    close()
-    ElMessage.success('已提交审核')
-    await openRequest(requestId)
-  } catch (e) {
-    ElMessage.error(errorMessage(e))
-  } finally {
-    submitting.value = false
-  }
-}
-
-function onFormSubmit(data: CertificateData) {
-  const target = selected.value
-  void submit(() => (target ? submitUpdate(target.id, data) : submitCreate(data)), () => (formVisible.value = false))
-}
-
-function onRevokeSubmit(reason: string) {
-  const target = selected.value!
-  void submit(() => submitRevoke(target.id, reason), () => (revokeVisible.value = false))
-}
+const { certificates, loading, reload, page, pageSize, total, filters, search,
+  selected, source, formVisible, revokeVisible, historyVisible, submitting, serverErrors,
+  openCreate, openEdit, openRevoke, openHistory, openRequest, onFormSubmit, onRevokeSubmit } = useCertificateWorkbench()
 </script>
 
 <template>
   <el-card shadow="never">
     <template #header>
       <div class="card-header">
-        <span>证书管理</span>
+        <span>注册证管理</span>
         <div>
           <el-button text type="primary" @click="reload">刷新</el-button>
-          <el-button type="primary" @click="openCreate">申请新增</el-button>
+          <el-button type="primary" @click="openCreate">登记注册证</el-button>
         </div>
       </div>
     </template>
 
+    <div class="filters">
+      <el-input v-model="filters.keyword" clearable placeholder="证号、名称或持有人" @keyup.enter="search" />
+      <el-button @click="search">查询</el-button>
+    </div>
     <CertificateTable
       :certificates="certificates ?? []"
       :loading="loading"
@@ -94,15 +35,23 @@ function onRevokeSubmit(reason: string) {
       @history="openHistory"
       @open-pending="openRequest"
     />
+    <el-pagination v-model:current-page="page" v-model:page-size="pageSize" :total="total"
+      :page-sizes="[20, 50, 100]" layout="total, sizes, prev, pager, next" class="pagination" />
   </el-card>
 
-  <CertificateFormDialog v-model:visible="formVisible" :certificate="selected" :submitting="submitting" @submit="onFormSubmit" />
-  <RevokeDialog v-model:visible="revokeVisible" :certificate="selected" :submitting="submitting" @submit="onRevokeSubmit" />
+  <CertificateDiagnosticsPanel />
+
+  <CertificateFormDialog v-model:visible="formVisible" :certificate="selected" :submitting="submitting"
+    :initial-data="source?.snapshot" :server-errors="serverErrors" @submit="onFormSubmit" />
+  <RevokeDialog v-model:visible="revokeVisible" :certificate="selected" :submitting="submitting"
+    :initial-reason="source?.reason ?? undefined" :error="serverErrors?.reason?.join('；')" @submit="onRevokeSubmit" />
   <CertificateHistoryDrawer v-if="selected && historyVisible" v-model:visible="historyVisible" :certificate="selected"
     @open-request="openRequest" />
 </template>
 
 <style scoped>
+.filters { display: flex; gap: 8px; max-width: 460px; margin-bottom: 16px; }
+.pagination { margin-top: 16px; justify-content: flex-end; }
 .card-header {
   display: flex;
   align-items: center;

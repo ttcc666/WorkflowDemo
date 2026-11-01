@@ -138,6 +138,7 @@ const onReassign = (task: ApprovalTask, to: string, reason: string) =>
         :initiator-id="instance.initiatorId"
         :allow-return="nodeOptions.allowReturn"
         :allow-add-sign="nodeOptions.allowAddSign"
+        :allow-transfer="nodeOptions.allowTransfer"
         :busy="busy"
         :resubmit-form="resubmitForm"
         :form-data="formValues"

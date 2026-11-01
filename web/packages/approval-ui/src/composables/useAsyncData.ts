@@ -8,6 +8,8 @@ interface UseAsyncDataOptions<T> {
   initial?: T
   /** 加载失败时是否弹出错误提示，默认 true */
   notifyError?: boolean
+  /** 身份或资源变化时清空旧数据，避免失败响应之后继续展示前一份敏感内容 */
+  resetOnReload?: boolean
 }
 
 export interface AsyncData<T> {
@@ -28,6 +30,7 @@ export function useAsyncData<T>(loader: (signal: AbortSignal) => Promise<T>, opt
 
   async function reload() {
     controller?.abort()
+    if (options.resetOnReload) data.value = options.initial
     const current = (controller = new AbortController())
     loading.value = true
     error.value = null

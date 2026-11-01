@@ -11,4 +11,7 @@ public sealed record StartApprovalRequest(string DefinitionKey, string BusinessT
 
     /// <summary>预先指定实例 ID（如需在同一事务中关联附件等数据），为空时自动生成。</summary>
     public Guid? InstanceId { get; init; }
+
+    /// <summary>锁定已经校验过的已发布版本，避免校验与发起之间发布新版本导致规则变化。</summary>
+    public Guid? DefinitionId { get; init; }
 }

@@ -84,20 +84,20 @@ public static partial class FlowDefinitionValidator
                     break;
 
                 case NodeType.Approval or NodeType.Cc:
-                {
-                    var noun = node.Type == NodeType.Cc ? "抄送人" : "审批人";
-                    if (node.Approvers.Count == 0)
-                        errors.Add($"节点 '{key}' 未配置{noun}");
-                    foreach (var rule in node.Approvers.Where(r => !context.ApproverTypes.Contains(r.Type)))
-                        errors.Add($"节点 '{key}' 使用了未注册的审批人类型 '{rule.Type}'");
-                    foreach (var rule in node.Approvers) ValidateRuleValue(errors, $"节点 '{key}' 的{noun}", rule, context, userFields);
+                    {
+                        var noun = node.Type == NodeType.Cc ? "抄送人" : "审批人";
+                        if (node.Approvers.Count == 0)
+                            errors.Add($"节点 '{key}' 未配置{noun}");
+                        foreach (var rule in node.Approvers.Where(r => !context.ApproverTypes.Contains(r.Type)))
+                            errors.Add($"节点 '{key}' 使用了未注册的审批人类型 '{rule.Type}'");
+                        foreach (var rule in node.Approvers) ValidateRuleValue(errors, $"节点 '{key}' 的{noun}", rule, context, userFields);
 
-                    // 逐级审批等有序审批人按顺序生成任务，只有依次审批才有意义
-                    var ordered = node.Approvers.Select(r => context.ApproverDescriptors?.GetValueOrDefault(r.Type)).FirstOrDefault(d => d?.Ordered == true);
-                    if (node.Type == NodeType.Approval && ordered is not null && node.Mode != ApproveMode.Sequential)
-                        errors.Add($"节点 '{key}' 的审批人「{ordered.DisplayName}」需按顺序审批，审批方式请改为依次审批");
-                    goto default;
-                }
+                        // 逐级审批等有序审批人按顺序生成任务，只有依次审批才有意义
+                        var ordered = node.Approvers.Select(r => context.ApproverDescriptors?.GetValueOrDefault(r.Type)).FirstOrDefault(d => d?.Ordered == true);
+                        if (node.Type == NodeType.Approval && ordered is not null && node.Mode != ApproveMode.Sequential)
+                            errors.Add($"节点 '{key}' 的审批人「{ordered.DisplayName}」需按顺序审批，审批方式请改为依次审批");
+                        goto default;
+                    }
 
                 case NodeType.Action:
                     if (node.Actions.Count == 0) errors.Add($"动作节点 '{key}' 未配置任何动作");
@@ -115,6 +115,9 @@ public static partial class FlowDefinitionValidator
                 errors.Add($"节点 '{key}' 不是动作节点，不能配置动作");
             ValidateNotifications(errors, $"节点 '{key}'", node.Notifications, node.Type, context, userFields);
             if (node.Timeout is { } timeout) ValidateTimeout(errors, key, node, timeout);
+            if (node.RequireQualifiedAssignee && (node.Type != NodeType.Approval
+                || node.EmptyApproverPolicy == EmptyApproverPolicy.AutoApprove || node.Timeout?.Action == TimeoutAction.AutoApprove))
+                errors.Add($"节点 '{key}' 的岗位资格要求只能用于人工审批，不能设置自动通过");
             if (node.FieldPermissions.Count > 0) ValidateFieldPermissions(errors, key, node, definition.Form);
         }
 

@@ -139,6 +139,7 @@ export function usePagedList<T>(
 
   if (options.resetOn?.length) {
     watch(options.resetOn, () => {
+      data.data.value = undefined
       if (page.value !== 1) page.value = 1
       else void data.reload()
     })

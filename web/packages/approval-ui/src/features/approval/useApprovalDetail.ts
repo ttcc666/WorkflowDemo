@@ -51,7 +51,8 @@ export function useApprovalDetail(instanceId: Ref<string>) {
       node = undefined
     }
     const isApproval = node?.type === 'Approval'
-    return { allowReturn: isApproval && node?.allowReturn !== false, allowAddSign: isApproval && node?.allowAddSign !== false }
+    return { allowReturn: isApproval && node?.allowReturn !== false, allowAddSign: isApproval && node?.allowAddSign !== false,
+      allowTransfer: isApproval && node?.allowTransfer !== false }
   })
 
   async function reload() {

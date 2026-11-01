@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { certificateApi } from '@/api/certificates'
 import type { Certificate } from '@/api/types'
-import { useAsyncData } from '@approval/ui'
+import { usePagedList, approvalUserKey } from '@approval/ui'
 import { formatDateTime } from '@approval/ui'
 import { operationLabels, requestStatusLabels } from '@/utils/labels'
 
@@ -10,9 +10,8 @@ const props = defineProps<{ certificate: Certificate }>()
 const visible = defineModel<boolean>('visible', { required: true })
 const emit = defineEmits<{ openRequest: [requestId: string] }>()
 
-const { data: requests, loading } = useAsyncData((signal) => certificateApi.requests(props.certificate.id, signal), {
-  watch: [() => props.certificate.id],
-  initial: [],
+const { items: requests, loading, page, pageSize, total } = usePagedList((query, signal) => certificateApi.requests(props.certificate.id, query, signal), {
+  resetOn: [() => props.certificate.id, approvalUserKey],
 })
 </script>
 
@@ -30,6 +29,7 @@ const { data: requests, loading } = useAsyncData((signal) => certificateApi.requ
       </el-timeline-item>
     </el-timeline>
     <el-empty v-if="!loading && !requests?.length" description="暂无记录" />
+    <el-pagination v-model:current-page="page" v-model:page-size="pageSize" :total="total" layout="total, prev, pager, next" />
   </el-drawer>
 </template>
 

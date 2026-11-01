@@ -61,9 +61,9 @@ async function request<T>(method: string, url: string, options: RequestOptions =
 /** 基础 HTTP 客户端：附加配置的请求头，把 ProblemDetails 转为 {@link ApiError}。宿主的业务接口也可使用。 */
 export const http = {
   get: <T>(url: string, signal?: AbortSignal) => request<T>('GET', url, { signal }),
-  post: <T = void>(url: string, body?: unknown) => request<T>('POST', url, { body }),
+  post: <T = void>(url: string, body?: unknown, headers?: Record<string, string>) => request<T>('POST', url, { body, headers }),
   postJson: <T = void>(url: string, json: string) => request<T>('POST', url, { rawJson: json }),
-  put: <T = void>(url: string, body?: unknown) => request<T>('PUT', url, { body }),
+  put: <T = void>(url: string, body?: unknown, headers?: Record<string, string>) => request<T>('PUT', url, { body, headers }),
   delete: <T = void>(url: string) => request<T>('DELETE', url),
   /** 以原始请求体上传（如文件内容），headers 附加在配置的请求头之后 */
   upload: <T>(url: string, body: Blob, headers: Record<string, string>) => request<T>('POST', url, { raw: body, headers }),

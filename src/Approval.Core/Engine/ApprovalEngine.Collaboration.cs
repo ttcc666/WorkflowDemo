@@ -166,6 +166,12 @@ public sealed partial class ApprovalEngine
         var node = flow.GetNode(task.NodeId);
         if (task.Kind == ApprovalTaskKind.Resubmit || node.Type != NodeType.Approval) throw new ApprovalException("该任务不支持加签");
         if (!node.AllowAddSign) throw new ApprovalException("该节点不允许加签");
+        if (node.RequireQualifiedAssignee)
+        {
+            var qualified = await GetEligibleApproversAsync(instance, node, ct);
+            if (signers.Any(id => !qualified.Contains(id)))
+                throw new ApprovalException("加签人不具备本节点审批资格") { Code = ApprovalErrorCode.Forbidden };
+        }
         if (!_options.AllowInitiatorApprove && signers.Contains(instance.InitiatorId)) throw new ApprovalException("不能给发起人加签");
 
         var nodeTasks = CurrentTasksOf(instance, node.Id);

@@ -1,6 +1,7 @@
 {
   "name": "approval-web",
   "private": true,
+  "packageManager": "pnpm@10.20.0",
   "scripts": {
     "dev": "pnpm --filter approval-demo dev",
     "build": "pnpm --filter approval-demo build",

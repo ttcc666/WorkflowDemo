@@ -12,6 +12,7 @@ src/Approval.Core                 框架本体（EF Core Relational + DynamicExp
 src/Approval.AspNetCore           ASP.NET Core 集成：MapApprovalEndpoints() 提供全部审批接口、当前用户与用户目录抽象
 tests/Approval.Core.Tests         引擎单元测试（SQLite 内存库）
 tests/Approval.AspNetCore.Tests   接口集成测试（TestServer）
+tests/Certificate.Api.Tests      真实注册证宿主、并发、迁移、快照与恢复测试
 samples/Certificate.Api           示例宿主：证书审核（业务审批）+ 请假 / 报销（表单审批）
 web/packages/approval-ui          前端组件库 @approval/ui：工作台、审批详情、流程设计器、表单设计器、发起中心
 web/apps/demo                     示例前端：接入 @approval/ui + 证书管理页面 + 演示用户切换
@@ -272,7 +273,7 @@ builder.Services.AddApprovalWorkflow<AppDbContext>(o =>
     .AddChannel<MySmsChannel>();                                // 自定义渠道
 ```
 
-示例 `certificate.create` 流程演示了全部能力：自动预检（注册动作 + 脚本）→ 临期证书走安全审核 → 部门审核 24 小时时限与催办 → 通过后异步推送档案（HTTP）→ Webhook 通知。密钥类配置（机器人地址、SMTP 密码）请使用 user-secrets 或环境变量，勿提交到仓库。
+示例 `certificate.create` 采用注册证三级审核：部门负责人 → 质量/法规 → 负责人终审，结合数据库证号占用、提交幂等和不可变审计快照。运行、升级、恢复及接口变化见 [注册证试点操作说明](docs/registration-certificate-pilot.md)。HTTP / Script 动作与并行等通用能力继续由框架提供。密钥类配置请使用 user-secrets 或环境变量，勿提交到仓库。
 
 ## 流程定义示例
 
@@ -321,7 +322,7 @@ cd web; pnpm typecheck; pnpm test
 dotnet pack src/Approval.Core -c Release -o output/packages
 dotnet pack src/Approval.AspNetCore -c Release -o output/packages
 cd web; pnpm build:lib                                            # @approval/ui → web/packages/approval-ui/dist（ES 模块 + d.ts + css）
-./samples/Certificate.Api/smoke-test.ps1                           # 接口层端到端演示
+./samples/Certificate.Api/smoke-test.ps1 -Base 'http://localhost:5199' # 仅针对显式本地地址的强断言验收
 ```
 
 示例用请求头 `X-User-Id` 模拟登录用户（`DemoCurrentUser`），用户、姓名和角色配置在 `appsettings.json` 的 `DemoUsers` 中，前端右上角可切换演示用户（发布流程需切换到 `admin`；表单审批可用 `hana` 人事、`fiona` 财务），**仅供演示**。
@@ -336,7 +337,7 @@ cd web; pnpm build:lib                                            # @approval/ui
 - 动作失败时的数据回滚只针对数据库：已经发出的外部调用无法撤回（异步动作请用 `IdempotencyKey` 保证重试幂等）。数据库执行策略开启自动重试（如 SQL Server `EnableRetryOnFailure`）时异步投递不使用事务，仅撤销未保存的修改；同步动作不应自行 SaveChanges（会连同审批的中间状态一起提交）。
 - 表结构有变化（`ApprovalMessages`、`ApprovalOutbox`、`ApprovalCarbonCopies`、`ApprovalDrafts`、`ApprovalFiles` 表，`ApprovalLogs.Details` 列，`ApprovalTasks` 的时限、`Kind`、`ParentTaskId`、`Round` 列，`ApprovalInstances` 的 `StateJson`、`Round` 列及新索引）：全部为新增，旧演示库需删除 `.db` 文件重建，正式项目请生成 EF Core 迁移（`dotnet ef migrations add ApprovalV2`）。
 - 列表接口已改为分页结构 `{ items, total, page, pageSize }`，完整流程定义改为仅管理员可读，旧调用方需相应调整。
-- 示例使用 `EnsureCreated` 建库，正式项目请改用 EF Core Migrations。
+- 注册证示例使用 EF Core Migrations；旧 EnsureCreated 库必须先预检并升级到新文件，详见试点操作说明。通用库的宿主仍需管理自己的 EF 迁移。
 - 表单版本跟随流程版本；暂不支持跳转到任意节点、流程迁移到新版本。
 - 附件不提供在线预览、病毒扫描与内容类型嗅探（只按扩展名白名单）；IIS 等反向代理的请求大小限制需另行配置。
 - 统计在内存中聚合，数据量大时请改用宿主自己的报表；隐藏字段为展示层控制，不是字段级加密，审计日志暂不支持导出。

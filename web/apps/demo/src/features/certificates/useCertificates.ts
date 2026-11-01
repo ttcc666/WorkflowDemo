@@ -1,13 +1,12 @@
-import { approvalApi } from '@approval/ui'
+import { approvalApi, approvalUserKey, usePagedList } from '@approval/ui'
 import { certificateApi } from '@/api/certificates'
 import type { CertificateData } from '@/api/types'
-import { useAsyncData } from '@approval/ui'
 
 export const CERTIFICATE_BUSINESS_TYPE = 'Certificate'
 
 /** 证书列表与提交操作。所有写操作只生成申请单并发起审批，返回申请单 ID。 */
 export function useCertificates() {
-  const list = useAsyncData((signal) => certificateApi.list(signal), { initial: [] })
+  const list = usePagedList((query, signal) => certificateApi.list(query, signal), { routePrefix: 'cert_', resetOn: [approvalUserKey] })
 
   async function submit(action: () => Promise<{ requestId: string }>) {
     const { requestId } = await action()
@@ -16,12 +15,13 @@ export function useCertificates() {
   }
 
   return {
-    certificates: list.data,
+    ...list,
+    certificates: list.items,
     loading: list.loading,
     reload: list.reload,
-    submitCreate: (data: CertificateData) => submit(() => certificateApi.submitCreate(data)),
-    submitUpdate: (id: string, data: CertificateData) => submit(() => certificateApi.submitUpdate(id, data)),
-    submitRevoke: (id: string, reason: string) => submit(() => certificateApi.submitRevoke(id, reason)),
+    submitCreate: (data: CertificateData, key: string, source?: string) => submit(() => certificateApi.submitCreate(data, key, source)),
+    submitUpdate: (id: string, data: CertificateData, key: string, source?: string) => submit(() => certificateApi.submitUpdate(id, data, key, source)),
+    submitRevoke: (id: string, reason: string, key: string, source?: string) => submit(() => certificateApi.submitRevoke(id, reason, key, source)),
   }
 }
 

@@ -43,7 +43,7 @@ public sealed partial class ApprovalEngine
     {
         toUserId = toUserId?.Trim() ?? "";
         var (instance, task, flow) = await LoadTaskAsync(taskId, ct);
-        if (ReassignError(instance, task, toUserId) is { } error) throw new ApprovalException(error);
+        if (await ReassignErrorAsync(instance, task, flow, toUserId, reason, ct) is { } error) throw new ApprovalException(error);
 
         await ReassignCoreAsync(instance, flow, task, operatorId, toUserId, reason, ct);
         await CommitAsync(instance, ct);
@@ -87,7 +87,7 @@ public sealed partial class ApprovalEngine
             var reassigned = new List<ApprovalTask>();
             foreach (var task in tasks)
             {
-                if (ReassignError(instance, task, toUserId) is { } error)
+                if (await ReassignErrorAsync(instance, task, flow, toUserId, reason, ct) is { } error)
                 {
                     skipped.Add(new ReassignSkip(task.Id, instance.Id, instance.Title, task.NodeName, error));
                     continue;
@@ -114,7 +114,8 @@ public sealed partial class ApprovalEngine
     }
 
     /// <summary>能否改派，不能时返回原因。</summary>
-    private string? ReassignError(ApprovalInstance instance, ApprovalTask task, string toUserId)
+    private async Task<string?> ReassignErrorAsync(ApprovalInstance instance, ApprovalTask task, FlowDefinition flow,
+        string toUserId, string? reason, CancellationToken ct)
     {
         if (instance.Status != InstanceStatus.Running) return "流程已结束";
         if (!IsOpen(task)) return "任务已处理";
@@ -125,6 +126,12 @@ public sealed partial class ApprovalEngine
         if (OpenTasks(CurrentTasksOf(instance, task.NodeId))
             .Any(t => t.Id != task.Id && t.AssigneeKind == AssigneeKind.User && t.AssigneeValue == toUserId))
             return "对方已是该节点的审批人";
+        var node = flow.GetNode(task.NodeId);
+        if (node.RequireQualifiedAssignee)
+        {
+            if (string.IsNullOrWhiteSpace(reason)) return "岗位改派必须填写原因";
+            if (!(await GetEligibleApproversAsync(instance, node, ct)).Contains(toUserId)) return "目标用户不存在或不具备本节点审批资格";
+        }
         return null;
     }
 

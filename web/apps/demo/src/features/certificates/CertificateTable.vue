@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { Certificate } from '@/api/types'
-import { certificateStatusLabels, certTypeLabels } from '@/utils/labels'
+import { certTypeLabels } from '@/utils/labels'
 
 defineProps<{ certificates: Certificate[]; loading: boolean }>()
 
@@ -11,7 +11,10 @@ const emit = defineEmits<{
   openPending: [requestId: string]
 }>()
 
-const isExpired = (c: Certificate) => c.expireDate < new Date().toISOString().slice(0, 10)
+const statuses = {
+  Valid: { text: '有效', type: 'success' }, NotYetValid: { text: '尚未生效', type: 'warning' },
+  Expired: { text: '已过期', type: 'danger' }, Revoked: { text: '已注销', type: 'info' },
+} as const
 
 // el-table 插槽中的 row 类型为通用对象，这里显式转换
 const cert = (row: unknown) => row as Certificate
@@ -27,13 +30,13 @@ const cert = (row: unknown) => row as Certificate
     </el-table-column>
     <el-table-column label="有效期" width="210">
       <template #default="{ row }">
-        <span :class="{ expired: isExpired(cert(row)) }">{{ row.issueDate }} ~ {{ row.expireDate }}</span>
+        <span :class="{ expired: row.effectiveStatus === 'Expired' }">{{ row.issueDate }} ~ {{ row.expireDate }}</span>
       </template>
     </el-table-column>
     <el-table-column label="状态" width="150">
       <template #default="{ row }">
-        <el-tag :type="certificateStatusLabels[row.status as Certificate['status']].type" size="small">
-          {{ certificateStatusLabels[row.status as Certificate['status']].text }}
+        <el-tag :type="statuses[cert(row).effectiveStatus].type" size="small">
+          {{ statuses[cert(row).effectiveStatus].text }}
         </el-tag>
         <el-tag v-if="row.pendingRequestId" type="warning" size="small" effect="dark" class="pending-tag"
           @click="emit('openPending', row.pendingRequestId)">
@@ -46,8 +49,8 @@ const cert = (row: unknown) => row as Certificate
         <!-- 审核中的证书加了编辑锁，不能再提交变更 -->
         <el-tooltip :disabled="!row.pendingRequestId" content="已有审核中的申请" placement="top">
           <span class="action-group">
-            <el-button link type="primary" :disabled="row.status !== 'Active' || !!row.pendingRequestId" @click="emit('edit', cert(row))">变更</el-button>
-            <el-button link type="danger" :disabled="row.status !== 'Active' || !!row.pendingRequestId" @click="emit('revoke', cert(row))">注销</el-button>
+            <el-button link type="primary" :disabled="!row.canManage || row.status !== 'Active' || !!row.pendingRequestId" @click="emit('edit', cert(row))">变更</el-button>
+            <el-button link type="danger" :disabled="!row.canManage || row.status !== 'Active' || !!row.pendingRequestId" @click="emit('revoke', cert(row))">注销</el-button>
           </span>
         </el-tooltip>
         <el-button link @click="emit('history', cert(row))">记录</el-button>

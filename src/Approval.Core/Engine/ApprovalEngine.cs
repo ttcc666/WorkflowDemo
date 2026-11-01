@@ -37,6 +37,8 @@ public sealed partial class ApprovalEngine
     private readonly ApprovalOutboxSignal _outboxSignal;
     private readonly TimeProvider _clock;
     private readonly ILogger<ApprovalEngine> _logger;
+    private readonly IApprovalUserDirectory? _directory;
+    private readonly Dictionary<Guid, FlowDefinition> _loadedFlows = [];
     private readonly List<ApprovalNotification> _pendingNotifications = [];
     private readonly Dictionary<FlowDefinition, FlowStructure> _structures = [];
     private readonly Dictionary<Guid, ExecutionState> _states = [];
@@ -54,7 +56,8 @@ public sealed partial class ApprovalEngine
         ApprovalOptions options,
         ApprovalOutboxSignal outboxSignal,
         TimeProvider clock,
-        ILogger<ApprovalEngine> logger)
+        ILogger<ApprovalEngine> logger,
+        IApprovalUserDirectory? directory = null)
     {
         _db = accessor.Context;
         _identity = identity;
@@ -72,6 +75,7 @@ public sealed partial class ApprovalEngine
         _outboxSignal = outboxSignal;
         _clock = clock;
         _logger = logger;
+        _directory = directory;
     }
 
     private DateTime Now => _clock.GetUtcNow().UtcDateTime;
@@ -79,7 +83,7 @@ public sealed partial class ApprovalEngine
     public async Task<ApprovalInstance> StartAsync(StartApprovalRequest request, CancellationToken ct = default)
     {
         var definition = await _db.Set<ApprovalDefinition>()
-            .Where(d => d.Key == request.DefinitionKey && d.IsPublished)
+            .Where(d => d.Key == request.DefinitionKey && d.IsPublished && (request.DefinitionId == null || d.Id == request.DefinitionId))
             .OrderByDescending(d => d.Version)
             .FirstOrDefaultAsync(ct)
             ?? throw new ApprovalException($"流程 '{request.DefinitionKey}' 未发布") { Code = ApprovalErrorCode.NotFound };
@@ -200,6 +204,10 @@ public sealed partial class ApprovalEngine
         var (instance, task, flow) = await LoadTaskAsync(taskId, ct);
         await EnsureCanHandleAsync(instance, task, userId, ct);
         if (task.Kind == ApprovalTaskKind.Resubmit) throw new ApprovalException("重新提交的任务不能转交");
+        var node = flow.GetNode(task.NodeId);
+        if (!node.AllowTransfer) throw new ApprovalException("该节点不允许转交") { Code = ApprovalErrorCode.Forbidden };
+        if (node.RequireQualifiedAssignee && !(await GetEligibleApproversAsync(instance, node, ct)).Contains(toUserId))
+            throw new ApprovalException("转交对象不具备本节点审批资格") { Code = ApprovalErrorCode.Forbidden };
         if (!_options.AllowInitiatorApprove && toUserId == instance.InitiatorId)
             throw new ApprovalException("不能转交给发起人");
         if (OpenTasks(CurrentTasksOf(instance, task.NodeId)).Any(t => t.AssigneeKind == AssigneeKind.User && t.AssigneeValue == toUserId))
@@ -355,15 +363,15 @@ public sealed partial class ApprovalEngine
                     return;
 
                 case NodeType.Join:
-                {
-                    var joins = StateOf(instance).Joins;
-                    if (!joins.TryGetValue(node.Id, out var join))
-                        throw new ApprovalException($"合并节点 '{node.Name}' 没有进行中的并行分支") { Code = ApprovalErrorCode.InvalidDefinition };
-                    if (++join.Arrived < join.Expected) return;   // 等待其他分支
-                    joins.Remove(node.Id);
-                    nodeId = node.Next!;
-                    continue;
-                }
+                    {
+                        var joins = StateOf(instance).Joins;
+                        if (!joins.TryGetValue(node.Id, out var join))
+                            throw new ApprovalException($"合并节点 '{node.Name}' 没有进行中的并行分支") { Code = ApprovalErrorCode.InvalidDefinition };
+                        if (++join.Arrived < join.Expected) return;   // 等待其他分支
+                        joins.Remove(node.Id);
+                        nodeId = node.Next!;
+                        continue;
+                    }
 
                 case NodeType.Action:
                     await RaiseAsync(NotifyEvent.Enter, instance, flow, node, new EventInfo([]), ct);
@@ -372,40 +380,40 @@ public sealed partial class ApprovalEngine
                     continue;
 
                 case NodeType.Cc:
-                {
-                    var recipients = await ResolveAssigneesAsync(instance, node, form, expandRoles: false, ct);
-                    if (recipients.Count > 0)
                     {
-                        foreach (var recipient in recipients) AddCarbonCopy(instance, node, recipient);
-                        AddLog(instance, node, ApprovalAction.Cc, SystemOperator,
-                            "抄送：" + string.Join("、", recipients.Select(Describe)));
-                        Notify(NotificationKind.Cc, instance, recipients);
-                        await RaiseAsync(NotifyEvent.Enter, instance, flow, node, new EventInfo(recipients), ct,
-                            fallback: NotificationDefaults.CcRule);
-                    }
-                    nodeId = node.Next!;
-                    continue;
-                }
-
-                case NodeType.Approval:
-                {
-                    // 会签、依次审批要求每个人都处理，因此角色需要展开为具体用户
-                    var resolved = await ResolveAssigneesAsync(instance, node, form, expandRoles: node.Mode != ApproveMode.Any, ct);
-                    var assignees = await FilterEligibleAsync(instance, resolved, ct);
-
-                    if (assignees.Count == 0)
-                    {
-                        if (node.EmptyApproverPolicy != EmptyApproverPolicy.AutoApprove)
-                            throw new ApprovalException($"节点 '{node.Name}' 未找到审批人") { Code = ApprovalErrorCode.InvalidDefinition };
-
-                        AddLog(instance, node, ApprovalAction.AutoApprove, SystemOperator, "未找到审批人，自动通过");
+                        var recipients = await ResolveAssigneesAsync(instance, node, form, expandRoles: false, ct);
+                        if (recipients.Count > 0)
+                        {
+                            foreach (var recipient in recipients) AddCarbonCopy(instance, node, recipient);
+                            AddLog(instance, node, ApprovalAction.Cc, SystemOperator,
+                                "抄送：" + string.Join("、", recipients.Select(Describe)));
+                            Notify(NotificationKind.Cc, instance, recipients);
+                            await RaiseAsync(NotifyEvent.Enter, instance, flow, node, new EventInfo(recipients), ct,
+                                fallback: NotificationDefaults.CcRule);
+                        }
                         nodeId = node.Next!;
                         continue;
                     }
 
-                    await CreateTasksAsync(instance, flow, node, assignees, ct);
-                    return;
-                }
+                case NodeType.Approval:
+                    {
+                        // 会签、依次审批要求每个人都处理，因此角色需要展开为具体用户
+                        var resolved = await ResolveAssigneesAsync(instance, node, form, expandRoles: node.Mode != ApproveMode.Any, ct);
+                        var assignees = await FilterEligibleAsync(instance, resolved, ct);
+
+                        if (assignees.Count == 0)
+                        {
+                            if (node.EmptyApproverPolicy != EmptyApproverPolicy.AutoApprove)
+                                throw new ApprovalException($"节点 '{node.Name}' 未找到审批人") { Code = ApprovalErrorCode.InvalidDefinition };
+
+                            AddLog(instance, node, ApprovalAction.AutoApprove, SystemOperator, "未找到审批人，自动通过");
+                            nodeId = node.Next!;
+                            continue;
+                        }
+
+                        await CreateTasksAsync(instance, flow, node, assignees, ct);
+                        return;
+                    }
 
                 default:
                     throw new ApprovalException($"不支持的节点类型 {node.Type}") { Code = ApprovalErrorCode.InvalidDefinition };
@@ -572,8 +580,9 @@ public sealed partial class ApprovalEngine
 
     private async Task<FlowDefinition> LoadFlowAsync(ApprovalInstance instance, CancellationToken ct)
     {
+        if (_loadedFlows.TryGetValue(instance.DefinitionId, out var cached)) return cached;
         var definition = await _db.Set<ApprovalDefinition>().AsNoTracking().FirstAsync(d => d.Id == instance.DefinitionId, ct);
-        return FlowDefinition.Parse(definition.DefinitionJson);
+        return _loadedFlows[instance.DefinitionId] = FlowDefinition.Parse(definition.DefinitionJson);
     }
 
     private async Task EnsureCanHandleAsync(ApprovalInstance instance, ApprovalTask task, string userId, CancellationToken ct)
@@ -596,6 +605,28 @@ public sealed partial class ApprovalEngine
         if (!_options.AllowSameUserMultipleNodes && instance.Tasks.Any(t =>
                 t.NodeId != task.NodeId && t.HandledBy == userId && t.Status == ApprovalTaskStatus.Approved))
             throw new ApprovalException("您已审批过该申请的其他环节") { Code = ApprovalErrorCode.Forbidden };
+
+        var node = (await LoadFlowAsync(instance, ct)).GetNode(task.NodeId);
+        if (node.RequireQualifiedAssignee && !(await GetEligibleApproversAsync(instance, node, ct)).Contains(userId))
+            throw new ApprovalException("您已不具备本节点审批资格，请联系管理员改派") { Code = ApprovalErrorCode.Forbidden };
+    }
+
+    /// <summary>按当前组织/用户目录计算合格人员；供岗位约束、宿主预检和无人处理告警共用。实例应包含任务历史。</summary>
+    public async Task<IReadOnlyList<string>> GetEligibleApproversAsync(ApprovalInstance instance, FlowNode node, CancellationToken ct = default)
+    {
+        var assignees = await ResolveAssigneesAsync(instance, node, FormData.Parse(instance.FormDataJson), expandRoles: true, ct);
+        var ids = assignees.Select(a => a.Value).Distinct().Where(id =>
+            (_options.AllowInitiatorApprove || id != instance.InitiatorId)
+            && (_options.AllowSameUserMultipleNodes || !instance.Tasks.Any(t =>
+                t.NodeId != node.Id && t.HandledBy == id && t.Status == ApprovalTaskStatus.Approved))).ToList();
+        if (node.RequireQualifiedAssignee && _directory is null)
+            throw new ApprovalException("岗位资格校验需要注册用户目录") { Code = ApprovalErrorCode.InvalidDefinition };
+        if (_directory is not null)
+        {
+            var known = (await _directory.GetUsersAsync(ids, ct)).Select(u => u.Id).ToHashSet();
+            ids.RemoveAll(id => !known.Contains(id));
+        }
+        return ids;
     }
 
     // ───────────────────────── 辅助方法 ─────────────────────────
@@ -656,7 +687,8 @@ public sealed partial class ApprovalEngine
     private void AddTask(ApprovalInstance instance, ApprovalTask task)
     {
         _db.Set<ApprovalTask>().Add(task);
-        instance.Tasks.Add(task);
+        // EF relationship fixup 可能已经加入导航集合，避免同一任务在内存中重复出现。
+        if (!instance.Tasks.Contains(task)) instance.Tasks.Add(task);
     }
 
     private void AddCarbonCopy(ApprovalInstance instance, FlowNode node, Assignee recipient) =>

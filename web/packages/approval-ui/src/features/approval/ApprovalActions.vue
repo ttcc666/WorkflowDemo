@@ -19,6 +19,7 @@ const props = defineProps<{
   /** 当前任务所在节点的选项（来自流程定义） */
   allowReturn: boolean
   allowAddSign: boolean
+  allowTransfer: boolean
   busy: boolean
   /** 表单审批：重新提交时可修改的表单结构与当前数据 */
   resubmitForm?: FormSchema
@@ -152,7 +153,7 @@ async function submit() {
       </span>
       <el-button type="success" :loading="busy" @click="open('approve')">同意</el-button>
       <el-button type="danger" :loading="busy" @click="open('reject')">{{ allowReturn ? '驳回 / 退回' : '驳回' }}</el-button>
-      <el-button :loading="busy" @click="open('transfer')">转交</el-button>
+      <el-button v-if="allowTransfer" :loading="busy" @click="open('transfer')">转交</el-button>
       <el-button v-if="allowAddSign" :loading="busy" @click="open('addSign')">加签</el-button>
     </template>
     <span v-else class="approval-actions__hint" />

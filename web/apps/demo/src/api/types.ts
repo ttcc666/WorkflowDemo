@@ -17,7 +17,7 @@ export interface DemoUser {
 
 export type CertificateStatus = 'Active' | 'Revoked'
 export type CertOperation = 'Create' | 'Update' | 'Revoke'
-export type RequestStatus = 'Reviewing' | 'Approved' | 'Rejected' | 'Withdrawn'
+export type RequestStatus = 'Reviewing' | 'Approved' | 'Rejected' | 'Withdrawn' | 'Terminated'
 
 export interface CertificateData {
   certNo: string
@@ -32,6 +32,8 @@ export interface Certificate extends CertificateData {
   id: string
   status: CertificateStatus
   pendingRequestId: string | null
+  effectiveStatus: 'Valid' | 'NotYetValid' | 'Expired' | 'Revoked'
+  canManage: boolean
 }
 
 export interface CertificateRequest {
@@ -39,11 +41,15 @@ export interface CertificateRequest {
   certificateId: string | null
   operation: CertOperation
   snapshot: CertificateData
+  beforeSnapshot: CertificateData | null
+  sourceRequestId: string | null
   reason: string | null
   status: RequestStatus
   applicantId: string
   createdAt: string
   completedAt: string | null
+  hasHistoricalBaseline: boolean
+  canReapply: boolean
 }
 
 export interface FieldChange {
