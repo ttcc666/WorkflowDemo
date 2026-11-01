@@ -2,6 +2,8 @@
 
 日期：2026-11-01。状态：阶段 0–5 的本次实施范围已完成，统一验证与独立包浏览器验收通过。
 
+业务归属校正：注册证仅是审批接入示例，类库归入 `samples/Approval.Certificate`，不参与框架包发布。框架契约与示例契约分别维护，下面的目录和命令已按此边界更新。
+
 方案已开始实施，结果和命令记录在[工程化验收记录](../docs/engineering-validation.md)。以下问题表保留改造前的分析基线；实施已核对并更新同级 Admin.Core 的模块引用，保留其现有改动及正在运行的服务，未改动部署数据库。
 
 ## 1. 目标与判断
@@ -23,7 +25,7 @@
 | 优先级 | 现状与依据 | 对工程化或扩展的影响 | 建议 |
 |---|---|---|---|
 | P0 | 根目录没有 `Directory.Build.props`、`Directory.Packages.props`、`.editorconfig`；各项目重复声明编译属性和包版本，验证步骤集中在 CI YAML | 本地、CI 和新项目容易产生配置差异 | 统一公共配置和 `eng/verify.ps1`，保留项目专属配置 |
-| P1 | [CertificateApplication.cs](../samples/Certificate.Api/CertificateApplication.cs) 同时处理业务注册、SQLite、认证、演示身份、Webhook 和宿主管线；[CertificateModels.cs](../src/Approval.Certificate/Certificates/CertificateModels.cs) 包含实体和具体 AppDbContext | 实际宿主复用业务时，需要理解示例项目的装配和环境假设；[已有集成计划](2026-11-01-admin-core-integration.md) 已采用链接源码复用 | 提取一个可复用的 `Approval.Certificate` 类库，让示例宿主承担装配 |
+| P1 | [CertificateApplication.cs](../samples/Certificate.Api/CertificateApplication.cs) 同时处理业务注册、SQLite、认证、演示身份、Webhook 和宿主管线；[CertificateModels.cs](../samples/Approval.Certificate/Certificates/CertificateModels.cs) 包含实体和具体 AppDbContext | 实际宿主复用业务时，需要理解示例项目的装配和环境假设；[已有集成计划](2026-11-01-admin-core-integration.md) 已采用链接源码复用 | 将注册证业务整理为 `samples/Approval.Certificate` 示例类库，让示例宿主承担装配，不纳入框架发布 |
 | P1 | [ApprovalEngine.cs](../src/Approval.Core/Engine/ApprovalEngine.cs) 及 5 个 partial 合计 1,546 个物理行，构造函数注入 13 项依赖；同时保存执行缓存、处理流转、解析人员、生成消息和提交 | 逻辑放在多个文件中，但共享同一个类的状态和内部方法；修改一类规则仍需理解整个操作周期 | 先提取扩展目录和人员解析，再逐步提取有清晰输入输出的运行时职责 |
 | P1 | 引擎和 [ApprovalDefinitionService.cs](../src/Approval.Core/Engine/ApprovalDefinitionService.cs) 各自处理同名解析器/动作覆盖与元数据 | 扩展在校验、设计器和执行时的解释规则可能随维护而分叉 | 共享一个 scoped 扩展目录，维持现有大小写与覆盖规则 |
 | P1 | [api/types.ts](../web/packages/approval-ui/src/api/types.ts) 从 `features/forms/formModel.ts` 导入协议类型；[flowModel.ts](../web/packages/approval-ui/src/features/flow/flowModel.ts) 同时定义流程协议、Vue Flow 模型、布局、连线编辑和运行态展示 | API 协议与编辑器实现混在一起，复用协议或替换画布时修改面扩大 | 先在现有前端包内建立无 UI 依赖的 `contracts/`，再按职责拆模型算法 |
@@ -35,11 +37,11 @@
 
 ## 3. 首轮目标边界
 
-首轮只增加一个具有实际复用需求的业务类库，核心内部先用目录和 internal 类型建立边界。
+示例层通过独立类库复用注册证业务；框架保持业务无关，核心内部先用目录和 internal 类型建立边界。
 
 ```mermaid
 flowchart TD
-    H["宿主装配<br/>samples/Certificate.Api 或实际 Admin 宿主"] --> C["拟新增 src/Approval.Certificate<br/>注册证业务、接口与持久化资源"]
+    H["宿主装配<br/>samples/Certificate.Api 或实际 Admin 宿主"] --> C["samples/Approval.Certificate<br/>注册证业务示例，不作为框架包发布"]
     H --> A["src/Approval.AspNetCore<br/>通用 HTTP 接口与当前用户适配"]
     C --> A
     C --> K["src/Approval.Core<br/>流转、表单、扩展目录、现有 EF 实现"]
@@ -59,7 +61,7 @@ src/
     Engine/Extensions/              扩展查找、覆盖规则和描述信息
     Engine/Runtime/                 逐步抽取的人员解析、事件收集等内部职责
   Approval.AspNetCore/              保留现有 HTTP 适配边界
-  Approval.Certificate/             从示例提取的可复用注册证模块
+samples/Approval.Certificate/       注册证业务示例类库，不参与框架包发布
 samples/Certificate.Api/            Program、配置、演示身份、宿主管线
 web/packages/approval-ui/src/
   contracts/                       流程、表单、HTTP DTO；无 Vue Flow 依赖
@@ -99,15 +101,15 @@ web/apps/demo/                     示例布局、路由、演示用户与业务
 
 验收：相同工作区，本地和 CI 执行相同验证步骤；依赖版本不变；迁移模型没有变化。
 
-### 阶段 1：提取注册证模块
+### 阶段 1：整理注册证示例模块
 
-- [x] 新建 `src/Approval.Certificate` 类库，迁入注册证服务、校验器、策略、回调、动作、业务端点及必要持久化/流程资源。
+- [x] 在 `samples/Approval.Certificate` 示例类库中维护注册证服务、校验器、策略、回调、动作、业务端点及必要持久化/流程资源；不作为框架包发布。
 - [x] 第一轮保留现有具体 DbContext 的事务模型；将其与配套迁移作为整体处理。拆出实体配置，但不重建 baseline 或修改迁移 ID。
 - [x] 明确迁移程序集、设计时 DbContext 创建、流程 JSON 的 build/publish 资源路径。通过现有迁移测试确认发现的迁移列表与之前一致。
 - [x] 增加模块服务注册入口；宿主负责连接字符串、认证、环境、HTTP 客户端配置和初始化时机。模块注册不隐式启动另一个 WebApplication。
 - [x] 演示身份、模拟 Webhook、回环代理、静态站点和演示路由留在 sample。先做行为等价的装配迁移，默认行为调整单独处理。
 - [x] 更新 `Workflow.slnx`、示例和现有测试引用；保持公共命名空间/配置键可兼容。若有二进制消费者，补类型转发或兼容入口。
-- [x] 将实际 Admin 宿主接入列为联动验收：改用类库/包引用，撤掉链接业务源码的做法。该仓库不在本轮分析范围，实施时需读取其当前状态。
+- [x] 将实际 Admin 宿主接入列为联动验收：改用示例类库项目引用，撤掉链接业务源码的做法。该仓库不在本轮分析范围，实施时需读取其当前状态。
 
 验收：示例通过现有业务/并发/授权/迁移/恢复测试；实际宿主无需引用 sample Web 项目或链接其业务源文件即可接入。宿主联动未完成时，不宣布本阶段整体完成。
 
@@ -180,7 +182,7 @@ dotnet tool restore
 dotnet restore 'Workflow.slnx'
 dotnet build 'Workflow.slnx' --no-restore --configuration 'Release'
 dotnet test 'Workflow.slnx' --no-build --no-restore --configuration 'Release' --verbosity 'minimal'
-dotnet ef migrations has-pending-model-changes --project 'src/Approval.Certificate' --startup-project 'samples/Certificate.Api' --configuration 'Release' --no-build
+dotnet ef migrations has-pending-model-changes --project 'samples/Approval.Certificate' --startup-project 'samples/Certificate.Api' --configuration 'Release' --no-build
 pnpm --dir 'web' install --frozen-lockfile
 pnpm --dir 'web' typecheck
 pnpm --dir 'web' test

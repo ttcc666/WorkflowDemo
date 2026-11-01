@@ -5,7 +5,7 @@
   </PropertyGroup>
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
-    <ProjectReference Include="../../src/Approval.Certificate/Approval.Certificate.csproj" />
+    <ProjectReference Include="../../samples/Approval.Certificate/Approval.Certificate.csproj" />
     <ProjectReference Include="../../samples/Certificate.Api/Certificate.Api.csproj" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
   </ItemGroup>

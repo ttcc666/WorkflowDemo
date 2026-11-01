@@ -14,7 +14,7 @@ D:/Study/CSharp/
 - [集成验收及逐项测试证据](../../Admin.Core/docs/approval-integration-validation.md)
 - [原实施方案](../plans/2026-11-01-admin-core-integration.md)
 
-当前通过项目引用构建 `src/Approval.Certificate` 类库，Admin 模块调用 `AddCertificateModule()`，不再链接示例项目的业务源码。注册证与审批仍共用 EF Core 事务；Admin 身份、部门和权限使用其 FreeSql 主库。数据库被绑定到单一企业范围，不能通过改变配置改属其他企业。
+当前通过项目引用构建 `samples/Approval.Certificate` 示例类库，Admin 模块调用 `AddCertificateModule()`，不再链接示例项目的业务源码。注册证是业务集成示例，不属于审批框架的 NuGet 发布范围。注册证与审批仍共用 EF Core 事务；Admin 身份、部门和权限使用其 FreeSql 主库。数据库被绑定到单一企业范围，不能通过改变配置改属其他企业。
 
 注册证类型保留原命名空间，旧程序集入口提供类型转发；迁移 ID 和模型保持不变。模块的默认流程与 Admin 自己的 `ApprovalFlows` 分别管理，宿主决定发布哪套定义。工程化验证见[验收记录](engineering-validation.md)。
 

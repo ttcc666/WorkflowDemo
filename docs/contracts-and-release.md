@@ -2,10 +2,11 @@
 
 ## 契约来源
 
-- `eng/Approval.ContractTool` 映射真实审批/注册证路由，在临时回环端口导出 OpenAPI，不初始化业务数据库。
-- `contracts/approval.openapi.json` 描述 HTTP；`flow.schema.json`、`form.schema.json` 描述嵌入 JSON 的结构。业务规则仍由服务端校验器执行。
-- `contracts/*.api.txt` 记录公开类型、成员、可空性、默认参数和常量；`Certificate.Api.forwards.txt` 记录旧程序集的类型转发。
-- `web/packages/approval-ui/src/contracts/http.generated.ts` 由 OpenAPI 生成；`api.ts` 保留原前端名称和投影，并区分服务端可接受的数字字符串与实际写出的数字。
+- `eng/Approval.ContractTool` 映射真实审批/注册证路由，按组在临时回环端口分别导出 OpenAPI，不初始化业务数据库。
+- `contracts/approval.openapi.json` 只描述通用审批 HTTP 接口；`flow.schema.json`、`form.schema.json` 描述嵌入 JSON 的结构。业务规则仍由服务端校验器执行。
+- `contracts/*.api.txt` 只记录两个框架程序集的公开类型、成员、可空性、默认参数和常量。
+- `samples/Approval.Certificate/contracts/` 单独保存注册证示例的 OpenAPI、公开 API 和旧程序集类型转发基线，仍由 `contracts:check` 校验。
+- `web/packages/approval-ui/src/contracts/http.generated.ts` 仅由框架 OpenAPI 生成；`api.ts` 保留原前端名称和投影，并区分服务端可接受的数字字符串与实际写出的数字。注册证类型留在示例前端。
 - HTTP 响应 DTO 位于 `Approval.AspNetCore/Contracts`，固定 JSON 样例验证其字段、字符串枚举、UTC 日期和空值与 v1 协议相同。C# 查询服务的既有返回类型保持兼容。
 
 ```powershell
@@ -29,9 +30,9 @@ pwsh -File './eng/verify.ps1' -Scope 'Contracts'      # 生成契约一致性
 pwsh -File './eng/verify.ps1' -Scope 'Packages'       # 打包、独立消费者与浏览器
 ```
 
-包版本由 `Directory.Build.props` 的 `ApprovalVersion` 与前端包版本共同校验。构建产物位于 `output/packages/<version>/`，包含三个 NuGet 包、npm tarball 和 `release-manifest.json`。
+包版本由 `Directory.Build.props` 的 `ApprovalVersion` 与前端包版本共同校验。构建产物位于 `output/packages/<version>/`，发布清单只包含 `Approval.Core`、`Approval.AspNetCore` 两个 NuGet 包和 `@approval/ui` 的 npm tarball。`Approval.Certificate` 是不可打包的示例项目。
 
-消费者使用复制的示例宿主代码，替换为 PackageReference / tarball 依赖，不引用库项目或 workspace 源码。独立 NuGet 缓存和 PackageSourceMapping 保证 Approval 包来自本次本地 feed；安装后的 SHA512 与原包逐一比较。前端检查 dist 导出、独立协议类型和 CSS，并执行真实构建。
+消费者复制示例宿主和注册证示例类库，宿主引用复制后的示例项目，示例通过 PackageReference 消费两个框架包，不引用仓库中的框架项目；前端通过 tarball 消费 UI 包。独立 NuGet 缓存和 PackageSourceMapping 保证框架包来自本次本地 feed；安装后的 SHA512 与原包逐一比较，注册证依赖则必须显示为本地项目。前端检查 dist 导出、独立协议类型和 CSS，并执行真实构建。
 
 浏览器在临时端口、新 SQLite 文件上运行，实际操作打包后的设计器、提交与三级审批，检查终审前台账为空、终审后正式生效。Windows 使用已安装的 Edge；其他环境可预先运行 `pnpm --dir 'web' exec playwright install chromium`，也可设置 `APPROVAL_BROWSER_CHANNEL`。测试进程只清理自己启动的服务。
 

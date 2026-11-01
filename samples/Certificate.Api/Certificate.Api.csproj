@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\Approval.Certificate\Approval.Certificate.csproj" />
+    <ProjectReference Include="..\Approval.Certificate\Approval.Certificate.csproj" />
   </ItemGroup>
 
   <ItemGroup>

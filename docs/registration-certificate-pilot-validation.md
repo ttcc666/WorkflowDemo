@@ -69,7 +69,7 @@ CI 配置及对应命令已在本地校验；远端 GitHub Actions 运行需推�
 Set-Location 'D:\Study\CSharp\Workflow'
 dotnet build 'Workflow.slnx' --no-restore --configuration 'Release'
 dotnet test 'Workflow.slnx' --no-build --no-restore --configuration 'Release' --verbosity 'minimal'
-dotnet ef migrations has-pending-model-changes --project 'src/Approval.Certificate' --startup-project 'samples/Certificate.Api' --configuration 'Release' --no-build
+dotnet ef migrations has-pending-model-changes --project 'samples/Approval.Certificate' --startup-project 'samples/Certificate.Api' --configuration 'Release' --no-build
 Push-Location 'web'
 pnpm install --frozen-lockfile
 pnpm typecheck

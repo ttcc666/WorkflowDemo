@@ -16,14 +16,16 @@
 ```
 src/Approval.Core                 框架本体（EF Core Relational + DynamicExpresso + Jint），不依赖 ASP.NET
 src/Approval.AspNetCore           ASP.NET Core 集成：MapApprovalEndpoints() 提供全部审批接口、当前用户与用户目录抽象
-src/Approval.Certificate          注册证业务类库：服务、回调、接口、DbContext、迁移与默认流程；宿主通过 AddCertificateModule() 接入
 tests/Approval.Core.Tests         引擎单元测试（SQLite 内存库）
 tests/Approval.AspNetCore.Tests   接口集成测试（TestServer）
 tests/Certificate.Api.Tests      真实注册证宿主、并发、迁移、快照与恢复测试
+samples/Approval.Certificate      注册证业务示例类库：单据、回调、接口、DbContext、迁移与默认流程，不发布 NuGet 包
 samples/Certificate.Api           示例宿主：证书审核（业务审批）+ 请假 / 报销（表单审批）
 web/packages/approval-ui          前端组件库 @approval/ui：工作台、审批详情、流程设计器、表单设计器、发起中心
 web/apps/demo                     示例前端：接入 @approval/ui + 证书管理页面 + 演示用户切换
 ```
+
+框架发布范围是 `Approval.Core`、`Approval.AspNetCore` 两个 NuGet 包及 `@approval/ui` 前端包。注册证业务归属示例层；业务系统可参考示例，通过 `IApprovalBusinessHandler` 等扩展点接入自己的单据。
 
 ## 前端界面
 
@@ -332,7 +334,6 @@ cd web; pnpm typecheck; pnpm test
 # 打包
 dotnet pack src/Approval.Core -c Release -o output/packages
 dotnet pack src/Approval.AspNetCore -c Release -o output/packages
-dotnet pack src/Approval.Certificate -c Release -o output/packages
 cd web; pnpm build:lib                                            # @approval/ui → web/packages/approval-ui/dist（ES 模块 + d.ts + css）
 ./samples/Certificate.Api/smoke-test.ps1 -Base 'http://localhost:5199' # 仅针对显式本地地址的强断言验收
 ```

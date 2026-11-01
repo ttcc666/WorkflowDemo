@@ -23,31 +23,42 @@ if (args.Length != 2 || args[0] != "--output")
     throw new ArgumentException("Usage: Approval.ContractTool --output <directory>");
 var output = Path.GetFullPath(args[1]);
 Directory.CreateDirectory(output);
+var sampleContracts = Path.Combine("samples", "Approval.Certificate", "contracts");
+var sampleOutput = Path.Combine(output, sampleContracts);
+Directory.CreateDirectory(sampleOutput);
 var builder = WebApplication.CreateBuilder(new WebApplicationOptions
 {
     Args = [], ContentRootPath = AppContext.BaseDirectory, EnvironmentName = "ContractGeneration"
 });
 builder.Logging.ClearProviders();
 builder.WebHost.UseUrls("http://127.0.0.1:0");
-builder.Services.AddOpenApi();
+builder.Services.AddOpenApi("approval");
+builder.Services.AddOpenApi("certificate");
 builder.Services.AddDbContext<AppDbContext>(options => options.UseSqlite("Data Source=:memory:"));
 builder.Services.AddScoped<IApprovalIdentityProvider, ContractIdentity>();
 builder.Services.AddApprovalWorkflow<AppDbContext>(options => options.EnableBackgroundServices = false)
     .AddFormApprovals().AddCertificateModule();
 builder.Services.AddApprovalAspNetCore();
 await using var app = builder.Build();
-app.MapApprovalEndpoints();
-app.MapCertificateEndpoints();
+app.MapGroup("").WithGroupName("approval").MapApprovalEndpoints();
+app.MapGroup("").WithGroupName("certificate").MapCertificateEndpoints();
 app.MapOpenApi();
 await app.StartAsync();
 try
 {
     using var http = new HttpClient(new SocketsHttpHandler { UseProxy = false });
-    var document = JsonNode.Parse(await http.GetStringAsync(app.Urls.Single() + "/openapi/v1.json"))!;
-    document["servers"] = new JsonArray(new JsonObject { ["url"] = "/" });
-    document["info"]!["title"] = "Approval Workflow";
-    document["info"]!["version"] = typeof(ApprovalOptions).Assembly.GetName().Version!.ToString(3);
-    await WriteJsonAsync("approval.openapi.json", document);
+    foreach (var (name, title, file) in new[]
+    {
+        ("approval", "Approval Workflow", "approval.openapi.json"),
+        ("certificate", "Certificate Approval Sample", Path.Combine(sampleContracts, "certificate.openapi.json"))
+    })
+    {
+        var document = JsonNode.Parse(await http.GetStringAsync(app.Urls.Single() + $"/openapi/{name}.json"))!;
+        document["servers"] = new JsonArray(new JsonObject { ["url"] = "/" });
+        document["info"]!["title"] = title;
+        document["info"]!["version"] = typeof(ApprovalOptions).Assembly.GetName().Version!.ToString(3);
+        await WriteJsonAsync(file, document);
+    }
 }
 finally
 {
@@ -69,7 +80,12 @@ formSchema["$schema"] = "https://json-schema.org/draft/2020-12/schema";
 formSchema["$id"] = "urn:approval:form:1";
 await WriteJsonAsync("form.schema.json", formSchema);
 var nullability = new NullabilityInfoContext();
-foreach (var assembly in new[] { typeof(ApprovalOptions).Assembly, typeof(ApprovalAspNetCoreOptions).Assembly, typeof(CertificateService).Assembly })
+foreach (var (assembly, directory) in new[]
+{
+    (typeof(ApprovalOptions).Assembly, output),
+    (typeof(ApprovalAspNetCoreOptions).Assembly, output),
+    (typeof(CertificateService).Assembly, sampleOutput)
+})
 {
     var lines = new List<string>();
     foreach (var type in assembly.GetExportedTypes().OrderBy(type => type.FullName, StringComparer.Ordinal))
@@ -82,10 +98,10 @@ foreach (var assembly in new[] { typeof(ApprovalOptions).Assembly, typeof(Approv
                 .Where(member => member is not MethodInfo { IsSpecialName: true })
                 .Select(member => $"  {member.MemberType} {member}{NullableContract(member)}").Order(StringComparer.Ordinal));
     }
-    await File.WriteAllTextAsync(Path.Combine(output, assembly.GetName().Name + ".api.txt"), string.Join('\n', lines) + "\n");
+    await File.WriteAllTextAsync(Path.Combine(directory, assembly.GetName().Name + ".api.txt"), string.Join('\n', lines) + "\n");
 }
 var legacy = typeof(global::Certificate.Api.CertificateApplication).Assembly;
-await File.WriteAllTextAsync(Path.Combine(output, "Certificate.Api.forwards.txt"), string.Join('\n', legacy.GetForwardedTypes()
+await File.WriteAllTextAsync(Path.Combine(sampleOutput, "Certificate.Api.forwards.txt"), string.Join('\n', legacy.GetForwardedTypes()
     .Select(type => $"{type.FullName} -> {type.Assembly.GetName().Name}").Order(StringComparer.Ordinal)) + "\n");
 Console.WriteLine($"Generated contracts in {output}");
 

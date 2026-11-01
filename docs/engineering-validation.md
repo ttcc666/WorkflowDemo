@@ -2,6 +2,8 @@
 
 日期：2026-11-01。改造范围与不变量见[实施方案](../plans/2026-11-01-engineering-and-extensibility.md)。此文件随阶段验收更新，未完成项不代表通过。
 
+当前边界已校正：注册证位于 `samples/Approval.Certificate`，不作为框架包发布。下面的阶段 0–5 保留首次改造的验收历史；当时的三个 NuGet 包已收敛为两个框架包，后续验收方式见“注册证示例归属校正”。
+
 ## 原始基线
 
 - Workflow Release 构建：0 warnings、0 errors。
@@ -21,7 +23,7 @@
 | 2 引擎职责 | 已完成本轮范围 | scoped 扩展目录、独立人员解析/资格服务、公共构造函数兼容；Workflow 258 Core + 43 HTTP + 64 Certificate 测试通过，迁移无差异；Admin 58 项通过 |
 | 3 前端契约与模型 | 已完成 | contracts 独立类型入口；图/表单模型拆分；41 个文件类型引用迁移；类型检查、原有 142 项前端测试、库/示例构建通过；边界检查已接入 CI |
 | 4 实例客户端 | 已完成本轮范围 | 独立客户端、注入、用户/目录缓存、路由批次隔离；前端总计 151 library + 6 demo 测试通过，另有 7 项依赖边界测试；Admin 前端 15 项测试、typecheck:approval、build 通过 |
-| 5 契约与发布门禁 | 已完成 | 统一入口退出码 0；378 项后端、166 项前端、7 项边界测试通过；契约检查通过；三个 NuGet 包与 npm tarball 的独立消费者通过；两项浏览器验收通过 |
+| 5 契约与发布门禁 | 已完成 | 首次验收的统一入口退出码 0；378 项后端、166 项前端、7 项边界测试通过；契约检查通过；当时三个 NuGet 包与 npm tarball 的独立消费者通过；两项浏览器验收通过 |
 
 阶段 1 的新增证据为 `ModulePackagingTests.Legacy_assembly_names_forward_to_the_certificate_module`（3 个旧公共类型）、`Module_embeds_all_default_certificate_workflows` 和 `Module_preserves_migration_history_and_model`。三份默认流程已复制到类库构建输出，独立发布包消费将在阶段 5 验收。
 
@@ -46,6 +48,21 @@
 浏览器结果位于消费者 `browser/results.json` 和 `browser/passed.json`，报告为 expected=2、unexpected=0、skipped=0、flaky=0，校验和与发布清单一致。Windows 验收使用已安装的 Edge；Chromium 下载遇到网络超时后已停止该下载进程。检查用临时服务及最终验收服务均已清理，现有 Admin 服务未被停止。
 
 验收使用包含全部改造的工作区，原集成适配与本次工程化改造分别归入本地提交。未执行包发布或更新运行中的业务服务。以后新增控制流语义、自定义字段和同 router 命名空间时，按计划中保留的条件项另行设计。
+
+## 注册证示例归属校正（2026-11-02）
+
+- `src/` 仅保留 `Approval.Core` 与 `Approval.AspNetCore`；注册证示例类库设置 `IsPackable=false`，与示例宿主一起位于 `samples/`。28 个 C# / 流程 JSON 文件与移动前的 Git 内容一致，程序集名称、命名空间和迁移 ID 保持兼容。
+- 框架 OpenAPI 保留 47 条路径，5 条注册证路径移入 `samples/Approval.Certificate/contracts/certificate.openapi.json`；逐项比较确认请求、响应与已有 Schema 不变。示例的公开 API / 类型转发基线也移入该目录，UI 包不再生成注册证类型。
+- 发布清单只列出两个框架 NuGet 包及 UI tarball。独立消费者复制注册证示例源码，通过 PackageReference 使用框架；验收同时断言框架依赖来自本次包、注册证依赖来自复制的示例项目。
+- Admin 集成的项目引用与存在性检查同步指向新路径；使用独立编译目录验证，保留已有服务及该仓库的其他改动。
+
+本次后端构建为 0 warnings / 0 errors，Workflow 为 378 passed / 0 failed / 0 skipped，EF 模型无差异，Admin 后端为 58 passed / 0 failed / 0 skipped。前端 166 项测试与 7 项边界测试、类型检查、库/示例构建以及契约生成一致性检查均通过。Admin 的 `typecheck:approval` 通过。独立消费者构建通过，浏览器最终结果为 2 passed / 0 failed / 0 skipped / 0 flaky。
+
+浏览器首轮在 `packaged designer publishes a workflow and three approvals activate the certificate` 的最终展示断言中失败：按证号片段查找整行，在路由切换期间同时匹配了审批详情和证书列表。后台三级审批和正式生效断言已通过，失败现场也显示证书有效。现改为等待证书列表路由、精确定位证号单元格所在的唯一行，并检查同一行的“有效”单元格。使用同一批包重跑两项浏览器验收后，进程退出码为 0，JSON 报告和包校验和均核验通过。
+
+本次各阶段日志位于 `output/engineering/certificate-sample-*.log`。`certificate-sample-packages.log` 保留独立消费者构建及浏览器首轮失败的记录；`certificate-sample-browser.log` 是修复后的成功复验。初次浏览器现场保存在消费者的 `browser-before-locator-fix/`，最终报告和 `passed.json` 位于 `browser/`。包与浏览器的最新关联关系见 `output/engineering/package-verification.json`。
+
+发布清单的源码指纹对应打包时的工作区；此后只调整了浏览器测试定位及本验收记录，浏览器复验使用的三个包文件与清单中的 SHA256 完全一致。
 
 ## 重现
 

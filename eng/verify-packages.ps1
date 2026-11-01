@@ -12,12 +12,13 @@ $webRoot = Join-Path $repositoryRoot 'web'
 $uiPackage = Get-Content -LiteralPath (Join-Path $webRoot 'packages/approval-ui/package.json') -Raw | ConvertFrom-Json
 if ($uiPackage.version -ne $version) { throw 'NuGet and npm release versions differ' }
 $packages = Join-Path $repositoryRoot ('output/packages/' + $version)
+$frameworkPackages = @('Approval.Core', 'Approval.AspNetCore')
 New-Item -ItemType 'Directory' -Path $packages -Force | Out-Null
 if (-not $SkipBuild) {
     Invoke-CheckedCommand 'dotnet' @('build', 'Workflow.slnx', '--configuration', 'Release') $repositoryRoot
     Invoke-CheckedCommand 'pnpm' @('build:lib') $webRoot
 }
-foreach ($package in @('Approval.Core', 'Approval.AspNetCore', 'Approval.Certificate')) {
+foreach ($package in $frameworkPackages) {
     Invoke-CheckedCommand 'dotnet' @('pack', ('src/' + $package), '--configuration', 'Release', '--no-build', '--output', $packages) $repositoryRoot
 }
 $tarball = Join-Path $packages ('approval-ui-' + $version + '.tgz')
@@ -25,6 +26,7 @@ Invoke-CheckedCommand 'pnpm' @('pack', '--out', $tarball) (Join-Path $webRoot 'p
 
 $consumerRoot = Join-Path $repositoryRoot ('output/engineering/consumer-' + [Guid]::NewGuid().ToString('N'))
 $apiRoot = Join-Path $consumerRoot 'api'
+$sampleRoot = Join-Path $consumerRoot 'samples/Approval.Certificate'
 $uiRoot = Join-Path $consumerRoot 'web'
 $feed = Join-Path $consumerRoot 'feed'
 New-Item -ItemType 'Directory' -Path $apiRoot,$uiRoot,$feed -Force | Out-Null
@@ -44,6 +46,7 @@ function Copy-HostSources {
     }
 }
 Copy-HostSources (Join-Path $repositoryRoot 'samples/Certificate.Api') $apiRoot
+Copy-HostSources (Join-Path $repositoryRoot 'samples/Approval.Certificate') $sampleRoot
 Copy-HostSources (Join-Path $webRoot 'apps/demo') $uiRoot
 Copy-Item -LiteralPath (Join-Path $repositoryRoot 'global.json') -Destination $consumerRoot
 '<Project />' | Set-Content -LiteralPath (Join-Path $consumerRoot 'Directory.Build.props')
@@ -54,30 +57,56 @@ if ($LASTEXITCODE -ne 0) { throw 'Cannot locate the NuGet dependency cache' }
 ('<configuration><packageSources><clear/><add key="release" value="feed"/><add key="cached" value="{0}"/><add key="nuget" value="https://api.nuget.org/v3/index.json"/></packageSources><packageSourceMapping><packageSource key="release"><package pattern="Approval.*"/></packageSource><packageSource key="cached"><package pattern="*"/></packageSource><packageSource key="nuget"><package pattern="*"/></packageSource></packageSourceMapping></configuration>' -f [Security.SecurityElement]::Escape($cachedPackages)) | Set-Content -LiteralPath (Join-Path $consumerRoot 'NuGet.Config')
 $versions = [xml](Get-Content -LiteralPath (Join-Path $repositoryRoot 'Directory.Packages.props') -Raw)
 $efVersion = ($versions.Project.ItemGroup.PackageVersion | Where-Object Include -eq 'Microsoft.EntityFrameworkCore.Sqlite').Version
+# The copied business sample consumes framework packages; it is not itself a framework package.
+$sampleProjectPath = Join-Path $sampleRoot 'Approval.Certificate.csproj'
+$sampleProject = [xml](Get-Content -LiteralPath $sampleProjectPath -Raw)
+foreach ($property in ([ordered]@{ TargetFramework = 'net10.0'; ImplicitUsings = 'enable'; Nullable = 'enable'; Version = $version }).GetEnumerator()) {
+    $element = $sampleProject.SelectSingleNode('/Project/PropertyGroup/' + $property.Key)
+    if ($null -eq $element) {
+        $element = $sampleProject.CreateElement($property.Key)
+        $sampleProject.Project.PropertyGroup.AppendChild($element) | Out-Null
+    }
+    $element.InnerText = $property.Value
+}
+foreach ($reference in $sampleProject.SelectNodes('/Project/ItemGroup/PackageReference')) {
+    $dependency = $versions.Project.ItemGroup.PackageVersion | Where-Object Include -eq $reference.Include
+    if ($null -eq $dependency) { throw ('Missing sample dependency version: ' + $reference.Include) }
+    $reference.SetAttribute('Version', $dependency.Version)
+}
+foreach ($reference in $sampleProject.SelectNodes('/Project/ItemGroup/ProjectReference')) {
+    $name = [IO.Path]::GetFileNameWithoutExtension($reference.Include)
+    if ($name -notin $frameworkPackages) { throw ('Unexpected sample project reference: ' + $reference.Include) }
+    $packageReference = $sampleProject.CreateElement('PackageReference')
+    $packageReference.SetAttribute('Include', $name)
+    $packageReference.SetAttribute('Version', $version)
+    $reference.ParentNode.ReplaceChild($packageReference, $reference) | Out-Null
+}
+$sampleProject.Save($sampleProjectPath)
 $project = @'
 <Project Sdk="Microsoft.NET.Sdk.Web">
   <PropertyGroup><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable><IsPackable>false</IsPackable></PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Approval.Certificate" Version="{0}" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="{1}" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="{1}" PrivateAssets="all" />
+    <ProjectReference Include="../samples/Approval.Certificate/Approval.Certificate.csproj" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="{0}" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="{0}" PrivateAssets="all" />
     <Content Update="Flows/*.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>
-'@ -f $version, $efVersion
+'@ -f $efVersion
 $project | Set-Content -LiteralPath (Join-Path $apiRoot 'Certificate.Api.csproj')
-foreach ($name in @('Approval.Core', 'Approval.AspNetCore', 'Approval.Certificate')) {
+foreach ($name in $frameworkPackages) {
     Copy-Item -LiteralPath (Join-Path $packages ($name + '.' + $version + '.nupkg')) -Destination $feed
 }
 Invoke-CheckedCommand 'dotnet' @('build', 'Certificate.Api.csproj', '--configuration', 'Release', ('-p:RestorePackagesPath=' + (Join-Path $consumerRoot 'nuget-packages'))) $apiRoot
 $deps = Get-Content -LiteralPath (Join-Path $apiRoot 'bin/Release/net10.0/Certificate.Api.deps.json') -Raw | ConvertFrom-Json
-foreach ($name in @('Approval.Core', 'Approval.AspNetCore', 'Approval.Certificate')) {
+foreach ($name in $frameworkPackages) {
     if ($deps.libraries.($name + '/' + $version).type -ne 'package') { throw ('Consumer did not load a NuGet package: ' + $name) }
     $expectedHash = 'sha512-' + [Convert]::ToBase64String([Security.Cryptography.SHA512]::HashData([IO.File]::ReadAllBytes((Join-Path $feed ($name + '.' + $version + '.nupkg')))))
     if ($deps.libraries.($name + '/' + $version).sha512 -cne $expectedHash) { throw ('Consumer restored stale package bytes: ' + $name) }
 }
+if ($deps.libraries.('Approval.Certificate/' + $version).type -ne 'project') { throw 'The business sample must be built from the copied sample project.' }
 foreach ($name in @('certificate.create.json', 'certificate.update.json', 'certificate.revoke.json')) {
-    if (-not (Test-Path -LiteralPath (Join-Path $apiRoot ('bin/Release/net10.0/Flows/' + $name)))) { throw ('Missing packaged workflow: ' + $name) }
+    if (-not (Test-Path -LiteralPath (Join-Path $apiRoot ('bin/Release/net10.0/Flows/' + $name)))) { throw ('Missing sample workflow: ' + $name) }
 }
 
 $packagePath = Join-Path $uiRoot 'package.json'
@@ -103,7 +132,7 @@ $installed = Get-Content -LiteralPath (Join-Path $uiRoot 'node_modules/@approval
 if ($installed.version -ne $version -or $installed.exports.'.'.import -ne './dist/index.js') { throw 'Consumer resolved source exports instead of the release package' }
 Invoke-CheckedCommand 'pnpm' @('build') $uiRoot
 
-$artifacts = @($tarball) + @(Get-ChildItem -LiteralPath $packages -Filter '*.nupkg' | ForEach-Object FullName)
+$artifacts = @($tarball) + @($frameworkPackages | ForEach-Object { Join-Path $packages ($_ + '.' + $version + '.nupkg') })
 $hashes = @($artifacts | ForEach-Object { [pscustomobject]@{ File = (Split-Path -Leaf $_); Sha256 = (Get-FileHash -LiteralPath $_).Hash.ToLowerInvariant() } })
 $sourceHasher = [Security.Cryptography.IncrementalHash]::CreateHash([Security.Cryptography.HashAlgorithmName]::SHA256)
 Push-Location -LiteralPath $repositoryRoot

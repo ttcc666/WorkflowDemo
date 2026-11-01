@@ -65,7 +65,7 @@ pwsh -File 'samples/Certificate.Api/smoke-test.ps1' -Base 'http://localhost:5199
 
 ## 流程发布与版本
 
-启动只补齐缺失的流程，不覆盖管理员已经发布的定义。注册证默认模板位于 `src/Approval.Certificate/Flows`，随类库内嵌并复制到构建/发布输出；宿主 `Flows` 目录的同名模板优先。修改宿主模板之后，需要通过管理接口/设计器或显式发布命令生成新版本：
+启动只补齐缺失的流程，不覆盖管理员已经发布的定义。注册证默认模板位于 `samples/Approval.Certificate/Flows`，随示例类库内嵌并复制到构建/发布输出；宿主 `Flows` 目录的同名模板优先。修改宿主模板之后，需要通过管理接口/设计器或显式发布命令生成新版本：
 
 ```powershell
 dotnet run --project 'samples/Certificate.Api' --launch-profile 'http' -- '--Certificate:DatabaseOperation=publish-flows'

@@ -18,7 +18,7 @@ if ($Scope -in @('All', 'Backend')) {
     }
     Invoke-CheckedCommand 'dotnet' @('build', 'Workflow.slnx', '--no-restore', '--configuration', 'Release')
     Invoke-CheckedCommand 'dotnet' @('test', 'Workflow.slnx', '--no-build', '--no-restore', '--configuration', 'Release', '--verbosity', 'minimal')
-    Invoke-CheckedCommand 'dotnet' @('ef', 'migrations', 'has-pending-model-changes', '--project', 'src/Approval.Certificate', '--startup-project', 'samples/Certificate.Api', '--configuration', 'Release', '--no-build')
+    Invoke-CheckedCommand 'dotnet' @('ef', 'migrations', 'has-pending-model-changes', '--project', 'samples/Approval.Certificate', '--startup-project', 'samples/Certificate.Api', '--configuration', 'Release', '--no-build')
 
     $parseTokens = $null
     $parseErrors = $null
