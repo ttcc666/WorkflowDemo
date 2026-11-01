@@ -3,7 +3,6 @@ import { approvalApi } from '../../api/approval'
 import { ApiError } from '../../api/http'
 import { useAsyncData } from '../../composables/useAsyncData'
 import type { FlowDefinition } from '../flow/flowModel'
-import { useApprovalUser } from '../../composables/useApprovalUser'
 import { approvalUserKey } from '../../config'
 
 /**
@@ -39,15 +38,8 @@ export function useApprovalDetail(instanceId: Ref<string>) {
   const myTask = computed(() => handling.data.value?.task)
   const editableFields = computed(() => handling.data.value?.editableFields ?? [])
 
-  const { userId } = useApprovalUser()
-  const isInitiator = computed(() => instance.data.value?.initiatorId === userId.value)
-  // 未有人同意时可撤回；被退回到发起人时总是可以撤回（放弃本次申请）
-  const canWithdraw = computed(() => {
-    const value = instance.data.value
-    if (!isInitiator.value || value?.status !== 'Running') return false
-    const returned = value.tasks.some((t) => t.kind === 'Resubmit' && t.status === 'Pending')
-    return returned || !value.tasks.some((t) => t.status === 'Approved')
-  })
+  // 使用服务端的操作能力，包含宿主撤回配置；切换用户或刷新详情时随响应更新。
+  const canWithdraw = computed(() => instance.data.value?.canWithdraw ?? false)
 
   /** 当前待办所在节点的退回 / 加签选项 */
   const nodeOptions = computed(() => {

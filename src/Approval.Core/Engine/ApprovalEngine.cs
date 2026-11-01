@@ -172,9 +172,7 @@ public sealed partial class ApprovalEngine
         if (instance.Status != InstanceStatus.Running) throw new ApprovalException("流程已结束，无法撤回");
         if (instance.InitiatorId != userId)
             throw new ApprovalException("只有发起人可以撤回") { Code = ApprovalErrorCode.Forbidden };
-        // 已被退回到发起人时总是可以撤回（放弃本次申请）
-        var returnedToInitiator = instance.Tasks.Any(t => t.Kind == ApprovalTaskKind.Resubmit && t.Status == ApprovalTaskStatus.Pending);
-        if (!_options.AllowWithdrawAfterApproval && !returnedToInitiator && instance.Tasks.Any(t => t.Status == ApprovalTaskStatus.Approved))
+        if (!CanWithdraw(instance, userId, _options))
             throw new ApprovalException("已有人审批通过，无法撤回");
 
         var flow = await LoadFlowAsync(instance, ct);
@@ -186,6 +184,13 @@ public sealed partial class ApprovalEngine
 
         await CommitAsync(instance, ct);
     }
+
+    /// <summary>详情中的撤回能力与实际操作共用的规则；instance 必须已加载任务。退回发起人后始终可撤回。</summary>
+    internal static bool CanWithdraw(ApprovalInstance instance, string userId, ApprovalOptions options) =>
+        instance.Status == InstanceStatus.Running && instance.InitiatorId == userId
+        && (options.AllowWithdrawAfterApproval
+            || instance.Tasks.Any(t => t.Kind == ApprovalTaskKind.Resubmit && t.Status == ApprovalTaskStatus.Pending)
+            || !instance.Tasks.Any(t => t.Status == ApprovalTaskStatus.Approved));
 
     /// <summary>把自己的待办转交给指定用户。</summary>
     public async Task TransferAsync(Guid taskId, string userId, string toUserId, string? comment = null, CancellationToken ct = default)

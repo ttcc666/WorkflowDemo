@@ -24,7 +24,7 @@ public sealed class HttpActionHandler(IHttpClientFactory httpClientFactory, Appr
         },
         new ActionParameter("url", "地址")
         {
-            Required = true, Help = "支持占位符，如 {appBaseUrl}/api/archive?id={实例ID|url}", Template = TemplateEncoding.Raw
+            Required = true, Help = "填写最终地址（不跟随重定向）；支持占位符，如 {appBaseUrl}/api/archive?id={实例ID|url}", Template = TemplateEncoding.Raw
         },
         new ActionParameter("headers", "请求头", ActionParameterKind.TextArea)
         {

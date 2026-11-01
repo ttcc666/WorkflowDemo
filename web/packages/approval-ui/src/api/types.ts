@@ -93,6 +93,8 @@ export interface ApprovalInstance {
   access: ApprovalAccessLevel
   /** 当前用户看不到的字段（节点字段权限设为隐藏）：已从 formDataJson 与修改轨迹中去掉，展示时应隐藏这些字段 */
   hiddenFields: string[]
+  /** 服务端按当前用户、流程状态和撤回配置计算；提交撤回时仍会再次校验 */
+  canWithdraw: boolean
 }
 
 export type ApprovalAccessLevel = 'Participant' | 'Full'

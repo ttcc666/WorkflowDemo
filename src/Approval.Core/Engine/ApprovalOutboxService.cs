@@ -190,7 +190,8 @@ public sealed class ApprovalOutboxService(
 
             case OutboxKind.Action:
             {
-                var handler = actions.FirstOrDefault(a => string.Equals(a.Descriptor.Type, message.Target, StringComparison.OrdinalIgnoreCase))
+                // 与同步引擎和设计器一致：同名动作由后注册的实现覆盖。
+                var handler = actions.LastOrDefault(a => string.Equals(a.Descriptor.Type, message.Target, StringComparison.OrdinalIgnoreCase))
                               ?? throw new InvalidOperationException($"动作类型 '{message.Target}' 未注册");
                 var payload = JsonSerializer.Deserialize<AsyncActionPayload>(message.PayloadJson, OutboxJson.Options)!;
                 var instance = await _db.Set<ApprovalInstance>().AsNoTracking().FirstOrDefaultAsync(i => i.Id == message.InstanceId, ct)

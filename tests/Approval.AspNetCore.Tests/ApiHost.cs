@@ -89,7 +89,7 @@ public sealed class ApiHost : IAsyncDisposable
     public HttpClient Client { get; }
 
     public static async Task<ApiHost> StartAsync(bool withDirectory = true, Action<ApprovalBuilder>? build = null,
-        Action<ApprovalAspNetCoreOptions>? api = null)
+        Action<ApprovalAspNetCoreOptions>? api = null, Action<ApprovalOptions>? workflow = null)
     {
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseTestServer();
@@ -104,7 +104,11 @@ public sealed class ApiHost : IAsyncDisposable
         builder.Services.AddSingleton<IApprovalCurrentUser, HeaderCurrentUser>();
         builder.Services.AddApprovalAspNetCore(api);
         var approval = builder.Services
-            .AddApprovalWorkflow<ApiDbContext>(o => o.EnableBackgroundServices = false)
+            .AddApprovalWorkflow<ApiDbContext>(o =>
+            {
+                o.EnableBackgroundServices = false;
+                workflow?.Invoke(o);
+            })
             .AddBusinessHandler<DocHandler>();
         build?.Invoke(approval);
 

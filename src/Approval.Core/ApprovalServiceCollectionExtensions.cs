@@ -36,7 +36,20 @@ public static class ApprovalServiceCollectionExtensions
         services.AddSingleton<IApproverResolver, InitiatorApproverResolver>();
 
         // 内置动作：HTTP 请求、脚本
-        services.AddHttpClient(HttpActionHandler.HttpClientName);
+        services.AddHttpClient(HttpActionHandler.HttpClientName)
+            .ConfigurePrimaryHttpMessageHandler((handler, _) =>
+            {
+                // 白名单只允许显式请求的地址；禁止传输层自动跳转，保留宿主的代理等配置。
+                switch (handler)
+                {
+                    case SocketsHttpHandler sockets:
+                        sockets.AllowAutoRedirect = false;
+                        break;
+                    case HttpClientHandler http:
+                        http.AllowAutoRedirect = false;
+                        break;
+                }
+            });
         services.AddHttpClient(ChannelJson.HttpClientName);
         services.AddScoped<IApprovalActionHandler, HttpActionHandler>();
         services.AddScoped<IApprovalActionHandler, ScriptActionHandler>();

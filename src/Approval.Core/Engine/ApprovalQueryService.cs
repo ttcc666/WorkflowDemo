@@ -61,7 +61,11 @@ public sealed record InstanceDetail(
     IReadOnlyList<ApprovalTask> Tasks,
     IReadOnlyList<ApprovalLog> Logs,
     ApprovalAccessLevel Access,
-    IReadOnlyList<string> HiddenFields);
+    IReadOnlyList<string> HiddenFields)
+{
+    /// <summary>当前查看者是否可以撤回；仅供界面显示，提交操作时引擎会再次校验。</summary>
+    public bool CanWithdraw { get; init; }
+}
 
 /// <summary>待办筛选：关键字（标题 / 申请人）、流程标识、只看已超时。</summary>
 public sealed record TodoQuery(string? Keyword = null, string? DefinitionKey = null, bool OverdueOnly = false);
@@ -209,7 +213,10 @@ public sealed class ApprovalQueryService(
         return new InstanceDetail(instance.Id, instance.DefinitionId, instance.DefinitionKey, instance.DefinitionVersion, instance.BusinessType,
             instance.BusinessKey, instance.Title, instance.InitiatorId, instance.Status, instance.CurrentNodeId, instance.Round,
             FieldVisibility.RemoveFields(instance.FormDataJson, hidden), instance.CreatedAt, instance.CompletedAt, instance.Tasks,
-            FieldVisibility.FilterLogs(instance.Logs, hidden), access.Level, hidden.Order(StringComparer.OrdinalIgnoreCase).ToList());
+            FieldVisibility.FilterLogs(instance.Logs, hidden), access.Level, hidden.Order(StringComparer.OrdinalIgnoreCase).ToList())
+        {
+            CanWithdraw = ApprovalEngine.CanWithdraw(instance, viewer.UserId, options)
+        };
     }
 
     /// <summary>实例绑定版本的流程定义（同一请求内按定义 ID 缓存，按业务查询多条记录时只解析一次）。</summary>

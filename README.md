@@ -183,6 +183,7 @@ builder.Services.AddApprovalWorkflow<AppDbContext>().AddAccessPolicy<AuditorPoli
 
 - 完整流程定义（含 HTTP 动作参数、通知配置）**仅管理员**（及 `ApprovalAspNetCoreOptions.DefinitionReaders` 中的角色）可读；查看实例的人通过 `instances/{id}/definition` 取公开视图（去掉动作参数、通知、时限与发起角色）。
 - `ApprovalQueryService.GetInstanceAsync` / `GetByBusinessAsync` **不做权限判断**，供宿主后台使用；接口请用 `GetInstanceForViewerAsync` / `GetByBusinessForViewerAsync`。业务单据自身接口的权限由宿主负责。
+- 审批详情的 `canWithdraw` 表示当前查看者能否撤回，统一考虑流程状态、发起人身份、`AllowWithdrawAfterApproval` 与退回发起人的情况；前端据此显示按钮，提交撤回时服务端再次校验。
 
 **分页**：`todo`、`done`、`started`、`cc`、`admin/instances`、`outbox` 返回 `{ items, total, page, pageSize }`；参数 `page`（从 1 开始）、`pageSize`（默认 20，最大 100）、`keyword`（标题 / 申请人）、`status`、`definitionKey`、`from` / `to`（发起时间，ISO 8601），待办另有 `overdueOnly`。
 
@@ -249,7 +250,7 @@ flowchart LR
 
 | 能力 | 说明 |
 |---|---|
-| 动作节点 `Action` | 依次执行步骤：内置 `Http`（主机白名单防 SSRF、`Idempotency-Key`）、`Script`（Jint 沙箱，限制时间 / 内存 / 语句数 / 递归，无 .NET 访问）、宿主注册的动作（`AddActionHandler<T>()`，设计器按参数描述自动生成表单） |
+| 动作节点 `Action` | 依次执行步骤：内置 `Http`（主机白名单、禁止自动重定向，需配置最终地址、`Idempotency-Key`）、`Script`（Jint 沙箱，限制时间 / 内存 / 语句数 / 递归，无 .NET 访问）、宿主注册的动作（`AddActionHandler<T>()`，设计器按参数描述自动生成表单；同名动作在同步、异步模式下均由最后注册的实现覆盖） |
 | 同步 / 异步 | 同步在审批事务内执行，失败回滚（可选“失败继续”），输出写入表单变量供后续条件使用，如 `risk.body.level == "high"`；异步写入 Outbox 由后台执行并重试 |
 | 动作的数据修改 | 注册动作可注入宿主 DbContext 修改业务数据，**不要自行调用 SaveChanges**：同步动作的修改随审批一起提交；异步动作的修改与投递结果在同一事务提交。动作失败时，其做了一半的修改会被撤销（“失败继续”时也是），只记录失败信息；异步动作自行 SaveChanges 的部分也会随事务回滚 |
 | 参数模板 | `{标题}`、`{申请人}`、`{form.certNo}`、`{appBaseUrl}` 等；`{x\|json}` / `{x\|url}` 指定转义，HTTP 请求体默认按 JSON 转义；脚本代码不做替换（防注入） |
