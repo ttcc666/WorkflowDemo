@@ -34,7 +34,7 @@ async function request<T>(method: string, url: string, options: RequestOptions =
   else if (options.body !== undefined) body = JSON.stringify(options.body)
   if (typeof body === 'string') headers['Content-Type'] = 'application/json'
 
-  const response = await fetch(url, { method, headers, body, signal: options.signal })
+  const response = await (config.fetcher ?? fetch)(url, { method, headers, body, signal: options.signal })
 
   if (!response.ok) {
     let message = `请求失败（HTTP ${response.status}）`

@@ -7,6 +7,8 @@
 
 审批的定义、流转、待办、轨迹、通知由框架统一处理。
 
+已有 Admin.Core 宿主可使用[注册证审批集成](docs/admin-core-integration.md)，复用登录、组织、菜单、权限和令牌刷新。
+
 ```
 src/Approval.Core                 框架本体（EF Core Relational + DynamicExpresso + Jint），不依赖 ASP.NET
 src/Approval.AspNetCore           ASP.NET Core 集成：MapApprovalEndpoints() 提供全部审批接口、当前用户与用户目录抽象

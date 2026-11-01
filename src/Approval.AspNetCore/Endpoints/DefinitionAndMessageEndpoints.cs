@@ -158,7 +158,8 @@ internal static class DirectoryEndpoints
     }
 
     private static IApprovalUserDirectory? Directory(HttpContext http) =>
-        http.RequestServices.GetService(typeof(IApprovalUserDirectory)) as IApprovalUserDirectory;
+        http.RequestServices.GetService(typeof(IApprovalHttpUserDirectory)) as IApprovalUserDirectory
+        ?? http.RequestServices.GetService(typeof(IApprovalUserDirectory)) as IApprovalUserDirectory;
 
     private static IResult NotConfigured() =>
         Results.Problem(title: "宿主未注册用户目录（IApprovalUserDirectory）", statusCode: StatusCodes.Status501NotImplemented,

@@ -6,6 +6,8 @@ export interface ApprovalUIOptions {
   apiBase?: string
   /** 每个请求附加的请求头（如 `Authorization`）；每次请求时调用，可返回最新令牌 */
   headers?: () => Record<string, string>
+  /** 宿主认证请求桥接：保留原始 Response，支持令牌刷新、取消和二进制响应。 */
+  fetcher?: (url: string, init: RequestInit) => Promise<Response>
   /** 接口返回 401 时调用（如跳转登录页） */
   onUnauthorized?: () => void
   /**
