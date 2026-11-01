@@ -1,8 +1,12 @@
 <Solution>
+  <Folder Name="/eng/">
+    <Project Path="eng/Approval.ContractTool/Approval.ContractTool.csproj" />
+  </Folder>
   <Folder Name="/samples/">
     <Project Path="samples/Certificate.Api/Certificate.Api.csproj" />
   </Folder>
   <Folder Name="/src/">
+    <Project Path="src/Approval.Certificate/Approval.Certificate.csproj" />
     <Project Path="src/Approval.AspNetCore/Approval.AspNetCore.csproj" />
     <Project Path="src/Approval.Core/Approval.Core.csproj" />
   </Folder>

@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { onBeforeUnmount, shallowRef, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { approvalApi } from '../api/approval'
-import type { ApprovalMessage } from '../api/types'
-import { approvalUserKey } from '../config'
+import { useApprovalClient } from '../client'
+import type { ApprovalMessage } from '../contracts/api'
 import { approvalRouteNames } from '../routes'
 import { formatDateTime } from '../utils/labels'
+
+const { api: approvalApi, userKey: approvalUserKey } = useApprovalClient()
 
 /** 站内信：铃铛显示未读数，展开查看最近消息，点击跳转审批详情并标记已读。 */
 const router = useRouter()

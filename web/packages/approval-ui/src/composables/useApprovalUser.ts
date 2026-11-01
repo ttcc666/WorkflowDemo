@@ -1,30 +1,36 @@
-import { computed, shallowRef, watch } from 'vue'
-import { approvalApi } from '../api/approval'
-import type { ApprovalMe } from '../api/types'
-import { approvalUserKey } from '../config'
+import { computed, effectScope, shallowRef, watch } from 'vue'
+import { registerClientCleanup, useApprovalClient, type ApprovalClient } from '../client'
+import type { ApprovalMe } from '../contracts/api'
 
-// 全应用共享一份当前用户信息（GET /me），用户标识变化时重新加载
-const me = shallowRef<ApprovalMe | null>(null)
-let started = false
-let controller: AbortController | null = null
+const users = new WeakMap<ApprovalClient, ReturnType<typeof createUserState>>()
 
-async function load() {
-  controller?.abort()
-  const current = (controller = new AbortController())
-  try {
-    const result = await approvalApi.me(current.signal)
-    if (current === controller) me.value = result
-  } catch {
-    if (current === controller) me.value = null
+function createUserState(client: ApprovalClient) {
+  const me = shallowRef<ApprovalMe | null>(null)
+  const scope = effectScope(true)
+  let controller: AbortController | null = null
+
+  async function load() {
+    controller?.abort()
+    const current = (controller = new AbortController())
+    try {
+      const result = await client.api.me(current.signal)
+      if (current === controller) me.value = result
+    } catch {
+      if (current === controller) me.value = null
+    }
   }
-}
 
-/** 当前用户（来自后端 /me）：用户 ID、名称、角色、是否管理员、能否查看流程定义、是否启用表单审批。 */
-export function useApprovalUser() {
-  if (!started) {
-    started = true
-    watch(approvalUserKey, load, { immediate: true })
-  }
+  registerClientCleanup(client, () => {
+    scope.stop()
+    controller?.abort()
+    controller = null
+    me.value = null
+    users.delete(client)
+  })
+  scope.run(() => watch(client.userKey, () => {
+    me.value = null
+    void load()
+  }, { immediate: true, flush: 'sync' }))
 
   return {
     me: computed(() => me.value),
@@ -36,4 +42,12 @@ export function useApprovalUser() {
     formBusinessType: computed(() => me.value?.formBusinessType ?? null),
     reload: load,
   }
+}
+
+/** 同一客户端共享当前用户；身份切换会取消旧请求，应用释放后停止监听。 */
+export function useApprovalUser() {
+  const client = useApprovalClient()
+  let state = users.get(client)
+  if (!state) users.set(client, state = createUserState(client))
+  return state
 }

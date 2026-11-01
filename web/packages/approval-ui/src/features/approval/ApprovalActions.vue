@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { computed, reactive, ref, shallowRef, useTemplateRef } from 'vue'
-import { approvalApi } from '../../api/approval'
-import type { AddSignMode, ApprovalTask, ReturnTarget } from '../../api/types'
+import { useApprovalClient } from '../../client'
+import type { AddSignMode, ApprovalTask, ReturnTarget } from '../../contracts/api'
 import UserPicker from '../../components/UserPicker.vue'
 import DynamicForm from '../forms/DynamicForm.vue'
 import { initialValues, type FormSchema, type FormValues } from '../forms/formModel'
 import { assigneeText, taskKindLabels } from '../../utils/labels'
+
+const { api: approvalApi } = useApprovalClient()
 
 type ActionKind = 'approve' | 'reject' | 'transfer' | 'withdraw' | 'addSign' | 'resubmit' | 'terminate'
 

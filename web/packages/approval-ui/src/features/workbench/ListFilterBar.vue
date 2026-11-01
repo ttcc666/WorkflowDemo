@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { FlowSummary } from '../../api/types'
+import type { FlowSummary } from '../../contracts/api'
 import type { ListFilters } from '../../composables/usePagedList'
 import { instanceStatusLabels } from '../../utils/labels'
 

@@ -2,14 +2,16 @@
 import { shallowRef } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { approvalApi } from '../../api/approval'
+import { useApprovalClient } from '../../client'
 import { errorMessage } from '../../api/http'
-import type { FlowSummary, InstanceListItem } from '../../api/types'
+import type { FlowSummary, InstanceListItem } from '../../contracts/api'
 import UserPicker from '../../components/UserPicker.vue'
 import { usePagedList } from '../../composables/usePagedList'
 import { approvalRouteNames } from '../../routes'
 import InstanceTable from '../workbench/InstanceTable.vue'
 import ListFilterBar from '../workbench/ListFilterBar.vue'
+
+const { api: approvalApi } = useApprovalClient()
 
 /** 流程监控：全部流程的分页搜索（状态、流程、发起人、关键字、发起日期），进行中的可终止。 */
 defineProps<{ flows: FlowSummary[] }>()

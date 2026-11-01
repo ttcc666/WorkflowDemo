@@ -2,13 +2,14 @@
 import { computed, shallowRef } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { approvalApi } from '../api/approval'
+import { useApprovalClient } from '../client'
 import { errorMessage } from '../api/http'
-import type { DraftSummary, StartableFlow } from '../api/types'
+import type { DraftSummary, StartableFlow } from '../contracts/api'
 import { useAsyncData } from '../composables/useAsyncData'
-import { approvalUserKey } from '../config'
 import { approvalRouteNames } from '../routes'
 import { formatDateTime } from '../utils/labels'
+
+const { api: approvalApi, userKey: approvalUserKey } = useApprovalClient()
 
 /** 发起中心：我的草稿 + 按分类列出当前用户可发起的流程（设置了“在发起中心显示”）。 */
 const router = useRouter()

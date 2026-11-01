@@ -49,6 +49,8 @@ public static class ApprovalAspNetCoreExtensions
             ?? throw new InvalidOperationException("请先调用 services.AddApprovalAspNetCore()");
 
         var group = app.MapGroup(prefix).WithTags("Approval");
+        foreach (var status in new[] { 400, 401, 403, 404, 409 })
+            group.WithMetadata(new ProducesResponseTypeMetadata(status, typeof(Microsoft.AspNetCore.Mvc.ProblemDetails), ["application/problem+json"]));
         group.AddEndpointFilter(async (context, next) =>
         {
             try

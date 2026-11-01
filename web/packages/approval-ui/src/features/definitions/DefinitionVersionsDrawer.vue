@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { approvalApi } from '../../api/approval'
+import { useApprovalClient } from '../../client'
 import { useAsyncData } from '../../composables/useAsyncData'
 import { formatDateTime } from '../../utils/labels'
+
+const { api: approvalApi } = useApprovalClient()
 
 const props = defineProps<{ flowKey: string }>()
 const visible = defineModel<boolean>('visible', { required: true })

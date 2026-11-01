@@ -1,11 +1,12 @@
 {
   "name": "@approval/ui",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Approval.Core 的 Vue 3 + Element Plus 前端：审批工作台、审批详情、流程设计器、表单设计器、发起中心",
   "type": "module",
   "sideEffects": ["**/*.css"],
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./contracts": { "types": "./src/contracts/index.ts" }
   },
   "files": ["dist"],
   "publishConfig": {
@@ -14,7 +15,8 @@
         "types": "./dist/types/index.d.ts",
         "import": "./dist/index.js"
       },
-      "./style.css": "./dist/approval-ui.css"
+      "./style.css": "./dist/approval-ui.css",
+      "./contracts": { "types": "./dist/types/contracts/index.d.ts" }
     },
     "types": "./dist/types/index.d.ts"
   },

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, shallowRef, watch } from 'vue'
-import type { ApprovalTask } from '../../api/types'
+import type { ApprovalTask } from '../../contracts/api'
 import UserPicker from '../../components/UserPicker.vue'
 import { assigneeText } from '../../utils/labels'
 

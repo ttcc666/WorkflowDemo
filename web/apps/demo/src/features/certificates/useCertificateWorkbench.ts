@@ -1,11 +1,14 @@
 import { shallowRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { ApiError, approvalUserKey, errorMessage } from '@approval/ui'
+import { ApiError, errorMessage } from '@approval/ui'
+import { approval } from '@/approval'
 import { certificateApi } from '@/api/certificates'
 import type { Certificate, CertificateData, CertificateRequest } from '@/api/types'
 import { findApprovalInstanceId, useCertificates } from './useCertificates'
 import { createSubmissionIdentity } from './submissionIdentity'
+
+const { userKey: approvalUserKey } = approval
 
 /** 注册证页面的选中项、重新申请、稳定提交标识与服务端字段错误。 */
 export function useCertificateWorkbench() {

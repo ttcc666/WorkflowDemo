@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, shallowRef, watch } from 'vue'
-import type { DirectoryUser } from '../api/types'
+import type { DirectoryUser } from '../contracts/api'
 import { useDirectory } from '../composables/useDirectory'
+import { useApprovalClient } from '../client'
 
 /**
  * 用户选择器：远程搜索用户目录，回显已选用户名称。
@@ -22,6 +23,8 @@ const props = withDefaults(
 const model = defineModel<string | string[] | null>({ default: null })
 
 const directory = useDirectory()
+const { userKey } = useApprovalClient()
+let request = 0
 const options = shallowRef<DirectoryUser[]>([])
 const loading = shallowRef(false)
 
@@ -29,23 +32,29 @@ const selectedIds = computed(() => (Array.isArray(model.value) ? model.value : m
 const visibleOptions = computed(() => options.value.filter((u) => !props.exclude.includes(u.id)))
 
 async function search(keyword: string) {
+  const current = ++request
   loading.value = true
   try {
     const found = await directory.search(keyword.trim())
     // 保留已选项，避免搜索后已选标签显示为 ID
     const selected = await directory.resolve(selectedIds.value)
+    if (current !== request) return
     options.value = [...selected.filter((s) => !found.some((f) => f.id === s.id)), ...found]
   } finally {
-    loading.value = false
+    if (current === request) loading.value = false
   }
 }
 
-watch(selectedIds, async (ids) => {
+watch([selectedIds, userKey], async ([ids, identity], [, previousIdentity]) => {
+  const current = ++request
+  if (identity !== previousIdentity) options.value = []
+  loading.value = false
   if (ids.some((id) => !options.value.some((o) => o.id === id))) {
     const selected = await directory.resolve(ids)
+    if (current !== request) return
     options.value = [...selected, ...options.value.filter((o) => !ids.includes(o.id))]
   }
-}, { immediate: true })
+}, { immediate: true, flush: 'sync' })
 
 function onVisible(visible: boolean) {
   if (visible && options.value.length <= selectedIds.value.length) void search('')

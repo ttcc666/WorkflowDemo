@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { TodoItem } from '../../api/types'
+import type { TodoItem } from '../../contracts/api'
 import { assigneeText, dueText, formatDateTime, taskKindLabels } from '../../utils/labels'
 
 defineProps<{ items: TodoItem[]; loading: boolean }>()

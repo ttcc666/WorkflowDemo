@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { ElMessage } from 'element-plus'
-import { approvalApi } from '../../api/approval'
+import { useApprovalClient } from '../../client'
 import { errorMessage } from '../../api/http'
-import type { FileValue } from './formModel'
+import type { FileValue } from '../../contracts/forms'
+
+const { api: approvalApi } = useApprovalClient()
 
 /** 附件列表：点击下载（带鉴权请求头，服务端校验下载权限）；removable 时可移除。 */
 defineProps<{ files: FileValue[]; removable?: boolean }>()

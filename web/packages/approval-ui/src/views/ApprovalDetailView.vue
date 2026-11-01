@@ -2,9 +2,9 @@
 import { computed, ref, shallowRef, useTemplateRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { approvalApi } from '../api/approval'
+import { useApprovalClient } from '../client'
 import { ApiError, errorMessage } from '../api/http'
-import type { AddSignMode, ApprovalTask } from '../api/types'
+import type { AddSignMode, ApprovalTask } from '../contracts/api'
 import { useApprovalUser } from '../composables/useApprovalUser'
 import DynamicForm from '../features/forms/DynamicForm.vue'
 import {
@@ -24,6 +24,8 @@ import { businessPanelOf } from '../features/approval/businessPanels'
 import { useApprovalDetail } from '../features/approval/useApprovalDetail'
 import FlowViewer from '../features/flow/FlowViewer.vue'
 
+const { api: approvalApi, config: approvalConfig } = useApprovalClient()
+
 const route = useRoute()
 const router = useRouter()
 const { userId, formBusinessType, isAdmin } = useApprovalUser()
@@ -32,7 +34,7 @@ const instanceId = computed(() => route.params.id as string)
 const { instance, loading, error, notFound, definition, myTask, editableFields, canWithdraw, nodeOptions, reload } =
   useApprovalDetail(instanceId)
 
-const businessPanel = computed(() => (instance.value ? businessPanelOf(instance.value.businessType) : undefined))
+const businessPanel = computed(() => (instance.value ? businessPanelOf(instance.value.businessType, approvalConfig().businessPanels) : undefined))
 // 定义带表单时按实例绑定版本的表单结构展示，去掉当前用户看不到的隐藏字段；表单审批被退回时可修改后重新提交
 const formSchema = computed(() => {
   const form = formOfDefinition(definition.value?.definitionJson).form

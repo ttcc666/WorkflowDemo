@@ -1,11 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
     <PackageId>Approval.AspNetCore</PackageId>
-    <Version>0.1.0</Version>
+    <Version>$(ApprovalVersion)</Version>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
     <Description>Approval.Core 的 ASP.NET Core 集成：通用审批接口（Minimal API）、当前用户与用户目录抽象、异常映射为 ProblemDetails。</Description>
     <PackageTags>approval;workflow;aspnetcore</PackageTags>
   </PropertyGroup>
@@ -20,6 +18,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Approval.AspNetCore.Tests" />
+    <None Include="../../README.md" Pack="true" PackagePath="README.md" />
   </ItemGroup>
 
 </Project>

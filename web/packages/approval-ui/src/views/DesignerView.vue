@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, provide, shallowRef, useTemplateRef, watch } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { approvalApi } from '../api/approval'
+import { useApprovalClient } from '../client'
 import { ApiError, errorMessage } from '../api/http'
 import { useAsyncData } from '../composables/useAsyncData'
 import { useApprovalUser } from '../composables/useApprovalUser'
@@ -17,10 +17,13 @@ import { designerFormKey } from '../features/designer/designerContext'
 import FlowSettingsPanel from '../features/forms/FlowSettingsPanel.vue'
 import FormDesigner from '../features/forms/FormDesigner.vue'
 import { useFlowDesigner } from '../features/designer/useFlowDesigner'
+import { useDesignerShortcuts } from '../features/designer/useDesignerShortcuts'
 import FlowCanvas from '../features/flow/FlowCanvas.vue'
 import { newFlowDefinition, notifyEventsFor, type FlowDefinition, type NodeType } from '../features/flow/flowModel'
-import type { ApprovalMeta } from '../api/types'
+import type { ApprovalMeta } from '../contracts/api'
 import { approvalRouteNames } from '../routes'
+
+const { api: approvalApi } = useApprovalClient()
 
 const route = useRoute()
 const router = useRouter()
@@ -100,21 +103,8 @@ function onNodeDroppedOnEdge(nodeId: string, edgeId: string) {
 
 // ───── 撤销 / 重做快捷键（输入框内保留浏览器自带的文本撤销） ─────
 
-function onKeydown(e: KeyboardEvent) {
-  if (!(e.ctrlKey || e.metaKey)) return
-  const target = e.target as HTMLElement | null
-  if (target?.closest('input, textarea, [contenteditable="true"]')) return
-  const key = e.key.toLowerCase()
-  if (key === 'z' && !e.shiftKey) {
-    e.preventDefault()
-    designer.undo()
-  } else if (key === 'y' || (key === 'z' && e.shiftKey)) {
-    e.preventDefault()
-    designer.redo()
-  }
-}
-window.addEventListener('keydown', onKeydown)
-onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
+useDesignerShortcuts(designer)
+
 
 function autoLayout() {
   designer.autoLayout()

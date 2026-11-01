@@ -1,6 +1,8 @@
-import { http } from '@approval/ui'
+import { approval } from '../approval'
 import type { ListQuery, PagedResult } from '@approval/ui'
 import type { Certificate, CertificateData, CertificateRequest, CertificateRequestDetail } from './types'
+
+const http = approval.http
 
 export const certificateApi = {
   list: (query: ListQuery, signal?: AbortSignal) =>

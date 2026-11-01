@@ -25,14 +25,14 @@ internal static class AdminEndpoints
             CancellationToken ct) =>
         {
             await e.TerminateAsync(id, http.GetApprovalUserId(), body.Reason ?? "", ct);
-            return Results.NoContent();
+            return TypedResults.NoContent();
         });
 
         admin.MapPost("/tasks/{id:guid}/reassign", async (Guid id, ReassignRequest body, HttpContext http, ApprovalEngine e,
             CancellationToken ct) =>
         {
             await e.ReassignAsync(id, http.GetApprovalUserId(), body.ToUserId, body.Reason, ct);
-            return Results.NoContent();
+            return TypedResults.NoContent();
         });
 
         // 离职交接：先预览某人的未完成待办，再批量改派

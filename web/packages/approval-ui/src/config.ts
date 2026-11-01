@@ -24,23 +24,28 @@ export interface ApprovalUIOptions {
   outboxPanel?: Component
 }
 
-interface ResolvedOptions extends ApprovalUIOptions {
+export interface ResolvedApprovalUIOptions extends ApprovalUIOptions {
   apiBase: string
   businessPanels: Record<string, Component>
 }
 
-const current = shallowRef<ResolvedOptions>({ apiBase: '/api/approval', businessPanels: {} })
+const current = shallowRef<ResolvedApprovalUIOptions>({ apiBase: '/api/approval', businessPanels: {} })
 
-/** 设置全局配置（插件安装时调用）；非组件代码（如 http）也从这里读取，因此不使用 provide / inject。 */
-export function configureApprovalUI(options: ApprovalUIOptions = {}) {
-  current.value = {
+/** 为一个客户端解析配置；业务面板映射按实例复制。 */
+export function resolveApprovalUIOptions(options: ApprovalUIOptions = {}): ResolvedApprovalUIOptions {
+  return {
     ...options,
     apiBase: (options.apiBase ?? '/api/approval').replace(/\/+$/, ''),
     businessPanels: { ...options.businessPanels },
   }
 }
 
-export function approvalConfig(): ResolvedOptions {
+/** 兼容单实例配置。隔离客户端使用 createApprovalClient(options)。 */
+export function configureApprovalUI(options: ApprovalUIOptions = {}) {
+  current.value = resolveApprovalUIOptions(options)
+}
+
+export function approvalConfig(): ResolvedApprovalUIOptions {
   return current.value
 }
 

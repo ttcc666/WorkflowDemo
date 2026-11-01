@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { ApprovalDefinition } from '../../api/types'
+import type { ApprovalDefinition } from '../../contracts/api'
 import { formatDateTime } from '../../utils/labels'
 
 defineProps<{ definitions: ApprovalDefinition[]; loading: boolean }>()

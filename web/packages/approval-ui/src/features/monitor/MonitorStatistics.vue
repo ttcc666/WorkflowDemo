@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed, shallowRef } from 'vue'
-import { approvalApi } from '../../api/approval'
-import type { FlowSummary } from '../../api/types'
+import { useApprovalClient } from '../../client'
+import type { FlowSummary } from '../../contracts/api'
 import { useAsyncData } from '../../composables/useAsyncData'
 import { localDayStart } from '../../composables/usePagedList'
 import { assigneeText, durationText, formatDateTime } from '../../utils/labels'
+
+const { api: approvalApi } = useApprovalClient()
 
 /**
  * 统计：一行筛选（发起日期、流程）作用于下方全部内容；指标卡 + 各流程状态分布 + 节点处理时长 + 待办积压。

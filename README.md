@@ -9,9 +9,14 @@
 
 已有 Admin.Core 宿主可使用[注册证审批集成](docs/admin-core-integration.md)，复用登录、组织、菜单、权限和令牌刷新。
 
+新前端接入可使用[独立客户端与协议类型入口](docs/client-instances.md)，将请求、用户与目录缓存绑定到对应 Vue 应用；原单实例入口继续兼容。
+
+接口与流程格式、兼容基线、独立包与浏览器验收见[契约和发布流程](docs/contracts-and-release.md)。
+
 ```
 src/Approval.Core                 框架本体（EF Core Relational + DynamicExpresso + Jint），不依赖 ASP.NET
 src/Approval.AspNetCore           ASP.NET Core 集成：MapApprovalEndpoints() 提供全部审批接口、当前用户与用户目录抽象
+src/Approval.Certificate          注册证业务类库：服务、回调、接口、DbContext、迁移与默认流程；宿主通过 AddCertificateModule() 接入
 tests/Approval.Core.Tests         引擎单元测试（SQLite 内存库）
 tests/Approval.AspNetCore.Tests   接口集成测试（TestServer）
 tests/Certificate.Api.Tests      真实注册证宿主、并发、迁移、快照与恢复测试
@@ -305,9 +310,13 @@ builder.Services.AddApprovalWorkflow<AppDbContext>(o =>
 
 ## 运行
 
+本地与 CI 使用同一验证入口；公共编译设置和 NuGet 版本分别由 `Directory.Build.props`、`Directory.Packages.props` 管理。详细改造进度见[工程化方案](plans/2026-11-01-engineering-and-extensibility.md)。
+
 ```powershell
-cd D:\Study\CSharp\Workflow
-dotnet test                                                        # 后端单元测试
+Set-Location -LiteralPath 'D:\Study\CSharp\Workflow'
+pwsh -File './eng/verify.ps1'                         # 完整验证，与 CI 一致
+pwsh -File './eng/verify.ps1' -Scope 'Backend'         # 后端构建、测试、迁移检查
+pwsh -File './eng/verify.ps1' -Scope 'Frontend'        # 前端类型、测试、库与示例构建
 
 # 方式一：构建前端后由后端托管（打开 http://localhost:5199）
 cd web; pnpm install; pnpm build; cd ..          # 示例前端构建到 samples/Certificate.Api/wwwroot
@@ -323,6 +332,7 @@ cd web; pnpm typecheck; pnpm test
 # 打包
 dotnet pack src/Approval.Core -c Release -o output/packages
 dotnet pack src/Approval.AspNetCore -c Release -o output/packages
+dotnet pack src/Approval.Certificate -c Release -o output/packages
 cd web; pnpm build:lib                                            # @approval/ui → web/packages/approval-ui/dist（ES 模块 + d.ts + css）
 ./samples/Certificate.Api/smoke-test.ps1 -Base 'http://localhost:5199' # 仅针对显式本地地址的强断言验收
 ```
@@ -337,7 +347,7 @@ cd web; pnpm build:lib                                            # @approval/ui
 - 旧版 `IApprovalNotifier` 仍保留（提交后同步调用、失败只记日志），新代码请使用通知规则 + 渠道（Outbox 可靠投递）。
 - 同步 HTTP 动作在事务提交前执行，若随后提交失败外部调用已发生，有副作用的调用请使用异步模式。
 - 动作失败时的数据回滚只针对数据库：已经发出的外部调用无法撤回（异步动作请用 `IdempotencyKey` 保证重试幂等）。数据库执行策略开启自动重试（如 SQL Server `EnableRetryOnFailure`）时异步投递不使用事务，仅撤销未保存的修改；同步动作不应自行 SaveChanges（会连同审批的中间状态一起提交）。
-- 表结构有变化（`ApprovalMessages`、`ApprovalOutbox`、`ApprovalCarbonCopies`、`ApprovalDrafts`、`ApprovalFiles` 表，`ApprovalLogs.Details` 列，`ApprovalTasks` 的时限、`Kind`、`ParentTaskId`、`Round` 列，`ApprovalInstances` 的 `StateJson`、`Round` 列及新索引）：全部为新增，旧演示库需删除 `.db` 文件重建，正式项目请生成 EF Core 迁移（`dotnet ef migrations add ApprovalV2`）。
+- 数据库升级以[试点运维手册](docs/registration-certificate-pilot.md)为准：注册证库保留现有迁移历史，旧 EnsureCreated 库先预检并升级副本；通用库由各宿主维护自己的 EF 迁移。
 - 列表接口已改为分页结构 `{ items, total, page, pageSize }`，完整流程定义改为仅管理员可读，旧调用方需相应调整。
 - 注册证示例使用 EF Core Migrations；旧 EnsureCreated 库必须先预检并升级到新文件，详见试点操作说明。通用库的宿主仍需管理自己的 EF 迁移。
 - 表单版本跟随流程版本；暂不支持跳转到任意节点、流程迁移到新版本。

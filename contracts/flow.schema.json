@@ -1,0 +1,503 @@
+{
+  "$id": "urn:approval:flow:1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "form": {
+      "properties": {
+        "fields": {
+          "items": {
+            "properties": {
+              "accept": {
+                "items": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "type": "array"
+              },
+              "columns": {
+                "items": {
+                  "$ref": "#/properties/form/properties/fields/items"
+                },
+                "type": "array"
+              },
+              "defaultValue": true,
+              "formula": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "help": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "key": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "max": {
+                "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
+                "type": [
+                  "string",
+                  "number",
+                  "null"
+                ]
+              },
+              "maxFiles": {
+                "pattern": "^-?(?:0|[1-9]\\d*)$",
+                "type": [
+                  "string",
+                  "integer",
+                  "null"
+                ]
+              },
+              "maxLength": {
+                "pattern": "^-?(?:0|[1-9]\\d*)$",
+                "type": [
+                  "string",
+                  "integer",
+                  "null"
+                ]
+              },
+              "maxRows": {
+                "pattern": "^-?(?:0|[1-9]\\d*)$",
+                "type": [
+                  "string",
+                  "integer",
+                  "null"
+                ]
+              },
+              "min": {
+                "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
+                "type": [
+                  "string",
+                  "number",
+                  "null"
+                ]
+              },
+              "options": {
+                "items": {
+                  "properties": {
+                    "label": {
+                      "type": "string"
+                    },
+                    "value": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "label",
+                    "value"
+                  ],
+                  "type": [
+                    "object",
+                    "null"
+                  ]
+                },
+                "type": "array"
+              },
+              "placeholder": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "precision": {
+                "pattern": "^-?(?:0|[1-9]\\d*)$",
+                "type": [
+                  "string",
+                  "integer",
+                  "null"
+                ]
+              },
+              "required": {
+                "type": "boolean"
+              },
+              "span": {
+                "pattern": "^-?(?:0|[1-9]\\d*)$",
+                "type": [
+                  "string",
+                  "integer"
+                ]
+              },
+              "sum": {
+                "type": "boolean"
+              },
+              "type": {
+                "enum": [
+                  "Text",
+                  "TextArea",
+                  "Number",
+                  "Money",
+                  "Date",
+                  "DateRange",
+                  "Select",
+                  "MultiSelect",
+                  "Radio",
+                  "Switch",
+                  "User",
+                  "Users",
+                  "Table",
+                  "Description",
+                  "Formula",
+                  "File"
+                ]
+              }
+            },
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "type": "array"
+        }
+      },
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "nodes": {
+      "additionalProperties": {
+        "properties": {
+          "actions": {
+            "items": {
+              "properties": {
+                "continueOnError": {
+                  "type": "boolean"
+                },
+                "mode": {
+                  "enum": [
+                    "Sync",
+                    "Async"
+                  ]
+                },
+                "name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "outputVariable": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "parameters": {
+                  "additionalProperties": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "type": "object"
+                },
+                "type": {
+                  "type": "string"
+                }
+              },
+              "type": [
+                "object",
+                "null"
+              ]
+            },
+            "type": "array"
+          },
+          "allowAddSign": {
+            "type": "boolean"
+          },
+          "allowReturn": {
+            "type": "boolean"
+          },
+          "allowTransfer": {
+            "type": "boolean"
+          },
+          "approvers": {
+            "items": {
+              "$ref": "#/properties/notifications/items/properties/recipients/items"
+            },
+            "type": "array"
+          },
+          "branches": {
+            "items": {
+              "properties": {
+                "expression": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "next": {
+                  "type": "string"
+                },
+                "priority": {
+                  "pattern": "^-?(?:0|[1-9]\\d*)$",
+                  "type": [
+                    "string",
+                    "integer"
+                  ]
+                }
+              },
+              "required": [
+                "priority",
+                "expression",
+                "next"
+              ],
+              "type": [
+                "object",
+                "null"
+              ]
+            },
+            "type": "array"
+          },
+          "emptyApproverPolicy": {
+            "enum": [
+              "Error",
+              "AutoApprove"
+            ]
+          },
+          "fieldPermissions": {
+            "additionalProperties": {
+              "enum": [
+                "Editable",
+                "Hidden"
+              ]
+            },
+            "type": "object"
+          },
+          "id": {
+            "type": "string"
+          },
+          "mode": {
+            "enum": [
+              "Any",
+              "All",
+              "Sequential"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "next": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "notifications": {
+            "items": {
+              "$ref": "#/properties/notifications/items"
+            },
+            "type": "array"
+          },
+          "position": {
+            "properties": {
+              "x": {
+                "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?(?:[eE][\u002B-]?\\d\u002B)?$",
+                "type": [
+                  "string",
+                  "number"
+                ]
+              },
+              "y": {
+                "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?(?:[eE][\u002B-]?\\d\u002B)?$",
+                "type": [
+                  "string",
+                  "number"
+                ]
+              }
+            },
+            "required": [
+              "x",
+              "y"
+            ],
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "requireQualifiedAssignee": {
+            "type": "boolean"
+          },
+          "timeout": {
+            "properties": {
+              "action": {
+                "enum": [
+                  "Remind",
+                  "AutoApprove",
+                  "AutoReject"
+                ]
+              },
+              "maxReminders": {
+                "pattern": "^-?(?:0|[1-9]\\d*)$",
+                "type": [
+                  "string",
+                  "integer"
+                ]
+              },
+              "minutes": {
+                "pattern": "^-?(?:0|[1-9]\\d*)$",
+                "type": [
+                  "string",
+                  "integer"
+                ]
+              },
+              "repeatMinutes": {
+                "pattern": "^-?(?:0|[1-9]\\d*)$",
+                "type": [
+                  "string",
+                  "integer",
+                  "null"
+                ]
+              }
+            },
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "type": {
+            "enum": [
+              "Start",
+              "Approval",
+              "Cc",
+              "Condition",
+              "Action",
+              "Parallel",
+              "Join",
+              "End"
+            ]
+          }
+        },
+        "type": [
+          "object",
+          "null"
+        ]
+      },
+      "type": "object"
+    },
+    "notifications": {
+      "items": {
+        "properties": {
+          "channels": {
+            "items": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "type": "array"
+          },
+          "content": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "events": {
+            "items": {
+              "enum": [
+                "Enter",
+                "Approved",
+                "Rejected",
+                "Transferred",
+                "Timeout",
+                "Completed"
+              ]
+            },
+            "type": "array"
+          },
+          "recipients": {
+            "items": {
+              "properties": {
+                "type": {
+                  "type": "string"
+                },
+                "value": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type",
+                "value"
+              ],
+              "type": [
+                "object",
+                "null"
+              ]
+            },
+            "type": "array"
+          },
+          "title": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "type": [
+          "object",
+          "null"
+        ]
+      },
+      "type": "array"
+    },
+    "schemaVersion": {
+      "const": 1,
+      "default": 1,
+      "type": "integer"
+    },
+    "settings": {
+      "properties": {
+        "category": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "initiatorRoles": {
+          "items": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "type": "array"
+        },
+        "startable": {
+          "type": "boolean"
+        },
+        "titleTemplate": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "startNodeId": {
+      "type": "string"
+    }
+  },
+  "type": [
+    "object",
+    "null"
+  ]
+}

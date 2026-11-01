@@ -2,6 +2,7 @@ using System.Text.Json;
 using Approval.Core.Actions;
 using Approval.Core.Conditions;
 using Approval.Core.Domain;
+using Approval.Core.Engine.Extensions;
 using Approval.Core.Notifications;
 using Approval.Core.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -39,16 +40,33 @@ public sealed record OutboxQuery(OutboxStatus? Status = null, Guid? InstanceId =
 /// 异步动作可通过注入的 DbContext 修改数据：成功时与投递结果在同一事务提交；失败时撤销（含动作自行 SaveChanges 的部分），
 /// 只保存失败记录，避免重试时留下做了一半的数据。
 /// </summary>
-public sealed class ApprovalOutboxService(
-    ApprovalDbContextAccessor accessor,
-    IEnumerable<IApprovalChannel> channels,
-    IEnumerable<IApprovalActionHandler> actions,
-    ApprovalOptions options,
-    TimeProvider clock,
-    ILogger<ApprovalOutboxService> logger)
+public sealed class ApprovalOutboxService
 {
-    private readonly DbContext _db = accessor.Context;
-    private DateTime Now => clock.GetUtcNow().UtcDateTime;
+    private readonly DbContext _db;
+    private readonly IReadOnlyDictionary<string, IApprovalChannel> _channels;
+    private readonly IReadOnlyDictionary<string, IApprovalActionHandler> _actions;
+    private readonly ApprovalOptions _options;
+    private readonly TimeProvider _clock;
+    private readonly ILogger<ApprovalOutboxService> _logger;
+
+    public ApprovalOutboxService(ApprovalDbContextAccessor accessor, IEnumerable<IApprovalChannel> channels,
+        IEnumerable<IApprovalActionHandler> actions, ApprovalOptions options, TimeProvider clock, ILogger<ApprovalOutboxService> logger)
+        : this(accessor, new ApprovalExtensionCatalog(() => [], () => [], () => actions, () => channels), options, clock, logger)
+    {
+    }
+
+    internal ApprovalOutboxService(ApprovalDbContextAccessor accessor, ApprovalExtensionCatalog extensions,
+        ApprovalOptions options, TimeProvider clock, ILogger<ApprovalOutboxService> logger)
+    {
+        _db = accessor.Context;
+        _channels = extensions.Channels;
+        _actions = extensions.Actions;
+        _options = options;
+        _clock = clock;
+        _logger = logger;
+    }
+
+    private DateTime Now => _clock.GetUtcNow().UtcDateTime;
 
     /// <summary>处理一批到期消息，返回本批处理的条数。</summary>
     public async Task<int> ProcessDueAsync(CancellationToken ct = default)
@@ -58,7 +76,7 @@ public sealed class ApprovalOutboxService(
             .Where(m => m.Status == OutboxStatus.Pending && m.NextAttemptAt <= now)
             .OrderBy(m => m.NextAttemptAt)
             .Select(m => m.Id)
-            .Take(Math.Max(1, options.Outbox.BatchSize))
+            .Take(Math.Max(1, _options.Outbox.BatchSize))
             .ToListAsync(ct);
 
         foreach (var id in ids)
@@ -76,7 +94,7 @@ public sealed class ApprovalOutboxService(
 
         // 抢占
         message.Attempts++;
-        message.NextAttemptAt = Now + options.Outbox.LeaseDuration;
+        message.NextAttemptAt = Now + _options.Outbox.LeaseDuration;
         message.ConcurrencyStamp++;
         try
         {
@@ -129,13 +147,13 @@ public sealed class ApprovalOutboxService(
         {
             message.Status = OutboxStatus.Failed;
             message.CompletedAt = Now;
-            logger.LogError(ex, "Outbox 消息 {Id}（{Kind} {Target}）重试 {Attempts} 次后仍失败", message.Id, message.Kind,
+            _logger.LogError(ex, "Outbox 消息 {Id}（{Kind} {Target}）重试 {Attempts} 次后仍失败", message.Id, message.Kind,
                 message.Target, message.Attempts);
         }
         else
         {
             message.NextAttemptAt = Now + RetryDelay(message.Attempts);
-            logger.LogWarning(ex, "Outbox 消息 {Id}（{Kind} {Target}）第 {Attempts} 次投递失败，{Next:u} 重试", message.Id,
+            _logger.LogWarning(ex, "Outbox 消息 {Id}（{Kind} {Target}）第 {Attempts} 次投递失败，{Next:u} 重试", message.Id,
                 message.Kind, message.Target, message.Attempts, message.NextAttemptAt);
         }
     }
@@ -152,7 +170,7 @@ public sealed class ApprovalOutboxService(
         catch (DbUpdateConcurrencyException)
         {
             // 投递期间被手动重试重置：以重置后的状态为准，消息会再次投递（动作的数据修改随事务回滚，重试时重新执行）
-            logger.LogWarning("Outbox 消息 {Id} 投递期间被修改，投递结果未保存", message.Id);
+            _logger.LogWarning("Outbox 消息 {Id} 投递期间被修改，投递结果未保存", message.Id);
         }
     }
 
@@ -171,8 +189,8 @@ public sealed class ApprovalOutboxService(
     /// <summary>第 n 次失败后等待 BaseRetryDelay × 2^(n-1)，不超过 MaxRetryDelay。</summary>
     public TimeSpan RetryDelay(int attempts)
     {
-        var delay = options.Outbox.BaseRetryDelay * Math.Pow(2, Math.Min(attempts - 1, 20));
-        return delay < options.Outbox.MaxRetryDelay ? delay : options.Outbox.MaxRetryDelay;
+        var delay = _options.Outbox.BaseRetryDelay * Math.Pow(2, Math.Min(attempts - 1, 20));
+        return delay < _options.Outbox.MaxRetryDelay ? delay : _options.Outbox.MaxRetryDelay;
     }
 
     private async Task DeliverAsync(ApprovalOutboxMessage message, CancellationToken ct)
@@ -181,7 +199,7 @@ public sealed class ApprovalOutboxService(
         {
             case OutboxKind.Notification:
             {
-                var channel = channels.FirstOrDefault(c => string.Equals(c.Name, message.Target, StringComparison.OrdinalIgnoreCase))
+                var channel = _channels.GetValueOrDefault(message.Target)
                               ?? throw new InvalidOperationException($"通知渠道 '{message.Target}' 未注册");
                 var payload = JsonSerializer.Deserialize<ChannelMessage>(message.PayloadJson, OutboxJson.Options)!;
                 await channel.SendAsync(payload, ct);
@@ -191,7 +209,7 @@ public sealed class ApprovalOutboxService(
             case OutboxKind.Action:
             {
                 // 与同步引擎和设计器一致：同名动作由后注册的实现覆盖。
-                var handler = actions.LastOrDefault(a => string.Equals(a.Descriptor.Type, message.Target, StringComparison.OrdinalIgnoreCase))
+                var handler = _actions.GetValueOrDefault(message.Target)
                               ?? throw new InvalidOperationException($"动作类型 '{message.Target}' 未注册");
                 var payload = JsonSerializer.Deserialize<AsyncActionPayload>(message.PayloadJson, OutboxJson.Options)!;
                 var instance = await _db.Set<ApprovalInstance>().AsNoTracking().FirstOrDefaultAsync(i => i.Id == message.InstanceId, ct)

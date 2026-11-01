@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { http } from '@approval/ui'
+import { approval } from '../approval'
 import { certificateApi } from './certificates'
 
-vi.mock('@approval/ui', () => ({ http: { get: vi.fn(), post: vi.fn(), put: vi.fn() } }))
+vi.mock('../approval', () => ({ approval: { http: { get: vi.fn(), post: vi.fn(), put: vi.fn() } } }))
+const http = approval.http
 beforeEach(() => vi.clearAllMocks())
 
 const data = { certNo: 'REG-1', name: '注册证', holder: '企业', certType: 'Normal', issueDate: '2026-01-01', expireDate: '2029-01-01' }

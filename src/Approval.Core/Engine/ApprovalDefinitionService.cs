@@ -2,6 +2,7 @@ using Approval.Core.Abstractions;
 using Approval.Core.Actions;
 using Approval.Core.Definitions;
 using Approval.Core.Domain;
+using Approval.Core.Engine.Extensions;
 using Approval.Core.Notifications;
 using Approval.Core.Persistence;
 using Approval.Core.Templates;
@@ -22,22 +23,29 @@ public sealed record ApprovalMetadata(
 public sealed record FlowSummary(string Key, string Name);
 
 /// <summary>流程定义管理：校验、发布新版本、查询。</summary>
-public sealed class ApprovalDefinitionService(
-    ApprovalDbContextAccessor accessor,
-    IEnumerable<IApproverResolver> resolvers,
-    IEnumerable<IApprovalActionHandler> actions,
-    IEnumerable<IApprovalChannel> channels,
-    TimeProvider clock)
+public sealed class ApprovalDefinitionService
 {
-    /// <summary>内置审批人类型在设计器中的顺序，其余（自定义）按类型名排在后面。</summary>
     private static readonly string[] BuiltInOrder = ["Role", "User", "FormField", "Initiator", "DeptLeader", "Manager", "ManagerChain"];
+    private readonly DbContext _db;
+    private readonly TimeProvider _clock;
+    private readonly IReadOnlyDictionary<string, ApproverTypeDescriptor> _approverTypes;
+    private readonly IReadOnlyDictionary<string, IApprovalActionHandler> _actions;
+    private readonly IReadOnlyList<ChannelInfo> _channels;
 
-    private readonly DbContext _db = accessor.Context;
+    public ApprovalDefinitionService(ApprovalDbContextAccessor accessor, IEnumerable<IApproverResolver> resolvers,
+        IEnumerable<IApprovalActionHandler> actions, IEnumerable<IApprovalChannel> channels, TimeProvider clock)
+        : this(accessor, new ApprovalExtensionCatalog(() => resolvers, () => [], () => actions, () => channels), clock)
+    {
+    }
 
-    // 同名时后注册的覆盖先注册的，与引擎一致；描述的类型名以解析器为准
-    private readonly Dictionary<string, ApproverTypeDescriptor> _approverTypes =
-        resolvers.GroupBy(r => r.Type, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(g => g.Key, g => g.Last().Descriptor with { Type = g.Key }, StringComparer.OrdinalIgnoreCase);
+    internal ApprovalDefinitionService(ApprovalDbContextAccessor accessor, ApprovalExtensionCatalog extensions, TimeProvider clock)
+    {
+        _db = accessor.Context;
+        _clock = clock;
+        _approverTypes = extensions.ApproverDescriptors;
+        _actions = extensions.Actions;
+        _channels = extensions.ChannelDescriptors;
+    }
 
     /// <summary>已注册的审批人类型（供设计器选择，按参数类型生成控件）。</summary>
     public IReadOnlyList<ApproverTypeDescriptor> ApproverTypes =>
@@ -45,17 +53,6 @@ public sealed class ApprovalDefinitionService(
             .OrderBy(d => Array.IndexOf(BuiltInOrder, d.Type) is var i and >= 0 ? i : BuiltInOrder.Length)
             .ThenBy(d => d.Type, StringComparer.OrdinalIgnoreCase)
             .ToList();
-
-    // 同名时后注册的覆盖先注册的，与引擎一致
-    private readonly Dictionary<string, IApprovalActionHandler> _actions =
-        actions.GroupBy(a => a.Descriptor.Type, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(g => g.Key, g => g.Last(), StringComparer.OrdinalIgnoreCase);
-
-    private readonly List<ChannelInfo> _channels =
-    [
-        new(InAppChannel.Name, InAppChannel.DisplayName),
-        .. channels.GroupBy(c => c.Name, StringComparer.OrdinalIgnoreCase).Select(g => new ChannelInfo(g.Key, g.Last().DisplayName))
-    ];
 
     public ApprovalMetadata Metadata => new(
         ApproverTypes,
@@ -95,7 +92,7 @@ public sealed class ApprovalDefinitionService(
             Version = latestVersion + 1,
             DefinitionJson = flow.ToJson(),
             IsPublished = true,
-            CreatedAt = clock.GetUtcNow().UtcDateTime
+            CreatedAt = _clock.GetUtcNow().UtcDateTime
         };
         _db.Set<ApprovalDefinition>().Add(definition);
         await _db.SaveChangesAsync(ct);

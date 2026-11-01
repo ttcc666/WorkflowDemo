@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { approvalApi } from '../api/approval'
+import { useApprovalClient } from '../client'
 import { useApprovalUser } from '../composables/useApprovalUser'
 import { useAsyncData } from '../composables/useAsyncData'
 import HandoverPanel from '../features/monitor/HandoverPanel.vue'
 import MonitorInstances from '../features/monitor/MonitorInstances.vue'
 import MonitorStatistics from '../features/monitor/MonitorStatistics.vue'
+
+const { api: approvalApi } = useApprovalClient()
 
 /** 流程监控（仅管理员）：全部流程（搜索、终止）、统计、离职交接。 */
 type Tab = 'instances' | 'statistics' | 'handover'

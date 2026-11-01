@@ -1,5 +1,8 @@
 <script setup lang="ts">
-import { approvalUserKey, http, useApprovalUser, useAsyncData } from '@approval/ui'
+import { useApprovalUser, useAsyncData } from '@approval/ui'
+import { approval } from '@/approval'
+
+const { userKey: approvalUserKey, http } = approval
 
 interface Diagnostics {
   pendingApplications: number

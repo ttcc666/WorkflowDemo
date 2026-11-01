@@ -1,4 +1,4 @@
-import { approvalConfig } from '../config'
+import { approvalConfig, type ResolvedApprovalUIOptions } from '../config'
 
 /** 后端返回的业务错误（ProblemDetails），message 为可直接展示给用户的中文提示。 */
 export class ApiError extends Error {
@@ -25,51 +25,60 @@ interface RequestOptions {
   signal?: AbortSignal
 }
 
-async function request<T>(method: string, url: string, options: RequestOptions = {}): Promise<T> {
-  const config = approvalConfig()
-  const headers: Record<string, string> = { ...config.headers?.(), ...options.headers }
-  let body: string | Blob | undefined
-  if (options.raw !== undefined) body = options.raw
-  else if (options.rawJson !== undefined) body = options.rawJson
-  else if (options.body !== undefined) body = JSON.stringify(options.body)
-  if (typeof body === 'string') headers['Content-Type'] = 'application/json'
+/** 创建独立的传输客户端；请求时读取 headers、fetcher 与错误处理。 */
+export function createHttpClient(
+  getConfig: () => Pick<ResolvedApprovalUIOptions, 'headers' | 'fetcher' | 'onUnauthorized'> = approvalConfig,
+) {
+  async function request<T>(method: string, url: string, options: RequestOptions = {}): Promise<T> {
+    const config = getConfig()
+    const headers: Record<string, string> = { ...config.headers?.(), ...options.headers }
+    let body: string | Blob | undefined
+    if (options.raw !== undefined) body = options.raw
+    else if (options.rawJson !== undefined) body = options.rawJson
+    else if (options.body !== undefined) body = JSON.stringify(options.body)
+    if (typeof body === 'string') headers['Content-Type'] = 'application/json'
 
-  const response = await (config.fetcher ?? fetch)(url, { method, headers, body, signal: options.signal })
+    const response = await (config.fetcher ?? fetch)(url, { method, headers, body, signal: options.signal })
 
-  if (!response.ok) {
-    let message = `请求失败（HTTP ${response.status}）`
-    let code: string | undefined
-    let errors: Record<string, string[]> | undefined
-    try {
-      const problem = await response.json()
-      message = problem.title ?? message
-      code = problem.code
-      errors = problem.errors
-    } catch {
-      // 非 JSON 错误响应，使用默认提示
+    if (!response.ok) {
+      let message = `请求失败（HTTP ${response.status}）`
+      let code: string | undefined
+      let errors: Record<string, string[]> | undefined
+      try {
+        const problem = await response.json()
+        message = problem.title ?? message
+        code = problem.code
+        errors = problem.errors
+      } catch {
+        // 非 JSON 错误响应，使用默认提示
+      }
+      if (response.status === 401) config.onUnauthorized?.()
+      throw new ApiError(message, response.status, code, errors)
     }
-    if (response.status === 401) config.onUnauthorized?.()
-    throw new ApiError(message, response.status, code, errors)
+
+    if (response.status === 204) return undefined as T
+    if (options.asBlob) return (await response.blob()) as T
+    const text = await response.text()
+    return (text ? JSON.parse(text) : undefined) as T
   }
 
-  if (response.status === 204) return undefined as T
-  if (options.asBlob) return (await response.blob()) as T
-  const text = await response.text()
-  return (text ? JSON.parse(text) : undefined) as T
+  /** 基础 HTTP 客户端：附加配置的请求头，把 ProblemDetails 转为 {@link ApiError}。宿主的业务接口也可使用。 */
+  return {
+    get: <T>(url: string, signal?: AbortSignal) => request<T>('GET', url, { signal }),
+    post: <T = void>(url: string, body?: unknown, headers?: Record<string, string>) => request<T>('POST', url, { body, headers }),
+    postJson: <T = void>(url: string, json: string) => request<T>('POST', url, { rawJson: json }),
+    put: <T = void>(url: string, body?: unknown, headers?: Record<string, string>) => request<T>('PUT', url, { body, headers }),
+    delete: <T = void>(url: string) => request<T>('DELETE', url),
+    /** 以原始请求体上传（如文件内容），headers 附加在配置的请求头之后 */
+    upload: <T>(url: string, body: Blob, headers: Record<string, string>) => request<T>('POST', url, { raw: body, headers }),
+    /** 下载为 Blob（带配置的请求头，用于需要鉴权的文件下载） */
+    blob: (url: string) => request<Blob>('GET', url, { asBlob: true }),
+  }
 }
 
-/** 基础 HTTP 客户端：附加配置的请求头，把 ProblemDetails 转为 {@link ApiError}。宿主的业务接口也可使用。 */
-export const http = {
-  get: <T>(url: string, signal?: AbortSignal) => request<T>('GET', url, { signal }),
-  post: <T = void>(url: string, body?: unknown, headers?: Record<string, string>) => request<T>('POST', url, { body, headers }),
-  postJson: <T = void>(url: string, json: string) => request<T>('POST', url, { rawJson: json }),
-  put: <T = void>(url: string, body?: unknown, headers?: Record<string, string>) => request<T>('PUT', url, { body, headers }),
-  delete: <T = void>(url: string) => request<T>('DELETE', url),
-  /** 以原始请求体上传（如文件内容），headers 附加在配置的请求头之后 */
-  upload: <T>(url: string, body: Blob, headers: Record<string, string>) => request<T>('POST', url, { raw: body, headers }),
-  /** 下载为 Blob（带配置的请求头，用于需要鉴权的文件下载） */
-  blob: (url: string) => request<Blob>('GET', url, { asBlob: true }),
-}
+export type ApprovalHttpClient = ReturnType<typeof createHttpClient>
+/** 兼容单实例入口，始终读取 configureApprovalUI 的最新配置。 */
+export const http = createHttpClient(approvalConfig)
 
 export function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)

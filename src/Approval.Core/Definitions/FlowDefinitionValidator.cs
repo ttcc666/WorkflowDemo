@@ -33,6 +33,8 @@ public static partial class FlowDefinitionValidator
 
     public static IReadOnlyList<string> Validate(FlowDefinition definition, FlowValidationContext context)
     {
+        if (definition.SchemaVersion != FlowDefinition.CurrentSchemaVersion)
+            return [$"不支持流程协议版本 {definition.SchemaVersion}，当前支持 v{FlowDefinition.CurrentSchemaVersion}"];
         var errors = new List<string>();
         var nodes = definition.Nodes;
 

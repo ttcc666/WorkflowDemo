@@ -1,3 +1,4 @@
+using Approval.AspNetCore.Contracts;
 using Approval.Core;
 using Approval.Core.Abstractions;
 using Approval.Core.Definitions;
@@ -23,25 +24,25 @@ internal static class DefinitionEndpoints
         group.MapGet("/definitions", async (HttpContext http, ApprovalDefinitionService d, CancellationToken ct) =>
         {
             await EnsureReaderAsync(http, ct);
-            return await d.ListLatestAsync(ct);
+            return (await d.ListLatestAsync(ct)).Select(ApprovalDefinitionResponse.From).ToArray();
         });
 
         group.MapGet("/definitions/by-id/{id:guid}", async (Guid id, HttpContext http, ApprovalDefinitionService d, CancellationToken ct) =>
         {
             await EnsureReaderAsync(http, ct);
-            return await d.GetByIdAsync(id, ct) is { } definition ? Results.Ok(definition) : Results.NotFound();
-        });
+            return await d.GetByIdAsync(id, ct) is { } definition ? Results.Ok(ApprovalDefinitionResponse.From(definition)) : Results.NotFound();
+        }).Produces<ApprovalDefinitionResponse>().Produces(StatusCodes.Status404NotFound);
 
         group.MapGet("/definitions/{key}", async (string key, HttpContext http, ApprovalDefinitionService d, CancellationToken ct) =>
         {
             await EnsureReaderAsync(http, ct);
-            return await d.GetLatestAsync(key, ct) is { } definition ? Results.Ok(definition) : Results.NotFound();
-        });
+            return await d.GetLatestAsync(key, ct) is { } definition ? Results.Ok(ApprovalDefinitionResponse.From(definition)) : Results.NotFound();
+        }).Produces<ApprovalDefinitionResponse>().Produces(StatusCodes.Status404NotFound);
 
         group.MapGet("/definitions/{key}/versions", async (string key, HttpContext http, ApprovalDefinitionService d, CancellationToken ct) =>
         {
             await EnsureReaderAsync(http, ct);
-            return await d.ListVersionsAsync(key, ct);
+            return (await d.ListVersionsAsync(key, ct)).Select(ApprovalDefinitionResponse.From).ToArray();
         });
 
         // 只校验不发布，供设计器实时提示；解析失败也作为校验错误返回。warnings 为不阻止发布的提示
@@ -50,21 +51,21 @@ internal static class DefinitionEndpoints
             try
             {
                 var flow = FlowDefinition.Parse(await http.ReadBodyAsStringAsync(ct));
-                return Results.Ok(new { errors = d.Validate(flow), warnings = d.Warnings(flow) });
+                return TypedResults.Ok(new ApprovalValidationResponse(d.Validate(flow), d.Warnings(flow)));
             }
             catch (ApprovalException ex)
             {
-                return Results.Ok(new { errors = new[] { ex.Message }, warnings = Array.Empty<string>() });
+                return TypedResults.Ok(new ApprovalValidationResponse([ex.Message], []));
             }
-        });
+        }).Accepts<FlowDefinition>("application/json");
 
         // 发布新版本：请求体为流程定义 JSON；仅管理员
         group.MapPost("/definitions/{key}", async (string key, string? name, HttpContext http, ApprovalDefinitionService d, CancellationToken ct) =>
         {
             await http.EnsureApprovalAdminAsync("仅管理员可发布流程", ct);
             var definition = await d.PublishAsync(key, string.IsNullOrWhiteSpace(name) ? key : name, await http.ReadBodyAsStringAsync(ct), ct);
-            return Results.Ok(new { definition.Id, definition.Key, definition.Version });
-        });
+            return TypedResults.Ok(new ApprovalPublishedResponse(definition.Id, definition.Key, definition.Version));
+        }).Accepts<FlowDefinition>("application/json");
     }
 
     private static async Task EnsureReaderAsync(HttpContext http, CancellationToken ct)
@@ -80,19 +81,19 @@ internal static class MessageEndpoints
     public static void Map(RouteGroupBuilder group, ApprovalAspNetCoreOptions options)
     {
         group.MapGet("/messages", (bool? unreadOnly, int? take, HttpContext http, ApprovalMessageService m, CancellationToken ct) =>
-            m.ListAsync(http.GetApprovalUserId(), unreadOnly ?? false, Math.Clamp(take ?? 50, 1, 200), ct));
+            MapMessagesAsync(m, http.GetApprovalUserId(), unreadOnly ?? false, Math.Clamp(take ?? 50, 1, 200), ct));
 
         group.MapGet("/messages/unread-count", async (HttpContext http, ApprovalMessageService m, CancellationToken ct) =>
-            new { count = await m.UnreadCountAsync(http.GetApprovalUserId(), ct) });
+            new CountResponse(await m.UnreadCountAsync(http.GetApprovalUserId(), ct)));
 
         group.MapPost("/messages/{id:guid}/read", async (Guid id, HttpContext http, ApprovalMessageService m, CancellationToken ct) =>
         {
             await m.MarkReadAsync(http.GetApprovalUserId(), id, ct);
-            return Results.NoContent();
+            return TypedResults.NoContent();
         });
 
         group.MapPost("/messages/read-all", async (HttpContext http, ApprovalMessageService m, CancellationToken ct) =>
-            new { count = await m.MarkAllReadAsync(http.GetApprovalUserId(), ct) });
+            new CountResponse(await m.MarkAllReadAsync(http.GetApprovalUserId(), ct)));
 
         if (!options.EnableOutboxEndpoints) return;
 
@@ -101,7 +102,8 @@ internal static class MessageEndpoints
             ApprovalOutboxService o, CancellationToken ct) =>
         {
             await http.EnsureApprovalAdminAsync("仅管理员可查看投递记录", ct);
-            return await o.ListAsync(new OutboxQuery(status, instanceId), new PageRequest(page, pageSize), ct);
+            var pageResult = await o.ListAsync(new OutboxQuery(status, instanceId), new PageRequest(page, pageSize), ct);
+            return new PagedResult<ApprovalOutboxMessageResponse>(pageResult.Items.Select(ApprovalOutboxMessageResponse.From).ToArray(), pageResult.Total, pageResult.Page, pageResult.PageSize);
         });
 
         group.MapPost("/outbox/{id:guid}/retry", async (Guid id, HttpContext http, ApprovalOutboxService o, ApprovalOutboxSignal signal,
@@ -110,9 +112,14 @@ internal static class MessageEndpoints
             await http.EnsureApprovalAdminAsync("仅管理员可重试投递", ct);
             await o.RetryAsync(id, ct);
             signal.Notify();
-            return Results.NoContent();
+            return TypedResults.NoContent();
         });
     }
+
+    private static async Task<IReadOnlyList<ApprovalMessageResponse>> MapMessagesAsync(
+        ApprovalMessageService service, string userId, bool unreadOnly, int take, CancellationToken ct) =>
+        (await service.ListAsync(userId, unreadOnly, take, ct)).Select(ApprovalMessageResponse.From).ToArray();
+
 }
 
 /// <summary>当前用户与用户目录。</summary>
@@ -129,16 +136,9 @@ internal static class DirectoryEndpoints
             var userId = http.GetApprovalUserId();
             var directory = http.RequestServices.GetService(typeof(IApprovalUserDirectory)) as IApprovalUserDirectory;
             var user = directory is null ? null : (await directory.GetUsersAsync([userId], ct)).FirstOrDefault();
-            return new
-            {
-                userId,
-                name = user?.Name ?? userId,
-                roles = await identity.GetRolesAsync(userId, ct),
-                isAdmin = await http.IsApprovalAdminAsync(ct),
-                canViewDefinitions = await http.CanReadApprovalDefinitionsAsync(ct),
-                formsEnabled = formBusinessType is not null,
-                formBusinessType
-            };
+            return new ApprovalMeResponse(userId, user?.Name ?? userId,
+                await identity.GetRolesAsync(userId, ct), await http.IsApprovalAdminAsync(ct),
+                await http.CanReadApprovalDefinitionsAsync(ct), formBusinessType is not null, formBusinessType);
         });
 
         // ids=a,b 时按 ID 批量获取（回显已选用户），否则按关键字搜索
@@ -151,10 +151,11 @@ internal static class DirectoryEndpoints
                 return Results.Ok(await directory.GetUsersAsync(list, ct));
             }
             return Results.Ok(await directory.SearchUsersAsync(keyword?.Trim(), Math.Clamp(take ?? 50, 1, MaxTake), ct));
-        });
+        }).Produces<IReadOnlyList<ApprovalUser>>().ProducesProblem(StatusCodes.Status501NotImplemented);
 
         group.MapGet("/directory/roles", async (HttpContext http, CancellationToken ct) =>
-            Directory(http) is { } directory ? Results.Ok(await directory.ListRolesAsync(ct)) : NotConfigured());
+            Directory(http) is { } directory ? Results.Ok(await directory.ListRolesAsync(ct)) : NotConfigured())
+            .Produces<IReadOnlyList<string>>().ProducesProblem(StatusCodes.Status501NotImplemented);
     }
 
     private static IApprovalUserDirectory? Directory(HttpContext http) =>

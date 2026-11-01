@@ -1,14 +1,15 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { approvalApi } from '../api/approval'
+import { useApprovalClient } from '../client'
 import { useAsyncData } from '../composables/useAsyncData'
 import { usePagedList } from '../composables/usePagedList'
-import { approvalUserKey } from '../config'
 import { approvalRouteNames } from '../routes'
 import ListFilterBar from '../features/workbench/ListFilterBar.vue'
 import TodoTable from '../features/workbench/TodoTable.vue'
 import InstanceTable from '../features/workbench/InstanceTable.vue'
+
+const { api: approvalApi, userKey: approvalUserKey } = useApprovalClient()
 
 type Tab = 'todo' | 'done' | 'started' | 'cc'
 const tabs: Tab[] = ['todo', 'done', 'started', 'cc']

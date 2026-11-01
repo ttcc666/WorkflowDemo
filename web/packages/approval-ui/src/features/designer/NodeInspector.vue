@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { ApprovalMeta } from '../../api/types'
+import type { ApprovalMeta } from '../../contracts/api'
 import {
   modeLabels,
   nodeTypeLabels,

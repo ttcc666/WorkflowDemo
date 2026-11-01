@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Approval.AspNetCore;
+using Approval.Certificate;
 using Approval.Core;
 using Approval.Core.Abstractions;
 using Approval.Core.Domain;
@@ -78,11 +79,10 @@ public static class CertificateApplication
                 approvalConfig.GetSection("Files").Bind(o.Files);
                 o.TimeoutScanInterval = approvalConfig.GetValue("TimeoutScanInterval", o.TimeoutScanInterval);
             })
-            .AddBusinessHandler<CertificateApprovalHandler>()
+            .AddCertificateModule()
             // 组织架构：审批人可选“部门负责人”“上级”“逐级上级”（演示数据见 appsettings.json 的 Departments 与 DemoUsers）
             // 表单审批：设置了“可发起”的流程（如 Flows/leave.json、expense.json、purchase.json）可在发起中心直接填写表单发起
             .AddFormApprovals()
-            .AddActionHandler<CertificateExpiryCheckAction>()
             // 演示：Webhook 发到本服务的模拟接收端（/api/demo/webhook），可在“投递记录”页模拟失败观察重试
             .AddWebhookChannel(o =>
             {
@@ -101,14 +101,6 @@ public static class CertificateApplication
         if (approvalConfig["Email:Host"] is { Length: > 0 })
             approval.AddEmailChannel(o => approvalConfig.GetSection("Email").Bind(o));
 
-        builder.Services.AddScoped<CertificateService>();
-        builder.Services.AddScoped<CertificateDataValidator>();
-        builder.Services.AddScoped<CertificateWorkflowPolicy>();
-        builder.Services.AddScoped<CertificateQueryService>();
-        builder.Services.AddScoped<CertificateAccessPolicy>();
-        builder.Services.AddScoped<CertificateDatabase>();
-        builder.Services.AddScoped<CertificateDiagnostics>();
-        builder.Services.AddSingleton<CertificateMonitor>();
         if (approvalConfig.GetValue("EnableBackgroundServices", true))
             builder.Services.AddHostedService(sp => sp.GetRequiredService<CertificateMonitor>());
         builder.Services.Replace(ServiceDescriptor.Scoped<IApprovalAccessPolicy>(sp => sp.GetRequiredService<CertificateAccessPolicy>()));
@@ -202,12 +194,14 @@ public static class CertificateApplication
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var definitions = scope.ServiceProvider.GetRequiredService<ApprovalDefinitionService>();
         var count = 0;
-        foreach (var file in Directory.GetFiles(Path.Combine(app.Environment.ContentRootPath, "Flows"), "*.json").Order())
+        var defaults = CertificateFlowTemplates.ReadDefaults();
+        var files = Directory.GetFiles(Path.Combine(app.Environment.ContentRootPath, "Flows"), "*.json")
+            .ToDictionary(file => Path.GetFileNameWithoutExtension(file), StringComparer.Ordinal);
+        foreach (var key in defaults.Keys.Concat(files.Keys).Distinct(StringComparer.Ordinal).Order())
         {
-            var key = Path.GetFileNameWithoutExtension(file);
             var latest = await definitions.GetLatestAsync(key, ct);
             if (latest is not null && !replaceExisting) continue;
-            var json = await File.ReadAllTextAsync(file, ct);
+            var json = files.TryGetValue(key, out var file) ? await File.ReadAllTextAsync(file, ct) : defaults[key];
             using var document = JsonDocument.Parse(json);
             var name = document.RootElement.TryGetProperty("name", out var n) && n.GetString() is { Length: > 0 } text ? text : key;
             var flow = Approval.Core.Definitions.FlowDefinition.Parse(json);

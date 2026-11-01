@@ -1,3 +1,4 @@
+using Approval.AspNetCore.Contracts;
 using Approval.Core;
 using Approval.Core.Engine;
 using Approval.Core.Files;
@@ -24,7 +25,7 @@ internal static class FormEndpoints
             if (http.Request.ContentLength > options.Files.MaxFileSizeBytes)
                 throw new ApprovalException($"文件不能超过 {options.Files.MaxFileSizeMb} MB");
             var file = await files.UploadAsync(http.GetApprovalUserId(), Uri.UnescapeDataString(name), http.Request.Body, ct);
-            return Results.Ok(new { id = file.Id, name = file.FileName, size = file.Size, contentType = file.ContentType });
+            return TypedResults.Ok(new ApprovalFileResponse(file.Id, file.FileName, file.Size, file.ContentType));
         }).WithMetadata(new RequestSizeLimitAttribute(options.Files.MaxFileSizeBytes + 64 * 1024));
 
         // 下载附件：上传者，或能查看所属审批且附件不在隐藏字段中；一律作为附件下载，禁止浏览器嗅探类型
@@ -35,8 +36,8 @@ internal static class FormEndpoints
             http.Response.Headers.XContentTypeOptions = "nosniff";
             http.Response.Headers.CacheControl = "private, no-store";
             http.Response.Headers.ContentSecurityPolicy = "default-src 'none'; sandbox";
-            return Results.File(content, file.ContentType, file.FileName);
-        });
+            return TypedResults.File(content, file.ContentType, file.FileName);
+        }).Produces(StatusCodes.Status200OK, contentType: "application/octet-stream");
 
         group.MapGet("/forms/startable", (HttpContext http, ApprovalFormService forms, CancellationToken ct) =>
             forms.ListStartableAsync(http.GetApprovalUserId(), ct));
@@ -51,14 +52,14 @@ internal static class FormEndpoints
         group.MapDelete("/forms/drafts/{id:guid}", async (Guid id, HttpContext http, ApprovalFormService forms, CancellationToken ct) =>
         {
             await forms.DeleteDraftAsync(http.GetApprovalUserId(), id, ct);
-            return Results.NoContent();
+            return TypedResults.NoContent();
         });
 
         group.MapPut("/forms/{key}/draft", async (string key, SaveDraftRequest body, HttpContext http, ApprovalFormService forms,
             CancellationToken ct) =>
         {
             var draft = await forms.SaveDraftAsync(http.GetApprovalUserId(), key, body.DraftId, body.FormData, body.Comment, ct);
-            return Results.Ok(new { draftId = draft.Id, draft.UpdatedAt });
+            return TypedResults.Ok(new ApprovalDraftSavedResponse(draft.Id, draft.UpdatedAt));
         });
 
         group.MapGet("/forms/{key}", (string key, HttpContext http, ApprovalFormService forms, CancellationToken ct) =>
@@ -69,7 +70,7 @@ internal static class FormEndpoints
             CancellationToken ct) =>
         {
             var instance = await forms.StartAsync(key, http.GetApprovalUserId(), body.FormData, body.Comment, body.DraftId, ct);
-            return Results.Ok(new { instanceId = instance.Id });
+            return TypedResults.Ok(new ApprovalStartedResponse(instance.Id));
         });
 
         // 退回发起人后重新提交：表单审批可带新的表单数据，其他业务只提交意见
@@ -77,7 +78,7 @@ internal static class FormEndpoints
             CancellationToken ct) =>
         {
             await forms.ResubmitAsync(id, http.GetApprovalUserId(), body.FormData, body.Comment, ct);
-            return Results.NoContent();
+            return TypedResults.NoContent();
         });
     }
 }

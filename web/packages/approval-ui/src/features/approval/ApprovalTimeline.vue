@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, shallowReactive } from 'vue'
-import type { ApprovalLog, ApprovalTask, FormFieldChange } from '../../api/types'
+import type { ApprovalLog, ApprovalTask, FormFieldChange } from '../../contracts/api'
 import { sumKey, type FormField, type FormSchema } from '../forms/formModel'
 import { actionLabels, assigneeText, dueText, formatDateTime, taskKindLabels, taskStatusLabels } from '../../utils/labels'
 import FieldChangeValue from './FieldChangeValue.vue'

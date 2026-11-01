@@ -1,5 +1,5 @@
 import { computed, nextTick, ref, shallowRef, type Ref } from 'vue'
-import { approvalApi } from '../../api/approval'
+import { useApprovalClient } from '../../client'
 import {
   applyConnection,
   branchLabel,
@@ -32,6 +32,7 @@ type Point = { x: number; y: number }
  * 其余修改都通过这里的方法完成。每次修改都会记录一个快照，用于撤销 / 重做和判断是否有未发布的修改。
  */
 export function useFlowDesigner() {
+  const { api: approvalApi } = useApprovalClient()
   // 运行时保持深层响应（属性面板会就地修改 node.data）；
   // 显式标注 Ref<T> 以跳过 UnwrapRef 对 Vue Flow 复杂泛型的推导（否则 TS2589 类型过深）
   const nodes = ref([]) as Ref<FlowNode[]>

@@ -2,14 +2,16 @@
 import { computed, onBeforeUnmount, ref, shallowRef, useTemplateRef, watch } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { approvalApi } from '../api/approval'
+import { useApprovalClient } from '../client'
 import { ApiError, errorMessage } from '../api/http'
-import type { DraftDetail, StartForm } from '../api/types'
+import type { DraftDetail, StartForm } from '../contracts/api'
 import { useAsyncData } from '../composables/useAsyncData'
 import DynamicForm from '../features/forms/DynamicForm.vue'
 import { initialValues, parseFormValues, type FormValues } from '../features/forms/formModel'
 import { approvalRouteNames } from '../routes'
 import { formatDateTime } from '../utils/labels'
+
+const { api: approvalApi } = useApprovalClient()
 
 /**
  * 发起页：按流程的表单结构填写并提交；服务端字段错误回显到对应表单项。

@@ -2,13 +2,15 @@
 import { computed, shallowRef } from 'vue'
 import { useRouter } from 'vue-router'
 import { approvalRouteNames } from '../routes'
-import { approvalApi } from '../api/approval'
-import type { ApprovalDefinition } from '../api/types'
+import { useApprovalClient } from '../client'
+import type { ApprovalDefinition } from '../contracts/api'
 import { useApprovalUser } from '../composables/useApprovalUser'
 import { useAsyncData } from '../composables/useAsyncData'
 import DefinitionTable from '../features/definitions/DefinitionTable.vue'
 import DefinitionVersionsDrawer from '../features/definitions/DefinitionVersionsDrawer.vue'
 import NewDefinitionDialog from '../features/definitions/NewDefinitionDialog.vue'
+
+const { api: approvalApi } = useApprovalClient()
 
 const router = useRouter()
 // 完整流程定义含动作参数、通知配置，仅管理员（及后端配置的 DefinitionReaders 角色）可查看

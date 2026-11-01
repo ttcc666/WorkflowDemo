@@ -95,8 +95,8 @@ public sealed partial class ApprovalEngine
                 assignees.AddRange(instance.Tasks
                     .Where(t => t.Status == ApprovalTaskStatus.Approved && t.HandledBy is not null && t.HandledBy != SystemOperator)
                     .Select(t => new Assignee(AssigneeKind.User, t.HandledBy!)));
-            else if (_resolvers.ContainsKey(recipient.Type))
-                assignees.AddRange(await ResolveRulesAsync([recipient], instance, node ?? new FlowNode(), form, ct));
+            else if (_assignees.CanResolve(recipient.Type))
+                assignees.AddRange(await _assignees.ResolveRulesAsync([recipient], instance, node ?? new FlowNode(), form, ct));
             else
                 _logger.LogWarning("通知接收人类型 '{Type}' 未注册，已跳过", recipient.Type);
         }

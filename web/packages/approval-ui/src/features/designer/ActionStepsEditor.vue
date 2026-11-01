@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import type { ActionMeta } from '../../api/types'
-import type { ActionMode, ActionStep } from '../flow/flowModel'
+import type { ActionMeta } from '../../contracts/api'
+import type { ActionMode, ActionStep } from '../../contracts/flow'
 
 /** 动作节点的步骤列表：参数表单根据后端注册动作的参数描述自动生成。 */
 const props = defineProps<{ actions: ActionMeta[] }>()

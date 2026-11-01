@@ -3,9 +3,12 @@ import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { certificateApi } from '@/api/certificates'
 import type { CertificateData } from '@/api/types'
-import { useAsyncData, approvalUserKey } from '@approval/ui'
+import { useAsyncData } from '@approval/ui'
+import { approval } from '@/approval'
 import { formatDateTime } from '@approval/ui'
 import { certificateFieldLabels, certTypeLabels, operationLabels, requestStatusLabels } from '@/utils/labels'
+
+const { userKey: approvalUserKey } = approval
 
 /** 审批详情中的证书申请内容：变更前后对比。由 businessPanels 按 BusinessType=Certificate 加载。 */
 const props = defineProps<{ businessKey: string }>()

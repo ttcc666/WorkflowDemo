@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { ApproverTypeMeta, ApproverValueKind } from '../../api/types'
+import type { ApproverTypeMeta, ApproverValueKind } from '../../contracts/api'
 import UserPicker from '../../components/UserPicker.vue'
 import { userFields } from '../forms/formModel'
 import { useDesignerForm } from './designerContext'

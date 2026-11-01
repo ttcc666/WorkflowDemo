@@ -1,15 +1,15 @@
 import { computed, type Ref } from 'vue'
-import { approvalApi } from '../../api/approval'
+import { useApprovalClient } from '../../client'
 import { ApiError } from '../../api/http'
 import { useAsyncData } from '../../composables/useAsyncData'
-import type { FlowDefinition } from '../flow/flowModel'
-import { approvalUserKey } from '../../config'
+import type { FlowDefinition } from '../../contracts/flow'
 
 /**
  * 审批详情：实例（含任务、轨迹，已按当前用户去掉隐藏字段）、实例绑定版本的流程定义（公开视图）、
  * 当前用户可处理的任务及其所在节点可在同意时修改的字段。
  */
 export function useApprovalDetail(instanceId: Ref<string>) {
+  const { api: approvalApi, userKey: approvalUserKey } = useApprovalClient()
   // 切换用户后重新加载（权限可能变化）；无权查看与不存在都返回 404，数据置为 null，页面显示提示
   const instance = useAsyncData(
     async (signal) => {

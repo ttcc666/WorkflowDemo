@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, shallowRef, watch } from 'vue'
-import type { ApprovalInstance } from '../../api/types'
+import type { ApprovalInstance } from '../../contracts/api'
 import FlowCanvas from './FlowCanvas.vue'
 import { computeRunState, toFlowElements, NODE_HEIGHT, type FlowDefinition, type FlowEdge, type FlowNode } from './flowModel'
 

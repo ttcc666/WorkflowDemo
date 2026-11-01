@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { ApproverTypeMeta } from '../../api/types'
+import type { ApproverTypeMeta } from '../../contracts/api'
 import { approverRuleText, approverSummary, createNodeData, formatLevel, levelRuleText, parseLevel } from './flowModel'
 
 describe('组织架构审批人参数', () => {

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { FieldAccess } from '../flow/flowModel'
+import type { FieldAccess } from '../../contracts/flow'
 import { fieldTypeLabels, type FormField } from '../forms/formModel'
 
 /**

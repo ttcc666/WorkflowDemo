@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { onBeforeUnmount } from 'vue'
 import { ElMessage } from 'element-plus'
-import { approvalApi } from '../api/approval'
+import { useApprovalClient } from '../client'
 import { errorMessage } from '../api/http'
-import type { OutboxMessage } from '../api/types'
+import type { OutboxMessage } from '../contracts/api'
 import { useApprovalUser } from '../composables/useApprovalUser'
 import { usePagedList } from '../composables/usePagedList'
-import { approvalConfig, approvalUserKey } from '../config'
 import { formatDateTime, outboxStatusLabels } from '../utils/labels'
+
+const { api: approvalApi, userKey: approvalUserKey, config: approvalConfig } = useApprovalClient()
 
 /** 投递记录：外部渠道通知与异步动作的投递状态、重试（分页，状态与页码同步到地址栏）。宿主可通过 outboxPanel 选项在下方追加面板。 */
 const { isAdmin } = useApprovalUser()

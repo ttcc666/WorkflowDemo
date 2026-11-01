@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { effectScope, ref, type EffectScope } from 'vue'
 import { approvalApi } from '../../api/approval'
 import { ApiError } from '../../api/http'
-import type { ApprovalInstance, ApprovalTask } from '../../api/types'
+import type { ApprovalInstance, ApprovalTask } from '../../contracts/api'
 import { useApprovalDetail } from './useApprovalDetail'
 
 vi.mock('../../api/approval', () => ({

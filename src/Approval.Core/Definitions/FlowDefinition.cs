@@ -35,6 +35,12 @@ public enum EmptyApproverPolicy { Error, AutoApprove }
 /// <summary>流程定义（节点图），以 JSON 存储在 <see cref="Domain.ApprovalDefinition.DefinitionJson"/> 中。</summary>
 public sealed class FlowDefinition
 {
+    public const int CurrentSchemaVersion = 1;
+
+    /// <summary>JSON 协议版本，与发布版本独立。旧定义缺省为 v1；发布新定义时显式写出。</summary>
+    [JsonConverter(typeof(FlowSchemaVersionConverter))]
+    public int SchemaVersion { get; set; } = CurrentSchemaVersion;
+
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         Converters = { new JsonStringEnumConverter() },
@@ -72,6 +78,7 @@ public sealed class FlowDefinition
             throw new ApprovalException($"流程定义 JSON 格式错误：{ex.Message}", ex);
         }
 
+        definition.EnsureSupportedSchema();
         // 字典 key 即节点 ID，未显式填写 Id 时以 key 为准
         foreach (var (key, node) in definition.Nodes)
         {
@@ -80,7 +87,17 @@ public sealed class FlowDefinition
         return definition;
     }
 
-    public string ToJson() => JsonSerializer.Serialize(this, JsonOptions);
+    public string ToJson()
+    {
+        EnsureSupportedSchema();
+        return JsonSerializer.Serialize(this, JsonOptions);
+    }
+
+    private void EnsureSupportedSchema()
+    {
+        if (SchemaVersion != CurrentSchemaVersion)
+            throw new ApprovalException($"不支持流程协议版本 {SchemaVersion}，当前支持 v{CurrentSchemaVersion}") { Code = ApprovalErrorCode.InvalidDefinition };
+    }
 
     /// <summary>
     /// 公开视图（给实例的查看者画流程图、展示表单）：去掉动作参数与输出变量（HTTP 请求头、令牌等）、通知规则、时限策略和发起角色，

@@ -1,0 +1,47 @@
+[
+  {
+    "name": "legacy-without-version",
+    "json": "{\"startNodeId\":\"start\",\"nodes\":{\"start\":{\"name\":\"提交\",\"type\":\"Start\",\"next\":\"end\",\"position\":{\"x\":0,\"y\":0}},\"end\":{\"name\":\"完成\",\"type\":\"End\",\"position\":{\"x\":0,\"y\":160}}},\"form\":{\"fields\":[{\"key\":\"title\",\"label\":\"标题\",\"type\":\"Text\",\"required\":true},{\"key\":\"amount\",\"label\":\"金额\",\"type\":\"Money\",\"precision\":2}]}}",
+    "valid": true
+  },
+  {
+    "name": "v1",
+    "json": "{\"schemaVersion\":1,\"startNodeId\":\"start\",\"nodes\":{\"start\":{\"name\":\"提交\",\"type\":\"Start\",\"next\":\"end\",\"position\":{\"x\":0,\"y\":0}},\"end\":{\"name\":\"完成\",\"type\":\"End\",\"position\":{\"x\":0,\"y\":160}}},\"form\":{\"fields\":[{\"key\":\"title\",\"label\":\"标题\",\"type\":\"Text\",\"required\":true},{\"key\":\"amount\",\"label\":\"金额\",\"type\":\"Money\",\"precision\":2}]}}",
+    "valid": true
+  },
+  {
+    "name": "v1-decimal",
+    "json": "{\"schemaVersion\":1.0,\"startNodeId\":\"start\",\"nodes\":{\"start\":{\"name\":\"提交\",\"type\":\"Start\",\"next\":\"end\",\"position\":{\"x\":0,\"y\":0}},\"end\":{\"name\":\"完成\",\"type\":\"End\",\"position\":{\"x\":0,\"y\":160}}},\"form\":{\"fields\":[{\"key\":\"title\",\"label\":\"标题\",\"type\":\"Text\",\"required\":true},{\"key\":\"amount\",\"label\":\"金额\",\"type\":\"Money\",\"precision\":2}]}}",
+    "valid": true
+  },
+  {
+    "name": "future",
+    "json": "{\"schemaVersion\":2,\"startNodeId\":\"start\",\"nodes\":{\"start\":{\"name\":\"提交\",\"type\":\"Start\",\"next\":\"end\",\"position\":{\"x\":0,\"y\":0}},\"end\":{\"name\":\"完成\",\"type\":\"End\",\"position\":{\"x\":0,\"y\":160}}},\"form\":{\"fields\":[{\"key\":\"title\",\"label\":\"标题\",\"type\":\"Text\",\"required\":true},{\"key\":\"amount\",\"label\":\"金额\",\"type\":\"Money\",\"precision\":2}]}}",
+    "valid": false
+  },
+  {
+    "name": "zero",
+    "json": "{\"schemaVersion\":0,\"startNodeId\":\"start\",\"nodes\":{\"start\":{\"name\":\"提交\",\"type\":\"Start\",\"next\":\"end\",\"position\":{\"x\":0,\"y\":0}},\"end\":{\"name\":\"完成\",\"type\":\"End\",\"position\":{\"x\":0,\"y\":160}}},\"form\":{\"fields\":[{\"key\":\"title\",\"label\":\"标题\",\"type\":\"Text\",\"required\":true},{\"key\":\"amount\",\"label\":\"金额\",\"type\":\"Money\",\"precision\":2}]}}",
+    "valid": false
+  },
+  {
+    "name": "negative",
+    "json": "{\"schemaVersion\":-1,\"startNodeId\":\"start\",\"nodes\":{\"start\":{\"name\":\"提交\",\"type\":\"Start\",\"next\":\"end\",\"position\":{\"x\":0,\"y\":0}},\"end\":{\"name\":\"完成\",\"type\":\"End\",\"position\":{\"x\":0,\"y\":160}}},\"form\":{\"fields\":[{\"key\":\"title\",\"label\":\"标题\",\"type\":\"Text\",\"required\":true},{\"key\":\"amount\",\"label\":\"金额\",\"type\":\"Money\",\"precision\":2}]}}",
+    "valid": false
+  },
+  {
+    "name": "fraction",
+    "json": "{\"schemaVersion\":1.5,\"startNodeId\":\"start\",\"nodes\":{\"start\":{\"name\":\"提交\",\"type\":\"Start\",\"next\":\"end\",\"position\":{\"x\":0,\"y\":0}},\"end\":{\"name\":\"完成\",\"type\":\"End\",\"position\":{\"x\":0,\"y\":160}}},\"form\":{\"fields\":[{\"key\":\"title\",\"label\":\"标题\",\"type\":\"Text\",\"required\":true},{\"key\":\"amount\",\"label\":\"金额\",\"type\":\"Money\",\"precision\":2}]}}",
+    "valid": false
+  },
+  {
+    "name": "string",
+    "json": "{\"schemaVersion\":\"1\",\"startNodeId\":\"start\",\"nodes\":{\"start\":{\"name\":\"提交\",\"type\":\"Start\",\"next\":\"end\",\"position\":{\"x\":0,\"y\":0}},\"end\":{\"name\":\"完成\",\"type\":\"End\",\"position\":{\"x\":0,\"y\":160}}},\"form\":{\"fields\":[{\"key\":\"title\",\"label\":\"标题\",\"type\":\"Text\",\"required\":true},{\"key\":\"amount\",\"label\":\"金额\",\"type\":\"Money\",\"precision\":2}]}}",
+    "valid": false
+  },
+  {
+    "name": "null",
+    "json": "{\"schemaVersion\":null,\"startNodeId\":\"start\",\"nodes\":{\"start\":{\"name\":\"提交\",\"type\":\"Start\",\"next\":\"end\",\"position\":{\"x\":0,\"y\":0}},\"end\":{\"name\":\"完成\",\"type\":\"End\",\"position\":{\"x\":0,\"y\":160}}},\"form\":{\"fields\":[{\"key\":\"title\",\"label\":\"标题\",\"type\":\"Text\",\"required\":true},{\"key\":\"amount\",\"label\":\"金额\",\"type\":\"Money\",\"precision\":2}]}}",
+    "valid": false
+  }
+]

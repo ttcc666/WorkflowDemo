@@ -5,6 +5,8 @@ using Approval.Core.Conditions;
 using Approval.Core.Definitions;
 using Approval.Core.Domain;
 using Approval.Core.Forms;
+using Approval.Core.Engine.Extensions;
+using Approval.Core.Engine.Runtime;
 using Approval.Core.Notifications;
 using Approval.Core.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -27,10 +29,10 @@ public sealed partial class ApprovalEngine
 
     private readonly DbContext _db;
     private readonly IApprovalIdentityProvider _identity;
-    private readonly Dictionary<string, IApproverResolver> _resolvers;
-    private readonly Dictionary<string, IApprovalBusinessHandler> _handlers;
-    private readonly Dictionary<string, IApprovalActionHandler> _actions;
-    private readonly HashSet<string> _channels;
+    private readonly ApprovalAssigneeService _assignees;
+    private readonly IReadOnlyDictionary<string, IApprovalBusinessHandler> _handlers;
+    private readonly IReadOnlyDictionary<string, IApprovalActionHandler> _actions;
+    private readonly IReadOnlySet<string> _channels;
     private readonly IReadOnlyList<IApprovalNotifier> _notifiers;
     private readonly IConditionEvaluator _evaluator;
     private readonly ApprovalOptions _options;
@@ -58,17 +60,30 @@ public sealed partial class ApprovalEngine
         TimeProvider clock,
         ILogger<ApprovalEngine> logger,
         IApprovalUserDirectory? directory = null)
+        : this(accessor, identity,
+            new ApprovalExtensionCatalog(() => resolvers, () => handlers, () => actions, () => channels),
+            notifiers, evaluator, options, outboxSignal, clock, logger, directory)
+    {
+    }
+
+    internal ApprovalEngine(
+        ApprovalDbContextAccessor accessor,
+        IApprovalIdentityProvider identity,
+        ApprovalExtensionCatalog extensions,
+        IEnumerable<IApprovalNotifier> notifiers,
+        IConditionEvaluator evaluator,
+        ApprovalOptions options,
+        ApprovalOutboxSignal outboxSignal,
+        TimeProvider clock,
+        ILogger<ApprovalEngine> logger,
+        IApprovalUserDirectory? directory)
     {
         _db = accessor.Context;
         _identity = identity;
-        // 后注册的同名实现覆盖先注册的，宿主可替换内置实现
-        _resolvers = new(StringComparer.OrdinalIgnoreCase);
-        foreach (var r in resolvers) _resolvers[r.Type] = r;
-        _handlers = new(StringComparer.OrdinalIgnoreCase);
-        foreach (var h in handlers) _handlers[h.BusinessType] = h;
-        _actions = new(StringComparer.OrdinalIgnoreCase);
-        foreach (var a in actions) _actions[a.Descriptor.Type] = a;
-        _channels = channels.Select(c => c.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        _assignees = new(identity, extensions.Resolvers, options, directory);
+        _handlers = extensions.BusinessHandlers;
+        _actions = extensions.Actions;
+        _channels = extensions.ChannelNames;
         _notifiers = notifiers.ToList();
         _evaluator = evaluator;
         _options = options;
@@ -381,7 +396,7 @@ public sealed partial class ApprovalEngine
 
                 case NodeType.Cc:
                     {
-                        var recipients = await ResolveAssigneesAsync(instance, node, form, expandRoles: false, ct);
+                        var recipients = await _assignees.ResolveAssigneesAsync(instance, node, form, expandRoles: false, ct);
                         if (recipients.Count > 0)
                         {
                             foreach (var recipient in recipients) AddCarbonCopy(instance, node, recipient);
@@ -398,8 +413,8 @@ public sealed partial class ApprovalEngine
                 case NodeType.Approval:
                     {
                         // 会签、依次审批要求每个人都处理，因此角色需要展开为具体用户
-                        var resolved = await ResolveAssigneesAsync(instance, node, form, expandRoles: node.Mode != ApproveMode.Any, ct);
-                        var assignees = await FilterEligibleAsync(instance, resolved, ct);
+                        var resolved = await _assignees.ResolveAssigneesAsync(instance, node, form, expandRoles: node.Mode != ApproveMode.Any, ct);
+                        var assignees = await _assignees.FilterEligibleAsync(instance, resolved, ct);
 
                         if (assignees.Count == 0)
                         {
@@ -432,57 +447,6 @@ public sealed partial class ApprovalEngine
                 return branch.Next;
         }
         throw new ApprovalException($"条件节点 '{node.Name}' 没有匹配的分支") { Code = ApprovalErrorCode.InvalidDefinition };
-    }
-
-    private async Task<List<Assignee>> ResolveAssigneesAsync(
-        ApprovalInstance instance, FlowNode node, IReadOnlyDictionary<string, object?> form, bool expandRoles, CancellationToken ct)
-    {
-        var result = new List<Assignee>();
-        foreach (var assignee in await ResolveRulesAsync(node.Approvers, instance, node, form, ct))
-        {
-            if (expandRoles && assignee.Kind == AssigneeKind.Role)
-            {
-                var userIds = await _identity.GetUserIdsInRoleAsync(assignee.Value, ct);
-                result.AddRange(userIds.Select(id => new Assignee(AssigneeKind.User, id)));
-            }
-            else
-            {
-                result.Add(assignee);
-            }
-        }
-        return result.Distinct().ToList();
-    }
-
-    private async Task<List<Assignee>> ResolveRulesAsync(IEnumerable<ApproverRule> rules, ApprovalInstance instance, FlowNode node,
-        IReadOnlyDictionary<string, object?> form, CancellationToken ct)
-    {
-        var context = new ApproverResolveContext { Instance = instance, Node = node, FormData = form };
-        var result = new List<Assignee>();
-        foreach (var rule in rules)
-        {
-            if (!_resolvers.TryGetValue(rule.Type, out var resolver))
-                throw new ApprovalException($"未注册的审批人类型 '{rule.Type}'") { Code = ApprovalErrorCode.InvalidDefinition };
-            result.AddRange(await resolver.ResolveAsync(rule.Value, context, ct));
-        }
-        return result;
-    }
-
-    /// <summary>
-    /// 剔除无法处理任务的审批人：不允许自审时剔除发起人；角色任务要求角色内至少有一名可审批的成员，
-    /// 否则任务将无人能处理、流程永久卡住。剔除后为空则交给节点的 EmptyApproverPolicy 处理。
-    /// </summary>
-    private async Task<List<Assignee>> FilterEligibleAsync(ApprovalInstance instance, List<Assignee> assignees, CancellationToken ct)
-    {
-        var eligible = new List<Assignee>(assignees.Count);
-        foreach (var assignee in assignees)
-        {
-            var ok = assignee.Kind == AssigneeKind.User
-                ? _options.AllowInitiatorApprove || assignee.Value != instance.InitiatorId
-                : (await _identity.GetUserIdsInRoleAsync(assignee.Value, ct))
-                    .Any(id => _options.AllowInitiatorApprove || id != instance.InitiatorId);
-            if (ok) eligible.Add(assignee);
-        }
-        return eligible;
     }
 
     private async Task CreateTasksAsync(ApprovalInstance instance, FlowDefinition flow, FlowNode node, IReadOnlyList<Assignee> assignees,
@@ -612,22 +576,8 @@ public sealed partial class ApprovalEngine
     }
 
     /// <summary>按当前组织/用户目录计算合格人员；供岗位约束、宿主预检和无人处理告警共用。实例应包含任务历史。</summary>
-    public async Task<IReadOnlyList<string>> GetEligibleApproversAsync(ApprovalInstance instance, FlowNode node, CancellationToken ct = default)
-    {
-        var assignees = await ResolveAssigneesAsync(instance, node, FormData.Parse(instance.FormDataJson), expandRoles: true, ct);
-        var ids = assignees.Select(a => a.Value).Distinct().Where(id =>
-            (_options.AllowInitiatorApprove || id != instance.InitiatorId)
-            && (_options.AllowSameUserMultipleNodes || !instance.Tasks.Any(t =>
-                t.NodeId != node.Id && t.HandledBy == id && t.Status == ApprovalTaskStatus.Approved))).ToList();
-        if (node.RequireQualifiedAssignee && _directory is null)
-            throw new ApprovalException("岗位资格校验需要注册用户目录") { Code = ApprovalErrorCode.InvalidDefinition };
-        if (_directory is not null)
-        {
-            var known = (await _directory.GetUsersAsync(ids, ct)).Select(u => u.Id).ToHashSet();
-            ids.RemoveAll(id => !known.Contains(id));
-        }
-        return ids;
-    }
+    public Task<IReadOnlyList<string>> GetEligibleApproversAsync(ApprovalInstance instance, FlowNode node, CancellationToken ct = default) =>
+        _assignees.GetEligibleApproversAsync(instance, node, ct);
 
     // ───────────────────────── 辅助方法 ─────────────────────────
 

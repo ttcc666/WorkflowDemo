@@ -3,6 +3,7 @@ using Approval.Core.Actions;
 using Approval.Core.Background;
 using Approval.Core.Conditions;
 using Approval.Core.Engine;
+using Approval.Core.Engine.Extensions;
 using Approval.Core.Files;
 using Approval.Core.Notifications;
 using Approval.Core.Persistence;
@@ -54,12 +55,35 @@ public static class ApprovalServiceCollectionExtensions
         services.AddScoped<IApprovalActionHandler, HttpActionHandler>();
         services.AddScoped<IApprovalActionHandler, ScriptActionHandler>();
 
-        services.AddScoped<ApprovalEngine>();
+        services.AddScoped(sp => new ApprovalExtensionCatalog(
+            () => sp.GetServices<IApproverResolver>(),
+            () => sp.GetServices<IApprovalBusinessHandler>(),
+            () => sp.GetServices<IApprovalActionHandler>(),
+            () => sp.GetServices<IApprovalChannel>()));
+        services.AddScoped(sp => new ApprovalEngine(
+            sp.GetRequiredService<ApprovalDbContextAccessor>(),
+            sp.GetRequiredService<IApprovalIdentityProvider>(),
+            sp.GetRequiredService<ApprovalExtensionCatalog>(),
+            sp.GetServices<IApprovalNotifier>(),
+            sp.GetRequiredService<IConditionEvaluator>(),
+            sp.GetRequiredService<ApprovalOptions>(),
+            sp.GetRequiredService<ApprovalOutboxSignal>(),
+            sp.GetRequiredService<TimeProvider>(),
+            sp.GetRequiredService<ILogger<ApprovalEngine>>(),
+            sp.GetService<IApprovalUserDirectory>()));
         services.AddScoped<ApprovalQueryService>();
         services.TryAddScoped<IApprovalAccessPolicy, DefaultApprovalAccessPolicy>();
-        services.AddScoped<ApprovalDefinitionService>();
+        services.AddScoped(sp => new ApprovalDefinitionService(
+            sp.GetRequiredService<ApprovalDbContextAccessor>(),
+            sp.GetRequiredService<ApprovalExtensionCatalog>(),
+            sp.GetRequiredService<TimeProvider>()));
         services.AddScoped<ApprovalMessageService>();
-        services.AddScoped<ApprovalOutboxService>();
+        services.AddScoped(sp => new ApprovalOutboxService(
+            sp.GetRequiredService<ApprovalDbContextAccessor>(),
+            sp.GetRequiredService<ApprovalExtensionCatalog>(),
+            sp.GetRequiredService<ApprovalOptions>(),
+            sp.GetRequiredService<TimeProvider>(),
+            sp.GetRequiredService<ILogger<ApprovalOutboxService>>()));
         services.AddScoped<ApprovalStatisticsService>();
 
         // 后台任务：注册为单例以便宿主 / 测试直接调用 DispatchOnceAsync、ScanOnceAsync

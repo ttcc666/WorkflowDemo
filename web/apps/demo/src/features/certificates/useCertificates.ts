@@ -1,6 +1,9 @@
-import { approvalApi, approvalUserKey, usePagedList } from '@approval/ui'
+import { usePagedList } from '@approval/ui'
+import { approval } from '@/approval'
 import { certificateApi } from '@/api/certificates'
 import type { CertificateData } from '@/api/types'
+
+const { api: approvalApi, userKey: approvalUserKey } = approval
 
 export const CERTIFICATE_BUSINESS_TYPE = 'Certificate'
 

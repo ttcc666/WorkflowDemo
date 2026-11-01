@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { certificateApi } from '@/api/certificates'
 import type { Certificate } from '@/api/types'
-import { usePagedList, approvalUserKey } from '@approval/ui'
+import { usePagedList } from '@approval/ui'
+import { approval } from '@/approval'
 import { formatDateTime } from '@approval/ui'
 import { operationLabels, requestStatusLabels } from '@/utils/labels'
+
+const { userKey: approvalUserKey } = approval
 
 /** 证书的申请记录（新增、变更、注销及其审核结果）。 */
 const props = defineProps<{ certificate: Certificate }>()

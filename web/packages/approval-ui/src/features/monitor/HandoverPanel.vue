@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { computed, shallowRef, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { approvalApi } from '../../api/approval'
+import { useApprovalClient } from '../../client'
 import { errorMessage } from '../../api/http'
-import type { ReassignResult, TodoItem } from '../../api/types'
+import type { ReassignResult, TodoItem } from '../../contracts/api'
 import UserPicker from '../../components/UserPicker.vue'
 import { useAsyncData } from '../../composables/useAsyncData'
 import { formatDateTime, taskStatusLabels } from '../../utils/labels'
+
+const { api: approvalApi } = useApprovalClient()
 
 /** 离职交接：选择原处理人 → 预览其未完成的待办 → 选择新处理人 → 确认批量改派（不含角色任务）。 */
 const fromUser = shallowRef<string | null>(null)

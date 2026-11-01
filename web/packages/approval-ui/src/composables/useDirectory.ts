@@ -1,51 +1,93 @@
-import { shallowRef } from 'vue'
-import { approvalApi } from '../api/approval'
-import type { DirectoryUser } from '../api/types'
+import { effectScope, shallowRef, watch } from 'vue'
+import { registerClientCleanup, useApprovalClient, type ApprovalClient } from '../client'
+import type { DirectoryUser } from '../contracts/api'
 
-// 用户名称与角色列表的应用级缓存：用户选择器回显、设计器角色下拉
-const names = new Map<string, DirectoryUser>()
-const roles = shallowRef<string[]>([])
-/** 宿主未注册用户目录（接口返回 501）时为 false，选择器退化为手动输入 */
-const available = shallowRef(true)
-let rolesPromise: Promise<void> | null = null
+const directories = new WeakMap<ApprovalClient, ReturnType<typeof createDirectory>>()
 
-function remember(users: DirectoryUser[]) {
-  for (const u of users) names.set(u.id, u)
-  return users
-}
+function createDirectory(client: ApprovalClient) {
+  const names = new Map<string, DirectoryUser>()
+  const roles = shallowRef<string[]>([])
+  const available = shallowRef(true)
+  const scope = effectScope(true)
+  let rolesPromise: Promise<void> | null = null
+  let rolesRequested = false
+  let generation = 0
+  let identity = client.userKey.value
+  let controller = new AbortController()
 
-function handleError(error: unknown) {
-  if ((error as { status?: number }).status === 501) available.value = false
-  return [] as DirectoryUser[]
-}
-
-/** 用户目录：搜索用户、按 ID 取用户、角色列表（后端 IApprovalUserDirectory）。 */
-export function useDirectory() {
-  async function search(keyword: string, take = 50) {
-    return approvalApi.users(keyword, take).then(remember, handleError)
+  function reset(reloadRoles = false) {
+    identity = client.userKey.value
+    generation++
+    controller.abort()
+    controller = new AbortController()
+    names.clear()
+    roles.value = []
+    available.value = true
+    rolesPromise = null
+    if (reloadRoles && rolesRequested) void loadRoles()
   }
 
-  /** 按 ID 取用户（已缓存的不再请求），用于回显已选用户的名称 */
+  function ensureIdentity() {
+    if (identity !== client.userKey.value) reset(true)
+  }
+
+  function remember(users: DirectoryUser[], expected: number) {
+    if (generation !== expected) return []
+    for (const user of users) names.set(user.id, user)
+    return users
+  }
+
+  function handleError(error: unknown, expected: number) {
+    if (generation === expected && (error as { status?: number }).status === 501) available.value = false
+    return [] as DirectoryUser[]
+  }
+
+  async function search(keyword: string, take = 50) {
+    ensureIdentity()
+    const expected = generation
+    return client.api.users(keyword, take, controller.signal).then(
+      users => remember(users, expected), error => handleError(error, expected))
+  }
+
   async function resolve(ids: string[]) {
-    const missing = ids.filter((id) => id && !names.has(id))
-    if (missing.length > 0) await approvalApi.usersByIds(missing).then(remember, handleError)
-    return ids.map((id) => names.get(id) ?? { id, name: id, roles: [] })
+    ensureIdentity()
+    const expected = generation
+    const missing = ids.filter(id => id && !names.has(id))
+    if (missing.length > 0) await client.api.usersByIds(missing, controller.signal).then(
+      users => remember(users, expected), error => handleError(error, expected))
+    return ids.map(id => (expected === generation ? names.get(id) : undefined) ?? { id, name: id, roles: [] })
   }
 
   function loadRoles() {
-    rolesPromise ??= approvalApi
-      .roles()
-      .then((list) => {
-        roles.value = list
-      })
-      .catch((e) => {
-        handleError(e)
-        rolesPromise = null
+    ensureIdentity()
+    rolesRequested = true
+    const expected = generation
+    rolesPromise ??= client.api.roles(controller.signal)
+      .then(list => { if (generation === expected) roles.value = list })
+      .catch(error => {
+        if (generation === expected) {
+          handleError(error, expected)
+          rolesPromise = null
+        }
       })
     return rolesPromise
   }
 
-  const displayName = (id: string) => names.get(id)?.name ?? id
+  scope.run(() => watch(client.userKey, ensureIdentity, { flush: 'sync' }))
+  registerClientCleanup(client, () => {
+    scope.stop()
+    reset()
+    controller.abort()
+    directories.delete(client)
+  })
 
-  return { search, resolve, loadRoles, roles, available, displayName }
+  return { search, resolve, loadRoles, roles, available, displayName: (id: string) => names.get(id)?.name ?? id }
+}
+
+/** 按客户端和身份隔离目录缓存，旧身份的迟到响应不能写回新缓存。 */
+export function useDirectory() {
+  const client = useApprovalClient()
+  let state = directories.get(client)
+  if (!state) directories.set(client, state = createDirectory(client))
+  return state
 }

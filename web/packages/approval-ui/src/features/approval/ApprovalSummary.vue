@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { ApprovalInstance } from '../../api/types'
+import type { ApprovalInstance } from '../../contracts/api'
 import { formatDateTime, instanceStatusLabels } from '../../utils/labels'
 
 const props = defineProps<{ instance: ApprovalInstance; definitionName?: string }>()

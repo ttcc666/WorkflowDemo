@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { ApproverTypeMeta, ChannelMeta, TemplateVariableMeta } from '../../api/types'
+import type { ApproverTypeMeta, ChannelMeta, TemplateVariableMeta } from '../../contracts/api'
 import {
   defaultNotification,
   defaultTemplates,

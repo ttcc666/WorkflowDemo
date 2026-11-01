@@ -1,6 +1,6 @@
 import { computed, nextTick, reactive, shallowRef, watch, type ComputedRef, type Ref, type WatchSource } from 'vue'
 import { useRouter, type LocationQuery, type Router } from 'vue-router'
-import type { ListQuery, PagedResult } from '../api/types'
+import type { ListQuery, PagedResult } from '../contracts/api'
 import { useAsyncData } from './useAsyncData'
 
 /** 列表筛选条件（字符串形式，便于绑定筛选栏和同步到路由 query）。 */
@@ -56,21 +56,23 @@ export function readListState(query: LocationQuery, prefix: string, defaultPageS
 }
 
 // 同一轮修改合并为一次 router.replace（同页多个列表同时变化时，避免互相覆盖）
-let pendingPatch: Record<string, string | undefined> | null = null
+const pendingPatches = new WeakMap<Router, Record<string, string | undefined>>()
 
 function patchRouteQuery(router: Router, patch: Record<string, string | undefined>) {
-  if (pendingPatch) {
-    Object.assign(pendingPatch, patch)
+  const pending = pendingPatches.get(router)
+  if (pending) {
+    Object.assign(pending, patch)
     return
   }
-  pendingPatch = { ...patch }
+  const batch = { ...patch }
+  pendingPatches.set(router, batch)
   void nextTick(() => {
     const merged: Record<string, string | null | (string | null)[]> = { ...router.currentRoute.value.query }
-    for (const [key, value] of Object.entries(pendingPatch ?? {})) {
+    for (const [key, value] of Object.entries(batch)) {
       if (value === undefined || value === '') delete merged[key]
       else merged[key] = value
     }
-    pendingPatch = null
+    pendingPatches.delete(router)
     void router.replace({ query: merged })
   })
 }

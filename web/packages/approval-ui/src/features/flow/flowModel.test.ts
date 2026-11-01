@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { ApprovalInstance, ApprovalTask } from '../../api/types'
+import type { ApprovalInstance, ApprovalTask } from '../../contracts/api'
 import {
   applyConnection,
   canInsertOnEdge,

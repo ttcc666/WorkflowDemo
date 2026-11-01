@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { InstanceListItem } from '../../api/types'
+import type { InstanceListItem } from '../../contracts/api'
 import { formatDateTime, instanceStatusLabels } from '../../utils/labels'
 
 defineProps<{ items: InstanceListItem[]; loading: boolean; emptyText: string }>()

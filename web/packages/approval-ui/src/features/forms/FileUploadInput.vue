@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed, shallowRef } from 'vue'
 import { ElMessage } from 'element-plus'
-import { approvalApi } from '../../api/approval'
+import { useApprovalClient } from '../../client'
 import { errorMessage } from '../../api/http'
 import FileList from './FileList.vue'
-import type { FileValue, FormField } from './formModel'
+import type { FileValue, FormField } from '../../contracts/forms'
+
+const { api: approvalApi } = useApprovalClient()
 
 /** 附件字段的输入：选择文件后立即上传（未绑定，提交表单后绑定到申请），值为已上传文件的列表。 */
 const props = defineProps<{ field: FormField }>()
