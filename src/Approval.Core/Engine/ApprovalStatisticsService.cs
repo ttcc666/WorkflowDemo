@@ -141,16 +141,22 @@ public sealed class ApprovalStatisticsService(ApprovalDbContextAccessor accessor
     private async Task<List<BacklogItem>> BacklogAsync(string? key, DateTime now, CancellationToken ct)
     {
         var scoped = await _authorization.ScopeAsync(_db.Set<ApprovalInstance>().AsNoTracking(), ct);
-        var pending = await (
+        var pending =
                 from t in _db.Set<ApprovalTask>().AsNoTracking()
                 join i in scoped on t.InstanceId equals i.Id
                 where t.Status == ApprovalTaskStatus.Pending && i.Status == InstanceStatus.Running && (key == null || i.DefinitionKey == key)
-                select new { t.AssigneeKind, t.AssigneeValue, t.CreatedAt, t.DueAt })
-            .ToListAsync(ct);
+                select new { t.AssigneeKind, t.AssigneeValue, t.CreatedAt, t.DueAt };
+        // Keep ordinal assignee grouping independent of the host database collation, without retaining every task row.
+        var groups = new Dictionary<(AssigneeKind Kind, string Value), (int Count, int Overdue, DateTime Oldest)>();
+        await foreach (var task in pending.AsAsyncEnumerable().WithCancellation(ct))
+        {
+            var group = (task.AssigneeKind, task.AssigneeValue);
+            if (groups.TryGetValue(group, out var value))
+                groups[group] = (value.Count + 1, value.Overdue + (task.DueAt < now ? 1 : 0), task.CreatedAt < value.Oldest ? task.CreatedAt : value.Oldest);
+            else groups[group] = (1, task.DueAt < now ? 1 : 0, task.CreatedAt);
+        }
 
-        return pending.GroupBy(t => (t.AssigneeKind, t.AssigneeValue))
-            .Select(g => new BacklogItem(g.Key.AssigneeKind, g.Key.AssigneeValue, g.Count(), g.Count(t => t.DueAt < now),
-                g.Min(t => t.CreatedAt)))
+        return groups.Select(g => new BacklogItem(g.Key.Kind, g.Key.Value, g.Value.Count, g.Value.Overdue, g.Value.Oldest))
             .OrderByDescending(b => b.Count).ThenBy(b => b.OldestCreatedAt)
             .Take(BacklogSize)
             .ToList();

@@ -163,7 +163,7 @@ public sealed class TimeoutTests : IAsyncLifetime
         }
         """;
         var errors = await _host.RunAsync(sp =>
-            Task.FromResult(sp.GetRequiredService<ApprovalDefinitionService>().Validate(FlowDefinition.Parse(flow))));
+            sp.GetRequiredService<ApprovalDefinitionService>().ValidateAsync(FlowDefinition.Parse(flow)));
 
         Assert.Contains(errors, e => e.Contains("'start' 不是审批节点"));
         Assert.Contains(errors, e => e.Contains("时限必须大于 0"));

@@ -28,7 +28,6 @@ public sealed partial class ApprovalDefinitionService
     private readonly DbContext _db;
     internal IApprovalDefinitionExtension? DefinitionExtension { get; }
     private readonly ApprovalUnitOfWork _unit;
-    private readonly ApprovalOptions _options;
     private readonly TimeProvider _clock;
     private readonly ApprovalDbContextAccessor _accessor;
     private readonly IReadOnlyDictionary<string, ApproverTypeDescriptor> _approverTypes;
@@ -46,7 +45,6 @@ public sealed partial class ApprovalDefinitionService
         _db = accessor.Context;
         _accessor = accessor;
         _unit = accessor.UnitOfWork;
-        _options = options ?? new();
         _authorization = accessor.Authorization;
         _clock = ApprovalHostServices.Clock(_unit, clock);
         _approverTypes = extensions.ApproverDescriptors;
@@ -61,12 +59,15 @@ public sealed partial class ApprovalDefinitionService
             .ThenBy(d => d.Type, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-    public ApprovalMetadata Metadata => new(
-        ApproverTypes,
-        [.. NotificationDefaults.NotificationRecipientDescriptors, .. ApproverTypes],
-        _channels,
-        TemplateVariables.Catalog,
-        NotificationDefaults.Contents);
+    public ApprovalMetadata Metadata
+    {
+        get
+        {
+            var types = ApproverTypes;
+            return new(types, [.. NotificationDefaults.NotificationRecipientDescriptors, .. types],
+                _channels, TemplateVariables.Catalog, NotificationDefaults.Contents);
+        }
+    }
 
     public IReadOnlyList<string> Validate(FlowDefinition flow)
     {
@@ -102,7 +103,7 @@ public sealed partial class ApprovalDefinitionService
     private async Task<ApprovalDefinition> PublishAsyncCore(string key, string name, FlowDefinition flow, CancellationToken ct = default)
     {
         await _authorization.RequireAsync(Approval.Core.Abstractions.ApprovalPermissions.DefinitionPublish, new() { DefinitionKey = key }, null, ct);
-        var errors = ValidateCore(flow).ToList();
+        var errors = ValidateCore(flow);
         if (errors.Count > 0)
             throw new ApprovalException("流程定义校验失败：" + string.Join("；", errors)) { Code = ApprovalErrorCode.InvalidDefinition };
 
@@ -117,9 +118,7 @@ public sealed partial class ApprovalDefinitionService
     public async Task<List<ApprovalDefinition>> ListLatestAsync(CancellationToken ct = default)
     {
         await _authorization.RequireAsync(Approval.Core.Abstractions.ApprovalPermissions.DefinitionReadSensitive, new(), null, ct);
-        var definitions = await _db.Set<ApprovalDefinition>().AsNoTracking()
-            .Where(d => d.IsPublished && d.Version == _db.Set<ApprovalDefinition>()
-                .Where(x => x.Key == d.Key && x.IsPublished).Max(x => x.Version))
+        var definitions = await ApprovalDefinitionAvailability.LatestPublished(_db).AsNoTracking()
             .OrderBy(d => d.Key)
             .ToListAsync(ct);
         return await FilterReadableDefinitionsAsync(definitions, ct);
@@ -129,9 +128,7 @@ public sealed partial class ApprovalDefinitionService
     public async Task<List<FlowSummary>> ListFlowsAsync(CancellationToken ct = default)
     {
         await _authorization.RequireAsync(Approval.Core.Abstractions.ApprovalPermissions.DefinitionRead, new(), null, ct);
-        var definitions = await _db.Set<ApprovalDefinition>().AsNoTracking()
-            .Where(d => d.IsPublished && d.Version == _db.Set<ApprovalDefinition>()
-                .Where(x => x.Key == d.Key && x.IsPublished).Max(x => x.Version))
+        var definitions = await ApprovalDefinitionAvailability.LatestPublished(_db).AsNoTracking()
             .OrderBy(d => d.Key)
             .Select(d => new { d.Id, d.Key, d.Name })
             .ToListAsync(ct);

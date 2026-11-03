@@ -256,7 +256,7 @@ public sealed class NotificationTests : IAsyncLifetime
         }
         """;
         var errors = await _host.RunAsync(sp =>
-            Task.FromResult(sp.GetRequiredService<ApprovalDefinitionService>().Validate(FlowDefinition.Parse(flow))));
+            sp.GetRequiredService<ApprovalDefinitionService>().ValidateAsync(FlowDefinition.Parse(flow)));
 
         Assert.Contains(errors, e => e.Contains("未注册的渠道 'Fax'"));
         Assert.Contains(errors, e => e.Contains("未注册的接收人类型 'Nobody'"));

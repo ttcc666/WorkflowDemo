@@ -224,18 +224,19 @@ public sealed partial class ApprovalFormService(
         if (directory is not null && errors.Count == 0)
         {
             var values = FormData.Parse(result.Json);
-            foreach (var field in schema.Fields.Where(f => f.Type is FormFieldType.User or FormFieldType.Users && Reported(f.Key)))
-            {
-                var ids = values.GetValueOrDefault(field.Key) switch
+            var userFields = schema.Fields.Where(f => f.Type is FormFieldType.User or FormFieldType.Users && Reported(f.Key))
+                .Select(field => new { Field = field, Ids = values.GetValueOrDefault(field.Key) switch
                 {
-                    string id => [id],
+                    string id => new[] { id },
                     object?[] list => list.OfType<string>().ToArray(),
                     _ => Array.Empty<string>()
-                };
-                if (ids.Length == 0) continue;
-                var found = (await _hostDirectory!.GetUsersAsync(ids, ct)).Select(u => u.Id).ToHashSet();
-                var missing = ids.Where(id => !found.Contains(id)).ToList();
-                if (missing.Count > 0) errors[field.Key] = [$"{field.Label}中的用户不存在：{string.Join("、", missing)}"];
+                } }).ToList();
+            var ids = userFields.SelectMany(f => f.Ids).Distinct().ToArray();
+            var found = ids.Length == 0 ? new HashSet<string>() : (await _hostDirectory!.GetUsersAsync(ids, ct)).Select(u => u.Id).ToHashSet();
+            foreach (var item in userFields)
+            {
+                var missing = item.Ids.Where(id => !found.Contains(id)).ToList();
+                if (missing.Count > 0) errors[item.Field.Key] = [$"{item.Field.Label}中的用户不存在：{string.Join("、", missing)}"];
             }
         }
 

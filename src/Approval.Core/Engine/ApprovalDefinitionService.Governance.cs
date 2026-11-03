@@ -182,16 +182,19 @@ public sealed partial class ApprovalDefinitionService
         await _authorization.RequireAsync(ApprovalPermissions.DefinitionReadSensitive, ct: ct);
         category = string.IsNullOrWhiteSpace(category) ? null : category.Trim();
         if (category is not null && uncategorized) throw new ApprovalException("分类与未分类筛选不能同时指定");
-        var management = _db.Set<ApprovalDefinitionManagement>().AsNoTracking();
-        var managedKeys = management.Where(d => (category == null || d.Category == category) && (!uncategorized || d.Category == null)).Select(d => d.Key);
-        var keys = await managedKeys.OrderBy(k => k).ToListAsync(ct);
+        var management = await _db.Set<ApprovalDefinitionManagement>().AsNoTracking()
+            .Where(d => (category == null || d.Category == category) && (!uncategorized || d.Category == null))
+            .OrderBy(d => d.Key)
+            .Select(d => new { d.Key, d.Name, d.Revision, d.LastVersion, d.IsEnabled, d.ActiveDefinitionId, d.UpdatedAt, d.Category,
+                HasDraftChanges = d.DraftJson != null && d.PublishedDraftRevision != d.DraftRevision })
+            .ToListAsync(ct);
         var result = new List<DefinitionGovernanceSummary>();
-        foreach (var key in keys)
+        foreach (var state in management)
         {
-            if (!await _authorization.CanAsync(ApprovalPermissions.DefinitionReadSensitive, new() { DefinitionKey = key }, ct: ct)) continue;
-            if (await GetGovernanceAsync(key, ct) is { } state)
-                result.Add(new(state.Key, state.Name, state.Revision, state.LastVersion, state.IsEnabled, state.ActiveDefinitionId,
-                    state.HasDraftChanges, state.UpdatedAt, state.Capabilities) { Category = state.Category });
+            if (!await _authorization.CanAsync(ApprovalPermissions.DefinitionReadSensitive, new() { DefinitionKey = state.Key }, ct: ct)) continue;
+            await _authorization.RequireAsync(ApprovalPermissions.DefinitionReadSensitive, new() { DefinitionKey = state.Key }, ct: ct);
+            result.Add(new(state.Key, state.Name, state.Revision, state.LastVersion, state.IsEnabled, state.ActiveDefinitionId,
+                state.HasDraftChanges, state.UpdatedAt, await GovernanceCapabilitiesAsync(state.Key, ct)) { Category = state.Category });
         }
         return result;
     }
