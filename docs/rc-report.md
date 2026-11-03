@@ -1,15 +1,15 @@
 # Approval.Core RC 最终验收报告
 
-日期：2026-11-03（Asia/Shanghai）。结论：**Not Ready（完整验收存在环境阻塞）**。
+日期：2026-11-03（Asia/Shanghai）。结论：**RC Ready**。
 
-本轮功能清理已完成；Windows 本机正式全量验证通过。三个服务数据库未能启动测试，不能据 SQLite 与模型生成推定通过跨数据库验收。未发现新的已证实 P0／P1 代码缺陷；这不构成未实测 Provider 的安全保证。
+本轮清理、本机正式验证与 GitHub 完整 CI 均通过。三个真实服务数据库已补验，Windows 全量验证、独立包消费者及浏览器 smoke 也通过。未发现新的已证实 P0／P1 代码缺陷，可以进入发布候选与基础架构冻结阶段。
 
 ## 1. Git 与范围
 
 - 分支：`codex/engineering-extensibility`。
 - 修改前 HEAD：`43acecca8174ad29a1c3864c2753b8dbc132a2db`。
-- 修改后 HEAD：本报告所在的独立提交；精确 SHA 保存在提交后的 `output/rc-2026-11-03/git-final.json` 与正式验收副本中。
-- 开始时工作区干净，无用户原有未提交修改；本轮不 Push、不合并、不改写 Git 历史。
+- RC 运行代码与 CI 提交 HEAD：`fb125f0dcab7d2f10b0e35ffc08b46c2f3a5b478`。验收报告补充为后续本地文档提交；最终精确 SHA 见 `output/rc-2026-11-03/git-final.json`。
+- 开始时工作区干净，无用户原有未提交修改。后续用户明确批准推送 `fb125f0` 并运行 CI，已正常快进推送到当前分支；未合并、未改写 Git 历史。CI 结果补充文档未再次 Push。
 - 用户最新确认：项目未正式发布，无外部消费者／生产历史数据。因此明确授权直接重命名构造参数、删除附件死状态及对应迁移／测试／文档。
 - 无新的权限框架、拦截器、SQL Parser、UnitOfWork 或消息供应商依赖；RequireOperationId 默认 false 及 OperationId 协议保持。
 
@@ -116,12 +116,12 @@
 | Raw SQL | 当前 EF 表名／schema 的普通 DML 目标检查，覆盖同步／异步 nonquery、reader、scalar | HostSqlDml_IsRejected_InEveryExecutionPath、BusinessRawSql_MayMentionAndReadApprovalTables |
 | 权限作用域 | Engine／Forms／Operations／Outbox 的内部写权限分离；Extension 使用 None、禁止重入／事务提交，Host Services、Resolver、数据／结果 getter 隔离 | PublicDataEditCallback_CannotChangeTaskStateOrPersistedHistory、HostCannotModifyFormsData_WhileNormalFormsServicesWork、ResultGetter_CannotInheritOperationWriteAuthority、InputGetter_CannotInheritEngineWriteAuthority |
 | 事务与租期 | 失败作用域作废；裸外部事务拒绝；池化租期清空失败与权限记录；宿主业务写入保持 | PublicUnitOfWork_DoesNotAuthorizeHostApprovalChanges、PooledHostContext_NewLeaseDoesNotInheritFailedTransactionOrWriteAuthority、ExistingHostContext_PreservesBusinessSaveApprovalTransactionConcurrencyAndOutbox |
-| OperationId | actor／kind／scope／key 构成范围，唯一索引先预约，摘要／版本校验，Replay 复核当前权限；未知提交在新 scope 核验；批量分别记录计划／实例结果／汇总 | KeyedCoreStart_ReplaysOriginalVersionAndRejectsDifferentContent、KeyedBulkReassign_ReplaysOriginalResult_AndResumesPartialCompletion、OperationEndpointTests；服务数据库并发／提交核验病例本轮未运行 |
+| OperationId | actor／kind／scope／key 构成范围，唯一索引先预约，摘要／版本校验，Replay 复核当前权限；未知提交在新 scope 核验；批量分别记录计划／实例结果／汇总 | KeyedCoreStart_ReplaysOriginalVersionAndRejectsDifferentContent、KeyedBulkReassign_ReplaysOriginalResult_AndResumesPartialCompletion、OperationEndpointTests；服务数据库并发／提交核验病例在三个真实 Provider 的本轮 CI 全部通过 |
 | Outbox | Worker、Dispatcher 与 ProcessDueAsync 检查关闭选项；关闭时保存 Pending，不解析／投递 Handler。ApprovalHostValidation 启用时解析真实 Handler，启动不发送探测事件 | EnabledDispatcherWithoutHandler_FailsApplicationStartup、RegisteredHandlerThatCannotBeConstructed_FailsStartup、ExplicitDispatcherConfiguration_PreservesOutbox_AndDeliversOnlyWhenEnabled：全量通过 |
 | 身份／权限 | 缺身份拒绝；未注册人工权限默认拒绝；异常／超时返回 AuthorizationUnavailable；系统操作必须命中显式能力 | ActorSpoofAndMissingIdentity_AreRejectedBeforeProvider、PermissionFailureOrTimeout_FailsClosed、MissingPermissionProvider_RejectsEvenAnAdministratorBeforeCreatingData |
 | 模块方向 | Core 无 ASP.NET Core／Forms／UI 引用；Forms → Core，Forms HTTP → Forms／ASP.NET Core；通知只携带宿主路由，Outbox 无供应商；业务实体不受审批所有权保护 | 边界 7 测试、契约生成、18 项 Core-only 真实包消费检查 |
 
-上述证据均来自本轮全量本机运行，未引用旧 CI 结果。没有新增需修复的已证实 P0／P1；没有通过跳过、吞异常或降低断言获得通过。
+上述证据来自本轮本机运行及 GitHub Run 41635117047，CI headSha 已核验为 fb125f0；未引用旧 CI 结果。没有新增需修复的已证实 P0／P1；没有通过跳过、吞异常或降低断言获得通过。
 
 **已知应用层边界**：ApprovalSqlWriteGuard 不是数据库安全隔离，也不是完整 SQL 解释器。动态 SQL、存储过程、视图／同义词、触发器和复杂间接写入不提供完整保证；直接 GetDbConnection、独立连接、移除拦截器、迁移／数据库管理权限属于可信宿主边界。持有数据库写权限的宿主仍能直接修改数据库。
 
@@ -136,10 +136,10 @@
 | Approval.AspNetCore.Tests | 同一 solution test 命令 | 81 | 0 | 0 | 通过 |
 | Certificate.Api.Tests | 同一 solution test 命令 | 58 | 0 | 0 | 通过 |
 | Windows 本机完整验证 | `pwsh -NoProfile -File 'eng/verify.ps1'` | — | — | — | 通过；不是远程 CI Run |
-| Windows 远程 CI | 未运行 | — | — | — | 本轮不 Push；远程分支不含工作树修改，无当前代码 CI Run ID |
-| PostgreSQL | `pwsh -NoProfile -File 'eng/verify-databases.ps1' -Provider 'PostgreSql' -SkipBuild -SkipRestore` | 0 | 0 | 0 | 入口退出 1，镜像拉取失败；测试未执行，不能写成通过或跳过 |
-| SQL Server | `pwsh -NoProfile -File 'eng/verify-databases.ps1' -Provider 'SqlServer' -SkipBuild -SkipRestore` | 0 | 0 | 0 | 入口退出 1，镜像拉取 EOF；测试未执行 |
-| MySQL | `pwsh -NoProfile -File 'eng/verify-databases.ps1' -Provider 'MySql' -SkipBuild -SkipRestore` | 0 | 0 | 0 | 入口退出 1，镜像拉取失败；测试未执行 |
+| Windows 远程 CI | `eng/verify.ps1`；GitHub Run **41635117047**、job verify | 完整验证通过 | 0 | 0 | 本轮 SHA fb125f0；548 项 .NET、UI 180、Demo 6、边界 7、模型 9、浏览器 5及包消费者通过 |
+| PostgreSQL | CI：`./eng/verify-databases.ps1 -Provider 'PostgreSql'` | 31 | 0 | 0 | 通过；PostgreSQL 17.11，Run 41635117047 |
+| SQL Server | CI：`./eng/verify-databases.ps1 -Provider 'SqlServer'` | 31 | 0 | 0 | 通过；SQL Server 2022（16.00.4255），Run 41635117047 |
+| MySQL | CI：`./eng/verify-databases.ps1 -Provider 'MySql'` | 31 | 0 | 0 | 通过；MySQL 8.4.10，Run 41635117047 |
 | EF Model Check | 下列九条模型命令 | 9 检查 | 0 | 0 | 均无 pending model changes |
 | ReferenceHost | `pwsh -NoProfile -File 'eng/verify-reference-host.ps1' -SkipBuild`，及复制后的 NuGet 消费宿主同一脚本 | 27 + 27 检查 | 0 | 0 | 两次本轮运行通过 |
 | UI Tests | web 下 `pnpm test` → @approval/ui vitest run | 180 | 0 | 0 | 19 文件通过 |
@@ -165,28 +165,43 @@ foreach ($provider in @('Sqlite', 'MySql', 'SqlServer', 'PostgreSql')) {
 
 | Requirement | Evidence |
 | --- | --- |
-| 删除真实数据库中的死表／字段并保留附件元数据 | InitialMigration_CreatesCurrentSchemaAndRoundTripsAttachmentMetadata：SQLite 通过；三个服务 Provider 未执行 |
+| 删除真实数据库中的死表／字段并保留附件元数据 | InitialMigration_CreatesCurrentSchemaAndRoundTripsAttachmentMetadata：SQLite 及 CI PostgreSQL／SQL Server／MySQL 全部通过 |
 | 保持当前附件访问与引用安全 | FileTests.下载权限_未绑定只有上传者_绑定后按实例权限_隐藏字段不可下载；他人的文件_已用于其他申请的文件_类型不符的文件不能提交：Core 全量通过 |
 | 当前唯一迁移与往返 | Migrations_RollBackAndReapply_WithoutModelDrift；Initial_migration_creates_current_schema_and_repeated_initialization_preserves_rows；Initial_migration_can_roll_back_empty_schema_and_recreate_without_model_drift；Module_contains_only_current_initial_migration_and_model：通过 |
 | 使用真实 Element Plus，原权限断言保持且无 warning | 审批操作的权限能力／只显示单独允许的动作，未提供能力时拒绝显示；允许退回不代表允许驳回，节点禁止退回时仍不显示：定向 2 项及全量 UI 180 项通过 |
 | 清理误导性的 Tenant 隔离断言 | ReferenceHost_BackgroundScopeRecoversAfterFailedBatch、ReferenceHost_SystemPermissionsRequireKnownWorkerAndAllowedCapability、Governance_DisabledFlowKeepsOriginalInstanceAndOtherDefinitionDraftIndependent、FinalAcceptance_BulkReassignmentReportsPerInstancePermissionAndKeepsDeniedInstances：本机全量通过 |
 
-### 环境失败与证据路径
+### 本机环境失败记录（已由 GitHub CI 补验解除阻塞）
 
-- PostgreSQL／MySQL：Docker Hub registry HTTPS 连接超时；SQL Server MCR pull 返回 unexpected EOF。之后镜像源尝试仍保留相同 digest，但 Docker Linux 引擎 pipe 已不可用，也未能运行测试。
+- 本机 PostgreSQL／MySQL：Docker Hub registry HTTPS 连接超时；SQL Server MCR pull 返回 unexpected EOF。之后镜像源尝试仍保留相同 digest，但 Docker Linux 引擎 pipe 已不可用，本机服务数据库测试未运行。
 - 本机 PostgreSQL 需要凭据；SQL Express 实际版本 9.00.3077.00（SQL Server 2005），不能替代当前 Provider 支持环境。只执行了只读连接探测，没有创建／删除用户库，没有使用已有其他数据库环境的连接进行写入，也没有修改连接配置。
-- 数据库入口 manifest 均 validated=false、testExitCode=null，没有 TRX；数据库测试框架并未启动，表中的 0 不是零用例“通过”。SkipBuild／SkipRestore 仅复用本轮正式构建，不跳过测试。
+- 本机数据库入口 manifest 均 validated=false、testExitCode=null，没有 TRX。此处仅记录失败尝试；后续 GitHub 三个数据库的 manifest 均 validated=true、testExitCode=0，TRX 均 31／0／0。
 - 本轮日志：`output/rc-2026-11-03/verify.log`、`ui-targeted.log`、`contracts-update.log`、`migration-generation.log`、`database-<Provider>.log`。
 - 数据库失败 run ID：PostgreSql `d6e5326d7fee4f0983c9bdf684850c0b`；SqlServer `cbb5cff9f77a41e18c4cc087a1efc2fd`；MySql `83d249810e254d07a9676e66959f2930`。这是本机脚本 ID，**不是 CI Run ID**。
 - 本轮独立消费者：`output/engineering/consumer-217ec23a75844faca315821decd12663`，含 verification.json、embedded-host/verification.json、browser/results.json、browser/passed.json 与审批截图。
 - 包 manifest 的 Commit 是执行时基线 HEAD；工作树包含本轮修改，其源文件指纹 `448a65426607b6089eb11f065dee0f5832b95494b9113d373e1cc73d75a7724a`。不将该字段解释为旧提交原样验证。验收后新增报告／更新执行清单仅为文档变化，不改变已验证运行代码或包字节。
 
+### GitHub CI 完整证据
+
+- [Run 41635117047](https://github.com/ttcc666/WorkflowDemo/actions/runs/41635117047)，事件 push，headSha=`fb125f0dcab7d2f10b0e35ffc08b46c2f3a5b478`；四个 job 均 success。
+- MySql job 125914242127：本机下载 TRX Passed=31、Failed=0、Skipped=0；脚本 runId `a79bb75d1c52448fa6c8d0780b3d302d`。
+- SqlServer job 125914242303：TRX 31／0／0；脚本 runId `77c3c393af92471e8988e7b11b7e14c8`。
+- PostgreSql job 125914242014：TRX 31／0／0；脚本 runId `373479bd5de84a6b917768d5f85c5878`。
+- Windows verify job 125914242062：四个 .NET 项目 378／31／81／58，均零失败／跳过；UI 180、Demo 6、边界 7；九个 EF model check、两个 27 项 ReferenceHost smoke、四个 NuGet 包及 npm 消费者、18 项 Core-only 检查和 5 个浏览器测试通过，无 Vue warning。
+- 数据库 artifact 的 head、provider、validated、testExitCode 均核验；文件 SHA-256 与 manifest 一致，TRX 非空且所有病例成功，四项必需迁移／schema／事务／写保护病例实际执行。Linux 锁文件 SHA-256 为 `E7062ABD306D1C9F24EE54F2D61E4403EF6C68D8EF7765CE1F0CF4AEE5AABC1C`，与同一源文件 LF 字节一致；Windows 工作树的 CRLF 差异单独确认。
+- Windows 下载产物核验：release-manifest Commit=fb125f0，5 个包；browser stats expected=5、unexpected=0、skipped=0、flaky=0；Core-only 18 检查；两个 ReferenceHost smoke 均 27 检查。
+- CI 源文件指纹 `5c644cd68e563291762d5bda7a6273e77d2fa3ee23a7510dd3786762d1bc9eab`，由已提交源码生成。验收后只更新报告和计划，没有改变已验证运行代码。
+- 全部证据保存于 `output/rc-2026-11-03/github-ci/`：ci.log、run.json、database-evidence.json、windows-evidence.json、三个数据库 artifact 与 Windows artifact。
+
+```powershell
+gh run view '41635117047' --repo 'ttcc666/WorkflowDemo'
+gh run view '41635117047' --repo 'ttcc666/WorkflowDemo' --log
+```
+
 ## 5. 剩余债务与影响
 
 | 项目 | 阻碍发布 | 安全／兼容影响 | 后续处理条件 |
 | --- | --- | --- | --- |
-| 三种服务数据库当前实测缺席 | 是，完整 RC 验收阻塞 | Provider 的并发、提交核验与物理迁移未获得本轮实测证据 | 恢复固定镜像访问或提供明确的专用临时库，运行正式脚本，要求零跳过 |
-| 当前修改的远程 Windows CI 未运行 | CI 验收证据缺席 | 本机同一正式脚本通过；不能替代远程环境证明 | 用户授权 Push／PR 后运行匹配提交的 workflow，并记录 Run ID |
 | 前端 Forms 与 UI 仍同一 npm 包 | 否 | 后端 Forms 已独立，Core-only 消费通过；前端拆包会涉及契约 | 有真实独立前端消费需求时再拆分 |
 | FieldPermissions／FieldAccess／HiddenFields／Channels | 否 | 当前真实表单权限、数据投影与通知路由仍使用；不是附件死状态 | 真实模块契约需求出现后定向调整，不在 RC 扩大重构 |
 | Operation 版本／IsTombstone 分支 | 否 | 当前结果／防重协议表面保留，本轮按原任务不改 OperationId 协议；不声称存在生产旧数据 | 独立审查操作结果协议时决定是否删除未使用版本分支 |
@@ -194,7 +209,7 @@ foreach ($provider in @('Sqlite', 'MySql', 'SqlServer', 'PostgreSql')) {
 
 ## 6. 结论与下一步
 
-**Not Ready**：本轮代码清理、文档、当前模型、SQLite、安全边界测试、独立包及浏览器验收已通过；三个服务数据库未执行实测，完整矩阵仍不满足冻结／发布准备条件。阻塞源于环境验证缺席，不是已确认的运行代码失败。恢复测试环境后只补未通过项目；没有新需求时不继续设计基础设施。
+**RC Ready**：本轮代码清理、身份与权限、写保护、事务／幂等、四种数据库、九套模型检查、Windows CI、独立包消费者与浏览器全部通过。原本机环境限制已由对应提交的真实 CI 补足证据，不再阻碍 RC 验收。可以进入基础架构冻结期；后续由真实集成需求与已确认缺陷驱动。
 
 ```powershell
 Set-Location -LiteralPath 'D:\Study\CSharp\Workflow'
