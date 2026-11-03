@@ -39,7 +39,7 @@ builder.Services.AddOpenApi("approval");
 builder.Services.AddOpenApi("certificate");
 builder.Services.AddDbContext<AppDbContext>(options => options.UseSqlite("Data Source=:memory:"));
 builder.Services.AddScoped<IApprovalIdentityProvider, ContractIdentity>();
-builder.Services.AddApprovalWorkflow<AppDbContext>(options => { options.EnableBackgroundServices = false; })
+builder.Services.AddApprovalWorkflow<AppDbContext>(options => { options.EnableBackgroundServices = false; options.Outbox.EnableDispatcher = false; })
     .AddApprovalForms().AddCertificateModule();
 builder.Services.AddApprovalAspNetCore();
 builder.Services.AddApprovalFormsAspNetCore();
@@ -64,7 +64,7 @@ try
         foreach (var endpoint in ((IEndpointRouteBuilder)app).DataSources.SelectMany(s => s.Endpoints).OfType<RouteEndpoint>())
         {
             var permissions = endpoint.Metadata.GetMetadata<ApprovalPermissionMetadata>();
-            if (permissions is null || permissions.Permissions.Any(p => p is ApprovalPermissions.DefinitionValidate or ApprovalPermissions.FileUpload or ApprovalPermissions.TaskReassignBulk)) continue;
+            if (permissions is null || permissions.Permissions.Any(p => p is ApprovalPermissions.DefinitionValidate or ApprovalPermissions.FileUpload)) continue;
             var path = System.Text.RegularExpressions.Regex.Replace(endpoint.RoutePattern.RawText!, @"\{([^}:]+):[^}]+\}", "{$1}");
             foreach (var method in endpoint.Metadata.GetMetadata<HttpMethodMetadata>()!.HttpMethods.Where(m => m is "POST" or "PUT" or "DELETE"))
                 if (document["paths"]?[path]?[method.ToLowerInvariant()] is JsonObject operation) AddCommandHeader(operation, false);

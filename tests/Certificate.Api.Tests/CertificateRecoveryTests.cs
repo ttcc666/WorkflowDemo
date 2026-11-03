@@ -62,7 +62,7 @@ public sealed class CertificateRecoveryTests
         {
             await EnableWebhookAsync(first);
             await first.RegisterAsync();
-            messageId = await first.DbAsync(async db =>
+            messageId = await first.SeedStorageAsync(async db =>
             {
                 var message = await db.Set<ApprovalOutboxMessage>().SingleAsync(m => m.PayloadJson.Contains("\"eventType\":\"NotificationRequested\""));
                 message.Attempts = 1;

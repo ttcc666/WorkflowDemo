@@ -2,6 +2,7 @@ using Approval.Core;
 using System.Text;
 using System.Text.Json;
 using Approval.Core.Domain;
+using Approval.Core.Persistence;
 using Approval.Forms.Schema;
 using Microsoft.EntityFrameworkCore;
 
@@ -31,7 +32,7 @@ public sealed partial class ApprovalFormService
     /// <summary>保存草稿（draftId 为空时新建），返回保存后的草稿。</summary>
     public Task<ApprovalDraft> SaveDraftAsync(string userId, string key, Guid? draftId, JsonElement formData, string? comment,
         CancellationToken ct = default) =>
-        _unit.ExecuteCommandAsync(token => SaveDraftAsyncCore(userId, key, draftId, formData, comment, token), ct);
+        _unit.ExecuteCommandAsync(ApprovalWriteOwner.Forms, token => SaveDraftAsyncCore(userId, key, draftId, formData, comment, token), ct);
 
     private async Task<ApprovalDraft> SaveDraftAsyncCore(string userId, string key, Guid? draftId, JsonElement formData, string? comment,
         CancellationToken ct = default)
@@ -44,7 +45,7 @@ public sealed partial class ApprovalFormService
         comment = string.IsNullOrWhiteSpace(comment) ? null : comment.Trim();
         if (comment is { Length: > 500 }) comment = comment[..500];
 
-        var now = clock.GetUtcNow().UtcDateTime;
+        var now = _clock.GetUtcNow().UtcDateTime;
         ApprovalDraft draft;
         if (draftId is { } id)
         {
@@ -100,13 +101,13 @@ public sealed partial class ApprovalFormService
     }
 
     public Task DeleteDraftAsync(string userId, Guid id, CancellationToken ct = default) =>
-        _unit.ExecuteCommandAsync(token => DeleteDraftAsyncCore(userId, id, token), ct);
+        _unit.ExecuteCommandAsync(ApprovalWriteOwner.Forms, token => DeleteDraftAsyncCore(userId, id, token), ct);
 
     private async Task DeleteDraftAsyncCore(string userId, Guid id, CancellationToken ct = default)
     {
         await _authorization.RequireAsync(Approval.Core.Abstractions.ApprovalPermissions.DraftDelete, new() { DraftId = id }, userId, ct);
         _db.Set<ApprovalDraft>().Remove(await FindDraftAsync(userId, id, ct));
-        // 草稿中的附件解除绑定，过期后清理
+        // 草稿中的附件解除绑定；后续存储生命周期由宿主管理。
         await files.BindToDraftAsync(id, [], ct);
         await _db.SaveChangesAsync(ct);
     }

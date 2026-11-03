@@ -48,6 +48,8 @@ public sealed class ApprovalOptions
 
 public sealed class ApprovalOutboxOptions
 {
+    /// <summary>是否允许后台或手动投递。关闭时事件仍持久化为 Pending，宿主不会收到事件。</summary>
+    public bool EnableDispatcher { get; set; } = true;
     /// <summary>没有新消息时的轮询间隔；审批操作写入消息后会立即唤醒投递任务。</summary>
     public TimeSpan PollInterval { get; set; } = TimeSpan.FromSeconds(5);
 

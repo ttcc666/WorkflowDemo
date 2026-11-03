@@ -20,7 +20,7 @@ public sealed class BackgroundRegistrationTests
               "end":{"type":"End"}}}
             """);
         var instance = await host.StartAsync("worker", "one", "alice");
-        Task Tick() => host.RunAsync(sp => Assert.IsType<ApprovalWorker>(Assert.Single(sp.GetServices<IHostedService>())).RunOnceAsync());
+        Task Tick() => host.RunAsync(sp => Assert.Single(sp.GetServices<IHostedService>().OfType<ApprovalWorker>()).RunOnceAsync());
         await Tick();
         Assert.Equal(OutboxStatus.Pending, Assert.Single(await host.NotificationOutboxAsync()).Status);
         host.Clock.Advance(TimeSpan.FromMinutes(1));
@@ -40,13 +40,13 @@ public sealed class BackgroundRegistrationTests
         await using var enabled = new TestHost();
         await enabled.RunAsync(sp =>
         {
-            Assert.IsType<ApprovalWorker>(Assert.Single(sp.GetServices<IHostedService>()));
+            Assert.Single(sp.GetServices<IHostedService>().OfType<ApprovalWorker>());
             return Task.CompletedTask;
         });
         await using var disabled = new TestHost(o => o.EnableBackgroundServices = false);
         await disabled.RunAsync(sp =>
         {
-            Assert.Empty(sp.GetServices<IHostedService>());
+            Assert.Empty(sp.GetServices<IHostedService>().OfType<ApprovalWorker>());
             Assert.NotNull(sp.GetRequiredService<ApprovalOutboxDispatcher>());
             Assert.NotNull(sp.GetRequiredService<ApprovalTimeoutScanner>());
             return Task.CompletedTask;

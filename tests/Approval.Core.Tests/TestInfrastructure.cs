@@ -152,6 +152,17 @@ public sealed class StubHttpHandler : HttpMessageHandler
 /// <summary>每个测试一个独立的 SQLite 内存库。</summary>
 public sealed class TestHost : IAsyncDisposable
 {
+    private sealed class StorageContext(DbContextOptions<StorageContext> options) : DbContext(options)
+    {
+        protected override void OnModelCreating(ModelBuilder model)
+        { model.ConfigureApproval().ConfigureApprovalForms(); model.Entity<TestRecord>().HasIndex(x => x.Name).IsUnique(); }
+    }
+    // Explicit offline storage fixture for corrupt/legacy rows. Never used by service/security scenarios.
+    public async Task SeedStorageAsync(Func<DbContext, Task> seed)
+    {
+        await using var db = new StorageContext(new DbContextOptionsBuilder<StorageContext>().UseSqlite(_connection).Options);
+        await seed(db);
+    }
     private readonly SqliteConnection _connection;
     private readonly ServiceProvider _provider;
 
@@ -229,8 +240,18 @@ public sealed class TestHost : IAsyncDisposable
     public Task RunAsync(Func<IServiceProvider, Task> action) =>
         RunAsync<object?>(async sp => { await action(sp); return null; });
 
-    public Task PublishAsync(string key, string flowJson) =>
-        RunAsync(sp => sp.GetRequiredService<IApprovalUnitOfWork>().ExecuteAsync(token => sp.GetRequiredService<ApprovalDefinitionService>().PublishAsync(key, key, flowJson, token)));
+    public async Task PublishAsync(string key, string flowJson)
+    {
+        if (!_provider.GetRequiredService<ApprovalOptions>().RequireOperationId)
+        {
+            await RunAsync(sp => sp.GetRequiredService<ApprovalDefinitionService>().PublishAsync(key, key, flowJson));
+            return;
+        }
+        Identity.Add("fixture-publisher", "Admin");
+        await RunAsAsync("fixture-publisher", sp => sp.GetRequiredService<IApprovalCommandExecutor>().ExecuteAsync(
+            new("fixture.publish", key, Guid.NewGuid().ToString("N"), flowJson, ApprovalPermissions.DefinitionPublish),
+            (attempt, ct) => attempt.GetRequiredService<ApprovalDefinitionService>().PublishAsync(key, key, flowJson, ct)));
+    }
 
     public Task<ApprovalInstance> StartAsync(string key, string businessKey, string initiator, object? form = null) =>
         RunAsync(sp => sp.GetRequiredService<ApprovalEngine>().StartAsync(

@@ -9,6 +9,7 @@ public static class ApprovalFormsModelBuilderExtensions
 {
     public static ModelBuilder ConfigureApprovalForms(this ModelBuilder modelBuilder, string tablePrefix = "Approval")
     {
+        ApprovalWriteAuthorization.RegisterForms(typeof(ApprovalDraft), typeof(ApprovalFile));
         modelBuilder.Entity<ApprovalDraft>(b =>
         {
             b.ToTable($"{tablePrefix}Drafts");
@@ -29,7 +30,7 @@ public static class ApprovalFormsModelBuilderExtensions
             b.Property(x => x.UploadedBy).HasMaxLength(100);
             b.HasIndex(x => x.InstanceId);
             b.HasIndex(x => x.DraftId);
-            // 清理未绑定文件：按上传时间
+            // 支持宿主按上传时间查询附件；审批 Worker 不清理文件。
             b.HasIndex(x => x.UploadedAt);
         });
         modelBuilder.Entity<ApprovalFile>().HasOne<ApprovalInstance>().WithMany()

@@ -1,5 +1,7 @@
 # 数据库验证
 
+第三轮新增必需病例 `ApprovalWriteProtection_RejectsHostTrackedBulkAndSqlButPreservesEngine`：在每个真实 Provider 的安装保护上下文拒绝宿主状态写入、日志删除、bulk 和原生 DML，并确认正常引擎审批成功。低层约束/旧数据构造使用明确的离线 storage fixture；安全病例始终使用正常宿主注册和 UseApproval，不使用测试写入豁免。
+
 支持 SQLite、SQL Server、PostgreSQL、MySQL。审批模型使用 UTC 转换、唯一键、外键和显式并发令牌；不同 provider 拥有各自宿主 Migration 链，禁止复用其他 provider 的 snapshot。
 
 根目录运行 dotnet test Workflow.slnx --configuration Release；默认 Database.Tests 使用独立 SQLite 临时文件。服务数据库分别运行 pwsh -NoProfile -File ./eng/verify-databases.ps1 -Provider SqlServer（或 PostgreSql / MySql）。脚本只创建随机 approval_test_ 数据库；使用已有测试库必须显式指定独立测试库连接。

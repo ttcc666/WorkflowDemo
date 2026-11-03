@@ -15,7 +15,7 @@ public sealed class FlowValidationContext
     /// <summary>审批人类型描述（参数类型、是否有序），用于校验规则参数与审批方式。</summary>
     public IReadOnlyDictionary<string, ApproverTypeDescriptor>? ApproverDescriptors { get; init; }
 
-    /// <summary>可用的通知渠道（含站内信 InApp）。</summary>
+    /// <summary>宿主声明的通知路由（含内置站内信 InApp）；名称保留以兼容现有契约。</summary>
     public IReadOnlySet<string>? Channels { get; init; }
 
 }

@@ -88,16 +88,24 @@ internal sealed class ApprovalCommandExecutor<TContext>(IServiceScopeFactory sco
                         {
                             record = new() { Id = Guid.NewGuid(), LookupHash = lookup, ActorId = identity.ActorId, Kind = command.Kind,
                                 Scope = command.Scope, RequestKey = key!, RequestHash = hash };
-                            db.Add(record);
-                            // Reserve before invoking host code; concurrent requests cannot both execute a committed command.
-                            await db.SaveChangesAsync(token);
+                            using (unit.Writes.Enter(ApprovalWriteOwner.Operations))
+                            {
+                                db.Add(record);
+                                // Reserve before invoking host code; concurrent requests cannot both execute a committed command.
+                                await db.SaveChangesAsync(token);
+                            }
+                            ApprovalPersistence.State(db).KeyedCommand = true;
                         }
                         var result = await operation(sp, token);
                         if (record is not null)
                         {
-                            record.ResultJson = JsonSerializer.Serialize(new StoredResult<T>(result, authorizedResource), Json);
+                            string resultJson;
+                            using (unit.Extension()) resultJson = JsonSerializer.Serialize(new StoredResult<T>(result, authorizedResource), Json);
+                            var committedAt = clock.GetUtcNow().UtcDateTime;
+                            using var authority = unit.Writes.Enter(ApprovalWriteOwner.Operations);
+                            record.ResultJson = resultJson;
                             record.InstanceId = ApprovalPersistence.State(db).InstanceId; record.DefinitionId = ApprovalPersistence.State(db).DefinitionId;
-                            record.CommittedAt = clock.GetUtcNow().UtcDateTime;
+                            record.CommittedAt = committedAt;
                         }
                         // Any failure after here is conservatively verified using a separate context.
                         committing = true;

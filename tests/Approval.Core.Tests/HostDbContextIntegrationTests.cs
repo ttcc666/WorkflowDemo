@@ -44,6 +44,16 @@ public sealed class HostDbContextIntegrationTests
         protected override void OnModelCreating(ModelBuilder model)
         { base.OnModelCreating(model); model.ConfigureApproval(); model.Entity<BusinessRecord>().HasKey(r => r.Id); }
     }
+    public sealed class ExplicitAcceptContext(DbContextOptions<ExplicitAcceptContext> options) : CustomBaseContext(options)
+    {
+        protected override void OnModelCreating(ModelBuilder model) { model.ConfigureApproval("Accepted"); model.Entity<BusinessRecord>().HasKey(r => r.Id); }
+        public override async Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken ct = default)
+        {
+            var result = await base.SaveChangesAsync(false, ct);
+            if (acceptAllChangesOnSuccess) ChangeTracker.AcceptAllChanges();
+            return result;
+        }
+    }
     private sealed class Permissions : IApprovalPermissionProvider
     {
         public Task<bool> AuthorizeAsync(ApprovalPermissionRequest request, CancellationToken ct) => Task.FromResult(true);
@@ -63,10 +73,12 @@ public sealed class HostDbContextIntegrationTests
     [InlineData("plain")]
     [InlineData("identity")]
     [InlineData("custom")]
+    [InlineData("explicit-accept")]
     public Task ExistingHostContext_PreservesBusinessSaveApprovalTransactionConcurrencyAndOutbox(string structure) => structure switch
     {
         "plain" => Exercise<PlainContext>(),
         "identity" => Exercise<IdentityContext>(),
+        "explicit-accept" => Exercise<ExplicitAcceptContext>(),
         _ => Exercise<CustomContext>()
     };
 
@@ -130,8 +142,10 @@ public sealed class HostDbContextIntegrationTests
         {
             var db1 = first.ServiceProvider.GetRequiredService<TContext>(); var db2 = second.ServiceProvider.GetRequiredService<TContext>();
             var a = await db1.Set<ApprovalInstance>().SingleAsync(); var b = await db2.Set<ApprovalInstance>().SingleAsync();
-            a.Title = "winner"; a.ConcurrencyStamp++; await db1.SaveChangesAsync();
-            b.Title = "stale overwrite"; b.ConcurrencyStamp++; await Assert.ThrowsAsync<DbUpdateConcurrencyException>(() => db2.SaveChangesAsync());
+            using (new ApprovalUnitOfWork(db1).Writes.Enter(ApprovalWriteOwner.Engine))
+            { a.Title = "winner"; a.ConcurrencyStamp++; await db1.SaveChangesAsync(); }
+            using (new ApprovalUnitOfWork(db2).Writes.Enter(ApprovalWriteOwner.Engine))
+            { b.Title = "stale overwrite"; b.ConcurrencyStamp++; await Assert.ThrowsAsync<DbUpdateConcurrencyException>(() => db2.SaveChangesAsync()); }
             var definition = await db1.Set<ApprovalDefinition>().SingleAsync(); definition.Name = "rewrite published version";
             await Assert.ThrowsAsync<InvalidOperationException>(() => db1.SaveChangesAsync());
         }
@@ -166,5 +180,29 @@ public sealed class HostDbContextIntegrationTests
         var db = scope.ServiceProvider.GetRequiredService<PlainContext>(); await db.Database.EnsureCreatedAsync();
         var error = await Assert.ThrowsAsync<ApprovalException>(() => scope.ServiceProvider.GetRequiredService<ApprovalDefinitionService>().PublishAsync("denied", "Denied", Flow));
         Assert.Equal(ApprovalErrorCode.Forbidden, error.Code); Assert.Equal(0, await db.Set<ApprovalDefinition>().CountAsync()); Assert.Equal(0, await db.Set<ApprovalOutboxMessage>().CountAsync());
+    }
+
+    [Fact]
+    public async Task PooledHostContext_NewLeaseDoesNotInheritFailedTransactionOrWriteAuthority()
+    {
+        await using var keeper = new SqliteConnection("Data Source=:memory:"); await keeper.OpenAsync();
+        var services = new ServiceCollection(); services.AddLogging();
+        services.AddDbContextPool<PlainContext>(o => o.UseSqlite(keeper), poolSize: 1);
+        services.AddApprovalWorkflow<PlainContext>(o => { o.EnableBackgroundServices = false; o.Outbox.EnableDispatcher = false; });
+        await using var provider = services.BuildServiceProvider();
+        Guid instance; int lease;
+        await using (var failed = provider.CreateAsyncScope())
+        {
+            failed.ServiceProvider.GetRequiredService<ApprovalExecutionContext>().InitializeSystem("pool-test", []);
+            var db = failed.ServiceProvider.GetRequiredService<PlainContext>(); await db.Database.EnsureCreatedAsync();
+            instance = db.ContextId.InstanceId; lease = db.ContextId.Lease;
+            await Assert.ThrowsAsync<IOException>(() => failed.ServiceProvider.GetRequiredService<IApprovalUnitOfWork>().ExecuteAsync(async ct =>
+            { db.Add(new BusinessRecord { Id = Guid.NewGuid(), Name = "rollback" }); await Task.Yield(); throw new IOException("abort"); }));
+        }
+        await using var success = provider.CreateAsyncScope();
+        var reused = success.ServiceProvider.GetRequiredService<PlainContext>();
+        Assert.Equal(instance, reused.ContextId.InstanceId); Assert.NotEqual(lease, reused.ContextId.Lease);
+        reused.Add(new BusinessRecord { Id = Guid.NewGuid(), Name = "new lease" }); await reused.SaveChangesAsync();
+        Assert.Equal("new lease", await reused.Set<BusinessRecord>().Select(r => r.Name).SingleAsync());
     }
 }

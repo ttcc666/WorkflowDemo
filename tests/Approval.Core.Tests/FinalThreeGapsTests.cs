@@ -183,7 +183,7 @@ public sealed class FinalThreeGapsTests
         await host.PublishAsync("f", Categorized("Published"));
         var state = await host.RunAsync(sp => sp.GetRequiredService<ApprovalDefinitionService>().GetGovernanceAsync("f"));
         Assert.Equal("Draft", state!.Category); Assert.Equal(draft.DraftJson, state.DraftJson); Assert.True(state.HasDraftChanges);
-        await host.RunAsync(async sp => { var db = sp.GetRequiredService<TestDbContext>();
+        await host.SeedStorageAsync(async db => {
             db.Add(new ApprovalDefinition { Id = Guid.NewGuid(), Key = "unmanaged", Name = "Unmanaged", DefinitionJson = Categorized("Unmanaged"), Category = "Unmanaged", Version = 1, IsPublished = true });
             await db.SaveChangesAsync();
         });

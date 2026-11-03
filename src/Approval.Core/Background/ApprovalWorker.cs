@@ -25,7 +25,7 @@ public sealed class ApprovalWorker(
             _nextTimeout = clock.GetUtcNow() + options.TimeoutScanInterval;
         }
 
-        await RunAsync("Outbox 投递", outbox.DispatchOnceAsync, ct);
+        if (options.Outbox.EnableDispatcher) await RunAsync("Outbox 投递", outbox.DispatchOnceAsync, ct);
 
 
     }

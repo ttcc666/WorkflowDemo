@@ -47,7 +47,7 @@ public sealed partial class ApprovalEngine
     private Guid? _operationTaskId;
     internal IApprovalDefinitionExtension? DefinitionExtension { get; set; }
     internal IApprovalLifecycleHandler? Lifecycle { get; set; }
-    internal IApprovalUserStatusProvider? UserStatus { get => _assignees.UserStatus; set => _assignees.UserStatus = value; }
+    internal IApprovalUserStatusProvider? UserStatus { get => _assignees.UserStatus; set => _assignees.UserStatus = ApprovalHostServices.Status(_unit, value); }
 
     public ApprovalEngine(
         ApprovalDbContextAccessor accessor,
@@ -82,20 +82,22 @@ public sealed partial class ApprovalEngine
         _unit = accessor.UnitOfWork;
         _commands = accessor.Commands;
         _authorization = accessor.Authorization;
-        _identity = identity;
-        _assignees = new(identity, extensions.Resolvers, options, directory);
+        _identity = ApprovalHostServices.Identity(_unit, identity);
+        _assignees = new(_identity, extensions.Resolvers, options, ApprovalHostServices.Directory(_unit, directory), _unit);
         _handlers = extensions.BusinessHandlers;
         _channels = extensions.ChannelNames;
-        _evaluator = evaluator;
+        _evaluator = ApprovalHostServices.Conditions(_unit, evaluator);
         _options = options;
         _displaySettings = new ApprovalDisplaySettings(options.DisplayTimeZone, options.InstanceUrlFormat, options.GlobalVariables);
         _outboxSignal = outboxSignal;
-        _clock = clock;
+        _clock = ApprovalHostServices.Clock(_unit, clock);
         _logger = logger;
-        _directory = directory;
+        _directory = ApprovalHostServices.Directory(_unit, directory);
     }
 
     private DateTime Now => _clock.GetUtcNow().UtcDateTime;
+    private string SerializeData(object? data)
+    { using var callback = _unit.Extension(); return FormData.Serialize(data); }
 
     public Task<ApprovalInstance> StartAsync(StartApprovalRequest request, CancellationToken ct = default) => StartCommandAsync(request, ct);
 
@@ -138,7 +140,7 @@ public sealed partial class ApprovalEngine
             Title = request.Title,
             InitiatorId = request.InitiatorId,
             Status = InstanceStatus.Running,
-            FormDataJson = FormData.Serialize(request.FormData),
+            FormDataJson = SerializeData(request.FormData),
             CreatedAt = Now
         };
         _db.Set<ApprovalInstance>().Add(instance);
@@ -149,7 +151,7 @@ public sealed partial class ApprovalEngine
 
         if (Lifecycle is not null)
         {
-            using var callback = _unit.Extension();
+            using var callback = _unit.Extension(prepared: instance, prepareData: true);
             await Lifecycle.OnStartingAsync(instance, ct);
         }
 
@@ -192,7 +194,9 @@ public sealed partial class ApprovalEngine
         await EnsureCanHandleAsync(instance, task, userId, ct);
         if (task.Kind == ApprovalTaskKind.Resubmit) throw new ApprovalException("退回到发起人的申请请修改后重新提交");
 
-        if (await edit(instance, task, flow) is { } change)
+        ApprovalDataEdit? change;
+        using (var callback = _unit.Extension(prepared: instance)) change = await edit(instance, task, FlowDefinition.Parse(flow.ToJson()));
+        if (change is not null)
         {
             instance.FormDataJson = change.DataJson;
             AddLog(instance, ApprovalAction.FormEdit, userId, change.Summary,
@@ -588,7 +592,7 @@ public sealed partial class ApprovalEngine
 
     // ───────────────────────── 校验与加载 ─────────────────────────
 
-    private async Task<(ApprovalInstance Instance, ApprovalTask Task, FlowDefinition Flow)> LoadTaskAsync(Guid taskId, CancellationToken ct)
+    private async Task<(ApprovalInstance Instance, ApprovalTask Task, FlowDefinition Flow)> LoadTaskAsync(Guid taskId, CancellationToken ct, bool write = true)
     {
         var instance = await _db.Set<ApprovalInstance>()
             .Include(i => i.Tasks)
@@ -596,7 +600,7 @@ public sealed partial class ApprovalEngine
             ?? throw new ApprovalException("审批任务不存在") { Code = ApprovalErrorCode.NotFound };
 
         var flow = await LoadFlowAsync(instance, ct);
-        Touch(instance);
+        if (write) Touch(instance);
         _operationTaskId = taskId;
         return (instance, instance.Tasks.Single(t => t.Id == taskId), flow);
     }
@@ -667,7 +671,7 @@ public sealed partial class ApprovalEngine
         if (!flow.Nodes.TryGetValue(nodeId, out var node)) throw new ApprovalException("节点不存在") { Code = ApprovalErrorCode.NotFound };
         return await _assignees.GetEligibleApproversAsync(new ApprovalInstance { DefinitionId = definition.Id, DefinitionKey = definition.Key,
             DefinitionVersion = definition.Version, BusinessType = request.BusinessType, BusinessKey = request.BusinessKey,
-            InitiatorId = request.InitiatorId, FormDataJson = FormData.Serialize(request.FormData), Status = InstanceStatus.Running }, node, ct);
+            InitiatorId = request.InitiatorId, FormDataJson = SerializeData(request.FormData), Status = InstanceStatus.Running }, node, ct);
     }
 
     // ───────────────────────── 辅助方法 ─────────────────────────

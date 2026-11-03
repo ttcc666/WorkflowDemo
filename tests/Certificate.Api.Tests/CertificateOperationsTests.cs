@@ -27,7 +27,7 @@ public sealed class CertificateOperationsTests
         await using var host = await CertificateHost.StartAsync(configure: services => services.AddSingleton<IApprovalPermissionProvider, ObserverPermissions>());
         await host.CreateAsync();
         var id = Guid.NewGuid();
-        await host.DbAsync(async db => { db.Add(new ApprovalOutboxMessage { Id = id, Target = "test", PayloadJson = "{}", Status = OutboxStatus.Failed }); return await db.SaveChangesAsync(); });
+        await host.SeedStorageAsync(async db => { db.Add(new ApprovalOutboxMessage { Id = id, Target = "test", PayloadJson = "{}", Status = OutboxStatus.Failed }); return await db.SaveChangesAsync(); });
         using var diagnostic = await host.SendAsync(HttpMethod.Get, "/api/approval/admin/certificates/diagnostics", "alice");
         Assert.Equal(HttpStatusCode.OK, diagnostic.StatusCode);
         using var json = JsonDocument.Parse(await diagnostic.Content.ReadAsStringAsync());

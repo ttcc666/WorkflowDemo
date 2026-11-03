@@ -162,10 +162,10 @@ public sealed partial class DatabaseContractTests
             .AddBusinessHandler<AtomicBusiness>().AddEventHandler<AtomicAction>();
         configureServices?.Invoke(services);
         var provider = services.BuildServiceProvider();
-        foreach (var tenant in initializeDatabase ? new[] { "database-tests" } : Array.Empty<string>())
+        if (initializeDatabase)
         {
-            await using var scope = provider.CreateAsyncScope(); ((AtomicResolver)scope.ServiceProvider.GetRequiredService<IApprovalContextResolver>()).Tenant = tenant;
-            var db = scope.ServiceProvider.GetRequiredService<AtomicContractContext>();
+            // The fixture imports a historical definition through an explicit offline storage context.
+            await using var db = fixture.CreateStorage();
             var definition = new ApprovalDefinition { Id = Guid.NewGuid(), Key = "doc", Name = "Atomic", Version = 1, DefinitionJson = AtomicFlow, IsPublished = true, CreatedAt = Timestamp };
             db.Add(definition);
             db.Add(new ApprovalDefinitionManagement { Id = Guid.NewGuid(), Key = "doc", Name = "Atomic", LastVersion = 1, ActiveDefinitionId = definition.Id, UpdatedAt = Timestamp, UpdatedBy = "admin" });

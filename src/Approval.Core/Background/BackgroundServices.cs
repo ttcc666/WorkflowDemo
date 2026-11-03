@@ -11,12 +11,17 @@ namespace Approval.Core.Background;
 /// <summary>后台投递 Outbox：被审批操作唤醒或按轮询间隔执行，每次在新的 DI 作用域中处理到期消息。</summary>
 public sealed class ApprovalOutboxDispatcher(ApprovalBackgroundRunner sweeper)
 {
+    internal Func<CancellationToken, Task>? ValidateHost { get; init; }
+    internal ApprovalOptions? Options { get; init; }
     // 保留宿主原有显式构造方式；定时循环已统一由 ApprovalWorker 拥有。
     public ApprovalOutboxDispatcher(ApprovalOutboxSignal signal, ApprovalOptions options,
         ILogger<ApprovalOutboxDispatcher> logger, ApprovalBackgroundRunner sweeper) : this(sweeper) { }
     /// <summary>处理所有到期消息（测试与手动触发时可直接调用）。</summary>
     public async Task DispatchOnceAsync(CancellationToken ct = default)
     {
+        ct.ThrowIfCancellationRequested();
+        if (Options?.Outbox.EnableDispatcher == false) return;
+        if (ValidateHost is not null) await ValidateHost(ct);
         await sweeper.RunAsync("outbox", (sp, token) => sp.GetRequiredService<ApprovalOutboxService>().ProcessDueAsync(token), ct);
     }
 

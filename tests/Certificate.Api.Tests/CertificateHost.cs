@@ -3,6 +3,9 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Approval.Core;
+using Approval.Core.Persistence;
+using Approval.Forms;
+using Microsoft.EntityFrameworkCore;
 using Certificate.Api;
 using Certificate.Api.Certificates;
 using Microsoft.AspNetCore.Builder;
@@ -143,6 +146,12 @@ public sealed class CertificateHost : IAsyncDisposable
 
     public Task<T> DbAsync<T>(Func<AppDbContext, Task<T>> action) => RunAsync(sp => action(sp.GetRequiredService<AppDbContext>()));
 
+    public async Task<T> SeedStorageAsync<T>(Func<DbContext, Task<T>> seed)
+    {
+        await using var db = new CertificateStorageContext(DatabasePath);
+        return await seed(db);
+    }
+
     public async Task<Guid> RegisterAsync(CertificateData? data = null)
     {
         var request = await CreateAsync(data);
@@ -193,6 +202,13 @@ public sealed class CertificateHost : IAsyncDisposable
             Directory.Delete(target, recursive: true);
         }
     }
+}
+
+// Only corrupt/legacy storage setup uses this context. All application requests use AppDbContext and UseApproval.
+internal sealed class CertificateStorageContext(string path) : DbContext
+{
+    protected override void OnConfiguring(DbContextOptionsBuilder options) => options.UseSqlite($"Data Source={path};Pooling=False");
+    protected override void OnModelCreating(ModelBuilder model) => model.ConfigureApproval().ConfigureApprovalForms();
 }
 
 public sealed class RecordingHttp : HttpMessageHandler

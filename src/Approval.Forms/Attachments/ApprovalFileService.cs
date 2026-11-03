@@ -13,7 +13,7 @@ using Microsoft.EntityFrameworkCore;
 namespace Approval.Forms.Attachments;
 
 /// <summary>
-/// 表单附件：上传（大小、扩展名白名单、文件名清洗、SHA-256）、按权限下载、提交表单时校验并绑定到实例 / 草稿、清理过期的未绑定文件。
+/// 表单附件：上传（大小、扩展名白名单、文件名清洗、SHA-256）、按权限下载、提交表单时校验并绑定到实例 / 草稿。
 /// 下载权限：上传者；或文件已绑定实例、查看者能查看该实例，且文件出现在查看者可见的字段中（隐藏字段中的附件不可下载）。
 /// </summary>
 public sealed class ApprovalFileService(
@@ -74,6 +74,7 @@ public sealed class ApprovalFileService(
             UploadedBy = userId,
             UploadedAt = clock.GetUtcNow().UtcDateTime
         };
+        using var authority = accessor.UnitOfWork.Writes.Enter(ApprovalWriteOwner.Forms);
         _db.Set<ApprovalFile>().Add(file);
         try
         {
@@ -81,6 +82,7 @@ public sealed class ApprovalFileService(
         }
         catch
         {
+            _db.Entry(file).State = EntityState.Detached;
             await store.DeleteAsync(key, ct);
             throw;
         }
@@ -165,9 +167,10 @@ public sealed class ApprovalFileService(
     private static bool Accepts(FormField field, string fileName) =>
         field.Accept.Count == 0 || field.Accept.Contains(Path.GetExtension(fileName).TrimStart('.'), StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>草稿引用的文件绑定到草稿，不再引用的解除绑定（过期后清理）。</summary>
+    /// <summary>草稿引用的文件绑定到草稿，不再引用的解除绑定；存储生命周期由宿主管理。</summary>
     internal async Task BindToDraftAsync(Guid draftId, IReadOnlyCollection<ApprovalFile> files, CancellationToken ct)
     {
+        using var authority = accessor.UnitOfWork.Writes.Enter(ApprovalWriteOwner.Forms);
         foreach (var file in await _db.Set<ApprovalFile>().Where(f => f.DraftId == draftId).ToListAsync(ct))
             if (!files.Contains(file)) file.DraftId = null;
         foreach (var file in files) file.DraftId = draftId;
@@ -176,6 +179,7 @@ public sealed class ApprovalFileService(
     /// <summary>引用的文件绑定到实例；从草稿提交时，草稿中未引用的文件解除绑定。</summary>
     internal async Task BindToInstanceAsync(Guid instanceId, IReadOnlyCollection<ApprovalFile> files, Guid? fromDraftId, CancellationToken ct)
     {
+        using var authority = accessor.UnitOfWork.Writes.Enter(ApprovalWriteOwner.Forms);
         if (fromDraftId is { } draftId) await BindToDraftAsync(draftId, [], ct);
         foreach (var file in files)
         {

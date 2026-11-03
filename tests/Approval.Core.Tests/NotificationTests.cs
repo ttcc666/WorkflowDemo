@@ -198,9 +198,8 @@ public sealed class NotificationTests : IAsyncLifetime
     public async Task Published_definition_with_unavailable_host_channel_rolls_back_instead_of_dropping_notification()
     {
         // 模拟发布后宿主撤下渠道适配器；不能在发起时静默漏发通知。
-        await _host.RunAsync(async sp =>
+        await _host.SeedStorageAsync(async db =>
         {
-            var db = sp.GetRequiredService<TestDbContext>();
             var definition = new ApprovalDefinition
             {
                 Id = Guid.NewGuid(), Key = "host-notify", Name = "Host notification", Version = 1, IsPublished = true,
@@ -223,9 +222,8 @@ public sealed class NotificationTests : IAsyncLifetime
     [Fact]
     public async Task Unknown_outbox_kind_fails_instead_of_being_acknowledged()
     {
-        await _host.RunAsync(async sp =>
+        await _host.SeedStorageAsync(async db =>
         {
-            var db = sp.GetRequiredService<TestDbContext>();
             db.Add(new ApprovalOutboxMessage
             {
                 Id = Guid.NewGuid(), Kind = (OutboxKind)999, Target = "Unknown", PayloadJson = "{}",

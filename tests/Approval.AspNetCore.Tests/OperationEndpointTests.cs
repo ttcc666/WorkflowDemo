@@ -89,4 +89,32 @@ public sealed class OperationEndpointTests
         }
         Assert.Equal(0, await host.RunAsync(sp => sp.GetRequiredService<ApiDbContext>().Set<ApprovalDraft>().CountAsync()));
     }
+    [Fact]
+    public async Task BulkReassignHeader_ReplaysOriginalSummary_AndStrictModeRejectsMissingKey()
+    {
+        await using var host = await ApiHost.StartAsync(workflow: o => o.RequireOperationId = true); await Seed(host);
+        host.Users.Roles["carol"] = [];
+        var instance = await host.RunAsync(sp => sp.GetRequiredService<Approval.Core.Abstractions.IApprovalUnitOfWork>().ExecuteAsync(ct =>
+            sp.GetRequiredService<ApprovalEngine>().StartAsync(new("doc", DocHandler.Type, "one", "alice"), ct)));
+        const string url = "/api/approval/admin/users/bob/reassign";
+        using var missing = await Send(host, HttpMethod.Post, url, "admin", null, new { toUserId = "carol", reason = "handover" });
+        Assert.Equal("OperationIdRequired", (await missing.ProblemAsync(400)).GetProperty("code").GetString());
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            using var response = await Send(host, HttpMethod.Post, url, "admin", "batch-http", new { toUserId = "carol", reason = "handover" });
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            Assert.Equal(1, (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("count").GetInt32());
+        }
+        using var changed = await Send(host, HttpMethod.Post, url, "admin", "batch-http", new { toUserId = "carol", reason = "different" });
+        Assert.Equal(HttpStatusCode.Conflict, changed.StatusCode);
+        await host.RunAsync(async sp =>
+        {
+            var db = sp.GetRequiredService<ApiDbContext>();
+            Assert.Equal("carol", (await db.Set<ApprovalTask>().SingleAsync(t => t.InstanceId == instance.Id && t.Status == ApprovalTaskStatus.Pending)).AssigneeValue);
+            Assert.Equal(1, await db.Set<ApprovalTask>().CountAsync(t => t.InstanceId == instance.Id && t.Status == ApprovalTaskStatus.Transferred && t.AssigneeValue == "bob"));
+            Assert.Equal(1, await db.Set<ApprovalLog>().CountAsync(l => l.Action == ApprovalAction.Reassign));
+            Assert.Equal(3, await db.Set<ApprovalOperation>().CountAsync(o => o.Kind.StartsWith("task.reassign-bulk.")));
+            return true;
+        });
+    }
 }

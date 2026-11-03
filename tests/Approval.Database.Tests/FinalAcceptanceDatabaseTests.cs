@@ -24,14 +24,13 @@ public sealed partial class DatabaseContractTests
         var faults = new AtomicFaults { FailCallback = true };
         await using var host = await AtomicHostAsync(faults, configureServices: s => s.AddScoped<IApprovalLifecycleHandler, FinalSyncAction>());
         var flow = AtomicFlow;
-        await AtomicRun(host, "alice", async sp =>
+        await using (var db = fixture.CreateStorage())
         {
-            var db = sp.GetRequiredService<AtomicContractContext>();
             var definition = new ApprovalDefinition { Id = Guid.NewGuid(), Key = "sync", Name = "Sync", Version = 1, DefinitionJson = flow, IsPublished = true, CreatedAt = Timestamp };
             db.Add(definition);
             db.Add(new ApprovalDefinitionManagement { Id = Guid.NewGuid(), Key = "sync", Name = "Sync", LastVersion = 1, ActiveDefinitionId = definition.Id, UpdatedAt = Timestamp, UpdatedBy = "admin" });
-            await db.SaveChangesAsync(); return true;
-        });
+            await db.SaveChangesAsync();
+        }
         Task<Guid> Start() => AtomicRun(host, "alice", sp => sp.GetRequiredService<IApprovalCommandExecutor>().ExecuteAsync(
             new("final.sync.start", "one", "sync-key", new { amount = 1 }, ApprovalPermissions.InstanceStart, new() { DefinitionKey = "sync" }),
             async (fresh, ct) =>

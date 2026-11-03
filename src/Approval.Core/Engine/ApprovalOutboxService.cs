@@ -73,7 +73,7 @@ public sealed class ApprovalOutboxService
         _unit = accessor.UnitOfWork; _scopes = scopes;
         _authorization = accessor.Authorization;
         _options = options;
-        _clock = clock;
+        _clock = ApprovalHostServices.Clock(_unit, clock);
         _logger = logger;
         _signal = signal ?? new ApprovalOutboxSignal();
     }
@@ -83,6 +83,8 @@ public sealed class ApprovalOutboxService
     /// <summary>处理一批到期消息，返回本批处理的条数。</summary>
     public async Task<int> ProcessDueAsync(CancellationToken ct = default)
     {
+        ct.ThrowIfCancellationRequested();
+        if (!_options.Outbox.EnableDispatcher) return 0;
         await _authorization.RequireAsync(Approval.Core.Abstractions.ApprovalPermissions.OutboxDispatch, new(), null, ct);
         if (_unit.IsActive || _db.Database.CurrentTransaction is not null || _db.ChangeTracker.HasChanges())
             throw new InvalidOperationException("后台投递必须使用独立、干净的作用域，不能加入宿主工作单元");
@@ -115,7 +117,7 @@ public sealed class ApprovalOutboxService
             await using var scope = await scopes.CreateAsync(ct);
             var worker = scope.ServiceProvider.GetRequiredService<ApprovalOutboxService>();
             ApprovalPersistence.State(worker._db).DeferredRead = deferredRead;
-            return await worker._unit.ExecuteAsync(token => operation(worker, token), ct);
+            return await worker._unit.ExecuteOwnedAsync(ApprovalWriteOwner.Outbox, token => operation(worker, token), ct);
         });
     }
     private async Task ProcessOneAsync(Delivery delivery, CancellationToken ct)
@@ -225,7 +227,7 @@ public sealed class ApprovalOutboxService
     }
 
     /// <summary>手动重试：重新进入待投递状态，重置次数，事务提交后唤醒后台执行器。</summary>
-    public Task RetryAsync(Guid id, CancellationToken ct = default) => _unit.ExecuteCommandAsync(token => RetryCoreAsync(id, token), ct);
+    public Task RetryAsync(Guid id, CancellationToken ct = default) => _unit.ExecuteCommandAsync(ApprovalWriteOwner.Outbox, token => RetryCoreAsync(id, token), ct);
 
     private async Task RetryCoreAsync(Guid id, CancellationToken ct)
     {

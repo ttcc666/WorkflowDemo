@@ -10,6 +10,7 @@ public sealed class DatabaseFixture : IAsyncLifetime
 {
     public string Provider { get; } = Environment.GetEnvironmentVariable("APPROVAL_TEST_PROVIDER") ?? "Sqlite";
     public static string SqlitePath { get; } = Path.Combine(Path.GetTempPath(), $"approval-contract-{Guid.NewGuid():N}.db");
+    internal DbContext CreateStorage() => new DatabaseStorageContext(Provider);
 
     public ContractDbContext Create(string tenant = "database-tests") => Provider switch
     {
@@ -125,12 +126,12 @@ public sealed partial class DatabaseContractTests(DatabaseFixture fixture) : ICl
         var definition = Definition();
         var instance = Instance();
         instance.DefinitionId = definition.Id;
-        await using (var write = fixture.Create())
+        await using (var write = fixture.CreateStorage())
         {
             write.AddRange(definition, instance);
             await write.SaveChangesAsync();
         }
-        await using var read = fixture.Create();
+        await using var read = fixture.CreateStorage();
         var actual = await read.Set<ApprovalDefinition>().SingleAsync(x => x.Id == definition.Id);
         Assert.Equal(definition.Key, actual.Key);
         Assert.Equal("采购审批😀", actual.Name);
@@ -148,13 +149,13 @@ public sealed partial class DatabaseContractTests(DatabaseFixture fixture) : ICl
     public async Task UniqueDefinitionVersion_RejectsDuplicateWithoutLosingWinner()
     {
         var winner = Definition();
-        await using (var db = fixture.Create()) { db.Add(winner); await db.SaveChangesAsync(); }
-        await using (var duplicate = fixture.Create())
+        await using (var db = fixture.CreateStorage()) { db.Add(winner); await db.SaveChangesAsync(); }
+        await using (var duplicate = fixture.CreateStorage())
         {
             duplicate.Add(Definition(winner.Key));
             await Assert.ThrowsAsync<DbUpdateException>(() => duplicate.SaveChangesAsync());
         }
-        await using var verify = fixture.Create();
+        await using var verify = fixture.CreateStorage();
         Assert.Equal(winner.Id, (await verify.Set<ApprovalDefinition>().SingleAsync(x => x.Key == winner.Key)).Id);
     }
 
@@ -162,16 +163,16 @@ public sealed partial class DatabaseContractTests(DatabaseFixture fixture) : ICl
     public async Task ConcurrencyStamp_RejectsStaleWriter()
     {
         var instance = Instance();
-        await using (var db = fixture.Create()) { AddInstance(db, instance); await db.SaveChangesAsync(); }
-        await using var first = fixture.Create();
-        await using var second = fixture.Create();
+        await using (var db = fixture.CreateStorage()) { AddInstance(db, instance); await db.SaveChangesAsync(); }
+        await using var first = fixture.CreateStorage();
+        await using var second = fixture.CreateStorage();
         var a = await first.Set<ApprovalInstance>().SingleAsync(x => x.Id == instance.Id);
         var b = await second.Set<ApprovalInstance>().SingleAsync(x => x.Id == instance.Id);
         a.Status = InstanceStatus.Approved; a.ConcurrencyStamp++;
         await first.SaveChangesAsync();
         b.Status = InstanceStatus.Rejected; b.ConcurrencyStamp++;
         await Assert.ThrowsAsync<DbUpdateConcurrencyException>(() => second.SaveChangesAsync());
-        await using var verify = fixture.Create();
+        await using var verify = fixture.CreateStorage();
         var persisted = await verify.Set<ApprovalInstance>().SingleAsync(x => x.Id == instance.Id);
         Assert.Equal(InstanceStatus.Approved, persisted.Status);
         Assert.Equal(1, persisted.ConcurrencyStamp);
@@ -182,7 +183,7 @@ public sealed partial class DatabaseContractTests(DatabaseFixture fixture) : ICl
     {
         var instance = Instance();
         var messageId = Guid.NewGuid();
-        await using (var db = fixture.Create())
+        await using (var db = fixture.CreateStorage())
         {
             await using var transaction = await db.Database.BeginTransactionAsync();
             AddInstance(db, instance);
@@ -194,7 +195,7 @@ public sealed partial class DatabaseContractTests(DatabaseFixture fixture) : ICl
             await db.SaveChangesAsync();
             await transaction.RollbackAsync();
         }
-        await using var verify = fixture.Create();
+        await using var verify = fixture.CreateStorage();
         Assert.False(await verify.Set<ApprovalInstance>().AnyAsync(x => x.Id == instance.Id));
         Assert.False(await verify.Set<ApprovalOutboxMessage>().AnyAsync(x => x.Id == messageId));
     }
@@ -203,7 +204,7 @@ public sealed partial class DatabaseContractTests(DatabaseFixture fixture) : ICl
     public async Task Savepoint_RollsBackInnerWriteAndCommitsOuterWrite()
     {
         var outer = Definition(); var inner = Definition();
-        await using (var db = fixture.Create())
+        await using (var db = fixture.CreateStorage())
         {
             await using var transaction = await db.Database.BeginTransactionAsync();
             Assert.True(transaction.SupportsSavepoints);
@@ -213,7 +214,7 @@ public sealed partial class DatabaseContractTests(DatabaseFixture fixture) : ICl
             await transaction.RollbackToSavepointAsync("inner_operation");
             await transaction.CommitAsync();
         }
-        await using var verify = fixture.Create();
+        await using var verify = fixture.CreateStorage();
         Assert.True(await verify.Set<ApprovalDefinition>().AnyAsync(x => x.Id == outer.Id));
         Assert.False(await verify.Set<ApprovalDefinition>().AnyAsync(x => x.Id == inner.Id));
     }
@@ -227,15 +228,15 @@ public sealed partial class DatabaseContractTests(DatabaseFixture fixture) : ICl
             Id = Guid.NewGuid(), InstanceId = instance.Id, NodeId = "review", NodeName = "审核",
             AssigneeKind = AssigneeKind.User, AssigneeValue = "用户乙", Status = ApprovalTaskStatus.Pending, CreatedAt = Timestamp
         });
-        await using (var db = fixture.Create()) { AddInstance(db, instance); await db.SaveChangesAsync(); }
-        await using var read = fixture.Create();
+        await using (var db = fixture.CreateStorage()) { AddInstance(db, instance); await db.SaveChangesAsync(); }
+        await using var read = fixture.CreateStorage();
         Guid[] ids = [instance.Id];
         var query = read.Set<ApprovalInstance>().Where(x => ids.Contains(x.Id));
         Assert.Equal(1, await query.CountAsync());
         var loaded = Assert.Single(await query.Include(x => x.Tasks).OrderBy(x => x.CreatedAt).ThenBy(x => x.Id).Skip(0).Take(10).ToListAsync());
         Assert.Equal("用户乙", Assert.Single(loaded.Tasks).AssigneeValue);
         Assert.Equal(1, await query.ExecuteUpdateAsync(x => x.SetProperty(i => i.Title, "批量更新")));
-        await using var verify = fixture.Create();
+        await using var verify = fixture.CreateStorage();
         Assert.Equal("批量更新", await verify.Set<ApprovalInstance>().Where(x => x.Id == instance.Id).Select(x => x.Title).SingleAsync());
         Assert.Equal(1, await verify.Set<ApprovalTask>().Where(x => x.InstanceId == instance.Id).ExecuteDeleteAsync());
         Assert.Empty(await verify.Set<ApprovalTask>().Where(x => x.InstanceId == instance.Id).ToListAsync());

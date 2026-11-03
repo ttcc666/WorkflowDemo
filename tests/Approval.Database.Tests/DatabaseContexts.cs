@@ -35,6 +35,24 @@ public sealed class SqliteContractContext() : ContractDbContext() { protected ov
 
 public sealed class MySqlDesignFactory : IDesignTimeDbContextFactory<MySqlContractContext>
 { public MySqlContractContext CreateDbContext(string[] args) => new(); }
+
+// Storage-level constraints are tested through a separate offline context. Application protection
+// scenarios always use ContractDbContext/DI, with UseApproval installed.
+internal sealed class DatabaseStorageContext(string provider) : DbContext
+{
+    protected override void OnConfiguring(DbContextOptionsBuilder options)
+    {
+        var connection = Environment.GetEnvironmentVariable("APPROVAL_TEST_CONNECTION");
+        switch (provider)
+        {
+            case "MySql": options.UseMySQL(connection!); break;
+            case "SqlServer": options.UseSqlServer(connection!); break;
+            case "PostgreSql": options.UseNpgsql(connection!); break;
+            default: options.UseSqlite($"Data Source={DatabaseFixture.SqlitePath}"); break;
+        }
+    }
+    protected override void OnModelCreating(ModelBuilder model) => model.ConfigureApproval().ConfigureApprovalForms();
+}
 public sealed class SqlServerDesignFactory : IDesignTimeDbContextFactory<SqlServerContractContext>
 { public SqlServerContractContext CreateDbContext(string[] args) => new(); }
 public sealed class PostgreSqlDesignFactory : IDesignTimeDbContextFactory<PostgreSqlContractContext>

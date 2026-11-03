@@ -435,7 +435,10 @@ export interface paths {
         post: {
             parameters: {
                 query?: never;
-                header?: never;
+                header?: {
+                    /** @description Stable key for one logical command; required when ApprovalOptions.RequireOperationId is enabled. Same content replays the committed result; changed content returns 409. Retain the key after unknown outcomes. */
+                    "Idempotency-Key"?: string;
+                };
                 path: {
                     userId: string;
                 };

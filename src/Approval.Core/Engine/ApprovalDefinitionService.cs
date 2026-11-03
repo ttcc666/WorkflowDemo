@@ -47,7 +47,7 @@ public sealed partial class ApprovalDefinitionService
         _unit = accessor.UnitOfWork;
         _options = options ?? new();
         _authorization = accessor.Authorization;
-        _clock = clock;
+        _clock = ApprovalHostServices.Clock(_unit, clock);
         _approverTypes = extensions.ApproverDescriptors;
         _channels = extensions.ChannelDescriptors;
     }
@@ -78,6 +78,7 @@ public sealed partial class ApprovalDefinitionService
     }
     private IReadOnlyList<string> ValidateCore(FlowDefinition flow)
     {
+        using var callback = _unit.Extension();
         var errors = FlowDefinitionValidator.Validate(flow, new FlowValidationContext
         {
             Extension = DefinitionExtension,
@@ -87,12 +88,14 @@ public sealed partial class ApprovalDefinitionService
         }).ToList();
         return errors;
     }
+    private string SerializeDefinition(FlowDefinition flow)
+    { using var callback = _unit.Extension(); return flow.ToJson(); }
 
     /// <summary>不阻止发布的提示，如节点隐藏的字段可能通过标题、通知模板或计算字段间接暴露。</summary>
     public IReadOnlyList<string> Warnings(FlowDefinition flow) => DefinitionExtension?.Warnings(flow) ?? [];
 
     public Task<ApprovalDefinition> PublishAsync(string key, string name, FlowDefinition flow, CancellationToken ct = default) =>
-        _unit.ExecuteCommandAsync(token => PublishAsyncCore(key, name, flow, token), ct);
+        _unit.ExecuteCommandAsync(ApprovalWriteOwner.Definitions, token => PublishAsyncCore(key, name, flow, token), ct);
 
     private async Task<ApprovalDefinition> PublishAsyncCore(string key, string name, FlowDefinition flow, CancellationToken ct = default)
     {

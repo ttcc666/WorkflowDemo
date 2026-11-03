@@ -7,10 +7,13 @@ namespace Approval.Core.Persistence;
 
 internal sealed class ApprovalTransactionState
 {
+    public DbContextId ContextId;
     public bool Active, Failed;
     public bool DeferredRead;
     public bool Serializable;
     public bool RequireOperationId, SystemActor;
+    public bool KeyedCommand;
+    public ApprovalWriteAuthorization? Writes;
     public int ExtensionDepth;
     public int ExtensionCommitDepth;
     public Guid? InstanceId, DefinitionId;
@@ -18,11 +21,19 @@ internal sealed class ApprovalTransactionState
     public Dictionary<string, Guid> Definitions = new(StringComparer.Ordinal);
     public readonly Dictionary<string, int> IdCounters = new(StringComparer.Ordinal);
     public readonly List<Func<Task>> Callbacks = [];
+    internal void ResetLease(DbContextId contextId)
+    {
+        Writes?.ResetLease(); ContextId = contextId;
+        Active = Failed = DeferredRead = Serializable = RequireOperationId = SystemActor = KeyedCommand = false;
+        ExtensionDepth = ExtensionCommitDepth = 0; InstanceId = DefinitionId = null; OperationSeed = null;
+        Definitions = new(StringComparer.Ordinal); IdCounters.Clear(); Callbacks.Clear();
+    }
 }
 
 internal sealed class ApprovalUnitOfWork(DbContext db) : IApprovalUnitOfWork
 {
     private ApprovalTransactionState State => ApprovalPersistence.State(db);
+    internal ApprovalWriteAuthorization Writes => State.Writes ??= new(db);
     public bool IsActive => State.Active;
     internal void Reference(Guid instance, Guid definition) { State.InstanceId = instance; State.DefinitionId = definition; }
     internal Guid NewId(string kind)
@@ -41,27 +52,40 @@ internal sealed class ApprovalUnitOfWork(DbContext db) : IApprovalUnitOfWork
             ?? throw new ApprovalException("结果实例不存在") { Code = ApprovalErrorCode.NotFound };
         Reference(instance.Id, instance.DefinitionId);
     }
-    internal IDisposable Extension(bool allowSave = false)
+    internal IDisposable Extension(bool allowSave = false, Approval.Core.Domain.ApprovalInstance? prepared = null, bool prepareData = false)
     {
+        var boundary = Writes.Enter(ApprovalWriteOwner.None, prepared, prepareData ? ["Title", "FormDataJson"] : ["Title"]);
         State.ExtensionCommitDepth++;
         if (!allowSave) State.ExtensionDepth++;
-        return new OnDispose(() => { State.ExtensionCommitDepth--; if (!allowSave) State.ExtensionDepth--; });
+        return new OnDispose(() => { try { boundary.Dispose(); } finally { State.ExtensionCommitDepth--; if (!allowSave) State.ExtensionDepth--; } });
     }
     internal void CheckUsable()
     {
         if (State.Failed) throw new InvalidOperationException("审批操作失败后必须释放当前作用域，不能继续保存或重用实体图");
     }
-    internal Task<T> ExecuteCommandAsync<T>(Func<CancellationToken, Task<T>> operation, CancellationToken ct = default)
+    internal Task<T> ExecuteCommandAsync<T>(Func<CancellationToken, Task<T>> operation, CancellationToken ct = default) =>
+        ExecuteCommandAsync(ApprovalWriteOwner.Engine, operation, ct);
+    internal Task<T> ExecuteCommandAsync<T>(ApprovalWriteOwner owner, Func<CancellationToken, Task<T>> operation, CancellationToken ct = default)
     {
-        if (!IsActive && State.RequireOperationId && !State.SystemActor)
+        if (!State.KeyedCommand && State.RequireOperationId && !State.SystemActor)
             throw new ApprovalException("写操作需要通过带稳定标识的命令协调器执行") { Code = ApprovalErrorCode.OperationIdRequired };
-        return ExecuteAsync(operation, ct);
+        return ExecuteOwnedAsync(owner, operation, ct);
     }
+    internal Task<T> ExecuteOwnedAsync<T>(ApprovalWriteOwner owner, Func<CancellationToken, Task<T>> operation, CancellationToken ct = default) =>
+        ExecuteAsync(async token =>
+        {
+            using var authority = Writes.Enter(owner);
+            try { return await operation(token); }
+            catch { State.Failed = true; throw; }
+        }, ct);
+    internal async Task ExecuteCommandAsync(ApprovalWriteOwner owner, Func<CancellationToken, Task> operation, CancellationToken ct = default) =>
+        await ExecuteCommandAsync<object?>(owner, async token => { await operation(token); return null; }, ct);
     internal async Task ExecuteCommandAsync(Func<CancellationToken, Task> operation, CancellationToken ct = default) =>
         await ExecuteCommandAsync<object?>(async token => { await operation(token); return null; }, ct);
     public void AfterCommit(Func<Task> callback)
     {
         CheckUsable();
+        Writes.Validate();
         if (!IsActive) throw new InvalidOperationException("提交后回调必须在审批工作单元内登记");
         State.Callbacks.Add(callback);
     }
@@ -102,11 +126,12 @@ internal sealed class ApprovalUnitOfWork(DbContext db) : IApprovalUnitOfWork
         catch
         {
             State.Failed = true;
+            Writes.Failed();
             State.Callbacks.Clear();
             try { await transaction.RollbackAsync(CancellationToken.None); } catch { /* Preserve the original failure; executor verifies uncertain commits. */ }
             throw;
         }
-        finally { State.Active = false; }
+        finally { State.Active = false; State.KeyedCommand = false; }
         await ownedTransaction.DisposeAsync();
         // Commit has completed. Cancellation of the original caller cannot roll it back.
         var callbacks = State.Callbacks.ToArray(); State.Callbacks.Clear();

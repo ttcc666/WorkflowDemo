@@ -9,3 +9,7 @@ Core 只定义 approval.task.approve/reject/return/transfer/add-sign、approval.
 IApprovalQueryScope 在分页、count、排序、统计前收窄 IQueryable；不得先读全表再过滤。Forms 的字段隐藏同时过滤详情 JSON、变更审计与附件访问。权限或查询范围服务超时/失败安全拒绝并返回 AuthorizationUnavailable。
 
 Certificate.Api 的 DemoPermissionProvider 仅由 DemoMode 明确启用；ReferenceHost 的 DirectoryPermissionProvider 是宿主样例授权实现。生产宿主提供自己的授权规则。
+
+启动阶段检查必需身份与启用投递时的事件处理器注册，不能在启动检查中伪造 HTTP 当前用户或调用处理器投递探测事件。默认人工拒绝 Provider 仍是安全的有效默认实现；缺少宿主权限集成不会隐式授权 Admin 角色。请求中的空身份、冒充 userId、权限/QueryScope 服务异常或超时继续拒绝。
+
+持久化授权不是角色权限：即使宿主 Provider 允许审批能力，也必须经相应引擎/Forms/消息服务执行；Provider、解析器、数据编辑、业务与事件回调不能直接改任务、轨迹或 Operation。只有开始准备回调可调整当前申请的标题/申请快照，数据编辑回调的标题及返回数据也限定到当前实例。

@@ -15,6 +15,11 @@ internal sealed record ApprovalHttpCommandResult(int Status, JsonElement? Value)
 internal static class ApprovalHttpCommands
 {
     public const string Header = "Idempotency-Key";
+    internal static string? OperationId(HttpContext http)
+    {
+        if (http.Request.Headers[Header].Count > 1) throw new ApprovalException("只能提供一个 Idempotency-Key") { Code = ApprovalErrorCode.OperationIdRequired };
+        return http.Request.Headers[Header].FirstOrDefault();
+    }
     internal static bool Managed(HttpContext http, ApprovalPermissionMetadata metadata) =>
         HttpMethods.IsPost(http.Request.Method) || HttpMethods.IsPut(http.Request.Method) || HttpMethods.IsDelete(http.Request.Method)
             ? !metadata.Permissions.Any(p => p is ApprovalPermissions.DefinitionValidate or ApprovalPermissions.FileUpload or ApprovalPermissions.TaskReassignBulk)
@@ -44,8 +49,7 @@ internal static class ApprovalHttpCommands
                 try { raw = JsonSerializer.Deserialize<JsonElement>(text); }
                 catch (JsonException ex) { throw new ApprovalException("流程定义 JSON 无效", ex) { Code = ApprovalErrorCode.InvalidDefinition }; }
             }
-            if (http.Request.Headers[Header].Count > 1) throw new ApprovalException("只能提供一个 Idempotency-Key") { Code = ApprovalErrorCode.OperationIdRequired };
-            var key = http.Request.Headers[Header].FirstOrDefault();
+            var key = OperationId(http);
             var resource = ApprovalEndpointPermissions.Resource(http, metadata);
             var permission = metadata.Permissions[0];
             foreach (var candidate in metadata.Permissions.Count > 1 ? metadata.Permissions : [])

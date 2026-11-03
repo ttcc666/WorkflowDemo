@@ -75,7 +75,7 @@ public sealed class PermissionTests
         await using var host = Host(permissions); await Seed(host);
         var instance = Assert.Single(await host.TodoAsync("bob"));
         var outboxId = Guid.NewGuid();
-        await host.RunAsync(async sp => { var db = sp.GetRequiredService<TestDbContext>(); db.Add(new ApprovalOutboxMessage { Id = outboxId, Target = "test", PayloadJson = "{}", Status = OutboxStatus.Failed }); await db.SaveChangesAsync(); });
+        await host.SeedStorageAsync(async db => { db.Add(new ApprovalOutboxMessage { Id = outboxId, Target = "test", PayloadJson = "{}", Status = OutboxStatus.Failed }); await db.SaveChangesAsync(); });
         await AssertCode(ApprovalErrorCode.Forbidden, () => As(host, "bob", sp => sp.GetRequiredService<ApprovalEngine>().TerminateAsync(instance.InstanceId, "bob", "stop")));
         await AssertCode(ApprovalErrorCode.Forbidden, () => As(host, "bob", sp => sp.GetRequiredService<ApprovalEngine>().ReassignAsync(instance.TaskId, "bob", "other", "handover")));
         await AssertCode(ApprovalErrorCode.Forbidden, () => As(host, "bob", sp => sp.GetRequiredService<ApprovalOutboxService>().RetryAsync(outboxId)));
@@ -185,7 +185,7 @@ public sealed class PermissionTests
         Assert.Null(detail);
         Assert.Single(await host.TodoAsync("bob"));
         // Simulate an existing/legacy self-assigned task. New starts already exclude the initiator.
-        await host.RunAsync(async sp => { var db = sp.GetRequiredService<TestDbContext>(); var row = await db.Set<ApprovalInstance>().SingleAsync(i => i.Id == task.InstanceId); row.InitiatorId = "bob"; await db.SaveChangesAsync(); });
+        await host.SeedStorageAsync(async db => { var row = await db.Set<ApprovalInstance>().SingleAsync(i => i.Id == task.InstanceId); row.InitiatorId = "bob"; await db.SaveChangesAsync(); });
         await AssertCode(ApprovalErrorCode.Forbidden, () => As(host, "bob", sp => sp.GetRequiredService<ApprovalEngine>().ApproveAsync(task.TaskId, "bob")));
     }
 
@@ -194,9 +194,8 @@ public sealed class PermissionTests
     {
         var permissions = new Permissions(); await using var host = Host(permissions, scope: true); await Seed(host);
         var hidden = await host.StartAsync("doc", "hidden", "alice");
-        await host.RunAsync(async sp =>
+        await host.SeedStorageAsync(async db =>
         {
-            var db = sp.GetRequiredService<TestDbContext>();
             db.Add(new ApprovalMessage { Id = Guid.NewGuid(), InstanceId = hidden.Id, UserId = "bob", Title = "hidden", Content = "hidden" });
             db.Add(new ApprovalOutboxMessage { Id = Guid.NewGuid(), InstanceId = hidden.Id, Target = "hidden", PayloadJson = "{}" });
             await db.SaveChangesAsync();

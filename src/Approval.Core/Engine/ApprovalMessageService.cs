@@ -10,6 +10,7 @@ public sealed class ApprovalMessageService(ApprovalDbContextAccessor accessor, T
     private readonly Approval.Core.Authorization.IApprovalAuthorization _authorization = accessor.Authorization;
     private readonly DbContext _db = accessor.Context;
     private readonly ApprovalUnitOfWork _unit = accessor.UnitOfWork;
+    private readonly TimeProvider _clock = ApprovalHostServices.Clock(accessor.UnitOfWork, clock);
 
     public async Task<List<ApprovalMessage>> ListAsync(string userId, bool unreadOnly = false, int take = 50, CancellationToken ct = default)
     {
@@ -26,7 +27,7 @@ public sealed class ApprovalMessageService(ApprovalDbContextAccessor accessor, T
     }
 
     public Task MarkReadAsync(string userId, Guid messageId, CancellationToken ct = default) =>
-        _unit.ExecuteCommandAsync(token => MarkReadAsyncCore(userId, messageId, token), ct);
+        _unit.ExecuteCommandAsync(ApprovalWriteOwner.MessageRead, token => MarkReadAsyncCore(userId, messageId, token), ct);
 
     private async Task MarkReadAsyncCore(string userId, Guid messageId, CancellationToken ct = default)
     {
@@ -35,20 +36,28 @@ public sealed class ApprovalMessageService(ApprovalDbContextAccessor accessor, T
                       ?? throw new ApprovalException("消息不存在") { Code = ApprovalErrorCode.NotFound };
         if (message.IsRead) return;
         message.IsRead = true;
-        message.ReadAt = clock.GetUtcNow().UtcDateTime;
+        message.ReadAt = _clock.GetUtcNow().UtcDateTime;
         await _db.SaveChangesAsync(ct);
     }
 
     public Task<int> MarkAllReadAsync(string userId, CancellationToken ct = default) =>
-        _unit.ExecuteCommandAsync(token => MarkAllReadAsyncCore(userId, token), ct);
+        _unit.ExecuteCommandAsync(ApprovalWriteOwner.MessageRead, token => MarkAllReadAsyncCore(userId, token), ct);
 
     private async Task<int> MarkAllReadAsyncCore(string userId, CancellationToken ct = default)
     {
         await _authorization.RequireAsync(Approval.Core.Abstractions.ApprovalPermissions.MessageWrite, new(), userId, ct);
-        var now = clock.GetUtcNow().UtcDateTime;
-        return await (await VisibleAsync(ct))
-            .Where(m => m.UserId == userId && !m.IsRead)
-            .ExecuteUpdateAsync(s => s.SetProperty(m => m.IsRead, true).SetProperty(m => m.ReadAt, now), ct);
+        var now = _clock.GetUtcNow().UtcDateTime;
+        var visible = (await VisibleAsync(ct)).Where(m => m.UserId == userId && !m.IsRead);
+        var count = 0;
+        while (true)
+        {
+            var batch = await visible.OrderBy(m => m.Id).Take(200).ToListAsync(ct);
+            if (batch.Count == 0) return count;
+            foreach (var message in batch) { message.IsRead = true; message.ReadAt = now; }
+            await _db.SaveChangesAsync(ct); count += batch.Count;
+            foreach (var message in batch) _db.Entry(message).State = EntityState.Detached;
+            if (batch.Count < 200) return count;
+        }
     }
     private async Task<IQueryable<ApprovalMessage>> VisibleAsync(CancellationToken ct)
     {

@@ -1,5 +1,6 @@
 using Approval.Core.Abstractions;
 using Approval.Core.Domain;
+using Approval.Core.Persistence;
 using Microsoft.EntityFrameworkCore;
 
 namespace Approval.Core.Authorization;
@@ -14,7 +15,7 @@ internal interface IApprovalAuthorization
     Task RequireRecordedAsync(string permission, ApprovalResource resource, CancellationToken ct) => RequireAsync(permission, resource, ct: ct);
 }
 
-/// <summary>宿主/HTTP 能力入口。权限 provider 不能绕过租户、操作人或后台权限边界。</summary>
+/// <summary>宿主/HTTP 能力入口。权限 provider 不能绕过可信操作人或后台权限边界。</summary>
 public sealed class ApprovalAuthorizationService
 {
     internal IApprovalAuthorization Inner { get; }
@@ -40,7 +41,7 @@ internal sealed class DefaultApprovalAuthorization(
 {
     private ApprovalPermissionSubject Subject(string? userId = null)
     {
-        var id = actor.ActorId; // Missing trusted identity is always an error, also in single-tenant mode.
+        var id = actor.ActorId; // Every host operation requires a trusted actor.
         if (string.IsNullOrWhiteSpace(id)) throw new ApprovalException("缺少可信操作人") { Code = ApprovalErrorCode.Unauthorized };
         if (userId is not null && !string.Equals(userId, id, StringComparison.Ordinal))
             throw new ApprovalException("操作人参数与当前身份不一致") { Code = ApprovalErrorCode.Forbidden };
@@ -62,7 +63,7 @@ internal sealed class DefaultApprovalAuthorization(
     public Task<ApprovalResource> ResolveResourceAsync(ApprovalResource resource, CancellationToken ct) => ResolveAsync(resource, Subject(), ct);
     public async Task RequireRecordedAsync(string permission, ApprovalResource resource, CancellationToken ct)
     {
-        // Only the command executor can call this, with a committed record scoped to the same tenant/actor.
+        // Only the command executor can call this, with a committed record scoped to the same actor/command.
         // Deleted resources (e.g. a draft) no longer resolve, but current ACLs still apply to the trusted snapshot.
         if (!ApprovalPermissions.All.Contains(permission)) throw new ArgumentException("未知权限码", nameof(permission));
         if (!await AuthorizeResolvedAsync(permission, Subject(), resource, ct)) throw new ApprovalException("无权读取原操作结果") { Code = ApprovalErrorCode.Forbidden };
@@ -74,6 +75,7 @@ internal sealed class DefaultApprovalAuthorization(
         if (!actor.IsSystem && permission.StartsWith("approval.system.", StringComparison.Ordinal)) return false;
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeout.CancelAfter(options.PermissionTimeout);
+        using var callback = new ApprovalUnitOfWork(db).Extension();
         try { return await provider.AuthorizeAsync(new(subject, permission, resolved), timeout.Token).WaitAsync(timeout.Token); }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
         catch (Exception ex) { throw new ApprovalException("审批权限服务暂不可用", ex) { Code = ApprovalErrorCode.AuthorizationUnavailable }; }
@@ -81,7 +83,8 @@ internal sealed class DefaultApprovalAuthorization(
     private async Task<ApprovalResource> ResolveAsync(ApprovalResource resource, ApprovalPermissionSubject subject, CancellationToken ct)
     {
         static ApprovalException Missing() => new("资源不存在或无权查看") { Code = ApprovalErrorCode.NotFound };
-        foreach (var resolver in resolvers) resource = await resolver.ResolveAsync(resource, ct);
+        foreach (var resolver in resolvers)
+        { using var callback = new ApprovalUnitOfWork(db).Extension(); resource = await resolver.ResolveAsync(resource, ct); }
         Guid? instanceId = resource.InstanceId;
         if (resource.TaskId is { } taskId)
             instanceId = (await db.Set<ApprovalTask>().AsNoTracking().SingleOrDefaultAsync(t => t.Id == taskId, ct) ?? throw Missing()).InstanceId;
@@ -121,6 +124,7 @@ internal sealed class DefaultApprovalAuthorization(
     }
     private async Task<IQueryable<ApprovalInstance>> ApplyScopeAsync(ApprovalPermissionSubject subject, IQueryable<ApprovalInstance> query, CancellationToken ct)
     {
+        using var callback = new ApprovalUnitOfWork(db).Extension();
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeout.CancelAfter(options.PermissionTimeout);
         try { return await scope.ApplyAsync(subject, query, timeout.Token).WaitAsync(timeout.Token); }

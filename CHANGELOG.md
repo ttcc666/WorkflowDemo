@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased — 2026-11-03（第三轮审批写边界与宿主可靠性）
+
+- 审批运行、治理、消息、Operation/Outbox 与 Forms 采用内部实体/属性写授权；普通共享 DbContext 跟踪写入、批量操作和可识别原生 DML 拒绝，宿主业务保存与原有事务保持。
+- 隔离宿主回调、输入/结果序列化和依赖读取；保存后的命令校验、显式 AcceptAllChanges 和池化 Context 租期状态继续验证。
+- 启用 Dispatcher 时启动检查身份/事件处理器；新增显式关闭投递选项，不丢弃 Outbox。严格 OperationId 不能由裸 UnitOfWork 替代；批量改派新增兼容键重载并保留逐实例恢复。
+- 保留公共旧签名、流程/字段权限/channels JSON、九套历史 Migration 与旧附件/幂等数据；Core-only 消费者补当前包摘要与实际攻击/正常审批验证。
+- 改造与实际验证证据见 docs/round3-report.md，保护与可信数据库边界见 docs/persistence-write-boundaries.md。
+
 ## 0.3.0 — 2026-11-03
 
 - 删除默认维护/归档/保留系统、相关 API/UI/Worker；保留诊断、审批审计与 Outbox。

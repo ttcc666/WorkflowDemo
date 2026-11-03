@@ -193,6 +193,8 @@ $embeddedDeps = Get-Content -LiteralPath (Join-Path $embeddedRoot 'bin/Release/n
 if (@($embeddedDeps.libraries.PSObject.Properties.Name | Where-Object { $_ -like 'Approval.Forms/*' -or $_ -like 'Approval.Forms.AspNetCore/*' }).Count -gt 0) { throw 'Core-only consumer implicitly depends on Forms.' }
 foreach ($name in @('Approval.Core', 'Approval.AspNetCore')) {
     if ($embeddedDeps.libraries.($name + '/' + $version).type -ne 'package') { throw ('Embedded consumer did not use package: ' + $name) }
+    $expectedHash = 'sha512-' + [Convert]::ToBase64String([Security.Cryptography.SHA512]::HashData([IO.File]::ReadAllBytes((Join-Path $feed ($name + '.' + $version + '.nupkg')))))
+    if ($embeddedDeps.libraries.($name + '/' + $version).sha512 -cne $expectedHash) { throw ('Embedded consumer restored stale package bytes: ' + $name) }
 }
 $savedConsumerDatabase = $env:APPROVAL_CONSUMER_DATABASE
 $savedConsumerReport = $env:APPROVAL_CONSUMER_REPORT

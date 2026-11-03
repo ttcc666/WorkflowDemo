@@ -28,7 +28,7 @@ public sealed partial class ApprovalEngine
     public async Task<IReadOnlyList<ReturnTarget>> GetReturnTargetsAsync(Guid taskId, string userId, CancellationToken ct = default)
     {
         await _authorization.RequireAsync(Approval.Core.Abstractions.ApprovalPermissions.TaskReturn, new() { TaskId = taskId }, userId, ct);
-        var (instance, task, flow) = await LoadTaskAsync(taskId, ct);
+        var (instance, task, flow) = await LoadTaskAsync(taskId, ct, write: false);
         await EnsureCanHandleAsync(instance, task, userId, ct);
         return ReturnTargetsOf(instance, flow, task)
             .Select(n => new ReturnTarget(n.Id, n.Name, n.Type == NodeType.Start))
@@ -154,7 +154,7 @@ public sealed partial class ApprovalEngine
         object? formData, CancellationToken ct)
     {
         instance.Status = InstanceStatus.Running;
-        if (formData is not null) instance.FormDataJson = FormData.Serialize(formData);
+        if (formData is not null) instance.FormDataJson = SerializeData(formData);
         CompleteTask(task, ApprovalTaskStatus.Approved, userId, comment);
         var start = flow.GetNode(flow.StartNodeId);
         AddLog(instance, start, ApprovalAction.Resubmit, userId, comment);

@@ -27,7 +27,7 @@ protected override void OnModelCreating(ModelBuilder modelBuilder)
 }
 ```
 
-审批 DI 自动为宿主 EF options 安装 `UseApproval()` 写保护；手动构造上下文时在 options 中显式调用该方法。宿主原有 SaveChanges override、EF 拦截器与业务模型继续使用。宿主自行创建和应用 EF Migration。
+审批 DI 自动为宿主 EF options 安装 `UseApproval()` 写保护；手动构造上下文时显式安装。审批实体的新增、修改、删除必须来自拥有它的内部服务，公开 UnitOfWork 不授予写权限；普通 ExecuteUpdate/Delete 同样拒绝。宿主业务 SaveChanges、已有 override 和事务集成继续使用。宿主自行创建和应用 EF Migration。详见[写入保护边界](docs/persistence-write-boundaries.md)。
 
 ```csharp
 app.UseAuthentication();
@@ -60,6 +60,8 @@ Forms 保留动态字段、公式、明细、字段权限、规范化、草稿�
 
 所有业务事件随审批事务写入 Outbox，由单个 Worker 至少一次投递给 `IApprovalEventHandler`。Event.Id 稳定，宿主以该 ID 幂等处理外部副作用。旧通知规则可作为 `NotificationRequested` 事件携带接收人、内容与宿主路由提示；Core 不注册任何发送渠道。
 
+启用 Dispatcher 时缺少或无法构造事件处理器会在宿主启动时失败。明确不投递时设置 `o.Outbox.EnableDispatcher = false`：Outbox 继续保存为 Pending；`EnableBackgroundServices = false` 只关闭定时调度，仍允许手动投递并要求处理器。
+
 前端包 `@approval/ui` 支持 Vue 3 / TypeScript、审批页面与设计器。当前前端仍将表单组件放在同一 npm 包中；后端 Forms 已是独立可选包。CSS 从 `@approval/ui/style.css` 引入，契约从 `@approval/ui/contracts` 引入。
 
 ## 文档与验证
@@ -71,5 +73,6 @@ Forms 保留动态字段、公式、明细、字段权限、规范化、草稿�
 - [0.3 升级与数据保留](docs/upgrade-0.3.md)
 - [数据库验证](docs/database-validation.md)、[包和契约](docs/contracts-and-release.md)
 - [本轮实际交付报告](docs/round2-report.md)
+- [第三轮写边界与宿主集成报告](docs/round3-report.md)
 
 在仓库根目录执行 `pwsh -NoProfile -File ./eng/verify.ps1`。三个服务数据库由 `eng/verify-databases.ps1` 在独立测试容器中验证；SQLite 纳入默认后端测试。发布验证会打包四个 NuGet 包及 npm 包，复制独立消费者，禁止消费者引用框架源码，验证包摘要并实际构建/运行。

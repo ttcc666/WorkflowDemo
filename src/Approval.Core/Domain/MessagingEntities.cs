@@ -19,7 +19,7 @@ public class ApprovalMessage : IApprovalEntity
 
 public enum OutboxKind
 {
-    /// <summary>外部渠道通知（Webhook、企业微信、钉钉、邮件等），Target 为渠道名。</summary>
+    /// <summary>旧通知载荷的兼容类型，Target 是宿主声明的通知路由；发送由宿主事件处理器负责。</summary>
     Notification,
     Event
 }

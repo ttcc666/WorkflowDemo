@@ -13,3 +13,9 @@
 把 AddFormApprovals 改为 AddApprovalForms 并增加 Forms HTTP 注册；文件设置移入 ApprovalFormOptions.Files。删除 Lifecycle 配置与旧维护/归档 endpoints。把渠道/Notifier 适配器迁移为 IApprovalEventHandler；宿主可继续处理通知规则的路由提示。
 
 移除旧管理员/设计者角色配置并注册明确的权限实现。未注册时默认拒绝。回退应用版本时旧表仍在；若宿主另行清理了这些数据，回退需使用宿主备份，不应修改 Migration 历史。
+
+第三轮写边界收尾没有新增数据库字段或迁移。共享上下文的直接审批写入现在拒绝；业务写入保留。已有直接改 Task/Instance/Operation/Draft/File 的宿主代码必须改用拥有它的服务，不应移除 UseApproval。
+
+新的启动检查会拒绝启用 Dispatcher 却未注册处理器的宿主，包括只关闭后台调度的宿主。注册真实 IApprovalEventHandler，或明确设置 Outbox.EnableDispatcher=false 并接受事件不会投递的行为。RequireOperationId 默认仍为 false；已经开启严格模式的宿主必须用带键 executor，不能以裸 UnitOfWork 代替。批量改派可使用新增重载/HTTP Header，原无键入口在兼容模式保留。
+
+流程 schemaVersion、channels、字段权限 JSON、历史 Migration、ArchiveId、DeletionPending、旧存储键和 Tombstone 读取继续保留。回滚代码会重新开放旧写入缺口，不能以删除幂等/Outbox 或清库解决失败；业务数据与操作结果不自动清理。

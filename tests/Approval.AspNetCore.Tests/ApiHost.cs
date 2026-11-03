@@ -116,6 +116,7 @@ public sealed class ApiHost : IAsyncDisposable
             .AddApprovalWorkflow<ApiDbContext>(o =>
             {
                 o.EnableBackgroundServices = false;
+                o.Outbox.EnableDispatcher = false; // This HTTP fixture records Outbox but deliberately has no external delivery integration.
                 workflow?.Invoke(o);
             })
             .AddBusinessHandler<DocHandler>();
@@ -173,7 +174,8 @@ public sealed class ApiHost : IAsyncDisposable
     public async Task<T> RunAsync<T>(Func<IServiceProvider, Task<T>> action)
     {
         await using var scope = _app.Services.CreateAsyncScope();
-        scope.ServiceProvider.GetRequiredService<Approval.Core.Hosting.ApprovalExecutionContext>().InitializeTrusted(new("test-fixture"), []);
+        // Explicit trusted system scope for fixture setup; HTTP requests still exercise real user/key checks.
+        scope.ServiceProvider.GetRequiredService<Approval.Core.Hosting.ApprovalExecutionContext>().InitializeSystem("test-fixture", ApprovalPermissions.All.ToArray());
         scope.ServiceProvider.GetRequiredService<ApprovalDbContextAccessor>().Authorization = Approval.Tests.Infrastructure.FlowFixtureAuthorization.Instance;
         return await action(scope.ServiceProvider);
     }

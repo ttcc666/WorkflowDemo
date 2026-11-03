@@ -29,7 +29,7 @@ public sealed partial class ApprovalDefinitionService
         return string.IsNullOrEmpty(category) ? null : category;
     }
     public Task<DefinitionGovernance> CopyAsync(string sourceKey, string targetKey, string name, Guid? sourceDefinitionId = null,
-        CancellationToken ct = default) => _unit.ExecuteCommandAsync(async token =>
+        CancellationToken ct = default) => _unit.ExecuteCommandAsync(ApprovalWriteOwner.Definitions, async token =>
     {
         await _authorization.RequireAsync(ApprovalPermissions.DefinitionReadSensitive, new() { DefinitionKey = sourceKey }, ct: token);
         await _authorization.RequireAsync(ApprovalPermissions.DefinitionDesign, new() { DefinitionKey = targetKey }, ct: token);
@@ -88,7 +88,7 @@ public sealed partial class ApprovalDefinitionService
     {
         ValidateNote(note);
         var definition = new ApprovalDefinition { Id = _unit.NewId("ApprovalDefinitionService"), Key = management.Key,
-            Name = name, Version = checked(management.LastVersion + 1), DefinitionJson = flow.ToJson(), IsPublished = true, Category = CategoryOf(flow),
+            Name = name, Version = checked(management.LastVersion + 1), DefinitionJson = SerializeDefinition(flow), IsPublished = true, Category = CategoryOf(flow),
             CreatedAt = _clock.GetUtcNow().UtcDateTime };
         _db.Add(definition); management.LastVersion = definition.Version; management.ActiveDefinitionId = definition.Id;
         if (fromDraft || management.DraftJson is null) management.Category = definition.Category;
@@ -99,14 +99,14 @@ public sealed partial class ApprovalDefinitionService
         return definition;
     }
     public Task<DefinitionGovernance> SaveDesignDraftAsync(string key, string name, string definitionJson, long expectedRevision,
-        Guid? sourceDefinitionId = null, CancellationToken ct = default) => _unit.ExecuteCommandAsync(async token =>
+        Guid? sourceDefinitionId = null, CancellationToken ct = default) => _unit.ExecuteCommandAsync(ApprovalWriteOwner.Definitions, async token =>
     {
         await _authorization.RequireAsync(ApprovalPermissions.DefinitionDesign, new() { DefinitionKey = key }, ct: token);
         ValidateIdentity(key, name);
         if (string.IsNullOrWhiteSpace(definitionJson)) throw new ApprovalException("设计草稿 JSON 不能为空");
         if (definitionJson.Length > 1_000_000) throw new ApprovalException("设计草稿超过 1000000 字符");
         var flow = FlowDefinition.Parse(definitionJson);
-        var json = flow.ToJson(); // Incomplete approval designs can still be saved.
+        var json = SerializeDefinition(flow); // Incomplete approval designs can still be saved.
         if (sourceDefinitionId is { } source && !await _db.Set<ApprovalDefinition>().AnyAsync(d => d.Id == source && d.Key == key && d.IsPublished, token))
             throw new ApprovalException("来源版本不存在") { Code = ApprovalErrorCode.NotFound };
         var management = await GetOrCreateManagementAsync(key, name, token); CheckRevision(management, expectedRevision);
@@ -118,7 +118,7 @@ public sealed partial class ApprovalDefinitionService
     }, ct);
 
     public Task<ApprovalDefinition> PublishDesignDraftAsync(string key, long expectedRevision, string? changeNote = null,
-        CancellationToken ct = default) => _unit.ExecuteCommandAsync(async token =>
+        CancellationToken ct = default) => _unit.ExecuteCommandAsync(ApprovalWriteOwner.Definitions, async token =>
     {
         await _authorization.RequireAsync(ApprovalPermissions.DefinitionPublish, new() { DefinitionKey = key }, ct: token);
         var management = await _db.Set<ApprovalDefinitionManagement>().SingleOrDefaultAsync(x => x.Key == key, token)
@@ -131,7 +131,7 @@ public sealed partial class ApprovalDefinitionService
     }, ct);
 
     public Task<DefinitionGovernance> SetEnabledAsync(string key, bool enabled, long expectedRevision, string? changeNote = null,
-        CancellationToken ct = default) => _unit.ExecuteCommandAsync(async token =>
+        CancellationToken ct = default) => _unit.ExecuteCommandAsync(ApprovalWriteOwner.Definitions, async token =>
     {
         await _authorization.RequireAsync(ApprovalPermissions.DefinitionDisable, new() { DefinitionKey = key }, ct: token);
         ValidateNote(changeNote);
@@ -144,7 +144,7 @@ public sealed partial class ApprovalDefinitionService
     }, ct);
 
     public Task<DefinitionGovernance> SelectVersionAsync(string key, Guid definitionId, long expectedRevision, string? changeNote = null,
-        CancellationToken ct = default) => _unit.ExecuteCommandAsync(async token =>
+        CancellationToken ct = default) => _unit.ExecuteCommandAsync(ApprovalWriteOwner.Definitions, async token =>
     {
         await _authorization.RequireAsync(ApprovalPermissions.DefinitionPublish, new() { DefinitionKey = key }, ct: token);
         ValidateNote(changeNote);

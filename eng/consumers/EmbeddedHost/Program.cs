@@ -76,6 +76,33 @@ Task<Guid> Submit() => Command("alice", "invoice.submit", "invoice-1", new { inv
     });
 var first = await Submit(); Check(first == await Submit(), "StableOperationReplay");
 await As("alice", async sp => { var db = sp.GetRequiredService<InvoiceDbContext>(); Check(await db.Invoices.CountAsync() == 1 && await db.Invoices.Select(i => i.SavedByHost).SingleAsync() == "invoice-host", "SharedTransactionAndSaveOverride"); return true; });
+async Task RejectHostWrite(string name, Func<InvoiceDbContext, Task> write)
+{
+    try { await As("alice", async sp => { await write(sp.GetRequiredService<InvoiceDbContext>()); return true; }); }
+    catch (InvalidOperationException) { Check(true, name); return; }
+    throw new InvalidOperationException("Host write was accepted: " + name);
+}
+await RejectHostWrite("HostTaskStateWriteRejected", async db =>
+{ (await db.Set<ApprovalTask>().SingleAsync(t => t.InstanceId == first)).Status = ApprovalTaskStatus.Approved; await db.SaveChangesAsync(); });
+await RejectHostWrite("HostInstanceStateWriteRejected", async db =>
+{ (await db.Set<ApprovalInstance>().SingleAsync(i => i.Id == first)).Status = InstanceStatus.Approved; await db.SaveChangesAsync(); });
+await RejectHostWrite("HostLogDeleteRejected", async db =>
+{ db.Remove(await db.Set<ApprovalLog>().FirstAsync(l => l.InstanceId == first)); await db.SaveChangesAsync(); });
+await RejectHostWrite("HostOperationWriteRejected", async db =>
+{ (await db.Set<ApprovalOperation>().FirstAsync()).ResultJson = "forged"; await db.SaveChangesAsync(); });
+await RejectHostWrite("HostBulkTaskWriteRejected", async db =>
+{ await db.Set<ApprovalTask>().ExecuteUpdateAsync(s => s.SetProperty(t => t.Status, ApprovalTaskStatus.Approved)); });
+await RejectHostWrite("HostBulkInstanceDeleteRejected", async db => { await db.Set<ApprovalInstance>().ExecuteDeleteAsync(); });
+await As("alice", async sp =>
+{
+    var db = sp.GetRequiredService<InvoiceDbContext>();
+    Check((await db.Set<ApprovalInstance>().SingleAsync(i => i.Id == first)).Status == InstanceStatus.Running
+        && (await db.Set<ApprovalTask>().SingleAsync(t => t.InstanceId == first)).Status == ApprovalTaskStatus.Pending,
+        "RejectedHostWritesPreserveDatabaseState");
+    var invoice = await db.Invoices.SingleAsync(); invoice.Amount = 99; await db.SaveChangesAsync();
+    Check((await db.Invoices.AsNoTracking().SingleAsync()).Amount == 99, "OrdinaryHostBusinessUpdatesRemainAllowed");
+    return true;
+});
 var review = await Pending("bob", first);
 await Act("bob", "addsign", "before", ApprovalPermissions.TaskAddSign, new() { TaskId = review.Id }, (e, ct) => e.AddSignAsync(review.Id, "bob", ["dave"], AddSignMode.Before, ct: ct));
 var sign = await Pending("dave", first);

@@ -15,7 +15,9 @@ Schema / 校验 / 公式 / 草稿 / 附件引用"] --> Core
   Host -.可选.-> FormsAsp
 ```
 
-宿主的任意 EF DbContext 通过 ConfigureApproval 加入审批模型，DI 安装 ApprovalPersistence 的 SaveChanges、查询、SQL 与事务拦截器。只有审批版本/审计/回调事务等必要边界受到保护。业务数据、审批状态、操作结果和 Outbox 使用同一工作单元提交。
+宿主的 EF DbContext 通过 ConfigureApproval 加入审批模型，DI 安装 ApprovalPersistence 的实体加载、SaveChanges、查询、SQL 与事务拦截器。审批运行、治理、消息、幂等及可选 Forms 实体采用内部所有权授权，新增/修改/删除和批量操作都受保护；授权按 DbContext 与具体变化记录，宿主回调不继承它。业务数据、审批状态、操作结果和 Outbox 仍使用同一工作单元提交。
+
+ApprovalHostValidation 只在启动时解析关键注册项，不是第二个 Worker。单个 ApprovalWorker 继续拥有投递和超时循环。详见[实体写入边界](persistence-write-boundaries.md)。
 
 Core 不引用 Forms、MVC、宿主或存储/通知提供者。Forms 通过 IApprovalDefinitionExtension、IApprovalDataProjection、IApprovalResourceResolver 扩展快照校验、数据可见性与可选资源解析。审批核心持有业务类型、业务键、流程变量和 JSON 快照。
 

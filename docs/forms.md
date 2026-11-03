@@ -9,3 +9,7 @@ Core 的 FlowDefinition.Form 是可选模块拥有的 JSON 数据。Forms 通过
 附件元数据/引用属于 Forms，实际内容归宿主 IApprovalFileStore。默认缺失适配器只在实际文件操作时报错，纯字段表单不要求存储。LocalApprovalFileStore 由宿主显式选择，不能放在公开静态目录。没有未绑定文件定时清理、删除任务或保留周期。
 
 前端当前继续使用 @approval/ui 中的表单组件；拆为独立 @approval/forms 是后续前端阶段，不能把后端独立性等同于前端已拆包。
+
+Draft/File 写权限仅供 Forms 内部服务使用，与 Core 引擎、定义治理、消息已读权限分开。普通宿主不能通过共享 DbContext 或 bulk 修改元数据。附件绑定仍与草稿/审批事务一起保存；上传元数据保存失败会撤销跟踪，避免之后保存失去文件内容的残留记录。
+
+FlowNode.FieldPermissions、FieldAccess、FieldsWith 和 HiddenFields 继续作为已发布 C#/JSON 的兼容结构保留。校验、字段隐藏、编辑规则和附件可见性实际由 Forms 扩展实现；缺少模块时拒绝相关定义/投影，不丢弃旧配置。后续契约版本可通过模块 snapshot 的双读适配拆分，不能直接移除字段或修改历史实例绑定的版本。

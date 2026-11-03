@@ -351,6 +351,7 @@ Approval.Core.ApprovalOptions
   Property System.TimeZoneInfo DisplayTimeZone [NotNull/NotNull]
 Approval.Core.ApprovalOutboxOptions
   Constructor Void .ctor() [args=]
+  Property Boolean EnableDispatcher [NotNull/NotNull]
   Property Int32 BatchSize [NotNull/NotNull]
   Property Int32 MaxAttempts [NotNull/NotNull]
   Property System.TimeSpan BaseRetryDelay [NotNull/NotNull]
@@ -880,6 +881,7 @@ Approval.Core.Engine.ApprovalEngine
   Method System.Threading.Tasks.Task WithdrawAsync(System.Guid, System.String, System.String, System.Threading.CancellationToken) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull,Nullable/Nullable default=null,NotNull/NotNull default=null]
   Method System.Threading.Tasks.Task`1[Approval.Core.Domain.ApprovalInstance] StartAsync(Approval.Core.Engine.StartApprovalRequest, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull,NotNull/NotNull default=null]
   Method System.Threading.Tasks.Task`1[Approval.Core.Domain.ApprovalTask] FindHandleableTaskAsync(System.Guid, System.String, System.Threading.CancellationToken) [return=NotNull/NotNull<Nullable/Nullable>; args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull default=null]
+  Method System.Threading.Tasks.Task`1[Approval.Core.Engine.ReassignResult] ReassignUserAsync(System.String, System.String, System.String, System.String, System.String, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,Nullable/Nullable,NotNull/NotNull,NotNull/NotNull default=null]
   Method System.Threading.Tasks.Task`1[Approval.Core.Engine.ReassignResult] ReassignUserAsync(System.String, System.String, System.String, System.String, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,Nullable/Nullable default=null,NotNull/NotNull default=null]
   Method System.Threading.Tasks.Task`1[System.Boolean] CanHandleAsync(System.Guid, System.String, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull default=null]
   Method System.Threading.Tasks.Task`1[System.Boolean] HandleTimeoutAsync(System.Guid, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull,NotNull/NotNull default=null]

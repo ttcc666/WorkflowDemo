@@ -36,7 +36,9 @@ internal static class AdminEndpoints
 
         admin.MapPost("/users/{userId}/reassign", (string userId, ReassignRequest body, HttpContext http, ApprovalEngine e,
             CancellationToken ct) =>
-            e.ReassignUserAsync(userId, body.ToUserId, http.GetApprovalUserId(), body.Reason, ct));
+            ApprovalHttpCommands.OperationId(http) is { } key
+                ? e.ReassignUserAsync(userId, body.ToUserId, http.GetApprovalUserId(), body.Reason, key, ct)
+                : e.ReassignUserAsync(userId, body.ToUserId, http.GetApprovalUserId(), body.Reason, ct));
 
         // 统计：默认最近 30 天
         admin.MapGet("/statistics", (DateTimeOffset? from, DateTimeOffset? to, string? definitionKey, ApprovalStatisticsService s,

@@ -30,8 +30,11 @@ public sealed partial class DatabaseContractTests
             Assert.Equal(1, await command.ExecuteNonQueryAsync());
         }
         var fileId = Guid.NewGuid();
-        db.Add(new ApprovalFile { Id = fileId, ArchiveId = archiveId, FileName = "history.pdf", ContentType = "application/pdf", StorageKey = "host/retained.pdf", UploadedBy = "legacy-user", UploadedAt = Timestamp, Sha256 = new string('b', 64), Size = 12 });
-        await db.SaveChangesAsync();
+        await using (var storage = fixture.CreateStorage())
+        {
+            storage.Add(new ApprovalFile { Id = fileId, ArchiveId = archiveId, FileName = "history.pdf", ContentType = "application/pdf", StorageKey = "host/retained.pdf", UploadedBy = "legacy-user", UploadedAt = Timestamp, Sha256 = new string('b', 64), Size = 12 });
+            await storage.SaveChangesAsync();
+        }
         await migrator.MigrateAsync();
         Assert.False(db.Database.HasPendingModelChanges());
         Assert.DoesNotContain(db.Model.GetEntityTypes(), entity => entity.GetTableName() == "ApprovalArchives");

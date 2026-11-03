@@ -45,6 +45,9 @@ public sealed partial class ApprovalFormService(
     private readonly Approval.Core.Authorization.IApprovalAuthorization _authorization = accessor.Authorization;
     private readonly DbContext _db = accessor.Context;
     private readonly ApprovalUnitOfWork _unit = accessor.UnitOfWork;
+    private readonly IApprovalIdentityProvider _hostIdentity = ApprovalHostServices.Identity(accessor.UnitOfWork, identity);
+    private readonly IApprovalUserDirectory? _hostDirectory = ApprovalHostServices.Directory(accessor.UnitOfWork, directory);
+    private readonly TimeProvider _clock = ApprovalHostServices.Clock(accessor.UnitOfWork, clock);
 
     public string BusinessType => formOptions.BusinessType;
 
@@ -71,7 +74,7 @@ public sealed partial class ApprovalFormService(
     /// <summary>发起表单审批：校验表单 → 生成标题 → 发起实例（业务主键为新 ID）。从草稿提交时同一事务删除草稿。</summary>
     public Task<ApprovalInstance> StartAsync(string key, string userId, JsonElement formData, string? comment = null,
         Guid? draftId = null, CancellationToken ct = default) =>
-        _unit.ExecuteCommandAsync(token => StartAsyncCore(key, userId, formData, comment, draftId, token), ct);
+        _unit.ExecuteCommandAsync(ApprovalWriteOwner.Forms, token => StartAsyncCore(key, userId, formData, comment, draftId, token), ct);
 
     private async Task<ApprovalInstance> StartAsyncCore(string key, string userId, JsonElement formData, string? comment = null,
         Guid? draftId = null, CancellationToken ct = default)
@@ -91,7 +94,7 @@ public sealed partial class ApprovalFormService(
         {
             InstanceId = instanceId,
             DefinitionId = definition.Id,
-            Title = RenderTitle(flow.Settings!, definition.Name, userId, clock.GetUtcNow().UtcDateTime, json),
+            Title = RenderTitle(flow.Settings!, definition.Name, userId, _clock.GetUtcNow().UtcDateTime, json),
             FormData = json,
             Comment = comment
         }, ct);
@@ -102,7 +105,7 @@ public sealed partial class ApprovalFormService(
     /// 其他业务的数据由业务单据决定，传入表单数据会被拒绝。
     /// </summary>
     public Task ResubmitAsync(Guid taskId, string userId, JsonElement? formData, string? comment = null, CancellationToken ct = default) =>
-        _unit.ExecuteCommandAsync(token => ResubmitAsyncCore(taskId, userId, formData, comment, token), ct);
+        _unit.ExecuteCommandAsync(ApprovalWriteOwner.Forms, token => ResubmitAsyncCore(taskId, userId, formData, comment, token), ct);
 
     private async Task ResubmitAsyncCore(Guid taskId, string userId, JsonElement? formData, string? comment = null, CancellationToken ct = default)
     {
@@ -127,7 +130,8 @@ public sealed partial class ApprovalFormService(
         var schema = flow.GetForm() ?? new FormSchema();
         var (json, attachments) = await files.ResolveAsync(schema, await NormalizeAsync(schema, data, ct), userId, instance.Id, null, false, ct);
         await files.BindToInstanceAsync(instance.Id, attachments, null, ct);
-        instance.Title = RenderTitle(flow.Settings ?? new FlowSettings(), definition.Name, userId, instance.CreatedAt, json);
+        using (_unit.Writes.Enter(ApprovalWriteOwner.None, instance, "Title"))
+            instance.Title = RenderTitle(flow.Settings ?? new FlowSettings(), definition.Name, userId, instance.CreatedAt, json);
 
         await engine.ResubmitAsync(taskId, userId, comment, json, ct);
     }
@@ -186,7 +190,8 @@ public sealed partial class ApprovalFormService(
 
         // 标题模板可能引用了被修改的字段
         var definition = await _db.Set<ApprovalDefinition>().AsNoTracking().FirstAsync(d => d.Id == instance.DefinitionId, ct);
-        instance.Title = RenderTitle(flow.Settings ?? new FlowSettings(), definition.Name, instance.InitiatorId, instance.CreatedAt, json);
+        using (_unit.Writes.Enter(ApprovalWriteOwner.None, instance, "Title"))
+            instance.Title = RenderTitle(flow.Settings ?? new FlowSettings(), definition.Name, instance.InitiatorId, instance.CreatedAt, json);
         return new ApprovalDataEdit(json, FieldVisibility.Summary(changes.Select(c => c.Label)), JsonSerializer.Serialize(changes, FormData.JsonOptions));
     }
 
@@ -226,7 +231,7 @@ public sealed partial class ApprovalFormService(
                     _ => Array.Empty<string>()
                 };
                 if (ids.Length == 0) continue;
-                var found = (await directory.GetUsersAsync(ids, ct)).Select(u => u.Id).ToHashSet();
+                var found = (await _hostDirectory!.GetUsersAsync(ids, ct)).Select(u => u.Id).ToHashSet();
                 var missing = ids.Where(id => !found.Contains(id)).ToList();
                 if (missing.Count > 0) errors[field.Key] = [$"{field.Label}中的用户不存在：{string.Join("、", missing)}"];
             }
@@ -276,7 +281,7 @@ public sealed partial class ApprovalFormService(
         if (settings.InitiatorRoles.Count == 0) return true;
         foreach (var role in settings.InitiatorRoles)
         {
-            if (await identity.IsInRoleAsync(userId, role, ct)) return true;
+            if (await _hostIdentity.IsInRoleAsync(userId, role, ct)) return true;
         }
         return false;
     }

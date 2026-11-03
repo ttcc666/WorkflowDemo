@@ -97,7 +97,7 @@ public static class ApprovalServiceCollectionExtensions
             sp.GetRequiredService<IApprovalScopeFactory>(),
             sp.GetRequiredService<ApprovalOutboxSignal>())
         {
-            EventHandler = sp.GetService<IApprovalEventHandler>()
+            EventHandler = options.Outbox.EnableDispatcher ? sp.GetRequiredService<IApprovalEventHandler>() : null
         });
         services.AddScoped<ApprovalStatisticsService>();
         services.AddScoped<Approval.Core.Diagnostics.ApprovalDiagnosticsService>();
@@ -106,7 +106,10 @@ public static class ApprovalServiceCollectionExtensions
 
         // 后台任务：注册为单例以便宿主 / 测试直接调用 DispatchOnceAsync、ScanOnceAsync
         services.AddSingleton<ApprovalOutboxSignal>();
-        services.AddSingleton<ApprovalOutboxDispatcher>();
+        services.AddSingleton<ApprovalHostValidation>();
+        services.AddHostedService(sp => sp.GetRequiredService<ApprovalHostValidation>());
+        services.AddSingleton(sp => new ApprovalOutboxDispatcher(sp.GetRequiredService<ApprovalBackgroundRunner>())
+        { ValidateHost = sp.GetRequiredService<ApprovalHostValidation>().ValidateAsync, Options = options });
         services.AddSingleton<ApprovalTimeoutScanner>();
         if (options.EnableBackgroundServices)
         {

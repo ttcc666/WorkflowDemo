@@ -2,6 +2,7 @@ using Approval.Core.Abstractions;
 using Approval.Core.Conditions;
 using Approval.Core.Definitions;
 using Approval.Core.Domain;
+using Approval.Core.Persistence;
 
 namespace Approval.Core.Engine.Runtime;
 
@@ -10,7 +11,8 @@ internal sealed class ApprovalAssigneeService(
     IApprovalIdentityProvider identity,
     IReadOnlyDictionary<string, IApproverResolver> resolvers,
     ApprovalOptions options,
-    IApprovalUserDirectory? directory)
+    IApprovalUserDirectory? directory,
+    ApprovalUnitOfWork unit)
 {
     private readonly IApprovalIdentityProvider _identity = identity;
     private readonly IReadOnlyDictionary<string, IApproverResolver> _resolvers = resolvers;
@@ -42,12 +44,14 @@ internal sealed class ApprovalAssigneeService(
     public async Task<List<Assignee>> ResolveRulesAsync(IEnumerable<ApproverRule> rules, ApprovalInstance instance, FlowNode node,
         IReadOnlyDictionary<string, object?> form, CancellationToken ct)
     {
-        var context = new ApproverResolveContext { Instance = instance, Node = node, FormData = form };
+        var context = new ApproverResolveContext { Instance = instance,
+            Node = System.Text.Json.JsonSerializer.Deserialize<FlowNode>(System.Text.Json.JsonSerializer.Serialize(node))!, FormData = form };
         var result = new List<Assignee>();
         foreach (var rule in rules)
         {
             if (!_resolvers.TryGetValue(rule.Type, out var resolver))
                 throw new ApprovalException($"未注册的审批人类型 '{rule.Type}'") { Code = ApprovalErrorCode.InvalidDefinition };
+            using var callback = unit.Extension();
             result.AddRange(await resolver.ResolveAsync(rule.Value, context, ct));
         }
         return result;

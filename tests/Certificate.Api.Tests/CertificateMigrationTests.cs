@@ -20,7 +20,8 @@ public sealed class CertificateMigrationTests
         var initial = (await db.Database.GetAppliedMigrationsAsync()).ToArray();
         Assert.Equal(new[] { "20261103051646_InitialApproval", "20261103065227_EmbeddedEngineBoundary" }, initial);
         var definition = new ApprovalDefinition { Id = Guid.NewGuid(), Key = "current", Name = "Current", Version = 1, DefinitionJson = "{}", Category = "分类", IsPublished = true };
-        db.Add(definition); await db.SaveChangesAsync(); db.ChangeTracker.Clear();
+        await using (var storage = new CertificateStorageContext(path))
+        { storage.Add(definition); await storage.SaveChangesAsync(); }
         await database.InitializeAsync();
         var persisted = await db.Set<ApprovalDefinition>().SingleAsync(); Assert.Equal(definition.Id, persisted.Id); Assert.Equal("分类", persisted.Category);
         Assert.Equal(initial, (await db.Database.GetAppliedMigrationsAsync()).ToArray());

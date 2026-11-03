@@ -110,7 +110,8 @@ try {
         @($results | Where-Object outcome -ne 'Passed').Count -gt 0) { throw 'Tests were absent, skipped or unsuccessful.' }
     foreach ($required in @('Migrations_RollBackAndReapply_WithoutModelDrift',
         'EmbeddedBoundaryMigration_PreservesLegacyArchiveAndAttachmentData',
-        'FinalAcceptance_SynchronousActionFailureRollsBackHostApprovalOperationAndOutbox')) {
+        'FinalAcceptance_SynchronousActionFailureRollsBackHostApprovalOperationAndOutbox',
+        'ApprovalWriteProtection_RejectsHostTrackedBulkAndSqlButPreservesEngine')) {
         if (-not @($results | Where-Object { $_.testName.EndsWith('.' + $required, [StringComparison]::Ordinal) }).Count) {
             throw ('Required database contract test was not executed: ' + $required)
         }

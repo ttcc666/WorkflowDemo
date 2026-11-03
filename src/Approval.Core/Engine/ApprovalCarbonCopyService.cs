@@ -33,11 +33,13 @@ public sealed class ApprovalCarbonCopyService(ApprovalDbContextAccessor accessor
     ApprovalQueryService queries, TimeProvider clock, IApprovalUserDirectory? directory = null)
 {
     private readonly DbContext _db = accessor.Context;
+    private readonly IApprovalIdentityProvider _identity = ApprovalHostServices.Identity(accessor.UnitOfWork, identity);
+    private readonly TimeProvider _clock = ApprovalHostServices.Clock(accessor.UnitOfWork, clock);
 
     private async Task<IQueryable<CarbonCopyItem>> MineAsync(string userId, CancellationToken ct, bool ownOnly = true, InstanceQuery? query = null)
     {
         await accessor.Authorization.RequireAsync(ApprovalPermissions.InstanceRead, userId: userId, ct: ct);
-        var roles = (await identity.GetRolesAsync(userId, ct)).ToList();
+        var roles = (await _identity.GetRolesAsync(userId, ct)).ToList();
         var visible = await accessor.Authorization.ScopeAsync(_db.Set<ApprovalInstance>().AsNoTracking(), ct);
         if (query is not null) visible = await queries.ApplyFiltersAsync(visible, query with { From = null, To = null }, ct);
         return from copy in _db.Set<ApprovalCarbonCopy>().AsNoTracking()
@@ -84,14 +86,14 @@ public sealed class ApprovalCarbonCopyService(ApprovalDbContextAccessor accessor
             ?? throw new ApprovalException("抄送记录不存在或无权查看") { Code = ApprovalErrorCode.NotFound };
 
     public Task MarkReadAsync(string userId, Guid id, CancellationToken ct = default) =>
-        accessor.UnitOfWork.ExecuteCommandAsync(async token =>
+        accessor.UnitOfWork.ExecuteCommandAsync(ApprovalWriteOwner.CarbonCopyRead, async token =>
         {
             var item = await GetAsync(userId, id, token);
             if (item.ReadAt is not null) return;
             _db.Add(new ApprovalCarbonCopyRead
             {
                 Id = Guid.ParseExact(ApprovalCommandHash.Of(id.ToString(), userId)[..32], "N"),
-                CarbonCopyId = id, UserId = userId, ReadAt = clock.GetUtcNow().UtcDateTime
+                CarbonCopyId = id, UserId = userId, ReadAt = _clock.GetUtcNow().UtcDateTime
             });
             try { await _db.SaveChangesAsync(token); }
             catch (DbUpdateException error) when (ApprovalDatabaseErrors.Unique(error))
@@ -118,7 +120,7 @@ public sealed class ApprovalCarbonCopyService(ApprovalDbContextAccessor accessor
         var users = publicDirectory ?? directory
             ?? throw new ApprovalException("查询抄送人员需要宿主接入用户目录") { Code = ApprovalErrorCode.InvalidDefinition };
         var ids = (copy.AssigneeKind == AssigneeKind.Role
-                ? await identity.GetUserIdsInRoleAsync(copy.AssigneeValue, ct) : [copy.AssigneeValue])
+                ? await _identity.GetUserIdsInRoleAsync(copy.AssigneeValue, ct) : [copy.AssigneeValue])
             .Where(id => !string.IsNullOrWhiteSpace(id)).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
         page ??= new PageRequest();
         var selected = ids.Skip(page.Skip).Take(page.PageSize).ToArray();
@@ -128,6 +130,6 @@ public sealed class ApprovalCarbonCopyService(ApprovalDbContextAccessor accessor
         var items = selected.Select(id => byId.TryGetValue(id, out var user)
             ? new CarbonCopyRecipient(id, user.Name, true, user.IsActive) : new CarbonCopyRecipient(id, null, false, null)).ToArray();
         return new(copy.Id, copy.AssigneeKind, copy.AssigneeValue, copy.AssigneeKind == AssigneeKind.Role,
-            clock.GetUtcNow().UtcDateTime, items, ids.Length, page.Page, page.PageSize);
+            _clock.GetUtcNow().UtcDateTime, items, ids.Length, page.Page, page.PageSize);
     }
 }
