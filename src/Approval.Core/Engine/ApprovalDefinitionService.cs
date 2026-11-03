@@ -26,7 +26,7 @@ public sealed partial class ApprovalDefinitionService
     private static readonly string[] BuiltInOrder = ["Role", "User", "FormField", "Initiator", "DeptLeader", "Manager", "ManagerChain"];
     private readonly Approval.Core.Authorization.IApprovalAuthorization _authorization;
     private readonly DbContext _db;
-    internal IApprovalDefinitionExtension? DefinitionExtension { get; set; }
+    internal IApprovalDefinitionExtension? DefinitionExtension { get; }
     private readonly ApprovalUnitOfWork _unit;
     private readonly ApprovalOptions _options;
     private readonly TimeProvider _clock;
@@ -40,7 +40,8 @@ public sealed partial class ApprovalDefinitionService
     {
     }
 
-    internal ApprovalDefinitionService(ApprovalDbContextAccessor accessor, ApprovalExtensionCatalog extensions, TimeProvider clock, ApprovalOptions? options = null)
+    internal ApprovalDefinitionService(ApprovalDbContextAccessor accessor, ApprovalExtensionCatalog extensions, TimeProvider clock, ApprovalOptions? options = null,
+        IApprovalDefinitionExtension? definitionExtension = null)
     {
         _db = accessor.Context;
         _accessor = accessor;
@@ -50,6 +51,7 @@ public sealed partial class ApprovalDefinitionService
         _clock = ApprovalHostServices.Clock(_unit, clock);
         _approverTypes = extensions.ApproverDescriptors;
         _channels = extensions.ChannelDescriptors;
+        DefinitionExtension = definitionExtension;
     }
 
     /// <summary>已注册的审批人类型（供设计器选择，按参数类型生成控件）。</summary>

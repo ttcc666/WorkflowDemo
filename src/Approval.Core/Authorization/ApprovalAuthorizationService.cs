@@ -39,6 +39,7 @@ internal sealed class DefaultApprovalAuthorization(
     DbContext db, IApprovalActorContext actor,
     IApprovalPermissionProvider provider, IApprovalQueryScope scope, ApprovalOptions options, IEnumerable<IApprovalResourceResolver> resolvers) : IApprovalAuthorization
 {
+    private readonly ApprovalResourceReader _resources = new(db, scope, options, resolvers);
     private ApprovalPermissionSubject Subject(string? userId = null)
     {
         var id = actor.ActorId; // Every host operation requires a trusted actor.
@@ -57,10 +58,10 @@ internal sealed class DefaultApprovalAuthorization(
         ct.ThrowIfCancellationRequested();
         if (!ApprovalPermissions.All.Contains(permission)) throw new ArgumentException("未知审批权限码", nameof(permission));
         var subject = Subject(userId);
-        var resolved = await ResolveAsync(resource ?? new(), subject, ct); // Resolve actual resource ownership before asking the host.
+        var resolved = await _resources.ResolveAsync(resource ?? new(), subject, ct); // Resolve actual resource ownership before asking the host.
         return await AuthorizeResolvedAsync(permission, subject, resolved, ct);
     }
-    public Task<ApprovalResource> ResolveResourceAsync(ApprovalResource resource, CancellationToken ct) => ResolveAsync(resource, Subject(), ct);
+    public Task<ApprovalResource> ResolveResourceAsync(ApprovalResource resource, CancellationToken ct) => _resources.ResolveAsync(resource, Subject(), ct);
     public async Task RequireRecordedAsync(string permission, ApprovalResource resource, CancellationToken ct)
     {
         // Only the command executor can call this, with a committed record scoped to the same actor/command.
@@ -80,38 +81,6 @@ internal sealed class DefaultApprovalAuthorization(
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
         catch (Exception ex) { throw new ApprovalException("审批权限服务暂不可用", ex) { Code = ApprovalErrorCode.AuthorizationUnavailable }; }
     }
-    private async Task<ApprovalResource> ResolveAsync(ApprovalResource resource, ApprovalPermissionSubject subject, CancellationToken ct)
-    {
-        static ApprovalException Missing() => new("资源不存在或无权查看") { Code = ApprovalErrorCode.NotFound };
-        foreach (var resolver in resolvers)
-        { using var callback = new ApprovalUnitOfWork(db).Extension(); resource = await resolver.ResolveAsync(resource, ct); }
-        Guid? instanceId = resource.InstanceId;
-        if (resource.TaskId is { } taskId)
-            instanceId = (await db.Set<ApprovalTask>().AsNoTracking().SingleOrDefaultAsync(t => t.Id == taskId, ct) ?? throw Missing()).InstanceId;
-        if (resource.OutboxId is { } outboxId)
-            instanceId = (await db.Set<ApprovalOutboxMessage>().AsNoTracking().SingleOrDefaultAsync(m => m.Id == outboxId, ct) ?? throw Missing()).InstanceId;
-        if (resource.MessageId is { } messageId)
-            instanceId = (await db.Set<ApprovalMessage>().AsNoTracking().SingleOrDefaultAsync(m => m.Id == messageId, ct) ?? throw Missing()).InstanceId;
-        if (instanceId is { } id)
-        {
-            if (resource.InstanceId is { } requested && requested != id) throw Missing();
-            var instances = await ApplyScopeAsync(subject, db.Set<ApprovalInstance>().AsNoTracking(), ct);
-            var instance = await db.Set<ApprovalInstance>().AsNoTracking().Where(i => instances.Select(x => x.Id).Contains(i.Id)).SingleOrDefaultAsync(i => i.Id == id, ct) ?? throw Missing();
-            resource = resource with { InstanceId = id, DefinitionId = instance.DefinitionId, DefinitionKey = instance.DefinitionKey, BusinessType = instance.BusinessType, BusinessKey = instance.BusinessKey };
-        }
-        if (resource.DefinitionId is { } definitionId)
-        {
-            var definition = await db.Set<ApprovalDefinition>().AsNoTracking().SingleOrDefaultAsync(d => d.Id == definitionId, ct) ?? throw Missing();
-            resource = resource with { DefinitionKey = definition.Key };
-        }
-        else if (!string.IsNullOrWhiteSpace(resource.DefinitionKey))
-        {
-            var definition = await db.Set<ApprovalDefinition>().AsNoTracking().Where(d => d.Key == resource.DefinitionKey && d.IsPublished)
-                .OrderByDescending(d => d.Version).FirstOrDefaultAsync(ct);
-            if (definition is not null) resource = resource with { DefinitionId = definition.Id };
-        }
-        return resource;
-    }
     public async Task<ApprovalViewer> ViewerAsync(ApprovalViewer viewer, Guid? instanceId = null, CancellationToken ct = default)
     {
         Subject(viewer.UserId);
@@ -119,17 +88,8 @@ internal sealed class DefaultApprovalAuthorization(
     }
     public async Task<IQueryable<ApprovalInstance>> ScopeAsync(IQueryable<ApprovalInstance> query, CancellationToken ct = default)
     {
-        var result = await ApplyScopeAsync(Subject(), query, ct);
+        var result = await _resources.ApplyScopeAsync(Subject(), query, ct);
         return query.Where(i => result.Select(x => x.Id).Contains(i.Id));
-    }
-    private async Task<IQueryable<ApprovalInstance>> ApplyScopeAsync(ApprovalPermissionSubject subject, IQueryable<ApprovalInstance> query, CancellationToken ct)
-    {
-        using var callback = new ApprovalUnitOfWork(db).Extension();
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        timeout.CancelAfter(options.PermissionTimeout);
-        try { return await scope.ApplyAsync(subject, query, timeout.Token).WaitAsync(timeout.Token); }
-        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
-        catch (Exception ex) { throw new ApprovalException("审批数据权限服务暂不可用", ex) { Code = ApprovalErrorCode.AuthorizationUnavailable }; }
     }
 }
 

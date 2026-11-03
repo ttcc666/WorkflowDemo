@@ -57,7 +57,7 @@ public sealed class ApprovalOutboxService
     private readonly TimeProvider _clock;
     private readonly ILogger<ApprovalOutboxService> _logger;
     private readonly ApprovalOutboxSignal _signal;
-    internal IApprovalEventHandler? EventHandler { get; set; }
+    internal IApprovalEventHandler? EventHandler { get; }
 
     public ApprovalOutboxService(ApprovalDbContextAccessor accessor, IEnumerable<ChannelInfo> channels,
         ApprovalOptions options, TimeProvider clock, ILogger<ApprovalOutboxService> logger, IApprovalScopeFactory? scopes = null)
@@ -67,7 +67,7 @@ public sealed class ApprovalOutboxService
 
     internal ApprovalOutboxService(ApprovalDbContextAccessor accessor, ApprovalExtensionCatalog extensions,
         ApprovalOptions options, TimeProvider clock, ILogger<ApprovalOutboxService> logger, IApprovalScopeFactory? scopes = null,
-        ApprovalOutboxSignal? signal = null)
+        ApprovalOutboxSignal? signal = null, IApprovalEventHandler? eventHandler = null)
     {
         _db = accessor.Context;
         _unit = accessor.UnitOfWork; _scopes = scopes;
@@ -76,6 +76,7 @@ public sealed class ApprovalOutboxService
         _clock = ApprovalHostServices.Clock(_unit, clock);
         _logger = logger;
         _signal = signal ?? new ApprovalOutboxSignal();
+        EventHandler = eventHandler;
     }
 
     private DateTime Now => _clock.GetUtcNow().UtcDateTime;

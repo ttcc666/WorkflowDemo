@@ -41,9 +41,9 @@ public sealed partial class ApprovalEngine
     private readonly ApprovalOutboxSignal _outboxSignal;
     private readonly TimeProvider _clock;
     private readonly IApprovalUserDirectory? _directory;
-    internal IApprovalDefinitionExtension? DefinitionExtension { get; set; }
-    internal IApprovalLifecycleHandler? Lifecycle { get; set; }
-    internal IApprovalUserStatusProvider? UserStatus { get => _assignees.UserStatus; set => _assignees.UserStatus = ApprovalHostServices.Status(_unit, value); }
+    internal IApprovalDefinitionExtension? DefinitionExtension { get; }
+    internal IApprovalLifecycleHandler? Lifecycle { get; }
+    internal IApprovalUserStatusProvider? UserStatus => _assignees.UserStatus;
 
     public ApprovalEngine(
         ApprovalDbContextAccessor accessor,
@@ -72,7 +72,10 @@ public sealed partial class ApprovalEngine
         ApprovalOutboxSignal outboxSignal,
         TimeProvider clock,
         ILogger<ApprovalEngine> logger,
-        IApprovalUserDirectory? directory)
+        IApprovalUserDirectory? directory,
+        IApprovalDefinitionExtension? definitionExtension = null,
+        IApprovalLifecycleHandler? lifecycle = null,
+        IApprovalUserStatusProvider? userStatus = null)
     {
         _db = accessor.Context;
         _unit = accessor.UnitOfWork;
@@ -89,6 +92,9 @@ public sealed partial class ApprovalEngine
             new ApprovalDisplaySettings(options.DisplayTimeZone, options.InstanceUrlFormat, options.GlobalVariables), _clock, logger);
         _tasks = new(_db, _unit, _events, _clock);
         _navigator = new(_assignees, ApprovalHostServices.Conditions(_unit, evaluator), _tasks, _events);
+        DefinitionExtension = definitionExtension;
+        Lifecycle = lifecycle;
+        _assignees.UserStatus = ApprovalHostServices.Status(_unit, userStatus);
     }
 
     private DateTime Now => _clock.GetUtcNow().UtcDateTime;

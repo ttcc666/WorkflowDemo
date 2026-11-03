@@ -33,20 +33,22 @@ public static class ApprovalServiceCollectionExtensions
             throw new InvalidOperationException("后台轮询间隔、重试间隔、批量和最大投递次数必须有效");
         if (options.Background.AssignmentSampleSize is < 1 or > 100)
             throw new InvalidOperationException("诊断扫描预算必须在 1–100 之间");
-        if (options.PermissionTimeout <= TimeSpan.Zero || options.PermissionTimeout > TimeSpan.FromMinutes(1)) throw new InvalidOperationException("权限超时须大于零且不超过一分钟");
-        services.TryAddScoped<IApprovalPermissionProvider, DefaultApprovalPermissionProvider>();
-        services.TryAddScoped<IApprovalQueryScope, DefaultApprovalQueryScope>();
+        if (options.PermissionTimeout <= TimeSpan.Zero || options.PermissionTimeout > TimeSpan.FromMinutes(1))
+            throw new InvalidOperationException("权限超时须大于零且不超过一分钟");
+        RegisterPersistence<TContext>(services, options);
+        RegisterAuthorization<TContext>(services, options);
+        RegisterRuntime(services, options);
+        RegisterQuery(services);
+        RegisterBackground(services, options);
+        return new ApprovalBuilder(services);
+    }
+
+    private static void RegisterPersistence<TContext>(IServiceCollection services, ApprovalOptions options)
+        where TContext : DbContext
+    {
         services.AddScoped<IApprovalHostContext, ApprovalHostContext<TContext>>();
         services.AddScoped<IApprovalCommandExecutor, ApprovalCommandExecutor<TContext>>();
         services.AddScoped<IApprovalUnitOfWork>(sp => sp.GetRequiredService<ApprovalDbContextAccessor>().UnitOfWork);
-        services.AddScoped<IApprovalAuthorization>(sp => new DefaultApprovalAuthorization(sp.GetRequiredService<TContext>(), sp.GetRequiredService<IApprovalActorContext>(), sp.GetRequiredService<IApprovalPermissionProvider>(), sp.GetRequiredService<IApprovalQueryScope>(), options, sp.GetServices<IApprovalResourceResolver>()));
-        services.AddScoped(sp => new ApprovalAuthorizationService(sp.GetRequiredService<IApprovalAuthorization>()));
-        services.TryAddScoped<ApprovalExecutionContext>();
-        services.TryAddScoped<IApprovalActorContext>(sp => sp.GetRequiredService<ApprovalExecutionContext>());
-        services.TryAddSingleton<IApprovalScopeFactory, ApprovalScopeFactory>();
-
-        services.TryAddSingleton(TimeProvider.System);
-        services.TryAddSingleton<IConditionEvaluator, DynamicExpressoConditionEvaluator>();
         services.AddScoped(sp =>
         {
             var db = sp.GetRequiredService<TContext>();
@@ -55,68 +57,74 @@ public static class ApprovalServiceCollectionExtensions
             ApprovalPersistence.State(db).SystemActor = sp.GetRequiredService<IApprovalActorContext>().IsSystem;
             return new ApprovalDbContextAccessor(db, sp.GetRequiredService<ApprovalAuthorizationService>(), sp.GetRequiredService<IApprovalCommandExecutor>(), sp.GetRequiredService<IApprovalActorContext>());
         });
+    }
 
+    private static void RegisterAuthorization<TContext>(IServiceCollection services, ApprovalOptions options)
+        where TContext : DbContext
+    {
+        services.TryAddScoped<IApprovalPermissionProvider, DefaultApprovalPermissionProvider>();
+        services.TryAddScoped<IApprovalQueryScope, DefaultApprovalQueryScope>();
+        services.AddScoped<IApprovalAuthorization>(sp => new DefaultApprovalAuthorization(
+            sp.GetRequiredService<TContext>(), sp.GetRequiredService<IApprovalActorContext>(),
+            sp.GetRequiredService<IApprovalPermissionProvider>(), sp.GetRequiredService<IApprovalQueryScope>(),
+            options, sp.GetServices<IApprovalResourceResolver>()));
+        services.AddScoped(sp => new ApprovalAuthorizationService(sp.GetRequiredService<IApprovalAuthorization>()));
+        services.TryAddScoped<ApprovalExecutionContext>();
+        services.TryAddScoped<IApprovalActorContext>(sp => sp.GetRequiredService<ApprovalExecutionContext>());
+        services.TryAddSingleton<IApprovalScopeFactory, ApprovalScopeFactory>();
+        services.TryAddScoped<IApprovalAccessPolicy, DefaultApprovalAccessPolicy>();
+    }
+
+    private static void RegisterRuntime(IServiceCollection services, ApprovalOptions options)
+    {
+        services.TryAddSingleton(TimeProvider.System);
+        services.TryAddSingleton<IConditionEvaluator, DynamicExpressoConditionEvaluator>();
         services.AddSingleton<IApproverResolver, UserApproverResolver>();
         services.AddSingleton<IApproverResolver, RoleApproverResolver>();
         services.AddSingleton<IApproverResolver, FormFieldApproverResolver>();
         services.AddSingleton<IApproverResolver, InitiatorApproverResolver>();
-
         services.AddScoped(sp => new ApprovalExtensionCatalog(
-            () => sp.GetServices<IApproverResolver>(),
-            () => sp.GetServices<IApprovalBusinessHandler>(),
-            () => options.NotificationTargets));
+            () => sp.GetServices<IApproverResolver>(), () => sp.GetServices<IApprovalBusinessHandler>(), () => options.NotificationTargets));
         services.AddScoped(sp => new ApprovalEngine(
-            sp.GetRequiredService<ApprovalDbContextAccessor>(),
-            sp.GetRequiredService<IApprovalIdentityProvider>(),
-            sp.GetRequiredService<ApprovalExtensionCatalog>(),
-            sp.GetRequiredService<IConditionEvaluator>(),
-            sp.GetRequiredService<ApprovalOptions>(),
-            sp.GetRequiredService<ApprovalOutboxSignal>(),
-            sp.GetRequiredService<TimeProvider>(),
-            sp.GetRequiredService<ILogger<ApprovalEngine>>(),
-            sp.GetService<IApprovalUserDirectory>())
-        {
-            DefinitionExtension = sp.GetService<IApprovalDefinitionExtension>(),
-            Lifecycle = sp.GetService<IApprovalLifecycleHandler>(),
-            UserStatus = sp.GetService<IApprovalUserStatusProvider>()
-        });
-        services.AddScoped<ApprovalQueryService>();
-        services.TryAddScoped<IApprovalAccessPolicy, DefaultApprovalAccessPolicy>();
+            sp.GetRequiredService<ApprovalDbContextAccessor>(), sp.GetRequiredService<IApprovalIdentityProvider>(),
+            sp.GetRequiredService<ApprovalExtensionCatalog>(), sp.GetRequiredService<IConditionEvaluator>(),
+            sp.GetRequiredService<ApprovalOptions>(), sp.GetRequiredService<ApprovalOutboxSignal>(),
+            sp.GetRequiredService<TimeProvider>(), sp.GetRequiredService<ILogger<ApprovalEngine>>(),
+            sp.GetService<IApprovalUserDirectory>(), sp.GetService<IApprovalDefinitionExtension>(),
+            sp.GetService<IApprovalLifecycleHandler>(), sp.GetService<IApprovalUserStatusProvider>()));
         services.AddScoped(sp => new ApprovalDefinitionService(
-            sp.GetRequiredService<ApprovalDbContextAccessor>(),
-            sp.GetRequiredService<ApprovalExtensionCatalog>(),
-            sp.GetRequiredService<TimeProvider>(), sp.GetRequiredService<ApprovalOptions>()) { DefinitionExtension = sp.GetService<IApprovalDefinitionExtension>() });
+            sp.GetRequiredService<ApprovalDbContextAccessor>(), sp.GetRequiredService<ApprovalExtensionCatalog>(),
+            sp.GetRequiredService<TimeProvider>(), sp.GetRequiredService<ApprovalOptions>(), sp.GetService<IApprovalDefinitionExtension>()));
+    }
+
+    private static void RegisterQuery(IServiceCollection services)
+    {
+        services.AddScoped<ApprovalQueryService>();
         services.AddScoped<ApprovalMessageService>();
         services.AddScoped<ApprovalCarbonCopyService>();
-        services.AddScoped(sp => new ApprovalOutboxService(
-            sp.GetRequiredService<ApprovalDbContextAccessor>(),
-            sp.GetRequiredService<ApprovalExtensionCatalog>(),
-            sp.GetRequiredService<ApprovalOptions>(),
-            sp.GetRequiredService<TimeProvider>(),
-            sp.GetRequiredService<ILogger<ApprovalOutboxService>>(),
-            sp.GetRequiredService<IApprovalScopeFactory>(),
-            sp.GetRequiredService<ApprovalOutboxSignal>())
-        {
-            EventHandler = options.Outbox.EnableDispatcher ? sp.GetRequiredService<IApprovalEventHandler>() : null
-        });
         services.AddScoped<ApprovalStatisticsService>();
         services.AddScoped<Approval.Core.Diagnostics.ApprovalDiagnosticsService>();
+    }
+
+    private static void RegisterBackground(IServiceCollection services, ApprovalOptions options)
+    {
+        services.AddScoped(sp => new ApprovalOutboxService(
+            sp.GetRequiredService<ApprovalDbContextAccessor>(), sp.GetRequiredService<ApprovalExtensionCatalog>(),
+            sp.GetRequiredService<ApprovalOptions>(), sp.GetRequiredService<TimeProvider>(), sp.GetRequiredService<ILogger<ApprovalOutboxService>>(),
+            sp.GetRequiredService<IApprovalScopeFactory>(), sp.GetRequiredService<ApprovalOutboxSignal>(),
+            options.Outbox.EnableDispatcher ? sp.GetRequiredService<IApprovalEventHandler>() : null));
         services.AddSingleton<Approval.Core.Diagnostics.ApprovalBackgroundState>();
         services.AddSingleton<ApprovalBackgroundRunner>();
-
         // 后台任务：注册为单例以便宿主 / 测试直接调用 DispatchOnceAsync、ScanOnceAsync
         services.AddSingleton<ApprovalOutboxSignal>();
         services.AddSingleton<ApprovalHostValidation>();
         services.AddHostedService(sp => sp.GetRequiredService<ApprovalHostValidation>());
-        services.AddSingleton(sp => new ApprovalOutboxDispatcher(sp.GetRequiredService<ApprovalBackgroundRunner>())
-        { ValidateHost = sp.GetRequiredService<ApprovalHostValidation>().ValidateAsync, Options = options });
+        services.AddSingleton(sp => new ApprovalOutboxDispatcher(sp.GetRequiredService<ApprovalBackgroundRunner>()) { ValidateHost = sp.GetRequiredService<ApprovalHostValidation>().ValidateAsync, Options = options });
         services.AddSingleton<ApprovalTimeoutScanner>();
         if (options.EnableBackgroundServices)
         {
             services.AddHostedService<ApprovalWorker>();
         }
-
-        return new ApprovalBuilder(services);
     }
 }
 
