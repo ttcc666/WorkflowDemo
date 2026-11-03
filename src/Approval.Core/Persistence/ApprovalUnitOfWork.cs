@@ -52,9 +52,9 @@ internal sealed class ApprovalUnitOfWork(DbContext db) : IApprovalUnitOfWork
             ?? throw new ApprovalException("结果实例不存在") { Code = ApprovalErrorCode.NotFound };
         Reference(instance.Id, instance.DefinitionId);
     }
-    internal IDisposable Extension(bool allowSave = false, Approval.Core.Domain.ApprovalInstance? prepared = null, bool prepareData = false)
+    internal IDisposable Extension(bool allowSave = false)
     {
-        var boundary = Writes.Enter(ApprovalWriteOwner.None, prepared, prepareData ? ["Title", "FormDataJson"] : ["Title"]);
+        var boundary = Writes.Enter(ApprovalWriteOwner.None);
         State.ExtensionCommitDepth++;
         if (!allowSave) State.ExtensionDepth++;
         return new OnDispose(() => { try { boundary.Dispose(); } finally { State.ExtensionCommitDepth--; if (!allowSave) State.ExtensionDepth--; } });

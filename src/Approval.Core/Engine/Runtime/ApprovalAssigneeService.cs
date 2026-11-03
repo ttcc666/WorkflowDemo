@@ -44,8 +44,8 @@ internal sealed class ApprovalAssigneeService(
     public async Task<List<Assignee>> ResolveRulesAsync(IEnumerable<ApproverRule> rules, ApprovalInstance instance, FlowNode node,
         IReadOnlyDictionary<string, object?> form, CancellationToken ct)
     {
-        var context = new ApproverResolveContext { Instance = instance,
-            Node = System.Text.Json.JsonSerializer.Deserialize<FlowNode>(System.Text.Json.JsonSerializer.Serialize(node))!, FormData = form };
+        var context = new ApproverResolveContext { Instance = ApprovalContextSnapshots.Instance(instance),
+            Node = ApprovalContextSnapshots.Node(node), FormData = form };
         var result = new List<Assignee>();
         foreach (var rule in rules)
         {

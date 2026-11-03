@@ -2,6 +2,10 @@
 
 ApprovalUnitOfWork 使用宿主注册的同一个 DbContext。本地业务、审批实例/任务、追加审计、操作记录和 Outbox 统一提交。任一操作失败会回滚事务并使该 scope 作废；宿主必须释放 scope，不能继续保存残留实体图。
 
+引擎每次调用创建独立 ApprovalOperationContext，保存本次 TaskId、自动推进步数、流程解析和运行态缓存；同一工作单元内的不同审批调用不会共享这些操作状态。事务级稳定 ID、固定定义和提交后回调仍由 UnitOfWork 管理。
+
+保存分三个时点：命令执行器先保存幂等键预约；Engine 的 FlushOperationAsync 在现有事务内保存实例运行态、任务和审计，使后续审批调用能查询到这些记录；最外层 UnitOfWork 最后保存宿主剩余变化及操作结果并 Commit。Engine 的 Flush 不提交事务；AfterCommit 只在最终 Commit 成功后唤醒 Outbox。提前保存和最终保存均保留，不因同一事务内出现多次 SaveChanges 而合并。
+
 命令包含 Kind、Scope、OperationId 和 Payload。执行器按操作人/命令类型/范围/键生成 LookupHash，保存 RequestHash、版本和结果 JSON。唯一索引在执行宿主委托前预约键，防止并发重复请求都执行成功。相同键与不同内容返回 Conflict；相同内容恢复原结果及绑定版本，并重新检查当前权限。
 
 数据库 COMMIT 之后发生异常时，用新上下文及独立超时核验记录。无法确认时返回 CommitOutcomeUnknown，客户端保留原键重试。不能把提交未知当成确定失败并换新键。完整委托由数据库执行策略重试，每次使用新 scope。

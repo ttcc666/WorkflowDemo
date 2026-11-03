@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using Approval.AspNetCore.Contracts;
+using Approval.Core.Abstractions;
 using Approval.Core.Domain;
 using Approval.Core.Engine;
 
@@ -17,7 +18,7 @@ public sealed class HttpResponseContractTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void Instance_response_preserves_v1_json_and_detaches_entities(bool nullValues)
+    public void Instance_response_preserves_v1_json_and_detaches_snapshots(bool nullValues)
     {
         var expected = Read("http-instance-v1.json");
         if (nullValues)
@@ -33,8 +34,10 @@ public sealed class HttpResponseContractTests
         expected["tasks"]![0]!["capabilities"] = new JsonObject();
         var response = ApprovalInstanceResponse.From(detail);
         AssertJson(expected, JsonSerializer.SerializeToNode(response, Json)!);
-        detail.Tasks[0].NodeName = "changed after projection";
-        detail.Logs[0].OperatorId = "another user";
+        var sourceTasks = (IList<ApprovalTaskContext>)detail.Tasks;
+        var sourceLogs = (IList<ApprovalLogContext>)detail.Logs;
+        sourceTasks[0] = sourceTasks[0] with { NodeName = "changed after projection" };
+        sourceLogs[0] = sourceLogs[0] with { OperatorId = "another user" };
         Assert.Equal("复审", response.Tasks[0].NodeName);
         Assert.Equal("bob", response.Logs[0].OperatorId);
     }

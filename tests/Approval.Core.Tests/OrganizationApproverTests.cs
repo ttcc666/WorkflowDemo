@@ -122,8 +122,8 @@ public sealed class OrganizationApproverTests : IAsyncLifetime
         Assert.Equal([("dave", ApprovalTaskStatus.Pending, 0)], await TasksAsync(instance.Id));
         var deep = await _host.RunAsync(sp => new ManagerChainApproverResolver(_host.Organization).ResolveAsync("10", new ApproverResolveContext
         {
-            Instance = new ApprovalInstance { DefinitionKey = "x", BusinessType = "x", BusinessKey = "x", InitiatorId = "alice" },
-            Node = new FlowNode(),
+            Instance = new ApprovalInstanceContext { DefinitionKey = "x", BusinessType = "x", BusinessKey = "x", InitiatorId = "alice" },
+            Node = new ApprovalNodeContext("", "", NodeType.Start, ApproveMode.Any),
             FormData = new Dictionary<string, object?>()
         }, CancellationToken.None));
         Assert.Equal(["dan", "dave"], deep.Select(a => a.Value));   // 遇到环截止，同一人只出现一次

@@ -13,9 +13,9 @@ public interface IApprovalDefinitionExtension
 /// <summary>可选模块或宿主按参与节点投影业务 JSON 与审计数据。</summary>
 public interface IApprovalDataProjection
 {
-    ApprovalDataView Project(FlowDefinition definition, ApprovalInstance instance, ApprovalAccess access);
+    ApprovalDataView Project(FlowDefinition definition, ApprovalDataProjectionContext context, ApprovalAccess access);
 }
-public sealed record ApprovalDataView(string DataJson, IReadOnlyList<ApprovalLog> Logs, IReadOnlyList<string> HiddenFields);
+public sealed record ApprovalDataView(string DataJson, IReadOnlyList<ApprovalLogContext> Logs, IReadOnlyList<string> HiddenFields);
 /// <summary>可选模块解析其拥有的资源，后续仍执行审批实例查询范围和能力检查。</summary>
 public interface IApprovalResourceResolver
 {

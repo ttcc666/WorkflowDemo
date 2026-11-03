@@ -56,7 +56,7 @@ internal sealed class ApprovalCommandExecutor<TContext>(IServiceScopeFactory sco
                 await auth.RequireAsync(ApprovalPermissions.InstanceRead, new() { InstanceId = id }, identity.ActorId, token);
                 var db = sp.GetRequiredService<TContext>();
                 var instance = await db.Set<ApprovalInstance>().AsNoTracking().SingleAsync(i => i.Id == id, token);
-                if (!(await sp.GetRequiredService<IApprovalAccessPolicy>().GetAccessAsync(new(identity.ActorId, false), instance, token)).CanView)
+                if (!(await sp.GetRequiredService<IApprovalAccessPolicy>().GetAccessAsync(new(identity.ActorId, false), ApprovalContextSnapshots.Instance(instance), token)).CanView)
                     throw new ApprovalException("无权读取原操作结果") { Code = ApprovalErrorCode.NotFound };
             }
             else await auth.Inner.RequireRecordedAsync(command.Permission, stored.Resource, token);

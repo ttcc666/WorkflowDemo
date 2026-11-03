@@ -35,5 +35,5 @@ public sealed record ApprovalAccess(ApprovalAccessLevel Level, IReadOnlySet<stri
 /// </summary>
 public interface IApprovalAccessPolicy
 {
-    Task<ApprovalAccess> GetAccessAsync(ApprovalViewer viewer, ApprovalInstance instance, CancellationToken ct);
+    Task<ApprovalAccess> GetAccessAsync(ApprovalViewer viewer, ApprovalInstanceContext instance, CancellationToken ct);
 }

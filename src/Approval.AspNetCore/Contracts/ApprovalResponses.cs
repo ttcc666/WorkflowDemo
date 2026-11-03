@@ -17,6 +17,8 @@ public sealed record ApprovalDefinitionResponse(
 {
     public static ApprovalDefinitionResponse From(ApprovalDefinition value) => new(
         value.Id, value.Key, value.Version, value.Name, value.DefinitionJson, value.IsPublished, value.CreatedAt);
+    public static ApprovalDefinitionResponse From(ApprovalDefinitionSnapshot value) => new(
+        value.Id, value.Key, value.Version, value.Name, value.DefinitionJson, value.IsPublished, value.CreatedAt);
 }
 
 /// <summary>ApprovalTask 的 HTTP 快照；保持既有 JSON 字段与 UTC 日期表示。</summary>
@@ -42,7 +44,7 @@ public sealed record ApprovalTaskResponse(
     DateTime? LastRemindedAt)
 {
     public IReadOnlyDictionary<string, bool> Capabilities { get; init; } = new Dictionary<string, bool>();
-    public static ApprovalTaskResponse From(ApprovalTask value) => new(
+    public static ApprovalTaskResponse From(ApprovalTaskContext value) => new(
         value.Id, value.InstanceId, value.NodeId, value.NodeName, value.AssigneeKind, value.Kind, value.ParentTaskId, value.Round, value.AssigneeValue, value.Status, value.Order, value.HandledBy, value.Comment, value.CreatedAt, value.CompletedAt, value.DueAt, value.NextRemindAt, value.RemindCount, value.LastRemindedAt);
 }
 
@@ -61,7 +63,7 @@ public sealed record ApprovalLogResponse(
 {
     [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
     public Guid? TaskId { get; init; }
-    public static ApprovalLogResponse From(ApprovalLog value) => new(
+    public static ApprovalLogResponse From(ApprovalLogContext value) => new(
         value.Id, value.InstanceId, value.Sequence, value.NodeId, value.NodeName, value.Action, value.OperatorId, value.Comment, value.Details, value.CreatedAt) { TaskId = value.TaskId };
 }
 

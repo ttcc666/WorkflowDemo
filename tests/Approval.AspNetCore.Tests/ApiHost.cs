@@ -72,8 +72,8 @@ public sealed class DocHandler : IApprovalBusinessHandler
 {
     public const string Type = "Doc";
     public string BusinessType => Type;
-    public Task OnApprovedAsync(ApprovalInstance instance, CancellationToken ct) => Task.CompletedTask;
-    public Task OnRejectedAsync(ApprovalInstance instance, CancellationToken ct) => Task.CompletedTask;
+    public Task OnApprovedAsync(ApprovalInstanceContext instance, CancellationToken ct) => Task.CompletedTask;
+    public Task OnRejectedAsync(ApprovalInstanceContext instance, CancellationToken ct) => Task.CompletedTask;
 }
 
 /// <summary>最小宿主：SQLite 内存库 + TestServer，不依赖示例项目。</summary>

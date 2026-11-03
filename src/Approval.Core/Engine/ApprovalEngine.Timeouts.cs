@@ -2,6 +2,7 @@ using Approval.Core.Abstractions;
 using Approval.Core.Definitions;
 using Approval.Core.Domain;
 using Approval.Core.Notifications;
+using Approval.Core.Engine.Runtime;
 
 namespace Approval.Core.Engine;
 
@@ -17,8 +18,9 @@ public sealed partial class ApprovalEngine
 
     private async Task<bool> HandleTimeoutAsyncCore(Guid taskId, CancellationToken ct = default)
     {
+        var operation = new ApprovalOperationContext();
         await _authorization.RequireAsync(Approval.Core.Abstractions.ApprovalPermissions.TaskTimeout, new() { TaskId = taskId }, null, ct);
-        var (instance, task, flow) = await LoadTaskAsync(taskId, ct);
+        var (instance, task, flow) = await LoadTaskAsync(operation, taskId, ct);
         if (instance.Status != InstanceStatus.Running || task.Status != ApprovalTaskStatus.Pending
             || task.NextRemindAt is not { } due || due > Now)
             return false;
@@ -28,7 +30,7 @@ public sealed partial class ApprovalEngine
         {
             // 发起后流程定义不会变化，这里只是防御：没有时限配置则不再处理
             task.NextRemindAt = null;
-            await CommitAsync(instance, ct);
+            await FlushOperationAsync(operation, instance, ct);
             return false;
         }
 
@@ -36,28 +38,28 @@ public sealed partial class ApprovalEngine
         var timeoutAction = _options.EnableAutomaticTimeoutDecisions ? policy.Action : TimeoutAction.Remind;
         task.RemindCount++;
         task.LastRemindedAt = Now;
-        await RaiseAsync(NotifyEvent.Timeout, instance, flow, node, new EventInfo([assignee]) { DueAt = task.DueAt }, ct,
+        await _events.RaiseAsync(operation, NotifyEvent.Timeout, instance, flow, node, new EventInfo([assignee]) { DueAt = task.DueAt }, ct,
             fallback: timeoutAction == TimeoutAction.Remind ? NotificationDefaults.TimeoutRule : null);
 
         switch (timeoutAction)
         {
             case TimeoutAction.AutoApprove:
-                await ApproveCoreAsync(instance, flow, task, SystemOperator, "超时自动同意", ApprovalAction.TimeoutApprove, ct);
+                await ApproveCoreAsync(operation, instance, flow, task, SystemOperator, "超时自动同意", ApprovalAction.TimeoutApprove, ct);
                 break;
 
             case TimeoutAction.AutoReject:
-                await RejectCoreAsync(instance, flow, task, SystemOperator, "超时自动驳回", ApprovalAction.TimeoutReject, ct);
+                await RejectCoreAsync(operation, instance, flow, task, SystemOperator, "超时自动驳回", ApprovalAction.TimeoutReject, ct);
                 break;
 
             default:
                 var repeat = policy.RepeatMinutes is > 0 && task.RemindCount < Math.Max(1, policy.MaxReminders);
                 task.NextRemindAt = repeat ? Now.AddMinutes(policy.RepeatMinutes!.Value) : null;
-                AddLog(instance, node, ApprovalAction.Remind, SystemOperator,
-                    $"超时提醒（第 {task.RemindCount} 次）：{Describe(assignee)}" + (repeat ? "" : "，不再提醒"));
+                _events.AddLog(operation, instance, node, ApprovalAction.Remind, SystemOperator,
+                    $"超时提醒（第 {task.RemindCount} 次）：{ApprovalEventWriter.Describe(assignee)}" + (repeat ? "" : "，不再提醒"));
                 break;
         }
 
-        await CommitAsync(instance, ct);
+        await FlushOperationAsync(operation, instance, ct);
         return true;
     }
 }

@@ -8,12 +8,11 @@ namespace Approval.Core.Tests;
 
 public sealed class DiscountLifecycle : IApprovalLifecycleHandler
 {
-    public Task OnStartingAsync(ApprovalInstance instance, CancellationToken ct)
+    public Task<ApprovalStartPreparation> OnStartingAsync(ApprovalInstanceContext instance, CancellationToken ct)
     {
         var form = JsonNode.Parse(instance.FormDataJson)!.AsObject();
         form["discounted"] = form["amount"]!.GetValue<decimal>() * 0.9m;
-        instance.FormDataJson = form.ToJsonString();
-        return Task.CompletedTask;
+        return Task.FromResult(new ApprovalStartPreparation(instance.Title, form.ToJsonString()));
     }
 }
 

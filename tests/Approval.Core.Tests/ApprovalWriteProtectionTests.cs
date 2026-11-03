@@ -187,7 +187,11 @@ public sealed class ApprovalWriteProtectionTests
         var taskId = Assert.Single((await host.GetInstanceAsync(id)).Tasks).Id;
         await Assert.ThrowsAsync<InvalidOperationException>(() => host.RunAsync(sp =>
             sp.GetRequiredService<Approval.Core.Engine.ApprovalEngine>().ApproveWithDataAsync(taskId, "bob", "real",
-                (_, task, _) => { task.AssigneeValue = "mallory"; return Task.FromResult<Approval.Core.Engine.ApprovalDataEdit?>(null); }, default)));
+                (_, task, _) =>
+                {
+                    sp.GetRequiredService<TestDbContext>().Set<ApprovalTask>().Local.Single(t => t.Id == task.Id).AssigneeValue = "mallory";
+                    return Task.FromResult<Approval.Core.Engine.ApprovalDataEdit?>(null);
+                }, default)));
         var instance = await host.GetInstanceAsync(id);
         Assert.Equal(InstanceStatus.Running, instance.Status);
         Assert.Equal("bob", Assert.Single(instance.Tasks).AssigneeValue);

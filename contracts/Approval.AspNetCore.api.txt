@@ -53,6 +53,7 @@ Approval.AspNetCore.ClaimsApprovalCurrentUser
 Approval.AspNetCore.Contracts.ApprovalDefinitionResponse
   Constructor Void .ctor(System.Guid, System.String, Int32, System.String, System.String, Boolean, System.DateTime) [args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull]
   Method Approval.AspNetCore.Contracts.ApprovalDefinitionResponse <Clone>$() [return=NotNull/NotNull; args=]
+  Method Approval.AspNetCore.Contracts.ApprovalDefinitionResponse From(Approval.Core.Abstractions.ApprovalDefinitionSnapshot) [return=NotNull/NotNull; args=NotNull/NotNull]
   Method Approval.AspNetCore.Contracts.ApprovalDefinitionResponse From(Approval.Core.Domain.ApprovalDefinition) [return=NotNull/NotNull; args=NotNull/NotNull]
   Method Boolean Equals(Approval.AspNetCore.Contracts.ApprovalDefinitionResponse) [return=NotNull/NotNull; args=Nullable/Nullable]
   Method Boolean Equals(System.Object) [return=NotNull/NotNull; args=Nullable/Nullable]
@@ -120,7 +121,7 @@ Approval.AspNetCore.Contracts.ApprovalInstanceResponse
 Approval.AspNetCore.Contracts.ApprovalLogResponse
   Constructor Void .ctor(System.Guid, System.Guid, Int32, System.String, System.String, Approval.Core.Domain.ApprovalAction, System.String, System.String, System.String, System.DateTime) [args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,Nullable/Nullable,Nullable/Nullable,NotNull/NotNull,NotNull/NotNull,Nullable/Nullable,Nullable/Nullable,NotNull/NotNull]
   Method Approval.AspNetCore.Contracts.ApprovalLogResponse <Clone>$() [return=NotNull/NotNull; args=]
-  Method Approval.AspNetCore.Contracts.ApprovalLogResponse From(Approval.Core.Domain.ApprovalLog) [return=NotNull/NotNull; args=NotNull/NotNull]
+  Method Approval.AspNetCore.Contracts.ApprovalLogResponse From(Approval.Core.Abstractions.ApprovalLogContext) [return=NotNull/NotNull; args=NotNull/NotNull]
   Method Boolean Equals(Approval.AspNetCore.Contracts.ApprovalLogResponse) [return=NotNull/NotNull; args=Nullable/Nullable]
   Method Boolean Equals(System.Object) [return=NotNull/NotNull; args=Nullable/Nullable]
   Method Int32 GetHashCode() [return=NotNull/NotNull; args=]
@@ -230,7 +231,7 @@ Approval.AspNetCore.Contracts.ApprovalStartedResponse
 Approval.AspNetCore.Contracts.ApprovalTaskResponse
   Constructor Void .ctor(System.Guid, System.Guid, System.String, System.String, Approval.Core.Domain.AssigneeKind, Approval.Core.Domain.ApprovalTaskKind, System.Nullable`1[System.Guid], Int32, System.String, Approval.Core.Domain.ApprovalTaskStatus, Int32, System.String, System.String, System.DateTime, System.Nullable`1[System.DateTime], System.Nullable`1[System.DateTime], System.Nullable`1[System.DateTime], Int32, System.Nullable`1[System.DateTime]) [args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,Nullable/Nullable,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,Nullable/Nullable,Nullable/Nullable,NotNull/NotNull,Nullable/Nullable,Nullable/Nullable,Nullable/Nullable,NotNull/NotNull,Nullable/Nullable]
   Method Approval.AspNetCore.Contracts.ApprovalTaskResponse <Clone>$() [return=NotNull/NotNull; args=]
-  Method Approval.AspNetCore.Contracts.ApprovalTaskResponse From(Approval.Core.Domain.ApprovalTask) [return=NotNull/NotNull; args=NotNull/NotNull]
+  Method Approval.AspNetCore.Contracts.ApprovalTaskResponse From(Approval.Core.Abstractions.ApprovalTaskContext) [return=NotNull/NotNull; args=NotNull/NotNull]
   Method Boolean Equals(Approval.AspNetCore.Contracts.ApprovalTaskResponse) [return=NotNull/NotNull; args=Nullable/Nullable]
   Method Boolean Equals(System.Object) [return=NotNull/NotNull; args=Nullable/Nullable]
   Method Int32 GetHashCode() [return=NotNull/NotNull; args=]
@@ -439,4 +440,4 @@ Approval.AspNetCore.IApprovalHttpUserDirectory
 Approval.AspNetCore.IApprovalTaskDataAdapter
   Method System.Threading.Tasks.Task ApproveAsync(System.Guid, System.String, System.Text.Json.JsonElement, System.String, System.Threading.CancellationToken) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,Nullable/Nullable,NotNull/NotNull]
   Method System.Threading.Tasks.Task ResubmitAsync(System.Guid, System.String, System.Nullable`1[System.Text.Json.JsonElement], System.String, System.Threading.CancellationToken) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull,Nullable/Nullable,Nullable/Nullable,NotNull/NotNull]
-  Method System.Threading.Tasks.Task`1[System.Collections.Generic.IReadOnlyList`1[System.String]] GetEditableFieldsAsync(Approval.Core.Domain.ApprovalTask, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull<NotNull/NotNull>>; args=NotNull/NotNull,NotNull/NotNull]
+  Method System.Threading.Tasks.Task`1[System.Collections.Generic.IReadOnlyList`1[System.String]] GetEditableFieldsAsync(Approval.Core.Abstractions.ApprovalTaskContext, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull<NotNull/NotNull>>; args=NotNull/NotNull,NotNull/NotNull]

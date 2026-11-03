@@ -21,10 +21,10 @@ Certificate.Api.Certificates.CertificateAccessPolicy
   Method Void EnsureCanManage(Certificate.Api.Certificates.CertificateEntity, Approval.Core.Abstractions.ApprovalViewer) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull]
 Certificate.Api.Certificates.CertificateApprovalHandler
   Constructor Void .ctor(Certificate.Api.Certificates.AppDbContext, System.TimeProvider, Certificate.Api.Certificates.CertificateDataValidator) [args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull]
-  Method System.Threading.Tasks.Task OnApprovedAsync(Approval.Core.Domain.ApprovalInstance, System.Threading.CancellationToken) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull]
-  Method System.Threading.Tasks.Task OnRejectedAsync(Approval.Core.Domain.ApprovalInstance, System.Threading.CancellationToken) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull]
-  Method System.Threading.Tasks.Task OnTerminatedAsync(Approval.Core.Domain.ApprovalInstance, System.Threading.CancellationToken) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull]
-  Method System.Threading.Tasks.Task OnWithdrawnAsync(Approval.Core.Domain.ApprovalInstance, System.Threading.CancellationToken) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull]
+  Method System.Threading.Tasks.Task OnApprovedAsync(Approval.Core.Abstractions.ApprovalInstanceContext, System.Threading.CancellationToken) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull]
+  Method System.Threading.Tasks.Task OnRejectedAsync(Approval.Core.Abstractions.ApprovalInstanceContext, System.Threading.CancellationToken) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull]
+  Method System.Threading.Tasks.Task OnTerminatedAsync(Approval.Core.Abstractions.ApprovalInstanceContext, System.Threading.CancellationToken) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull]
+  Method System.Threading.Tasks.Task OnWithdrawnAsync(Approval.Core.Abstractions.ApprovalInstanceContext, System.Threading.CancellationToken) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull]
   Property System.String BusinessType [NotNull/Unknown]
 Certificate.Api.Certificates.CertificateData
   Constructor Void .ctor(System.String, System.String, System.String, System.String, System.DateOnly, System.DateOnly) [args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull]

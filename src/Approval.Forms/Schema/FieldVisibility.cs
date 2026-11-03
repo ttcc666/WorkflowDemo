@@ -1,5 +1,6 @@
 using Approval.Core;
 using System.Text.Json.Nodes;
+using Approval.Core.Abstractions;
 using Approval.Core.Conditions;
 using Approval.Core.Definitions;
 using Approval.Core.Domain;
@@ -58,11 +59,11 @@ internal static class FieldVisibility
     }
 
     /// <summary>修改表单的轨迹去掉隐藏字段的差异并按剩余字段重写轨迹文本；修改的字段全部被隐藏时不返回该轨迹。</summary>
-    public static IReadOnlyList<ApprovalLog> FilterLogs(IReadOnlyList<ApprovalLog> logs, IReadOnlySet<string> hidden)
+    public static IReadOnlyList<ApprovalLogContext> FilterLogs(IReadOnlyList<ApprovalLogContext> logs, IReadOnlySet<string> hidden)
     {
         if (hidden.Count == 0) return logs;
 
-        var result = new List<ApprovalLog>(logs.Count);
+        var result = new List<ApprovalLogContext>(logs.Count);
         foreach (var log in logs)
         {
             if (log.Action != ApprovalAction.FormEdit || string.IsNullOrEmpty(log.Details) || JsonNode.Parse(log.Details) is not JsonArray changes)
@@ -74,19 +75,10 @@ internal static class FieldVisibility
             var visible = changes.Where(c => FieldOf(c) is not { } field || !hidden.Contains(field)).ToList();
             if (visible.Count == changes.Count) result.Add(log);
             else if (visible.Count > 0)
-                result.Add(new ApprovalLog
+                result.Add(log with
                 {
-                    TaskId = log.TaskId,
-                    Id = log.Id,
-                    InstanceId = log.InstanceId,
-                    Sequence = log.Sequence,
-                    NodeId = log.NodeId,
-                    NodeName = log.NodeName,
-                    Action = log.Action,
-                    OperatorId = log.OperatorId,
                     Comment = Summary(visible.Select(c => (c as JsonObject)?["label"]?.GetValue<string>() ?? FieldOf(c) ?? "")),
-                    Details = new JsonArray(visible.Select(c => c?.DeepClone()).ToArray()).ToJsonString(FormData.JsonOptions),
-                    CreatedAt = log.CreatedAt
+                    Details = new JsonArray(visible.Select(c => c?.DeepClone()).ToArray()).ToJsonString(FormData.JsonOptions)
                 });
         }
         return result;

@@ -42,8 +42,8 @@ public sealed record Assignee(AssigneeKind Kind, string Value);
 
 public sealed class ApproverResolveContext
 {
-    public required ApprovalInstance Instance { get; init; }
-    public required FlowNode Node { get; init; }
+    public required ApprovalInstanceContext Instance { get; init; }
+    public required ApprovalNodeContext Node { get; init; }
     public required IReadOnlyDictionary<string, object?> FormData { get; init; }
 }
 
@@ -120,12 +120,12 @@ public interface IApprovalBusinessHandler
 {
     string BusinessType { get; }
 
-    Task OnApprovedAsync(ApprovalInstance instance, CancellationToken ct);
+    Task OnApprovedAsync(ApprovalInstanceContext instance, CancellationToken ct);
 
-    Task OnRejectedAsync(ApprovalInstance instance, CancellationToken ct);
+    Task OnRejectedAsync(ApprovalInstanceContext instance, CancellationToken ct);
 
-    Task OnWithdrawnAsync(ApprovalInstance instance, CancellationToken ct) => Task.CompletedTask;
+    Task OnWithdrawnAsync(ApprovalInstanceContext instance, CancellationToken ct) => Task.CompletedTask;
 
     /// <summary>管理员终止流程。默认按驳回处理（关闭单据、解锁），需要区分时重写。</summary>
-    Task OnTerminatedAsync(ApprovalInstance instance, CancellationToken ct) => OnRejectedAsync(instance, ct);
+    Task OnTerminatedAsync(ApprovalInstanceContext instance, CancellationToken ct) => OnRejectedAsync(instance, ct);
 }

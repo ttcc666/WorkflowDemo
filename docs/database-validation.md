@@ -1,5 +1,15 @@
 # 数据库验证
 
+当前任务约定：数据库专项与多 Provider 验证通过 GitHub CLI / Actions 执行，本地不运行，也不启动 Docker。`.github/workflows/ci.yml` 的 databases job 使用 Ubuntu、固定镜像 digest，分别验证 MySql / SqlServer / PostgreSql；Windows verify job 同时执行 SQLite 和模型门禁。
+
+代码审查后推送工作分支，用 gh 核验本次提交及对应作业，不能拿其它 head 的历史绿色结果替代：
+
+```powershell
+gh run list --repo 'ttcc666/WorkflowDemo' --branch 'codex/backend-progressive-refactoring' --workflow 'ci.yml' --json 'databaseId,headSha,status,conclusion'
+```
+
+workflow 同时支持手动 `gh workflow run 'ci.yml' --repo 'ttcc666/WorkflowDemo' --ref 'codex/backend-progressive-refactoring'`。push 已触发同提交运行时优先复用，避免重复；完成后检查三种 Provider 作业及上传 TRX / manifest。
+
 第三轮新增必需病例 `ApprovalWriteProtection_RejectsHostTrackedBulkAndSqlButPreservesEngine`：在每个真实 Provider 的安装保护上下文拒绝宿主状态写入、日志删除、bulk 和原生 DML，并确认正常引擎审批成功。低层约束/旧数据构造使用明确的离线 storage fixture；安全病例始终使用正常宿主注册和 UseApproval，不使用测试写入豁免。
 
 支持 SQLite、SQL Server、PostgreSQL、MySQL。审批模型使用 UTC 转换、唯一键、外键和显式并发令牌；不同 provider 拥有各自宿主 Migration 链，禁止复用其他 provider 的 snapshot。

@@ -32,7 +32,7 @@ public sealed partial class ApprovalFormService
     /// <summary>保存草稿（draftId 为空时新建），返回保存后的草稿。</summary>
     public Task<ApprovalDraft> SaveDraftAsync(string userId, string key, Guid? draftId, JsonElement formData, string? comment,
         CancellationToken ct = default) =>
-        _unit.ExecuteCommandAsync(ApprovalWriteOwner.Forms, token => SaveDraftAsyncCore(userId, key, draftId, formData, comment, token), ct);
+        _bridge.ExecuteAsync(token => SaveDraftAsyncCore(userId, key, draftId, formData, comment, token), ct);
 
     private async Task<ApprovalDraft> SaveDraftAsyncCore(string userId, string key, Guid? draftId, JsonElement formData, string? comment,
         CancellationToken ct = default)
@@ -57,7 +57,7 @@ public sealed partial class ApprovalFormService
         {
             if (await _db.Set<ApprovalDraft>().CountAsync(d => d.UserId == userId, ct) >= MaxDraftsPerUser)
                 throw new ApprovalException($"草稿最多保存 {MaxDraftsPerUser} 份，请先删除不需要的草稿");
-            draft = new ApprovalDraft { Id = _unit.NewId("ApprovalFormService.Drafts"), UserId = userId, DefinitionKey = definition.Key, CreatedAt = now };
+            draft = new ApprovalDraft { Id = _bridge.NewId("ApprovalFormService.Drafts"), UserId = userId, DefinitionKey = definition.Key, CreatedAt = now };
             _db.Set<ApprovalDraft>().Add(draft);
         }
 
@@ -101,7 +101,7 @@ public sealed partial class ApprovalFormService
     }
 
     public Task DeleteDraftAsync(string userId, Guid id, CancellationToken ct = default) =>
-        _unit.ExecuteCommandAsync(ApprovalWriteOwner.Forms, token => DeleteDraftAsyncCore(userId, id, token), ct);
+        _bridge.ExecuteAsync(token => DeleteDraftAsyncCore(userId, id, token), ct);
 
     private async Task DeleteDraftAsyncCore(string userId, Guid id, CancellationToken ct = default)
     {

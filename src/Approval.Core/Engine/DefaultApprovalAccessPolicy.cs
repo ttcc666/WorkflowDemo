@@ -16,11 +16,11 @@ public class DefaultApprovalAccessPolicy(ApprovalDbContextAccessor accessor, IAp
 
     protected IApprovalIdentityProvider Identity { get; } = identity;
 
-    public virtual async Task<ApprovalAccess> GetAccessAsync(ApprovalViewer viewer, ApprovalInstance instance, CancellationToken ct)
+    public virtual async Task<ApprovalAccess> GetAccessAsync(ApprovalViewer viewer, ApprovalInstanceContext instance, CancellationToken ct)
     {
         viewer = await accessor.Authorization.ViewerAsync(viewer, instance.Id, ct);
-        instance = await Db.Set<ApprovalInstance>().AsNoTracking().SingleAsync(i => i.Id == instance.Id, ct);
-        if (viewer.IsAdmin || instance.InitiatorId == viewer.UserId) return ApprovalAccess.Full;
+        var actual = await Db.Set<ApprovalInstance>().AsNoTracking().SingleAsync(i => i.Id == instance.Id, ct);
+        if (viewer.IsAdmin || actual.InitiatorId == viewer.UserId) return ApprovalAccess.Full;
 
         var nodes = await GetParticipatedNodesAsync(viewer.UserId, instance.Id, ct);
         return nodes.Count == 0 ? ApprovalAccess.None : ApprovalAccess.Participant(nodes);

@@ -12,7 +12,7 @@ namespace Approval.Core.Tests;
 public sealed class AuditorAccessPolicy(ApprovalDbContextAccessor accessor, IApprovalIdentityProvider identity)
     : DefaultApprovalAccessPolicy(accessor, identity)
 {
-    public override async Task<ApprovalAccess> GetAccessAsync(ApprovalViewer viewer, ApprovalInstance instance, CancellationToken ct) =>
+    public override async Task<ApprovalAccess> GetAccessAsync(ApprovalViewer viewer, ApprovalInstanceContext instance, CancellationToken ct) =>
         await Identity.IsInRoleAsync(viewer.UserId, "Auditor", ct) ? ApprovalAccess.Full : await base.GetAccessAsync(viewer, instance, ct);
 }
 
@@ -139,7 +139,7 @@ public sealed class AccessControlTests : IAsyncLifetime
     {
         var instance = await _host.StartAsync("f", "B1", "alice");
 
-        Task<ApprovalDefinition?> Definition(string user) => _host.RunAsync(sp =>
+        Task<ApprovalDefinitionSnapshot?> Definition(string user) => _host.RunAsync(sp =>
             sp.GetRequiredService<ApprovalQueryService>().GetPublicDefinitionAsync(instance.Id, new ApprovalViewer(user, false)));
 
         Assert.Null(await Definition("outsider"));

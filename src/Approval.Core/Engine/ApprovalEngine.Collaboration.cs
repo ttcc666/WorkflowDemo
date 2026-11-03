@@ -3,6 +3,7 @@ using Approval.Core.Conditions;
 using Approval.Core.Definitions;
 using Approval.Core.Domain;
 using Approval.Core.Notifications;
+using Approval.Core.Engine.Runtime;
 
 namespace Approval.Core.Engine;
 
@@ -27,10 +28,11 @@ public sealed partial class ApprovalEngine
     /// <summary>当前用户处理该任务时可以退回到的节点：发起人，以及本实例已审批通过、位于当前节点上游的审批节点。</summary>
     public async Task<IReadOnlyList<ReturnTarget>> GetReturnTargetsAsync(Guid taskId, string userId, CancellationToken ct = default)
     {
+        var operation = new ApprovalOperationContext();
         await _authorization.RequireAsync(Approval.Core.Abstractions.ApprovalPermissions.TaskReturn, new() { TaskId = taskId }, userId, ct);
-        var (instance, task, flow) = await LoadTaskAsync(taskId, ct, write: false);
-        await EnsureCanHandleAsync(instance, task, userId, ct);
-        return ReturnTargetsOf(instance, flow, task)
+        var (instance, task, flow) = await LoadTaskAsync(operation, taskId, ct, write: false);
+        await EnsureCanHandleAsync(operation, instance, task, userId, ct);
+        return ReturnTargetsOf(operation, instance, flow, task)
             .Select(n => new ReturnTarget(n.Id, n.Name, n.Type == NodeType.Start))
             .ToList();
     }
@@ -44,24 +46,25 @@ public sealed partial class ApprovalEngine
 
     private async Task ReturnAsyncCore(Guid taskId, string userId, string comment, string targetNodeId, CancellationToken ct = default)
     {
+        var operation = new ApprovalOperationContext();
         await _authorization.RequireAsync(Approval.Core.Abstractions.ApprovalPermissions.TaskReturn, new() { TaskId = taskId }, userId, ct);
         if (string.IsNullOrWhiteSpace(comment)) throw new ApprovalException("退回必须填写意见");
 
-        var (instance, task, flow) = await LoadTaskAsync(taskId, ct);
-        await EnsureCanHandleAsync(instance, task, userId, ct);
-        var target = ReturnTargetsOf(instance, flow, task).FirstOrDefault(n => n.Id == targetNodeId)
+        var (instance, task, flow) = await LoadTaskAsync(operation, taskId, ct);
+        await EnsureCanHandleAsync(operation, instance, task, userId, ct);
+        var target = ReturnTargetsOf(operation, instance, flow, task).FirstOrDefault(n => n.Id == targetNodeId)
                      ?? throw new ApprovalException("不能退回到该节点：只能退回到已审批通过的上游节点或发起人");
 
-        await ReturnCoreAsync(instance, flow, task, userId, comment, target, ct);
-        await CommitAsync(instance, ct);
+        await ReturnCoreAsync(operation, instance, flow, task, userId, comment, target, ct);
+        await FlushOperationAsync(operation, instance, ct);
     }
 
-    private List<FlowNode> ReturnTargetsOf(ApprovalInstance instance, FlowDefinition flow, ApprovalTask task)
+    private List<FlowNode> ReturnTargetsOf(ApprovalOperationContext operation, ApprovalInstance instance, FlowDefinition flow, ApprovalTask task)
     {
         var node = flow.GetNode(task.NodeId);
         if (task.Kind == ApprovalTaskKind.Resubmit || node.Type != NodeType.Approval || !node.AllowReturn) return [];
 
-        var structure = StructureOf(flow);
+        var structure = operation.StructureOf(flow);
         var scope = structure.ScopeOf(node.Id);
         // 节点最近一次审批通过的时间，用于按经过的先后排序
         var passed = instance.Tasks
@@ -79,17 +82,17 @@ public sealed partial class ApprovalEngine
         return [flow.GetNode(flow.StartNodeId), .. candidates];
     }
 
-    private async Task ReturnCoreAsync(ApprovalInstance instance, FlowDefinition flow, ApprovalTask task, string userId, string comment,
+    private async Task ReturnCoreAsync(ApprovalOperationContext operation, ApprovalInstance instance, FlowDefinition flow, ApprovalTask task, string userId, string comment,
         FlowNode target, CancellationToken ct)
     {
         var node = flow.GetNode(task.NodeId);
         if (target.Type == NodeType.Start) instance.Status = InstanceStatus.Returned;
-        CompleteTask(task, ApprovalTaskStatus.Rejected, userId, comment);
-        AddLog(instance, node, ApprovalAction.Return, userId, $"退回到「{(target.Type == NodeType.Start ? "发起人" : target.Name)}」：{comment}");
+        _tasks.CompleteTask(task, ApprovalTaskStatus.Rejected, userId, comment);
+        _events.AddLog(operation, instance, node, ApprovalAction.Return, userId, $"退回到「{(target.Type == NodeType.Start ? "发起人" : target.Name)}」：{comment}");
 
         // 取消当前节点（含加签）的未完成任务；退出并行块时取消块内所有分支并清除合并计数
-        CancelOpenTasks(CurrentTasksOf(instance, node.Id));
-        var structure = StructureOf(flow);
+        _tasks.CancelOpenTasks(ApprovalTaskCoordinator.CurrentTasksOf(instance, node.Id));
+        var structure = operation.StructureOf(flow);
         var depth = structure.ScopeOf(target.Id).Count;
         var scope = structure.ScopeOf(node.Id);
         if (scope.Count > depth)
@@ -98,8 +101,8 @@ public sealed partial class ApprovalEngine
             bool InsideExited(string nodeId) =>
                 nodeId == exitedFork || structure.ScopeOf(nodeId) is var s && s.Count > depth && s[depth].ForkId == exitedFork;
 
-            CancelOpenTasks(instance.Tasks.Where(t => InsideExited(t.NodeId)));
-            var joins = StateOf(instance).Joins;
+            _tasks.CancelOpenTasks(instance.Tasks.Where(t => InsideExited(t.NodeId)));
+            var joins = operation.StateOf(instance).Joins;
             foreach (var fork in flow.Nodes.Values.Where(n => n.Type == NodeType.Parallel && InsideExited(n.Id)))
                 joins.Remove(structure.JoinOf(fork.Id));
         }
@@ -107,7 +110,7 @@ public sealed partial class ApprovalEngine
         instance.Round++;
         var toInitiator = target.Type == NodeType.Start;
         if (toInitiator) instance.Status = InstanceStatus.Returned;
-        await RaiseAsync(NotifyEvent.Returned, instance, flow, node,
+        await _events.RaiseAsync(operation, NotifyEvent.Returned, instance, flow, node,
             new EventInfo(toInitiator ? [new Assignee(AssigneeKind.User, instance.InitiatorId)] : [])
             {
                 OperatorId = userId,
@@ -117,11 +120,11 @@ public sealed partial class ApprovalEngine
 
         if (!toInitiator)
         {
-            await MoveToAsync(instance, flow, target.Id, ct);
+            await MoveToAsync(operation, instance, flow, target.Id, ct);
             return;
         }
 
-        AddTask(instance, new ApprovalTask
+        _tasks.AddTask(operation, instance, new ApprovalTask
         {
             Id = _unit.NewId("ApprovalEngine.Collaboration"),
             InstanceId = instance.Id,
@@ -142,26 +145,27 @@ public sealed partial class ApprovalEngine
 
     private async Task ResubmitAsyncCore(Guid taskId, string userId, string? comment = null, object? formData = null, CancellationToken ct = default)
     {
+        var operation = new ApprovalOperationContext();
         await _authorization.RequireAsync(Approval.Core.Abstractions.ApprovalPermissions.TaskResubmit, new() { TaskId = taskId }, userId, ct);
-        var (instance, task, flow) = await LoadTaskAsync(taskId, ct);
+        var (instance, task, flow) = await LoadTaskAsync(operation, taskId, ct);
         if (task.Kind != ApprovalTaskKind.Resubmit) throw new ApprovalException("该任务不是待重新提交的申请");
-        await EnsureCanHandleAsync(instance, task, userId, ct);
-        await ResubmitCoreAsync(instance, flow, task, userId, comment, formData, ct);
-        await CommitAsync(instance, ct);
+        await EnsureCanHandleAsync(operation, instance, task, userId, ct);
+        await ResubmitCoreAsync(operation, instance, flow, task, userId, comment, formData, ct);
+        await FlushOperationAsync(operation, instance, ct);
     }
 
-    private async Task ResubmitCoreAsync(ApprovalInstance instance, FlowDefinition flow, ApprovalTask task, string userId, string? comment,
+    private async Task ResubmitCoreAsync(ApprovalOperationContext operation, ApprovalInstance instance, FlowDefinition flow, ApprovalTask task, string userId, string? comment,
         object? formData, CancellationToken ct)
     {
         instance.Status = InstanceStatus.Running;
         if (formData is not null) instance.FormDataJson = SerializeData(formData);
-        CompleteTask(task, ApprovalTaskStatus.Approved, userId, comment);
+        _tasks.CompleteTask(task, ApprovalTaskStatus.Approved, userId, comment);
         var start = flow.GetNode(flow.StartNodeId);
-        AddLog(instance, start, ApprovalAction.Resubmit, userId, comment);
-        StateOf(instance).Joins.Clear();
-        await RaiseAsync(NotifyEvent.Resubmitted, instance, flow, start,
+        _events.AddLog(operation, instance, start, ApprovalAction.Resubmit, userId, comment);
+        operation.StateOf(instance).Joins.Clear();
+        await _events.RaiseAsync(operation, NotifyEvent.Resubmitted, instance, flow, start,
             new EventInfo([new Assignee(AssigneeKind.User, instance.InitiatorId)]) { OperatorId = userId, Comment = comment }, ct);
-        await MoveToAsync(instance, flow, start.Next!, ct);
+        await MoveToAsync(operation, instance, flow, start.Next!, ct);
     }
 
     // ───────────────────────── 加签 ─────────────────────────
@@ -174,6 +178,7 @@ public sealed partial class ApprovalEngine
     private async Task AddSignAsyncCore(Guid taskId, string userId, IReadOnlyList<string> userIds, AddSignMode mode, string? comment = null,
         CancellationToken ct = default)
     {
+        var operation = new ApprovalOperationContext();
         await _authorization.RequireAsync(Approval.Core.Abstractions.ApprovalPermissions.TaskAddSign, new() { TaskId = taskId }, userId, ct);
         var signers = userIds.Where(u => !string.IsNullOrWhiteSpace(u)).Select(u => u.Trim()).Distinct().ToList();
         if (signers.Count == 0) throw new ApprovalException("请选择加签人");
@@ -181,8 +186,8 @@ public sealed partial class ApprovalEngine
         foreach (var signer in signers) await EnsureActiveUserAsync(signer, ct);
         if (!Enum.IsDefined(mode)) throw new ApprovalException("无效的加签方式");
 
-        var (instance, task, flow) = await LoadTaskAsync(taskId, ct);
-        await EnsureCanHandleAsync(instance, task, userId, ct);
+        var (instance, task, flow) = await LoadTaskAsync(operation, taskId, ct);
+        await EnsureCanHandleAsync(operation, instance, task, userId, ct);
         var node = flow.GetNode(task.NodeId);
         if (task.Kind == ApprovalTaskKind.Resubmit || node.Type != NodeType.Approval) throw new ApprovalException("该任务不支持加签");
         if (!node.AllowAddSign) throw new ApprovalException("该节点不允许加签");
@@ -196,8 +201,8 @@ public sealed partial class ApprovalEngine
         }
         if (!_options.AllowInitiatorApprove && signers.Contains(instance.InitiatorId)) throw new ApprovalException("不能给发起人加签");
 
-        var nodeTasks = CurrentTasksOf(instance, node.Id);
-        var duplicated = signers.Where(u => OpenTasks(nodeTasks).Any(t => t.AssigneeKind == AssigneeKind.User && t.AssigneeValue == u)).ToList();
+        var nodeTasks = ApprovalTaskCoordinator.CurrentTasksOf(instance, node.Id);
+        var duplicated = signers.Where(u => ApprovalTaskCoordinator.OpenTasks(nodeTasks).Any(t => t.AssigneeKind == AssigneeKind.User && t.AssigneeValue == u)).ToList();
         if (duplicated.Count > 0) throw new ApprovalException($"{string.Join("、", duplicated)} 已是该节点的审批人");
 
         var (kind, label) = mode switch
@@ -215,16 +220,16 @@ public sealed partial class ApprovalEngine
                 task.NextRemindAt = null;
                 break;
             case AddSignMode.After:
-                CompleteTask(task, ApprovalTaskStatus.Approved, userId, comment);
+                _tasks.CompleteTask(task, ApprovalTaskStatus.Approved, userId, comment);
                 break;
         }
-        AddLog(instance, node, ApprovalAction.AddSign, userId,
+        _events.AddLog(operation, instance, node, ApprovalAction.AddSign, userId,
             $"{label}：{string.Join("、", signers)}" + (string.IsNullOrWhiteSpace(comment) ? "" : $"，{comment}"));
 
-        var dueAt = DueAtFor(node);
+        var dueAt = _tasks.DueAtFor(node);
         foreach (var signer in signers)
         {
-            AddTask(instance, new ApprovalTask
+            _tasks.AddTask(operation, instance, new ApprovalTask
             {
                 Id = _unit.NewId("ApprovalEngine.Collaboration"),
                 InstanceId = instance.Id,
@@ -244,31 +249,11 @@ public sealed partial class ApprovalEngine
         }
 
         var assignees = signers.Select(u => new Assignee(AssigneeKind.User, u)).ToList();
-        await RaiseAsync(NotifyEvent.Enter, instance, flow, node, new EventInfo(assignees) { DueAt = dueAt }, ct);
+        await _events.RaiseAsync(operation, NotifyEvent.Enter, instance, flow, node, new EventInfo(assignees) { DueAt = dueAt }, ct);
         if (mode == AddSignMode.After)
-            await RaiseAsync(NotifyEvent.Approved, instance, flow, node,
-                new EventInfo(PendingAssignees(CurrentTasksOf(instance, node.Id))) { OperatorId = userId, Comment = comment }, ct);
+            await _events.RaiseAsync(operation, NotifyEvent.Approved, instance, flow, node,
+                new EventInfo(ApprovalTaskCoordinator.PendingAssignees(ApprovalTaskCoordinator.CurrentTasksOf(instance, node.Id))) { OperatorId = userId, Comment = comment }, ct);
 
-        await CommitAsync(instance, ct);
-    }
-
-    /// <summary>parentId 下指定类型的加签任务是否都已同意。</summary>
-    private static bool AddSignChildrenDone(List<ApprovalTask> nodeTasks, Guid? parentId, ApprovalTaskKind kind) =>
-        parentId is not null && nodeTasks.Where(t => t.ParentTaskId == parentId && t.Kind == kind)
-            .All(t => t.Status == ApprovalTaskStatus.Approved);
-
-    /// <summary>前加签的加签人都同意后，恢复原任务为待处理并通知原审批人。</summary>
-    private async Task ResumeAfterBeforeSignAsync(ApprovalInstance instance, FlowDefinition flow, FlowNode node, List<ApprovalTask> nodeTasks,
-        Guid? parentId, CancellationToken ct)
-    {
-        var parent = nodeTasks.FirstOrDefault(t => t.Id == parentId);
-        if (parent is not { Status: ApprovalTaskStatus.Suspended } || !AddSignChildrenDone(nodeTasks, parentId, ApprovalTaskKind.AddSignBefore))
-            return;
-
-        parent.Status = ApprovalTaskStatus.Pending;
-        WriteEvent(instance, "TaskCreated", parent.NodeId, parent.NodeName, parent.Id, SystemOperator, null);
-        parent.DueAt = parent.NextRemindAt = DueAtFor(node);
-        var assignee = new Assignee(parent.AssigneeKind, parent.AssigneeValue);
-        await RaiseAsync(NotifyEvent.Enter, instance, flow, node, new EventInfo([assignee]) { DueAt = parent.DueAt }, ct);
+        await FlushOperationAsync(operation, instance, ct);
     }
 }

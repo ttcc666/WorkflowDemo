@@ -9,7 +9,7 @@ public static class ApprovalFormsModelBuilderExtensions
 {
     public static ModelBuilder ConfigureApprovalForms(this ModelBuilder modelBuilder, string tablePrefix = "Approval")
     {
-        ApprovalWriteAuthorization.RegisterForms(typeof(ApprovalDraft), typeof(ApprovalFile));
+        ApprovalFormsBridge.RegisterForms(typeof(ApprovalDraft), typeof(ApprovalFile));
         modelBuilder.Entity<ApprovalDraft>(b =>
         {
             b.ToTable($"{tablePrefix}Drafts");

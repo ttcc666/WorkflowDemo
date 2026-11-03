@@ -97,9 +97,9 @@ internal sealed class AtomicBusiness(AtomicContractContext db, AtomicFaults faul
 {
     public const string Type = "Atomic";
     public string BusinessType => Type;
-    public Task OnApprovedAsync(ApprovalInstance instance, CancellationToken ct)
+    public Task OnApprovedAsync(ApprovalInstanceContext instance, CancellationToken ct)
     { db.Add(new AtomicHostRecord { Id = Guid.NewGuid(), Value = 10 }); if (faults.FailCallback) throw new InvalidOperationException("business callback failed"); return Task.CompletedTask; }
-    public Task OnRejectedAsync(ApprovalInstance instance, CancellationToken ct) => Task.CompletedTask;
+    public Task OnRejectedAsync(ApprovalInstanceContext instance, CancellationToken ct) => Task.CompletedTask;
 }
 internal sealed class AtomicAction(AtomicContractContext db, AtomicFaults faults) : IApprovalEventHandler
 {

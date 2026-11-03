@@ -13,17 +13,21 @@ public sealed class CallbackFaults
 public sealed class WriteRecordCallback(TestDbContext db, CallbackFaults faults) : IApprovalLifecycleHandler, IApprovalEventHandler, IApprovalBusinessHandler
 {
     public string BusinessType => RecordingBusinessHandler.Type;
-    private async Task Write(ApprovalInstance? instance, CancellationToken ct)
+    private async Task Write(Guid? instanceId, CancellationToken ct)
     {
         db.Add(new TestRecord { Id = Guid.NewGuid(), Name = "R1" });
         if (faults.Mode == "save-then-fail") { await db.SaveChangesAsync(ct); throw new InvalidOperationException("保存后失败"); }
-        if (faults.Mode == "touch-then-fail") { instance!.Title = "被回调修改"; throw new InvalidOperationException("修改实例后失败"); }
+        if (faults.Mode == "touch-then-fail") { db.Set<ApprovalInstance>().Local.Single(i => i.Id == instanceId).Title = "被回调修改"; throw new InvalidOperationException("修改实例后失败"); }
         if (faults.Mode == "fail") throw new InvalidOperationException("回调失败");
     }
-    public Task OnStartingAsync(ApprovalInstance instance, CancellationToken ct) => faults.Starting ? Write(instance, ct) : Task.CompletedTask;
+    public async Task<ApprovalStartPreparation> OnStartingAsync(ApprovalInstanceContext instance, CancellationToken ct)
+    {
+        if (faults.Starting) await Write(instance.Id, ct);
+        return new(instance.Title, instance.FormDataJson);
+    }
     public Task HandleAsync(ApprovalEvent approvalEvent, CancellationToken ct) => !faults.Starting && !faults.Completing && approvalEvent.EventType == "Submit" ? Write(null, ct) : Task.CompletedTask;
-    public Task OnApprovedAsync(ApprovalInstance instance, CancellationToken ct) => faults.Completing ? Write(instance, ct) : Task.CompletedTask;
-    public Task OnRejectedAsync(ApprovalInstance instance, CancellationToken ct) => Task.CompletedTask;
+    public Task OnApprovedAsync(ApprovalInstanceContext instance, CancellationToken ct) => faults.Completing ? Write(instance.Id, ct) : Task.CompletedTask;
+    public Task OnRejectedAsync(ApprovalInstanceContext instance, CancellationToken ct) => Task.CompletedTask;
 }
 public sealed class ActionRollbackTests : IAsyncLifetime
 {

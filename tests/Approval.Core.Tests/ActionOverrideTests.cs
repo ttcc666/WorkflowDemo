@@ -10,11 +10,12 @@ public sealed class ActionOverrideTests
         """;
     private sealed class First : IApprovalLifecycleHandler
     {
-        public Task OnStartingAsync(ApprovalInstance instance, CancellationToken ct) => throw new InvalidOperationException("replaced handler must not run");
+        public Task<ApprovalStartPreparation> OnStartingAsync(ApprovalInstanceContext instance, CancellationToken ct) => throw new InvalidOperationException("replaced handler must not run");
     }
     private sealed class Last : IApprovalLifecycleHandler
     {
-        public Task OnStartingAsync(ApprovalInstance instance, CancellationToken ct) { instance.Title = "last"; return Task.CompletedTask; }
+        public Task<ApprovalStartPreparation> OnStartingAsync(ApprovalInstanceContext instance, CancellationToken ct) =>
+            Task.FromResult(new ApprovalStartPreparation("last", instance.FormDataJson));
     }
     [Fact]
     public async Task Last_registered_lifecycle_replaces_previous_handler()

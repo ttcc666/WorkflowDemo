@@ -125,12 +125,12 @@ public sealed class CertificateConcurrencyTests
     private sealed class FailingHandler(CertificateApprovalHandler real, Func<bool> fail) : IApprovalBusinessHandler
     {
         public string BusinessType => CertificateService.BusinessType;
-        public async Task OnApprovedAsync(ApprovalInstance instance, CancellationToken ct)
+        public async Task OnApprovedAsync(ApprovalInstanceContext instance, CancellationToken ct)
         {
             await real.OnApprovedAsync(instance, ct);
             if (fail()) throw new InvalidOperationException("模拟业务回调写回后失败");
         }
-        public Task OnRejectedAsync(ApprovalInstance instance, CancellationToken ct) => real.OnRejectedAsync(instance, ct);
+        public Task OnRejectedAsync(ApprovalInstanceContext instance, CancellationToken ct) => real.OnRejectedAsync(instance, ct);
     }
 }
 

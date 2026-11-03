@@ -1,5 +1,7 @@
 # 嵌入已有宿主
 
+2026-11-03 上下文重构改变了 C# 扩展签名，接入或升级时按 [上下文 API 迁移](backend-context-api-migration.md) 修改业务、resolver、准备和投影实现；HTTP JSON 与数据库模型保持不变。
+
 先 AddDbContext<TContext>，再 AddApprovalWorkflow<TContext>；TContext 可以继承 DbContext、IdentityDbContext 或自定义基类。OnModelCreating 先调用宿主 base，再 ConfigureApproval，可选 ConfigureApprovalForms，然后继续宿主自己的模型配置。
 
 DI 使用 EF ConfigureDbContext 安装 UseApproval 拦截器，不要求改写宿主继承结构。设计工厂或手动 new DbContext 时显式安装 UseApproval。不要覆盖或移除这些拦截器；已发布定义不可变、审计只追加、回调禁止自行提交和失败作用域不能复用的保护依赖它们。

@@ -2,6 +2,7 @@ using Approval.Core.Abstractions;
 using Approval.Core.Definitions;
 using Approval.Core.Domain;
 using Approval.Core.Persistence;
+using Approval.Core.Engine.Query;
 using Microsoft.EntityFrameworkCore;
 
 namespace Approval.Core.Engine;
@@ -57,8 +58,8 @@ public sealed record InstanceDetail(
     string FormDataJson,
     DateTime CreatedAt,
     DateTime? CompletedAt,
-    IReadOnlyList<ApprovalTask> Tasks,
-    IReadOnlyList<ApprovalLog> Logs,
+    IReadOnlyList<ApprovalTaskContext> Tasks,
+    IReadOnlyList<ApprovalLogContext> Logs,
     ApprovalAccessLevel Access,
     IReadOnlyList<string> HiddenFields)
 {
@@ -92,7 +93,7 @@ public sealed class ApprovalQueryService(
 {
     private readonly Approval.Core.Authorization.IApprovalAuthorization _authorization = accessor.Authorization;
     private readonly DbContext _db = accessor.Context;
-    private readonly Dictionary<Guid, FlowDefinition> _flows = [];
+    private readonly ApprovalInstanceReader _reader = new(accessor, accessPolicy, options, projection);
 
     /// <summary>我的待办：分配给我本人的任务 + 分配给我所在角色的任务，按到达时间排序。</summary>
     public async Task<PagedResult<TodoItem>> GetTodoAsync(string userId, TodoQuery? query = null, PageRequest? page = null,
@@ -193,85 +194,25 @@ public sealed class ApprovalQueryService(
     }
 
     /// <summary>审批详情（含任务与轨迹）。需要敏感数据读取权限，供宿主后台使用；接口请用 <see cref="GetInstanceForViewerAsync"/>。</summary>
-    public async Task<ApprovalInstance?> GetInstanceAsync(Guid instanceId, CancellationToken ct = default)
-    {
-        await _authorization.RequireAsync(Approval.Core.Abstractions.ApprovalPermissions.InstanceReadSensitive, new() { InstanceId = instanceId }, null, ct);
-        return await WithDetails().FirstOrDefaultAsync(i => i.Id == instanceId, ct);
-    }
+    public Task<InstanceDetail?> GetInstanceAsync(Guid instanceId, CancellationToken ct = default) =>
+        _reader.GetInstanceAsync(instanceId, ct);
 
     /// <summary>某业务单据的全部审批记录（驳回后重新发起会有多条）。需要敏感数据读取权限，并应用宿主查询范围。</summary>
-    public async Task<List<ApprovalInstance>> GetByBusinessAsync(string businessType, string businessKey, CancellationToken ct = default)
-    {
-        await _authorization.RequireAsync(Approval.Core.Abstractions.ApprovalPermissions.InstanceReadSensitive, new() { BusinessType = businessType, BusinessKey = businessKey }, null, ct);
-        var candidates = await (await _authorization.ScopeAsync(WithDetails(), ct))
-            .Where(i => i.BusinessType == businessType && i.BusinessKey == businessKey)
-            .OrderByDescending(i => i.CreatedAt)
-            .ToListAsync(ct);
-        return candidates.Where(i => i.BusinessType == businessType && i.BusinessKey == businessKey).ToList();
-    }
+    public Task<List<InstanceDetail>> GetByBusinessAsync(string businessType, string businessKey, CancellationToken ct = default) =>
+        _reader.GetByBusinessAsync(businessType, businessKey, ct);
 
     /// <summary>按查看者权限返回审批详情；不存在或无权查看时返回 null（接口统一返回 404）。</summary>
-    public async Task<InstanceDetail?> GetInstanceForViewerAsync(Guid instanceId, ApprovalViewer viewer, CancellationToken ct = default) =>
-        await WithDetails().FirstOrDefaultAsync(i => i.Id == instanceId, ct) is { } instance ? await ToDetailAsync(instance, viewer, ct) : null;
+    public Task<InstanceDetail?> GetInstanceForViewerAsync(Guid instanceId, ApprovalViewer viewer, CancellationToken ct = default) =>
+        _reader.GetInstanceForViewerAsync(instanceId, viewer, ct);
 
     /// <summary>某业务单据的审批记录，只返回查看者有权查看的。</summary>
-    public async Task<List<InstanceDetail>> GetByBusinessForViewerAsync(string businessType, string businessKey, ApprovalViewer viewer,
-        CancellationToken ct = default)
-    {
-        await _authorization.RequireAsync(Approval.Core.Abstractions.ApprovalPermissions.InstanceRead, new() { BusinessType = businessType, BusinessKey = businessKey }, viewer.UserId, ct);
-        var result = new List<InstanceDetail>();
-        foreach (var instance in await (await _authorization.ScopeAsync(WithDetails(), ct)).Where(i => i.BusinessType == businessType && i.BusinessKey == businessKey).ToListAsync(ct))
-        {
-            if (instance.BusinessType != businessType || instance.BusinessKey != businessKey) continue;
-            if (await ToDetailAsync(instance, viewer, ct) is { } detail) result.Add(detail);
-        }
-        return result;
-    }
+    public Task<List<InstanceDetail>> GetByBusinessForViewerAsync(string businessType, string businessKey, ApprovalViewer viewer,
+        CancellationToken ct = default) =>
+        _reader.GetByBusinessForViewerAsync(businessType, businessKey, viewer, ct);
 
     /// <summary>实例绑定版本的流程定义公开视图（见 <see cref="FlowDefinition.ToPublicView"/>）；无权查看实例时返回 null。</summary>
-    public async Task<ApprovalDefinition?> GetPublicDefinitionAsync(Guid instanceId, ApprovalViewer viewer, CancellationToken ct = default)
-    {
-        await _authorization.RequireAsync(Approval.Core.Abstractions.ApprovalPermissions.InstanceRead, new() { InstanceId = instanceId }, viewer.UserId, ct);
-        viewer = await _authorization.ViewerAsync(viewer, instanceId, ct);
-        var instance = await _db.Set<ApprovalInstance>().AsNoTracking().FirstOrDefaultAsync(i => i.Id == instanceId, ct);
-        if (instance is null || !(await accessPolicy.GetAccessAsync(viewer, instance, ct)).CanView) return null;
-
-        // 未跟踪的实体，替换 JSON 不会写回数据库
-        var definition = await _db.Set<ApprovalDefinition>().AsNoTracking().FirstAsync(d => d.Id == instance.DefinitionId, ct);
-        definition.DefinitionJson = FlowDefinition.Parse(definition.DefinitionJson).ToPublicView().ToJson();
-        return definition;
-    }
-
-    private async Task<InstanceDetail?> ToDetailAsync(ApprovalInstance instance, ApprovalViewer viewer, CancellationToken ct)
-    {
-        await _authorization.RequireAsync(Approval.Core.Abstractions.ApprovalPermissions.InstanceRead, new() { InstanceId = instance.Id }, viewer.UserId, ct);
-        viewer = await _authorization.ViewerAsync(viewer, instance.Id, ct);
-        var access = await accessPolicy.GetAccessAsync(viewer, instance, ct);
-        if (!access.CanView) return null;
-
-        // 参与人：在其参与的节点都设为隐藏的字段不返回（表单数据、修改轨迹中的字段差异）
-        var flow = await FlowOfAsync(instance.DefinitionId, ct);
-        if (flow.Form is not null && projection is null)
-            throw new ApprovalException("缺少快照模块的数据可见性适配器") { Code = ApprovalErrorCode.InvalidDefinition };
-        var data = projection?.Project(flow, instance, access) ?? new ApprovalDataView(instance.FormDataJson, instance.Logs, []);
-
-        return new InstanceDetail(instance.Id, instance.DefinitionId, instance.DefinitionKey, instance.DefinitionVersion, instance.BusinessType,
-            instance.BusinessKey, instance.Title, instance.InitiatorId, instance.Status, instance.CurrentNodeId, instance.Round,
-            data.DataJson, instance.CreatedAt, instance.CompletedAt, instance.Tasks,
-            data.Logs, access.Level, data.HiddenFields)
-        {
-            CanWithdraw = ApprovalEngine.CanWithdraw(instance, viewer.UserId, options)
-                && await _authorization.CanAsync(ApprovalPermissions.InstanceWithdraw, new() { InstanceId = instance.Id }, viewer.UserId, ct)
-        };
-    }
-
-    /// <summary>实例绑定版本的流程定义（同一请求内按定义 ID 缓存，按业务查询多条记录时只解析一次）。</summary>
-    private async Task<FlowDefinition> FlowOfAsync(Guid definitionId, CancellationToken ct)
-    {
-        if (_flows.TryGetValue(definitionId, out var flow)) return flow;
-        var definition = await _db.Set<ApprovalDefinition>().AsNoTracking().FirstAsync(d => d.Id == definitionId, ct);
-        return _flows[definitionId] = FlowDefinition.Parse(definition.DefinitionJson);
-    }
+    public Task<ApprovalDefinitionSnapshot?> GetPublicDefinitionAsync(Guid instanceId, ApprovalViewer viewer, CancellationToken ct = default) =>
+        _reader.GetPublicDefinitionAsync(instanceId, viewer, ct);
 
     /// <summary>用户可处理的待办任务：分配给本人或所在角色、流程进行中；不允许自审时排除自己发起的（重新提交任务除外）。</summary>
     private IQueryable<ApprovalTask> TodoTasks(string userId, List<string> roles)
@@ -335,10 +276,4 @@ public sealed class ApprovalQueryService(
     }
 
     private static string? Trim(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
-
-    private IQueryable<ApprovalInstance> WithDetails() =>
-        _db.Set<ApprovalInstance>().AsNoTracking()
-            .Include(i => i.Tasks.OrderBy(t => t.CreatedAt).ThenBy(t => t.Order))
-            .Include(i => i.Logs.OrderBy(l => l.Sequence))
-            .AsSplitQuery();
 }

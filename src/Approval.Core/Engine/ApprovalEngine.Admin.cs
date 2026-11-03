@@ -2,6 +2,7 @@ using Approval.Core.Abstractions;
 using Approval.Core.Definitions;
 using Approval.Core.Domain;
 using Approval.Core.Persistence;
+using Approval.Core.Engine.Runtime;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -22,6 +23,7 @@ public sealed partial class ApprovalEngine
 
     private async Task TerminateAsyncCore(Guid instanceId, string operatorId, string reason, CancellationToken ct = default)
     {
+        var operation = new ApprovalOperationContext();
         await _authorization.RequireAsync(Approval.Core.Abstractions.ApprovalPermissions.InstanceTerminate, new() { InstanceId = instanceId }, operatorId, ct);
         if (string.IsNullOrWhiteSpace(reason)) throw new ApprovalException("终止流程必须填写原因");
 
@@ -31,14 +33,14 @@ public sealed partial class ApprovalEngine
             ?? throw new ApprovalException("流程不存在") { Code = ApprovalErrorCode.NotFound };
         if (instance.Status is not (InstanceStatus.Running or InstanceStatus.Returned)) throw new ApprovalException("流程已结束，无法终止");
 
-        var flow = await LoadFlowAsync(instance, ct);
-        var node = OpenTasks(instance).Select(t => flow.Nodes.GetValueOrDefault(t.NodeId)).FirstOrDefault(n => n is not null);
+        var flow = await LoadFlowAsync(operation, instance, ct);
+        var node = ApprovalTaskCoordinator.OpenTasks(instance).Select(t => flow.Nodes.GetValueOrDefault(t.NodeId)).FirstOrDefault(n => n is not null);
         Touch(instance);
-        AddLog(instance, node, ApprovalAction.Terminate, operatorId, reason);
-        CancelOpenTasks(instance.Tasks);
-        await FinishAsync(instance, flow, node, InstanceStatus.Terminated, new EventInfo([]) { OperatorId = operatorId, Comment = reason }, ct);
+        _events.AddLog(operation, instance, node, ApprovalAction.Terminate, operatorId, reason);
+        _tasks.CancelOpenTasks(instance.Tasks);
+        await FinishAsync(operation, instance, flow, node, InstanceStatus.Terminated, new EventInfo([]) { OperatorId = operatorId, Comment = reason }, ct);
 
-        await CommitAsync(instance, ct);
+        await FlushOperationAsync(operation, instance, ct);
     }
 
     /// <summary>
@@ -50,14 +52,15 @@ public sealed partial class ApprovalEngine
 
     private async Task ReassignAsyncCore(Guid taskId, string operatorId, string toUserId, string? reason = null, CancellationToken ct = default)
     {
+        var operation = new ApprovalOperationContext();
         await _authorization.RequireAsync(Approval.Core.Abstractions.ApprovalPermissions.TaskReassign, new() { TaskId = taskId }, operatorId, ct);
         toUserId = toUserId?.Trim() ?? "";
         await EnsureActiveUserAsync(toUserId, ct);
-        var (instance, task, flow) = await LoadTaskAsync(taskId, ct);
+        var (instance, task, flow) = await LoadTaskAsync(operation, taskId, ct);
         if (await ReassignErrorAsync(instance, task, flow, toUserId, reason, ct) is { } error) throw new ApprovalException(error);
 
-        await ReassignCoreAsync(instance, flow, task, operatorId, toUserId, reason, ct);
-        await CommitAsync(instance, ct);
+        await ReassignCoreAsync(operation, instance, flow, task, operatorId, toUserId, reason, ct);
+        await FlushOperationAsync(operation, instance, ct);
     }
 
     /// <summary>
@@ -132,17 +135,18 @@ public sealed partial class ApprovalEngine
 
     private async Task<ReassignResult> ReassignBatchInstanceAsync(Guid instanceId, string fromUserId, string toUserId, string operatorId, string? reason, CancellationToken ct)
     {
+        var operation = new ApprovalOperationContext();
         using var authority = _unit.Writes.Enter(ApprovalWriteOwner.Engine);
         var instance = await _db.Set<ApprovalInstance>().Include(i => i.Tasks).FirstAsync(i => i.Id == instanceId, ct);
-        var flow = await LoadFlowAsync(instance, ct); var skipped = new List<ReassignSkip>(); var count = 0;
-        foreach (var task in instance.Tasks.Where(t => t.AssigneeKind == AssigneeKind.User && t.AssigneeValue == fromUserId && IsOpen(t)).OrderBy(t => t.CreatedAt).ToList())
+        var flow = await LoadFlowAsync(operation, instance, ct); var skipped = new List<ReassignSkip>(); var count = 0;
+        foreach (var task in instance.Tasks.Where(t => t.AssigneeKind == AssigneeKind.User && t.AssigneeValue == fromUserId && ApprovalTaskCoordinator.IsOpen(t)).OrderBy(t => t.CreatedAt).ToList())
         {
             var error = !await _authorization.CanAsync(ApprovalPermissions.TaskReassign, new() { TaskId = task.Id }, operatorId, ct)
                 ? "没有改派此任务的权限" : await ReassignErrorAsync(instance, task, flow, toUserId, reason, ct);
             if (error is not null) { skipped.Add(new(task.Id, instance.Id, instance.Title, task.NodeName, error)); continue; }
-            await ReassignCoreAsync(instance, flow, task, operatorId, toUserId, reason, ct); count++;
+            await ReassignCoreAsync(operation, instance, flow, task, operatorId, toUserId, reason, ct); count++;
         }
-        if (count > 0) { Touch(instance); await CommitAsync(instance, ct); }
+        if (count > 0) { Touch(instance); await FlushOperationAsync(operation, instance, ct); }
         return new(count, skipped);
     }
 
@@ -151,12 +155,12 @@ public sealed partial class ApprovalEngine
         string toUserId, string? reason, CancellationToken ct)
     {
         if (instance.Status is not (InstanceStatus.Running or InstanceStatus.Returned)) return "流程已结束";
-        if (!IsOpen(task)) return "任务已处理";
+        if (!ApprovalTaskCoordinator.IsOpen(task)) return "任务已处理";
         if (task.Kind == ApprovalTaskKind.Resubmit) return "退回发起人的申请不能改派";
         if (toUserId.Length == 0) return "请选择改派对象";
         if (task.AssigneeKind == AssigneeKind.User && task.AssigneeValue == toUserId) return "对方已是该任务的处理人";
         if (!_options.AllowInitiatorApprove && toUserId == instance.InitiatorId) return "不能改派给发起人（不允许审批自己的申请）";
-        if (OpenTasks(CurrentTasksOf(instance, task.NodeId))
+        if (ApprovalTaskCoordinator.OpenTasks(ApprovalTaskCoordinator.CurrentTasksOf(instance, task.NodeId))
             .Any(t => t.Id != task.Id && t.AssigneeKind == AssigneeKind.User && t.AssigneeValue == toUserId))
             return "对方已是该节点的审批人";
         var node = flow.GetNode(task.NodeId);
@@ -168,54 +172,20 @@ public sealed partial class ApprovalEngine
         return null;
     }
 
-    private async Task ReassignCoreAsync(ApprovalInstance instance, FlowDefinition flow, ApprovalTask task, string operatorId, string toUserId,
+    private async Task ReassignCoreAsync(ApprovalOperationContext operation, ApprovalInstance instance, FlowDefinition flow, ApprovalTask task, string operatorId, string toUserId,
         string? reason, CancellationToken ct)
     {
         await EnsureActiveUserAsync(toUserId, ct);
-        _operationTaskId = task.Id;
-        var from = Describe(new Assignee(task.AssigneeKind, task.AssigneeValue));
-        var handed = HandOver(instance, task, toUserId, operatorId, reason);
-        AddLog(instance, ApprovalAction.Reassign, operatorId,
+        operation.TaskId = task.Id;
+        var from = ApprovalEventWriter.Describe(new Assignee(task.AssigneeKind, task.AssigneeValue));
+        var handed = _tasks.HandOver(operation, instance, task, toUserId, operatorId, reason);
+        _events.AddLog(operation, instance, ApprovalAction.Reassign, operatorId,
             $"改派：{from} → {toUserId}" + (string.IsNullOrWhiteSpace(reason) ? "" : $"，{reason}"), task.NodeId, task.NodeName);
 
         // 尚未轮到 / 等待加签的任务在激活时再通知
         if (handed.Status != ApprovalTaskStatus.Pending) return;
         var target = new Assignee(AssigneeKind.User, toUserId);
-        await RaiseAsync(NotifyEvent.Transferred, instance, flow, flow.GetNode(task.NodeId),
+        await _events.RaiseAsync(operation, NotifyEvent.Transferred, instance, flow, flow.GetNode(task.NodeId),
             new EventInfo([target]) { OperatorId = operatorId, Comment = reason, TransferTo = toUserId, DueAt = handed.DueAt }, ct);
-    }
-
-    /// <summary>
-    /// 把任务交给另一位用户（转交、改派）：原任务标记为已转交，生成新任务；保留状态、时限与提醒进度（避免通过转交拖延），
-    /// 加签关系跟随新任务。
-    /// </summary>
-    private ApprovalTask HandOver(ApprovalInstance instance, ApprovalTask task, string toUserId, string handledBy, string? comment)
-    {
-        var status = task.Status;
-        var nextRemindAt = task.NextRemindAt;
-        CompleteTask(task, ApprovalTaskStatus.Transferred, handledBy, comment);
-
-        var handed = new ApprovalTask
-        {
-            Id = _unit.NewId("ApprovalEngine.Admin"),
-            InstanceId = instance.Id,
-            NodeId = task.NodeId,
-            NodeName = task.NodeName,
-            AssigneeKind = AssigneeKind.User,
-            AssigneeValue = toUserId,
-            Kind = task.Kind,
-            ParentTaskId = task.ParentTaskId,
-            Round = task.Round,
-            Order = task.Order,
-            Status = status,
-            CreatedAt = Now,
-            DueAt = task.DueAt,
-            NextRemindAt = nextRemindAt,
-            RemindCount = task.RemindCount,
-            LastRemindedAt = task.LastRemindedAt
-        };
-        AddTask(instance, handed);
-        foreach (var child in instance.Tasks.Where(t => t.ParentTaskId == task.Id)) child.ParentTaskId = handed.Id;
-        return handed;
     }
 }

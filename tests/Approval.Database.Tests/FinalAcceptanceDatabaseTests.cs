@@ -9,11 +9,11 @@ namespace Approval.Database.Tests;
 
 internal sealed class FinalSyncAction(AtomicContractContext db, AtomicFaults faults) : IApprovalLifecycleHandler
 {
-    public Task OnStartingAsync(ApprovalInstance instance, CancellationToken ct)
+    public Task<ApprovalStartPreparation> OnStartingAsync(ApprovalInstanceContext instance, CancellationToken ct)
     {
         db.Add(new AtomicHostRecord { Id = Guid.NewGuid(), Value = 20 });
         if (faults.FailCallback) throw new InvalidOperationException("controlled synchronous action failure");
-        return Task.CompletedTask;
+        return Task.FromResult(new ApprovalStartPreparation(instance.Title, instance.FormDataJson));
     }
 }
 public sealed partial class DatabaseContractTests

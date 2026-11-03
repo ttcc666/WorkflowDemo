@@ -93,20 +93,20 @@ public sealed class RecordingBusinessHandler : IApprovalBusinessHandler
 
     public string BusinessType => Type;
 
-    public Task OnApprovedAsync(ApprovalInstance instance, CancellationToken ct)
+    public Task OnApprovedAsync(ApprovalInstanceContext instance, CancellationToken ct)
     {
         if (FailOnApproved) throw new InvalidOperationException("业务回调失败");
         Calls.Add(("Approved", instance.BusinessKey));
         return Task.CompletedTask;
     }
 
-    public Task OnRejectedAsync(ApprovalInstance instance, CancellationToken ct)
+    public Task OnRejectedAsync(ApprovalInstanceContext instance, CancellationToken ct)
     {
         Calls.Add(("Rejected", instance.BusinessKey));
         return Task.CompletedTask;
     }
 
-    public Task OnWithdrawnAsync(ApprovalInstance instance, CancellationToken ct)
+    public Task OnWithdrawnAsync(ApprovalInstanceContext instance, CancellationToken ct)
     {
         Calls.Add(("Withdrawn", instance.BusinessKey));
         return Task.CompletedTask;
@@ -258,7 +258,9 @@ public sealed class TestHost : IAsyncDisposable
             new StartApprovalRequest(key, RecordingBusinessHandler.Type, businessKey, initiator) { FormData = form, Title = $"证书 {businessKey}" }));
 
     public Task<ApprovalInstance> GetInstanceAsync(Guid id) =>
-        RunAsync(async sp => (await sp.GetRequiredService<ApprovalQueryService>().GetInstanceAsync(id))!);
+        RunAsync(async sp => await sp.GetRequiredService<TestDbContext>().Set<ApprovalInstance>().AsNoTracking()
+            .Include(i => i.Tasks.OrderBy(t => t.CreatedAt).ThenBy(t => t.Order))
+            .Include(i => i.Logs.OrderBy(l => l.Sequence)).AsSplitQuery().SingleAsync(i => i.Id == id));
 
     public async Task<List<TodoItem>> TodoAsync(string userId) =>
         (await RunAsync(sp => sp.GetRequiredService<ApprovalQueryService>().GetTodoAsync(userId, page: new PageRequest(1, PageRequest.MaxPageSize))))

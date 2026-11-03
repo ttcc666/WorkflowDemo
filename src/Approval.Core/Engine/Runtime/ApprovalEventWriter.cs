@@ -4,31 +4,102 @@ using Approval.Core.Conditions;
 using Approval.Core.Definitions;
 using Approval.Core.Domain;
 using Approval.Core.Notifications;
+using Approval.Core.Persistence;
 using Approval.Core.Templates;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
-namespace Approval.Core.Engine;
+namespace Approval.Core.Engine.Runtime;
 
-// 通知：按流程定义中的通知规则生成站内信与 Outbox 消息，与审批数据在同一事务中保存
-public sealed partial class ApprovalEngine
+/// <summary>一次事件的上下文：事件对应的“当前审批人”及模板变量。</summary>
+internal sealed record EventInfo(IReadOnlyList<Assignee> Assignees)
 {
-    private bool _outboxWritten;
+    public string? OperatorId { get; init; }
+    public string? Comment { get; init; }
+    public string? TransferTo { get; init; }
+    public DateTime? DueAt { get; init; }
+    public string? ReturnTo { get; init; }
+}
 
-    /// <summary>一次事件的上下文：事件对应的“当前审批人”及模板变量。</summary>
-    private sealed record EventInfo(IReadOnlyList<Assignee> Assignees)
+/// <summary>追加审批审计、可靠事件、站内消息及通知 Outbox；持久化由调用方的工作单元拥有。</summary>
+internal sealed class ApprovalEventWriter(
+    DbContext db, ApprovalUnitOfWork unit, IApprovalIdentityProvider identity, ApprovalAssigneeService assignees,
+    IReadOnlySet<string> channels, ApprovalOptions options, ApprovalDisplaySettings displaySettings,
+    TimeProvider clock, ILogger<ApprovalEngine> logger)
+{
+    private const string SystemOperator = ApprovalEngine.SystemOperator;
+    private readonly DbContext _db = db;
+    private readonly ApprovalUnitOfWork _unit = unit;
+    private readonly IApprovalIdentityProvider _identity = identity;
+    private readonly ApprovalAssigneeService _assignees = assignees;
+    private readonly IReadOnlySet<string> _channels = channels;
+    private readonly ApprovalOptions _options = options;
+    private readonly ApprovalDisplaySettings _displaySettings = displaySettings;
+    private readonly TimeProvider _clock = clock;
+    private readonly ILogger<ApprovalEngine> _logger = logger;
+    private DateTime Now => _clock.GetUtcNow().UtcDateTime;
+
+
+    internal void AddCarbonCopy(ApprovalInstance instance, FlowNode node, Assignee recipient) =>
+        _db.Set<ApprovalCarbonCopy>().Add(new ApprovalCarbonCopy
+        {
+            Id = _unit.NewId("ApprovalEngine"),
+            InstanceId = instance.Id,
+            NodeId = node.Id,
+            AssigneeKind = recipient.Kind,
+            AssigneeValue = recipient.Value,
+            Round = instance.Round,
+            CreatedAt = Now
+        });
+
+    internal void AddLog(ApprovalOperationContext operation, ApprovalInstance instance, FlowNode? node, ApprovalAction action, string operatorId, string? comment) =>
+        AddLog(operation, instance, action, operatorId, comment, node?.Id, node?.Name);
+
+    internal void AddLog(ApprovalOperationContext operation, ApprovalInstance instance, ApprovalAction action, string operatorId, string? comment,
+        string? nodeId, string? nodeName, string? details = null)
     {
-        public string? OperatorId { get; init; }
-        public string? Comment { get; init; }
-        public string? TransferTo { get; init; }
-        public DateTime? DueAt { get; init; }
-        public string? ReturnTo { get; init; }
+        var taskId = action is ApprovalAction.Submit or ApprovalAction.Complete or ApprovalAction.NodeEntered or ApprovalAction.Cc
+            or ApprovalAction.Withdraw or ApprovalAction.Terminate ? null : operation.TaskId;
+        _db.Set<ApprovalLog>().Add(new ApprovalLog
+        {
+            Id = _unit.NewId("ApprovalEngine"),
+            InstanceId = instance.Id,
+            TaskId = taskId,
+            Sequence = ++instance.LogSequence,
+            NodeId = nodeId,
+            NodeName = nodeName,
+            Action = action,
+            OperatorId = operatorId,
+            Comment = comment,
+            Details = details,
+            CreatedAt = Now
+        });
+        WriteEvent(operation, instance, action.ToString(), nodeId, nodeName, taskId, operatorId, comment);
     }
+
+    internal void WriteEvent(ApprovalOperationContext operation, ApprovalInstance instance, string type, string? nodeId, string? nodeName, Guid? taskId,
+        string operatorId, string? comment)
+    {
+        AddOutbox(operation, OutboxKind.Event, "Host", instance, null, type,
+            id => new ApprovalEvent(id, type, instance.Id, instance.DefinitionId, instance.DefinitionVersion,
+                instance.BusinessType, instance.BusinessKey, type switch
+                {
+                    "Reject" or "TimeoutReject" => InstanceStatus.Rejected,
+                    "Withdraw" => InstanceStatus.Withdrawn,
+                    "Terminate" => InstanceStatus.Terminated,
+                    _ => instance.Status
+                }, nodeId, nodeName, taskId, operatorId, comment, Now)
+            { Recipients = taskId is { } tid && instance.Tasks.FirstOrDefault(t => t.Id == tid) is { } task
+                ? [new Assignee(task.AssigneeKind, task.AssigneeValue)] : [] });
+    }
+
+    internal static string Describe(Assignee a) => a.Kind == AssigneeKind.Role ? $"角色[{a.Value}]" : a.Value;
 
     /// <summary>
     /// 触发事件：收集节点规则与流程级规则（流程级规则对审批节点和流程结束生效），
     /// 解析接收人、渲染模板，站内信直接写表，其余渠道写入 Outbox。没有匹配的规则时使用 fallback。
     /// </summary>
-    private async Task RaiseAsync(NotifyEvent evt, ApprovalInstance instance, FlowDefinition flow, FlowNode? node,
+    internal async Task RaiseAsync(ApprovalOperationContext operation, NotifyEvent evt, ApprovalInstance instance, FlowDefinition flow, FlowNode? node,
         EventInfo info, CancellationToken ct, NotificationRule? fallback = null)
     {
         var rules = (node?.Notifications ?? []).Where(r => r.Events.Contains(evt)).ToList();
@@ -70,7 +141,7 @@ public sealed partial class ApprovalEngine
                 else if (_channels.Contains(channel))
                 {
                     var link = variables.GetValueOrDefault("link") as string;
-                    AddOutbox(OutboxKind.Event, "Host", instance, node, title,
+                    AddOutbox(operation, OutboxKind.Event, "Host", instance, node, title,
                         id => new ApprovalEvent(id, "NotificationRequested", instance.Id, instance.DefinitionId, instance.DefinitionVersion,
                             instance.BusinessType, instance.BusinessKey, instance.Status, node?.Id, node?.Name, null,
                             info.OperatorId ?? SystemOperator, info.Comment, Now)
@@ -132,7 +203,7 @@ public sealed partial class ApprovalEngine
         });
 
     /// <summary>写入 Outbox：随本次操作一起提交，提交后由后台任务投递。payload 工厂接收消息 ID（幂等键）。</summary>
-    private void AddOutbox(OutboxKind kind, string target, ApprovalInstance instance, FlowNode? node, string? description,
+    private void AddOutbox(ApprovalOperationContext operation, OutboxKind kind, string target, ApprovalInstance instance, FlowNode? node, string? description,
         Func<Guid, object> payload)
     {
         var id = _unit.NewId("ApprovalEngine.Notifications");
@@ -150,16 +221,8 @@ public sealed partial class ApprovalEngine
             NextAttemptAt = Now,
             CreatedAt = Now
         });
-        _outboxWritten = true;
+        operation.OutboxWritten = true;
     }
 
     private static string Truncate(string text, int length) => text.Length <= length ? text : text[..(length - 1)] + "…";
-}
-
-internal static class OutboxJson
-{
-    public static readonly JsonSerializerOptions Options = new(JsonSerializerDefaults.Web)
-    {
-        Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
-    };
 }

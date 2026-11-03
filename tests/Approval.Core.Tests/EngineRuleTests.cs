@@ -1,4 +1,5 @@
 using Approval.Forms.Schema;
+using Approval.Core.Abstractions;
 using Approval.Core.Definitions;
 using Approval.Core.Domain;
 using Microsoft.EntityFrameworkCore;
@@ -220,7 +221,7 @@ public sealed class EngineRuleTests : IAsyncLifetime
         await _host.PublishAsync("seq", Flows.SingleNode("Sequential"));
         var instance = await _host.StartAsync("seq", "H1", "alice");
 
-        Task<ApprovalTask?> Find(string user) =>
+        Task<ApprovalTaskContext?> Find(string user) =>
             _host.RunAsync(sp => sp.GetRequiredService<ApprovalEngine>().FindHandleableTaskAsync(instance.Id, user));
 
         Assert.Equal("r1", (await Find("r1"))?.AssigneeValue);

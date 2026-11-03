@@ -60,7 +60,7 @@ Approval.Forms.Runtime.ApprovalFormService
   Method System.Threading.Tasks.Task`1[Approval.Forms.Runtime.ApprovalDraft] SaveDraftAsync(System.String, System.String, System.Nullable`1[System.Guid], System.Text.Json.JsonElement, System.String, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull,NotNull/NotNull,Nullable/Nullable,NotNull/NotNull,Nullable/Nullable,NotNull/NotNull default=null]
   Method System.Threading.Tasks.Task`1[Approval.Forms.Runtime.DraftDetail] GetDraftAsync(System.String, System.Guid, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull default=null]
   Method System.Threading.Tasks.Task`1[Approval.Forms.Runtime.StartForm] GetStartFormAsync(System.String, System.String, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull default=null]
-  Method System.Threading.Tasks.Task`1[System.Collections.Generic.IReadOnlyList`1[System.String]] GetEditableFieldsAsync(Approval.Core.Domain.ApprovalTask, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull<NotNull/NotNull>>; args=NotNull/NotNull,NotNull/NotNull default=null]
+  Method System.Threading.Tasks.Task`1[System.Collections.Generic.IReadOnlyList`1[System.String]] GetEditableFieldsAsync(Approval.Core.Abstractions.ApprovalTaskContext, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull<NotNull/NotNull>>; args=NotNull/NotNull,NotNull/NotNull default=null]
   Method System.Threading.Tasks.Task`1[System.Collections.Generic.List`1[Approval.Forms.Runtime.DraftSummary]] ListDraftsAsync(System.String, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull<NotNull/NotNull>>; args=NotNull/NotNull,NotNull/NotNull default=null]
   Method System.Threading.Tasks.Task`1[System.Collections.Generic.List`1[Approval.Forms.Runtime.StartableFlow]] ListStartableAsync(System.String, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull<NotNull/NotNull>>; args=NotNull/NotNull,NotNull/NotNull default=null]
   Property System.String BusinessType [NotNull/Unknown]
@@ -96,8 +96,8 @@ Approval.Forms.Runtime.DraftSummary
   Property System.String DefinitionName [NotNull/NotNull]
 Approval.Forms.Runtime.FormApprovalHandler
   Constructor Void .ctor(Approval.Forms.Runtime.ApprovalFormOptions) [args=NotNull/NotNull]
-  Method System.Threading.Tasks.Task OnApprovedAsync(Approval.Core.Domain.ApprovalInstance, System.Threading.CancellationToken) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull]
-  Method System.Threading.Tasks.Task OnRejectedAsync(Approval.Core.Domain.ApprovalInstance, System.Threading.CancellationToken) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull]
+  Method System.Threading.Tasks.Task OnApprovedAsync(Approval.Core.Abstractions.ApprovalInstanceContext, System.Threading.CancellationToken) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull]
+  Method System.Threading.Tasks.Task OnRejectedAsync(Approval.Core.Abstractions.ApprovalInstanceContext, System.Threading.CancellationToken) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull]
   Property System.String BusinessType [NotNull/Unknown]
 Approval.Forms.Runtime.StartForm
   Constructor Void .ctor(System.Guid, System.String, System.String, Int32, Approval.Core.Definitions.FlowSettings, Approval.Forms.Schema.FormSchema) [args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull]

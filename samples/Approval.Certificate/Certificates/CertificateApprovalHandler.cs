@@ -10,7 +10,7 @@ public sealed class CertificateApprovalHandler(AppDbContext db, TimeProvider clo
 {
     public string BusinessType => CertificateService.BusinessType;
 
-    public async Task OnApprovedAsync(ApprovalInstance instance, CancellationToken ct)
+    public async Task OnApprovedAsync(ApprovalInstanceContext instance, CancellationToken ct)
     {
         var request = await LoadRequestAsync(instance, ct);
         if (request.Operation != CertOperation.Revoke) validator.Validate(request.Snapshot);
@@ -56,14 +56,14 @@ public sealed class CertificateApprovalHandler(AppDbContext db, TimeProvider clo
         Complete(request, RequestStatus.Approved);
     }
 
-    public Task OnRejectedAsync(ApprovalInstance instance, CancellationToken ct) => CloseAsync(instance, RequestStatus.Rejected, ct);
+    public Task OnRejectedAsync(ApprovalInstanceContext instance, CancellationToken ct) => CloseAsync(instance, RequestStatus.Rejected, ct);
 
-    public Task OnWithdrawnAsync(ApprovalInstance instance, CancellationToken ct) => CloseAsync(instance, RequestStatus.Withdrawn, ct);
+    public Task OnWithdrawnAsync(ApprovalInstanceContext instance, CancellationToken ct) => CloseAsync(instance, RequestStatus.Withdrawn, ct);
 
-    public Task OnTerminatedAsync(ApprovalInstance instance, CancellationToken ct) => CloseAsync(instance, RequestStatus.Terminated, ct);
+    public Task OnTerminatedAsync(ApprovalInstanceContext instance, CancellationToken ct) => CloseAsync(instance, RequestStatus.Terminated, ct);
 
     /// <summary>驳回或撤回：申请单关闭、证书解锁，正式证书数据保持不变。</summary>
-    private async Task CloseAsync(ApprovalInstance instance, RequestStatus status, CancellationToken ct)
+    private async Task CloseAsync(ApprovalInstanceContext instance, RequestStatus status, CancellationToken ct)
     {
         var request = await LoadRequestAsync(instance, ct);
         if (request.Operation == CertOperation.Create) db.CertificateNumberReservations.Remove(await ReservationAsync(request, ct));
@@ -77,7 +77,7 @@ public sealed class CertificateApprovalHandler(AppDbContext db, TimeProvider clo
         Complete(request, status);
     }
 
-    private async Task<CertificateRequest> LoadRequestAsync(ApprovalInstance instance, CancellationToken ct)
+    private async Task<CertificateRequest> LoadRequestAsync(ApprovalInstanceContext instance, CancellationToken ct)
     {
         var request = await db.CertificateRequests.FindAsync([Guid.Parse(instance.BusinessKey)], ct)
             ?? throw new InvalidOperationException($"证书申请单 {instance.BusinessKey} 不存在");

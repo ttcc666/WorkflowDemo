@@ -43,8 +43,9 @@ public sealed class ApprovalFileService(
         ["zip"] = "application/zip"
     };
 
-    private readonly Approval.Core.Authorization.IApprovalAuthorization _authorization = accessor.Authorization;
+    private readonly Approval.Core.Authorization.ApprovalAuthorizationService _authorization = ApprovalFormsBridge.Authorization(accessor);
     private readonly DbContext _db = accessor.Context;
+    private readonly ApprovalFormsBridge _bridge = new(accessor);
 
     /// <summary>保存上传的文件（未绑定，只有上传者可用）。超过大小、扩展名不允许时抛出 <see cref="ApprovalException"/>。</summary>
     public async Task<ApprovalFile> UploadAsync(string userId, string fileName, Stream content, CancellationToken ct = default)
@@ -74,7 +75,7 @@ public sealed class ApprovalFileService(
             UploadedBy = userId,
             UploadedAt = clock.GetUtcNow().UtcDateTime
         };
-        using var authority = accessor.UnitOfWork.Writes.Enter(ApprovalWriteOwner.Forms);
+        using var authority = _bridge.WriteMetadata();
         _db.Set<ApprovalFile>().Add(file);
         try
         {
@@ -95,7 +96,7 @@ public sealed class ApprovalFileService(
         var file = await _db.Set<ApprovalFile>().AsNoTracking().FirstOrDefaultAsync(f => f.Id == fileId, ct);
         if (file is null) return null;
         await _authorization.RequireAsync(Approval.Core.Abstractions.ApprovalPermissions.FileRead, new() { FileId = fileId }, viewer.UserId, ct);
-        viewer = await _authorization.ViewerAsync(viewer, file.InstanceId, ct);
+        viewer = await _bridge.ViewerAsync(viewer, file.InstanceId, ct);
         if (!await CanDownloadAsync(file, viewer, ct)) return null;
         return (file, await store.OpenReadAsync(file.StorageKey, ct));
     }
@@ -169,7 +170,7 @@ public sealed class ApprovalFileService(
     /// <summary>草稿引用的文件绑定到草稿，不再引用的解除绑定；存储生命周期由宿主管理。</summary>
     internal async Task BindToDraftAsync(Guid draftId, IReadOnlyCollection<ApprovalFile> files, CancellationToken ct)
     {
-        using var authority = accessor.UnitOfWork.Writes.Enter(ApprovalWriteOwner.Forms);
+        using var authority = _bridge.WriteMetadata();
         foreach (var file in await _db.Set<ApprovalFile>().Where(f => f.DraftId == draftId).ToListAsync(ct))
             if (!files.Contains(file)) file.DraftId = null;
         foreach (var file in files) file.DraftId = draftId;
@@ -178,7 +179,7 @@ public sealed class ApprovalFileService(
     /// <summary>引用的文件绑定到实例；从草稿提交时，草稿中未引用的文件解除绑定。</summary>
     internal async Task BindToInstanceAsync(Guid instanceId, IReadOnlyCollection<ApprovalFile> files, Guid? fromDraftId, CancellationToken ct)
     {
-        using var authority = accessor.UnitOfWork.Writes.Enter(ApprovalWriteOwner.Forms);
+        using var authority = _bridge.WriteMetadata();
         if (fromDraftId is { } draftId) await BindToDraftAsync(draftId, [], ct);
         foreach (var file in files)
         {

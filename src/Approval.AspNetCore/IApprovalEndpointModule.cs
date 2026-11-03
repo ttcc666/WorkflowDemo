@@ -1,5 +1,5 @@
 using System.Text.Json;
-using Approval.Core.Domain;
+using Approval.Core.Abstractions;
 using Microsoft.AspNetCore.Routing;
 namespace Approval.AspNetCore;
 public interface IApprovalEndpointModule
@@ -9,7 +9,7 @@ public interface IApprovalEndpointModule
 }
 public interface IApprovalTaskDataAdapter
 {
-    Task<IReadOnlyList<string>> GetEditableFieldsAsync(ApprovalTask task, CancellationToken ct);
+    Task<IReadOnlyList<string>> GetEditableFieldsAsync(ApprovalTaskContext task, CancellationToken ct);
     Task ResubmitAsync(Guid taskId, string userId, JsonElement? data, string? comment, CancellationToken ct);
     Task ApproveAsync(Guid taskId, string userId, JsonElement data, string? comment, CancellationToken ct);
 }

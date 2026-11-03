@@ -42,12 +42,12 @@ public sealed partial class ApprovalFormService(
     IApprovalUserDirectory? directory = null)
 {
     private const int MaxTitleLength = 500;
-    private readonly Approval.Core.Authorization.IApprovalAuthorization _authorization = accessor.Authorization;
+    private readonly Approval.Core.Authorization.ApprovalAuthorizationService _authorization = ApprovalFormsBridge.Authorization(accessor);
     private readonly DbContext _db = accessor.Context;
-    private readonly ApprovalUnitOfWork _unit = accessor.UnitOfWork;
-    private readonly IApprovalIdentityProvider _hostIdentity = ApprovalHostServices.Identity(accessor.UnitOfWork, identity);
-    private readonly IApprovalUserDirectory? _hostDirectory = ApprovalHostServices.Directory(accessor.UnitOfWork, directory);
-    private readonly TimeProvider _clock = ApprovalHostServices.Clock(accessor.UnitOfWork, clock);
+    private readonly ApprovalFormsBridge _bridge = new(accessor);
+    private readonly IApprovalIdentityProvider _hostIdentity = ApprovalFormsBridge.Identity(accessor, identity);
+    private readonly IApprovalUserDirectory? _hostDirectory = ApprovalFormsBridge.Directory(accessor, directory);
+    private readonly TimeProvider _clock = ApprovalFormsBridge.Clock(accessor, clock);
 
     public string BusinessType => formOptions.BusinessType;
 
@@ -74,7 +74,7 @@ public sealed partial class ApprovalFormService(
     /// <summary>发起表单审批：校验表单 → 生成标题 → 发起实例（业务主键为新 ID）。从草稿提交时同一事务删除草稿。</summary>
     public Task<ApprovalInstance> StartAsync(string key, string userId, JsonElement formData, string? comment = null,
         Guid? draftId = null, CancellationToken ct = default) =>
-        _unit.ExecuteCommandAsync(ApprovalWriteOwner.Forms, token => StartAsyncCore(key, userId, formData, comment, draftId, token), ct);
+        _bridge.ExecuteAsync(token => StartAsyncCore(key, userId, formData, comment, draftId, token), ct);
 
     private async Task<ApprovalInstance> StartAsyncCore(string key, string userId, JsonElement formData, string? comment = null,
         Guid? draftId = null, CancellationToken ct = default)
@@ -86,11 +86,11 @@ public sealed partial class ApprovalFormService(
         var (json, attachments) = await files.ResolveAsync(schema, await NormalizeAsync(schema, formData, ct), userId, null, draft?.Id, false, ct);
 
         // 草稿删除、附件绑定随发起一起提交（引擎在同一 DbContext 中 SaveChanges）
-        var instanceId = _unit.NewId("ApprovalFormService");
+        var instanceId = _bridge.NewId("ApprovalFormService");
         await files.BindToInstanceAsync(instanceId, attachments, draft?.Id, ct);
         if (draft is not null) _db.Set<ApprovalDraft>().Remove(draft);
 
-        return await engine.StartAsync(new StartApprovalRequest(definition.Key, BusinessType, _unit.NewId("ApprovalFormService").ToString("N"), userId)
+        return await engine.StartAsync(new StartApprovalRequest(definition.Key, BusinessType, _bridge.NewId("ApprovalFormService").ToString("N"), userId)
         {
             InstanceId = instanceId,
             DefinitionId = definition.Id,
@@ -105,7 +105,7 @@ public sealed partial class ApprovalFormService(
     /// 其他业务的数据由业务单据决定，传入表单数据会被拒绝。
     /// </summary>
     public Task ResubmitAsync(Guid taskId, string userId, JsonElement? formData, string? comment = null, CancellationToken ct = default) =>
-        _unit.ExecuteCommandAsync(ApprovalWriteOwner.Forms, token => ResubmitAsyncCore(taskId, userId, formData, comment, token), ct);
+        _bridge.ExecuteAsync(token => ResubmitAsyncCore(taskId, userId, formData, comment, token), ct);
 
     private async Task ResubmitAsyncCore(Guid taskId, string userId, JsonElement? formData, string? comment = null, CancellationToken ct = default)
     {
@@ -120,7 +120,7 @@ public sealed partial class ApprovalFormService(
                    ?? throw new ApprovalException("任务不存在") { Code = ApprovalErrorCode.NotFound };
         // 跟踪加载：引擎随后在同一 DbContext 中取到同一实体，标题修改随重新提交一起保存
         var instance = await _db.Set<ApprovalInstance>().FirstAsync(i => i.Id == task.InstanceId, ct);
-        if (!IsFormInstance(instance))
+        if (!IsFormInstance(instance.BusinessType))
             throw new ApprovalException("该申请的数据由业务单据决定，不能在审批中修改表单");
         if (task.Kind != ApprovalTaskKind.Resubmit || instance.InitiatorId != userId)
             throw new ApprovalException("只有被退回的发起人可以修改表单后重新提交") { Code = ApprovalErrorCode.Forbidden };
@@ -130,7 +130,7 @@ public sealed partial class ApprovalFormService(
         var schema = flow.GetForm() ?? new FormSchema();
         var (json, attachments) = await files.ResolveAsync(schema, await NormalizeAsync(schema, data, ct), userId, instance.Id, null, false, ct);
         await files.BindToInstanceAsync(instance.Id, attachments, null, ct);
-        using (_unit.Writes.Enter(ApprovalWriteOwner.None, instance, "Title"))
+        using (_bridge.EditTitle(instance))
             instance.Title = RenderTitle(flow.Settings ?? new FlowSettings(), definition.Name, userId, instance.CreatedAt, json);
 
         await engine.ResubmitAsync(taskId, userId, comment, json, ct);
@@ -147,23 +147,23 @@ public sealed partial class ApprovalFormService(
             : engine.ApproveAsync(taskId, userId, comment, ct);
 
     /// <summary>任务所在节点可在同意时修改的字段（仅表单审批的审批任务）；审批详情页据此显示编辑框。</summary>
-    public async Task<IReadOnlyList<string>> GetEditableFieldsAsync(ApprovalTask task, CancellationToken ct = default)
+    public async Task<IReadOnlyList<string>> GetEditableFieldsAsync(ApprovalTaskContext task, CancellationToken ct = default)
     {
         await _authorization.RequireAsync(Approval.Core.Abstractions.ApprovalPermissions.TaskRead, new() { TaskId = task.Id }, null, ct);
-        task = await _db.Set<ApprovalTask>().AsNoTracking().SingleAsync(t => t.Id == task.Id, ct);
-        if (task.Kind == ApprovalTaskKind.Resubmit) return [];
-        var instance = await _db.Set<ApprovalInstance>().AsNoTracking().FirstOrDefaultAsync(i => i.Id == task.InstanceId, ct);
-        if (instance is null || !IsFormInstance(instance)) return [];
+        var actualTask = await _db.Set<ApprovalTask>().AsNoTracking().SingleAsync(t => t.Id == task.Id, ct);
+        if (actualTask.Kind == ApprovalTaskKind.Resubmit) return [];
+        var instance = await _db.Set<ApprovalInstance>().AsNoTracking().FirstOrDefaultAsync(i => i.Id == actualTask.InstanceId, ct);
+        if (instance is null || !IsFormInstance(instance.BusinessType)) return [];
 
         var definition = await _db.Set<ApprovalDefinition>().AsNoTracking().FirstAsync(d => d.Id == instance.DefinitionId, ct);
-        return FieldVisibility.EditableFields(FlowDefinition.Parse(definition.DefinitionJson), task.NodeId).Select(f => f.Key).ToList();
+        return FieldVisibility.EditableFields(FlowDefinition.Parse(definition.DefinitionJson), actualTask.NodeId).Select(f => f.Key).ToList();
     }
 
     /// <summary>审批人修改可编辑字段：合并到当前数据 → 整表校验与计算 → 字段差异；没有实际修改时返回 null。</summary>
-    private async Task<ApprovalDataEdit?> EditAsync(ApprovalInstance instance, ApprovalTask task, FlowDefinition flow, JsonElement data,
+    private async Task<ApprovalDataEdit?> EditAsync(ApprovalInstanceContext instance, ApprovalTaskContext task, FlowDefinition flow, JsonElement data,
         string userId, CancellationToken ct)
     {
-        if (!IsFormInstance(instance)) throw new ApprovalException("该申请的数据由业务单据决定，不能在审批中修改表单");
+        if (!IsFormInstance(instance.BusinessType)) throw new ApprovalException("该申请的数据由业务单据决定，不能在审批中修改表单");
         if (data.ValueKind != JsonValueKind.Object) throw new ApprovalException("表单数据必须是 JSON 对象");
 
         var schema = flow.GetForm() ?? new FormSchema();
@@ -190,9 +190,11 @@ public sealed partial class ApprovalFormService(
 
         // 标题模板可能引用了被修改的字段
         var definition = await _db.Set<ApprovalDefinition>().AsNoTracking().FirstAsync(d => d.Id == instance.DefinitionId, ct);
-        using (_unit.Writes.Enter(ApprovalWriteOwner.None, instance, "Title"))
-            instance.Title = RenderTitle(flow.Settings ?? new FlowSettings(), definition.Name, instance.InitiatorId, instance.CreatedAt, json);
-        return new ApprovalDataEdit(json, FieldVisibility.Summary(changes.Select(c => c.Label)), JsonSerializer.Serialize(changes, FormData.JsonOptions));
+        return new ApprovalDataEdit(json, FieldVisibility.Summary(changes.Select(c => c.Label)), JsonSerializer.Serialize(changes, FormData.JsonOptions))
+        {
+            ReplaceTitle = true,
+            Title = RenderTitle(flow.Settings ?? new FlowSettings(), definition.Name, instance.InitiatorId, instance.CreatedAt, json)
+        };
     }
 
     /// <summary>表单之外的宿主准备变量和历史快照值原样保留：流程继续流转，后续条件分支可能用到。</summary>
@@ -207,8 +209,8 @@ public sealed partial class ApprovalFormService(
         return after.ToJsonString(FormData.JsonOptions);
     }
 
-    private bool IsFormInstance(ApprovalInstance instance) =>
-        string.Equals(instance.BusinessType, BusinessType, StringComparison.OrdinalIgnoreCase);
+    private bool IsFormInstance(string businessType) =>
+        string.Equals(businessType, BusinessType, StringComparison.OrdinalIgnoreCase);
 
     /// <param name="reportedFields">只报告这些字段（含其明细单元格）的错误；为空时报告全部。</param>
     private async Task<string> NormalizeAsync(FormSchema schema, JsonElement data, CancellationToken ct,
@@ -264,7 +266,7 @@ public sealed partial class ApprovalFormService(
 
     private async Task<(ApprovalDefinition Definition, FlowDefinition Flow)> LoadStartableAsync(string key, string userId, CancellationToken ct)
     {
-        var pinned = _unit.PinnedDefinition(key);
+        var pinned = _bridge.PinnedDefinition(key);
         var definition = pinned is { } id
             ? await _db.Set<ApprovalDefinition>().AsNoTracking().SingleOrDefaultAsync(d => d.Id == id && d.Key == key && d.IsPublished, ct)
             : await LatestDefinitions().FirstOrDefaultAsync(d => d.Key == key, ct);
@@ -272,7 +274,7 @@ public sealed partial class ApprovalFormService(
             throw new ApprovalException($"流程 '{key}' 不存在或不支持在发起中心发起") { Code = ApprovalErrorCode.NotFound };
         if (!await CanStartAsync(flow.Settings!, userId, ct))
             throw new ApprovalException("你没有发起该流程的权限") { Code = ApprovalErrorCode.Forbidden };
-        _unit.PinDefinition(key, definition.Id);
+        _bridge.PinDefinition(key, definition.Id);
         return (definition, flow);
     }
 
@@ -287,7 +289,7 @@ public sealed partial class ApprovalFormService(
     }
 
     private IQueryable<ApprovalDefinition> LatestDefinitions() =>
-        ApprovalDefinitionAvailability.ForNewStarts(_db).AsNoTracking();
+        _bridge.StartDefinitions().AsNoTracking();
 
     private static FlowDefinition? TryParse(ApprovalDefinition definition)
     {
@@ -307,7 +309,7 @@ public sealed class FormApprovalHandler(ApprovalFormOptions options) : IApproval
 {
     public string BusinessType => options.BusinessType;
 
-    public Task OnApprovedAsync(ApprovalInstance instance, CancellationToken ct) => Task.CompletedTask;
+    public Task OnApprovedAsync(ApprovalInstanceContext instance, CancellationToken ct) => Task.CompletedTask;
 
-    public Task OnRejectedAsync(ApprovalInstance instance, CancellationToken ct) => Task.CompletedTask;
+    public Task OnRejectedAsync(ApprovalInstanceContext instance, CancellationToken ct) => Task.CompletedTask;
 }

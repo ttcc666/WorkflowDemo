@@ -21,7 +21,13 @@ flowchart LR
 | 命令执行器 | Operation 预约与已提交结果，不开放给宿主委托 |
 | Forms | Draft/File 元数据与绑定；当前实例标题的窄更新，审批状态仍由 Core 更新 |
 
-内部授权不注册成通用 DI 服务，也没有宿主可以关闭保护的布尔属性。它绑定 DbContext 的租期、实体和预期变化，保存后消耗/更新，失败作用域作废。嵌套操作合并各自授权，宿主回调暂停继承权限。开始回调的合法标题/申请快照准备保留；回调改任务、历史、幂等记录或投递载荷被拒绝。
+内部授权不注册成通用 DI 服务，也没有宿主可以关闭保护的布尔属性。它绑定 DbContext 的租期、实体和预期变化，保存后消耗/更新，失败作用域作废。嵌套操作合并各自授权，宿主回调暂停继承权限。开始回调返回 ApprovalStartPreparation，由 Core 应用合法标题/申请快照；编辑回调同样通过返回值更新标题。回调直接改 Core 实体、历史、幂等记录或投递载荷被拒绝。
+
+业务、生命周期、resolver、访问策略、投影和编辑契约使用 Context / Snapshot，不传跟踪图。C# 迁移说明见 [上下文 API 迁移](backend-context-api-migration.md)；DTO 复制不代替 WriteGuard，经注入 DbContext 的违规写入仍被拒绝。
+
+ApprovalOperationContext 只保存一次引擎调用的数据，不授予写权限，也不拥有事务。Engine 的 FlushOperationAsync 保留事务内提前保存与并发冲突映射；最终 SaveChanges、Commit、Rollback 继续由最外层 ApprovalUnitOfWork 执行。同一工作单元中可以先启动再处理任务，前一次 Flush 的记录对后一次数据库查询可见，整体仍可一起回滚。
+
+Forms 对 Core internal 的依赖统一经过 ApprovalFormsBridge，固定 Forms 元数据所有者、指定实例 Title、稳定 ID 和定义固定协作，不提供可选择任意 ApprovalWriteOwner 的入口。friend assembly 仍保留，但签名与 IL 边界测试禁止 Forms 直接引用其它 Core internal 类型 / 成员；这是工程边界约束，不声称编译器已限制 friend 的访问范围。
 
 宿主先改审批对象再调用服务，或者服务返回后继续改审批对象，不能把这些变化夹带进最后一次 SaveChanges。手工 Attach/重设原始值的伪造对象也不能成为引擎权威状态。SavingChanges 后的宿主拦截器若引入审批变化，执行数据库命令前再次核验；EF 可能将此拒绝包装为 DbUpdateException。
 
