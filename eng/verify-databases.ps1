@@ -104,10 +104,10 @@ try {
     $definitions = @($trx.TestRun.TestDefinitions.UnitTest)
     $results = @($trx.TestRun.Results.UnitTestResult)
     $total = [int]$counters.total
-    if ($total -le 0 -or $definitions.Count -ne $total -or $results.Count -ne $total
-        -or [int]$counters.executed -ne $total -or [int]$counters.passed -ne $total
-        -or [int]$counters.failed -ne 0 -or [int]$counters.notExecuted -ne 0
-        -or @($results | Where-Object outcome -ne 'Passed').Count -gt 0) { throw 'Tests were absent, skipped or unsuccessful.' }
+    if ($total -le 0 -or $definitions.Count -ne $total -or $results.Count -ne $total -or
+        [int]$counters.executed -ne $total -or [int]$counters.passed -ne $total -or
+        [int]$counters.failed -ne 0 -or [int]$counters.notExecuted -ne 0 -or
+        @($results | Where-Object outcome -ne 'Passed').Count -gt 0) { throw 'Tests were absent, skipped or unsuccessful.' }
     foreach ($required in @('Migrations_RollBackAndReapply_WithoutModelDrift',
         'EmbeddedBoundaryMigration_PreservesLegacyArchiveAndAttachmentData',
         'FinalAcceptance_SynchronousActionFailureRollsBackHostApprovalOperationAndOutbox')) {
