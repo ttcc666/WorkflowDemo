@@ -8,4 +8,4 @@
 
 测试覆盖模型/迁移往返、Unicode 与 UTC、唯一约束、审批与业务原子提交、并发重复请求、未知 COMMIT 恢复、Outbox 重试，以及 InitialMigration_CreatesCurrentSchemaAndRoundTripsAttachmentMetadata。后者查询实际数据库系统目录，确认未创建旧维护表／附件死状态列，并验证当前附件元数据往返。九套未发布上下文各只有当前模型生成的 InitialApproval。
 
-无容器或数据库服务时测试明确失败，不跳过、不把模型生成当成真实数据库通过。本轮实际结果与环境限制见 round2-report.md；历史报告不是当前证明。
+无容器或数据库服务时测试明确失败，不跳过、不把模型生成当成真实数据库通过。本轮实际结果、本机环境限制与 GitHub CI 补验见 [RC 最终验收报告](rc-report.md)；历史报告不是当前证明。
