@@ -6,9 +6,6 @@ Approval.AspNetCore.ApprovalAspNetCoreOptions
   Property Boolean EnableOutboxEndpoints [NotNull/NotNull]
   Property Boolean UseStringEnums [NotNull/NotNull]
   Property System.Collections.Generic.Dictionary`2[System.String,System.String] PermissionPolicies [NotNull/Unknown<NotNull/NotNull,NotNull/NotNull>]
-  Property System.Collections.Generic.List`1[System.String] DefinitionReaders [NotNull/Unknown<NotNull/NotNull>]
-  Property System.String AdminPolicy [Nullable/Nullable]
-  Property System.String AdminRole [NotNull/NotNull]
 Approval.AspNetCore.ApprovalExceptionHandler
   Constructor Void .ctor(Microsoft.AspNetCore.Http.IProblemDetailsService) [args=NotNull/NotNull]
   Method System.Threading.Tasks.ValueTask`1[System.Boolean] TryHandleAsync(Microsoft.AspNetCore.Http.HttpContext, System.Exception, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull]
@@ -30,7 +27,7 @@ Approval.AspNetCore.ApprovalPermissionMetadata
   Property System.String Operation [NotNull/NotNull]
   Property System.String ResourceKind [Nullable/Nullable]
 Approval.AspNetCore.ApprovalPolicyPermissionProvider
-  Constructor Void .ctor(Microsoft.AspNetCore.Http.IHttpContextAccessor, Approval.Core.Abstractions.IApprovalIdentityProvider, Approval.AspNetCore.ApprovalAspNetCoreOptions) [args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull]
+  Constructor Void .ctor(Microsoft.AspNetCore.Http.IHttpContextAccessor, Approval.AspNetCore.ApprovalAspNetCoreOptions) [args=NotNull/NotNull,NotNull/NotNull]
   Method System.Threading.Tasks.Task`1[System.Boolean] AuthorizeAsync(Approval.Core.Abstractions.ApprovalPermissionRequest, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull,NotNull/NotNull]
 Approval.AspNetCore.ApprovalProblems
   Method Int32 StatusCodeOf(Approval.Core.ApprovalErrorCode) [return=NotNull/NotNull; args=NotNull/NotNull]
@@ -435,4 +432,11 @@ Approval.AspNetCore.Endpoints.TransferRequest
   Property System.String ToUserId [NotNull/NotNull]
 Approval.AspNetCore.IApprovalCurrentUser
   Method System.String GetUserId(Microsoft.AspNetCore.Http.HttpContext) [return=Nullable/Nullable; args=NotNull/NotNull]
+Approval.AspNetCore.IApprovalEndpointModule
+  Method Void Map(Microsoft.AspNetCore.Routing.RouteGroupBuilder) [return=NotNull/NotNull; args=NotNull/NotNull]
+  Property System.String BusinessType [NotNull/Unknown]
 Approval.AspNetCore.IApprovalHttpUserDirectory
+Approval.AspNetCore.IApprovalTaskDataAdapter
+  Method System.Threading.Tasks.Task ApproveAsync(System.Guid, System.String, System.Text.Json.JsonElement, System.String, System.Threading.CancellationToken) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,Nullable/Nullable,NotNull/NotNull]
+  Method System.Threading.Tasks.Task ResubmitAsync(System.Guid, System.String, System.Nullable`1[System.Text.Json.JsonElement], System.String, System.Threading.CancellationToken) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull,Nullable/Nullable,Nullable/Nullable,NotNull/NotNull]
+  Method System.Threading.Tasks.Task`1[System.Collections.Generic.IReadOnlyList`1[System.String]] GetEditableFieldsAsync(Approval.Core.Domain.ApprovalTask, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull<NotNull/NotNull>>; args=NotNull/NotNull,NotNull/NotNull]

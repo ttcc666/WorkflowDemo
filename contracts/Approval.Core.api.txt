@@ -30,6 +30,17 @@ Approval.Core.Abstractions.ApprovalCommand
   Property System.String OperationId [Nullable/Nullable]
   Property System.String Permission [NotNull/NotNull]
   Property System.String Scope [NotNull/NotNull]
+Approval.Core.Abstractions.ApprovalDataView
+  Constructor Void .ctor(System.String, System.Collections.Generic.IReadOnlyList`1[Approval.Core.Domain.ApprovalLog], System.Collections.Generic.IReadOnlyList`1[System.String]) [args=NotNull/NotNull,NotNull/NotNull<NotNull/NotNull>,NotNull/NotNull<NotNull/NotNull>]
+  Method Approval.Core.Abstractions.ApprovalDataView <Clone>$() [return=NotNull/NotNull; args=]
+  Method Boolean Equals(Approval.Core.Abstractions.ApprovalDataView) [return=NotNull/NotNull; args=Nullable/Nullable]
+  Method Boolean Equals(System.Object) [return=NotNull/NotNull; args=Nullable/Nullable]
+  Method Int32 GetHashCode() [return=NotNull/NotNull; args=]
+  Method System.String ToString() [return=NotNull/NotNull; args=]
+  Method Void Deconstruct(System.String ByRef, System.Collections.Generic.IReadOnlyList`1[Approval.Core.Domain.ApprovalLog] ByRef, System.Collections.Generic.IReadOnlyList`1[System.String] ByRef) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull<NotNull/NotNull>,NotNull/NotNull<NotNull/NotNull>]
+  Property System.Collections.Generic.IReadOnlyList`1[Approval.Core.Domain.ApprovalLog] Logs [NotNull/NotNull<NotNull/NotNull>]
+  Property System.Collections.Generic.IReadOnlyList`1[System.String] HiddenFields [NotNull/NotNull<NotNull/NotNull>]
+  Property System.String DataJson [NotNull/NotNull]
 Approval.Core.Abstractions.ApprovalDepartment
   Constructor Void .ctor(System.String, System.String, System.String) [args=NotNull/NotNull,NotNull/NotNull,Nullable/Nullable]
   Method Approval.Core.Abstractions.ApprovalDepartment <Clone>$() [return=NotNull/NotNull; args=]
@@ -61,7 +72,9 @@ Approval.Core.Abstractions.ApprovalEvent
   Method System.String ToString() [return=NotNull/NotNull; args=]
   Method Void Deconstruct(System.Guid ByRef, System.String ByRef, System.Guid ByRef, System.Guid ByRef, Int32 ByRef, System.String ByRef, System.String ByRef, Approval.Core.Domain.InstanceStatus ByRef, System.String ByRef, System.String ByRef, System.Nullable`1[System.Guid] ByRef, System.String ByRef, System.String ByRef, System.DateTime ByRef) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,Nullable/Nullable,Nullable/Nullable,Nullable/Nullable,NotNull/NotNull,Nullable/Nullable,NotNull/NotNull]
   Property Approval.Core.Domain.InstanceStatus Status [NotNull/NotNull]
+  Property Approval.Core.Notifications.ApprovalNotificationRequest Notification [Nullable/Nullable]
   Property Int32 DefinitionVersion [NotNull/NotNull]
+  Property System.Collections.Generic.IReadOnlyList`1[Approval.Core.Abstractions.Assignee] Recipients [NotNull/NotNull<NotNull/NotNull>]
   Property System.DateTime OccurredAt [NotNull/NotNull]
   Property System.Guid DefinitionId [NotNull/NotNull]
   Property System.Guid Id [NotNull/NotNull]
@@ -70,6 +83,7 @@ Approval.Core.Abstractions.ApprovalEvent
   Property System.String BusinessKey [NotNull/NotNull]
   Property System.String BusinessType [NotNull/NotNull]
   Property System.String Comment [Nullable/Nullable]
+  Property System.String DeliveryTarget [Nullable/Nullable]
   Property System.String EventType [NotNull/NotNull]
   Property System.String NodeId [Nullable/Nullable]
   Property System.String NodeName [Nullable/Nullable]
@@ -84,21 +98,6 @@ Approval.Core.Abstractions.ApprovalExecutionIdentity
   Method Void Deconstruct(System.String ByRef, Boolean ByRef) [return=NotNull/NotNull; args=Nullable/Nullable,NotNull/NotNull]
   Property Boolean IsSystem [NotNull/NotNull]
   Property System.String ActorId [Nullable/Nullable]
-Approval.Core.Abstractions.ApprovalNotification
-  Constructor Void .ctor(Approval.Core.Abstractions.NotificationKind, System.Guid, System.String, System.String, System.String, Approval.Core.Domain.InstanceStatus, System.Collections.Generic.IReadOnlyList`1[Approval.Core.Abstractions.Assignee]) [args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,Nullable/Nullable,NotNull/NotNull,NotNull/NotNull<NotNull/NotNull>]
-  Method Approval.Core.Abstractions.ApprovalNotification <Clone>$() [return=NotNull/NotNull; args=]
-  Method Boolean Equals(Approval.Core.Abstractions.ApprovalNotification) [return=NotNull/NotNull; args=Nullable/Nullable]
-  Method Boolean Equals(System.Object) [return=NotNull/NotNull; args=Nullable/Nullable]
-  Method Int32 GetHashCode() [return=NotNull/NotNull; args=]
-  Method System.String ToString() [return=NotNull/NotNull; args=]
-  Method Void Deconstruct(Approval.Core.Abstractions.NotificationKind ByRef, System.Guid ByRef, System.String ByRef, System.String ByRef, System.String ByRef, Approval.Core.Domain.InstanceStatus ByRef, System.Collections.Generic.IReadOnlyList`1[Approval.Core.Abstractions.Assignee] ByRef) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,Nullable/Nullable,NotNull/NotNull,NotNull/NotNull<NotNull/NotNull>]
-  Property Approval.Core.Abstractions.NotificationKind Kind [NotNull/NotNull]
-  Property Approval.Core.Domain.InstanceStatus Status [NotNull/NotNull]
-  Property System.Collections.Generic.IReadOnlyList`1[Approval.Core.Abstractions.Assignee] Recipients [NotNull/NotNull<NotNull/NotNull>]
-  Property System.Guid InstanceId [NotNull/NotNull]
-  Property System.String BusinessKey [NotNull/NotNull]
-  Property System.String BusinessType [NotNull/NotNull]
-  Property System.String Title [Nullable/Nullable]
 Approval.Core.Abstractions.ApprovalPermissionRequest
   Constructor Void .ctor(Approval.Core.Abstractions.ApprovalPermissionSubject, System.String, Approval.Core.Abstractions.ApprovalResource) [args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull]
   Method Approval.Core.Abstractions.ApprovalPermissionRequest <Clone>$() [return=NotNull/NotNull; args=]
@@ -121,10 +120,6 @@ Approval.Core.Abstractions.ApprovalPermissionSubject
   Property Boolean IsSystem [NotNull/NotNull]
   Property System.String ActorId [NotNull/NotNull]
 Approval.Core.Abstractions.ApprovalPermissions
-  Field System.String ArchiveExecute [NotNull/NotNull] value="approval.archive.execute"
-  Field System.String ArchivePurge [NotNull/NotNull] value="approval.archive.purge"
-  Field System.String ArchiveRead [NotNull/NotNull] value="approval.archive.read"
-  Field System.String ArchiveReadSensitive [NotNull/NotNull] value="approval.archive.read-sensitive"
   Field System.String DefinitionDesign [NotNull/NotNull] value="approval.definition.design"
   Field System.String DefinitionDisable [NotNull/NotNull] value="approval.definition.disable"
   Field System.String DefinitionPublish [NotNull/NotNull] value="approval.definition.publish"
@@ -136,7 +131,6 @@ Approval.Core.Abstractions.ApprovalPermissions
   Field System.String DraftDelete [NotNull/NotNull] value="approval.draft.delete"
   Field System.String DraftRead [NotNull/NotNull] value="approval.draft.read"
   Field System.String DraftWrite [NotNull/NotNull] value="approval.draft.write"
-  Field System.String FileCleanup [NotNull/NotNull] value="approval.system.file-cleanup"
   Field System.String FileRead [NotNull/NotNull] value="approval.file.read"
   Field System.String FileUpload [NotNull/NotNull] value="approval.file.upload"
   Field System.String InstanceRead [NotNull/NotNull] value="approval.instance.read"
@@ -145,7 +139,6 @@ Approval.Core.Abstractions.ApprovalPermissions
   Field System.String InstanceStart [NotNull/NotNull] value="approval.instance.start"
   Field System.String InstanceTerminate [NotNull/NotNull] value="approval.instance.terminate"
   Field System.String InstanceWithdraw [NotNull/NotNull] value="approval.instance.withdraw"
-  Field System.String MaintenanceRun [NotNull/NotNull] value="approval.system.maintenance-run"
   Field System.String MessageRead [NotNull/NotNull] value="approval.message.read"
   Field System.String MessageWrite [NotNull/NotNull] value="approval.message.write"
   Field System.String OutboxDispatch [NotNull/NotNull] value="approval.system.outbox-dispatch"
@@ -173,7 +166,6 @@ Approval.Core.Abstractions.ApprovalResource
   Method Boolean Equals(System.Object) [return=NotNull/NotNull; args=Nullable/Nullable]
   Method Int32 GetHashCode() [return=NotNull/NotNull; args=]
   Method System.String ToString() [return=NotNull/NotNull; args=]
-  Property System.Nullable`1[System.Guid] ArchiveId [Nullable/Nullable]
   Property System.Nullable`1[System.Guid] DefinitionId [Nullable/Nullable]
   Property System.Nullable`1[System.Guid] DraftId [Nullable/Nullable]
   Property System.Nullable`1[System.Guid] FileId [Nullable/Nullable]
@@ -248,8 +240,6 @@ Approval.Core.Abstractions.IApprovalAccessPolicy
 Approval.Core.Abstractions.IApprovalActorContext
   Property Boolean IsSystem [NotNull/Unknown]
   Property System.String ActorId [NotNull/Unknown]
-Approval.Core.Abstractions.IApprovalArchiveQueryScope
-  Method System.Threading.Tasks.Task`1[System.Linq.IQueryable`1[Approval.Core.Domain.ApprovalArchiveRecord]] ApplyAsync(Approval.Core.Abstractions.ApprovalPermissionSubject, System.Linq.IQueryable`1[Approval.Core.Domain.ApprovalArchiveRecord], System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull<NotNull/NotNull>>; args=NotNull/NotNull,NotNull/NotNull<NotNull/NotNull>,NotNull/NotNull]
 Approval.Core.Abstractions.IApprovalBusinessHandler
   Method System.Threading.Tasks.Task OnApprovedAsync(Approval.Core.Domain.ApprovalInstance, System.Threading.CancellationToken) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull]
   Method System.Threading.Tasks.Task OnRejectedAsync(Approval.Core.Domain.ApprovalInstance, System.Threading.CancellationToken) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull]
@@ -260,6 +250,12 @@ Approval.Core.Abstractions.IApprovalCommandExecutor
   Method System.Threading.Tasks.Task`1[T] ExecuteAsync[T](Approval.Core.Abstractions.ApprovalCommand, System.Func`3[System.IServiceProvider,System.Threading.CancellationToken,System.Threading.Tasks.Task`1[T]], System.Threading.CancellationToken) [return=NotNull/NotNull<Nullable/Nullable>; args=NotNull/NotNull,NotNull/NotNull<NotNull/NotNull,NotNull/NotNull,NotNull/NotNull<Nullable/Nullable>>,NotNull/NotNull default=null]
 Approval.Core.Abstractions.IApprovalContextResolver
   Method Approval.Core.Abstractions.ApprovalExecutionIdentity Resolve() [return=NotNull/NotNull; args=]
+Approval.Core.Abstractions.IApprovalDataProjection
+  Method Approval.Core.Abstractions.ApprovalDataView Project(Approval.Core.Definitions.FlowDefinition, Approval.Core.Domain.ApprovalInstance, Approval.Core.Abstractions.ApprovalAccess) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull]
+Approval.Core.Abstractions.IApprovalDefinitionExtension
+  Method System.Collections.Generic.IReadOnlyList`1[System.String] Warnings(Approval.Core.Definitions.FlowDefinition) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull]
+  Method System.Collections.Generic.IReadOnlySet`1[System.String] UserFields(Approval.Core.Definitions.FlowDefinition) [return=Nullable/Nullable<NotNull/NotNull>; args=NotNull/NotNull]
+  Method Void Validate(Approval.Core.Definitions.FlowDefinition, System.Collections.Generic.List`1[System.String]) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull<NotNull/NotNull>]
 Approval.Core.Abstractions.IApprovalEventHandler
   Method System.Threading.Tasks.Task HandleAsync(Approval.Core.Abstractions.ApprovalEvent, System.Threading.CancellationToken) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull]
 Approval.Core.Abstractions.IApprovalIdentityProvider
@@ -268,8 +264,6 @@ Approval.Core.Abstractions.IApprovalIdentityProvider
   Method System.Threading.Tasks.Task`1[System.Collections.Generic.IReadOnlyList`1[System.String]] GetUserIdsInRoleAsync(System.String, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull<NotNull/NotNull>>; args=NotNull/NotNull,NotNull/NotNull]
 Approval.Core.Abstractions.IApprovalLifecycleHandler
   Method System.Threading.Tasks.Task OnStartingAsync(Approval.Core.Domain.ApprovalInstance, System.Threading.CancellationToken) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull]
-Approval.Core.Abstractions.IApprovalNotifier
-  Method System.Threading.Tasks.Task NotifyAsync(Approval.Core.Abstractions.ApprovalNotification, System.Threading.CancellationToken) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull]
 Approval.Core.Abstractions.IApprovalOrganizationProvider
   Method System.Threading.Tasks.Task`1[Approval.Core.Abstractions.ApprovalDepartment] GetDepartmentAsync(System.String, System.Threading.CancellationToken) [return=NotNull/NotNull<Nullable/Nullable>; args=NotNull/NotNull,NotNull/NotNull]
   Method System.Threading.Tasks.Task`1[Approval.Core.Abstractions.ApprovalDepartment] GetParentDepartmentAsync(System.String, System.Threading.CancellationToken) [return=NotNull/NotNull<Nullable/Nullable>; args=NotNull/NotNull,NotNull/NotNull]
@@ -279,10 +273,14 @@ Approval.Core.Abstractions.IApprovalPermissionProvider
   Method System.Threading.Tasks.Task`1[System.Boolean] AuthorizeAsync(Approval.Core.Abstractions.ApprovalPermissionRequest, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull,NotNull/NotNull]
 Approval.Core.Abstractions.IApprovalQueryScope
   Method System.Threading.Tasks.Task`1[System.Linq.IQueryable`1[Approval.Core.Domain.ApprovalInstance]] ApplyAsync(Approval.Core.Abstractions.ApprovalPermissionSubject, System.Linq.IQueryable`1[Approval.Core.Domain.ApprovalInstance], System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull<NotNull/NotNull>>; args=NotNull/NotNull,NotNull/NotNull<NotNull/NotNull>,NotNull/NotNull]
+Approval.Core.Abstractions.IApprovalResourceResolver
+  Method System.Threading.Tasks.Task`1[Approval.Core.Abstractions.ApprovalResource] ResolveAsync(Approval.Core.Abstractions.ApprovalResource, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull,NotNull/NotNull]
 Approval.Core.Abstractions.IApprovalScopeFactory
   Method System.Threading.Tasks.Task`1[Approval.Core.Hosting.ApprovalScope] CreateAsync(System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull default=null]
 Approval.Core.Abstractions.IApprovalSystemActorContext
   Property System.Collections.Generic.IReadOnlySet`1[System.String] AllowedPermissions [NotNull/Unknown<NotNull/NotNull>]
+Approval.Core.Abstractions.IApprovalTrackedRevision
+  Property Int64 ConcurrencyStamp [NotNull/NotNull]
 Approval.Core.Abstractions.IApprovalUnitOfWork
   Method System.Threading.Tasks.Task ExecuteAsync(System.Func`2[System.Threading.CancellationToken,System.Threading.Tasks.Task], System.Threading.CancellationToken) [return=NotNull/NotNull; args=NotNull/NotNull<NotNull/NotNull,NotNull/NotNull>,NotNull/NotNull default=null]
   Method System.Threading.Tasks.Task SetResultInstanceAsync(System.Guid, System.Threading.CancellationToken) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull default=null]
@@ -301,10 +299,6 @@ Approval.Core.Abstractions.IApproverResolver
   Property System.String Type [NotNull/Unknown]
 Approval.Core.Abstractions.IConditionEvaluator
   Method Boolean Evaluate(System.String, System.Collections.Generic.IReadOnlyDictionary`2[System.String,System.Object]) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull<NotNull/NotNull,Nullable/Nullable>]
-Approval.Core.Abstractions.NotificationKind
-  TaskCreated = 0
-  Cc = 1
-  Completed = 2
 Approval.Core.ApprovalBackgroundOptions
   Constructor Void .ctor() [args=]
   Property Int32 AssignmentSampleSize [NotNull/NotNull]
@@ -313,13 +307,9 @@ Approval.Core.ApprovalBuilder
   Method Approval.Core.ApprovalBuilder AddAccessPolicy[T]() [return=NotNull/NotNull; args=]
   Method Approval.Core.ApprovalBuilder AddApproverResolver[T]() [return=NotNull/NotNull; args=]
   Method Approval.Core.ApprovalBuilder AddBusinessHandler[T]() [return=NotNull/NotNull; args=]
-  Method Approval.Core.ApprovalBuilder AddChannel[T]() [return=NotNull/NotNull; args=]
   Method Approval.Core.ApprovalBuilder AddEventHandler[T]() [return=NotNull/NotNull; args=]
-  Method Approval.Core.ApprovalBuilder AddFileStore[T]() [return=NotNull/NotNull; args=]
-  Method Approval.Core.ApprovalBuilder AddFormApprovals(System.String) [return=NotNull/NotNull; args=NotNull/NotNull default="Form"]
   Method Approval.Core.ApprovalBuilder AddIdentityProvider[T]() [return=NotNull/NotNull; args=]
   Method Approval.Core.ApprovalBuilder AddLifecycleHandler[T]() [return=NotNull/NotNull; args=]
-  Method Approval.Core.ApprovalBuilder AddNotifier[T]() [return=NotNull/NotNull; args=]
   Method Approval.Core.ApprovalBuilder AddOrganizationProvider[T]() [return=NotNull/NotNull; args=]
   Method Approval.Core.ApprovalBuilder AddPermissionProvider[T]() [return=NotNull/NotNull; args=]
   Method Approval.Core.ApprovalBuilder AddQueryScope[T]() [return=NotNull/NotNull; args=]
@@ -340,36 +330,9 @@ Approval.Core.ApprovalErrorCode
 Approval.Core.ApprovalException
   Constructor Void .ctor(System.String, System.Exception) [args=NotNull/NotNull,Nullable/Nullable default=null]
   Property Approval.Core.ApprovalErrorCode Code [NotNull/NotNull]
-Approval.Core.ApprovalFileOptions
-  Constructor Void .ctor() [args=]
-  Property Int32 MaxFileSizeMb [NotNull/NotNull]
-  Property Int64 MaxFileSizeBytes [NotNull/Unknown]
-  Property System.Collections.Generic.List`1[System.String] AllowedExtensions [NotNull/NotNull<NotNull/NotNull>]
-  Property System.String RootPath [NotNull/NotNull]
-  Property System.TimeSpan UnboundRetention [NotNull/NotNull]
-Approval.Core.ApprovalLifecycleOptions
-  Constructor Void .ctor() [args=]
-  Method System.Nullable`1[System.TimeSpan] Retention(Approval.Core.Domain.MaintenanceTarget, Approval.Core.Domain.MaintenanceMode) [return=Nullable/Nullable; args=NotNull/NotNull,NotNull/NotNull]
-  Property Boolean AllowDeletion [NotNull/NotNull]
-  Property Boolean Enabled [NotNull/NotNull]
-  Property Int32 BatchSize [NotNull/NotNull]
-  Property Int32 MaxBatchesPerRun [NotNull/NotNull]
-  Property System.Nullable`1[System.TimeSpan] ArchivedPayloadsAfter [Nullable/Nullable]
-  Property System.Nullable`1[System.TimeSpan] BusinessDraftsAfter [Nullable/Nullable]
-  Property System.Nullable`1[System.TimeSpan] DesignDraftsAfter [Nullable/Nullable]
-  Property System.Nullable`1[System.TimeSpan] FailedOutboxAfter [Nullable/Nullable]
-  Property System.Nullable`1[System.TimeSpan] OperationsAfter [Nullable/Nullable]
-  Property System.Nullable`1[System.TimeSpan] PurgeAfter [Nullable/Nullable]
-  Property System.Nullable`1[System.TimeSpan] ReadMessagesAfter [Nullable/Nullable]
-  Property System.Nullable`1[System.TimeSpan] SucceededOutboxAfter [Nullable/Nullable]
-  Property System.Nullable`1[System.TimeSpan] UnboundFilesAfter [Nullable/Nullable]
-  Property System.TimeSpan ArchiveAfter [NotNull/NotNull]
-  Property System.TimeSpan PollInterval [NotNull/NotNull]
 Approval.Core.ApprovalOptions
   Constructor Void .ctor() [args=]
   Property Approval.Core.ApprovalBackgroundOptions Background [NotNull/Unknown]
-  Property Approval.Core.ApprovalFileOptions Files [NotNull/Unknown]
-  Property Approval.Core.ApprovalLifecycleOptions Lifecycle [NotNull/Unknown]
   Property Approval.Core.ApprovalOutboxOptions Outbox [NotNull/Unknown]
   Property Boolean AllowInitiatorApprove [NotNull/NotNull]
   Property Boolean AllowSameUserMultipleNodes [NotNull/NotNull]
@@ -380,8 +343,7 @@ Approval.Core.ApprovalOptions
   Property Boolean RequireOperationId [NotNull/NotNull]
   Property Boolean SingleRunningInstancePerBusiness [NotNull/NotNull]
   Property System.Collections.Generic.Dictionary`2[System.String,System.String] GlobalVariables [NotNull/Unknown<NotNull/NotNull,NotNull/NotNull>]
-  Property System.Collections.Generic.List`1[System.String] DefinitionReaders [NotNull/Unknown<NotNull/NotNull>]
-  Property System.String AdminRole [NotNull/NotNull]
+  Property System.Collections.Generic.List`1[Approval.Core.Notifications.ChannelInfo] NotificationTargets [NotNull/Unknown<NotNull/NotNull>]
   Property System.String InstanceUrlFormat [Nullable/Nullable]
   Property System.TimeSpan CommitVerificationTimeout [NotNull/NotNull]
   Property System.TimeSpan PermissionTimeout [NotNull/NotNull]
@@ -405,15 +367,11 @@ Approval.Core.Authorization.ApprovalAuthorizationService
   Method System.Threading.Tasks.Task`1[System.Collections.Generic.IReadOnlyDictionary`2[System.String,System.Boolean]] CapabilitiesAsync(Approval.Core.Abstractions.ApprovalResource, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull<NotNull/NotNull,NotNull/NotNull>>; args=Nullable/Nullable default=null,NotNull/NotNull default=null]
   Method System.Threading.Tasks.Task`1[System.Linq.IQueryable`1[Approval.Core.Domain.ApprovalInstance]] ScopeInstancesAsync(System.Linq.IQueryable`1[Approval.Core.Domain.ApprovalInstance], System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull<NotNull/NotNull>>; args=NotNull/NotNull<NotNull/NotNull>,NotNull/NotNull default=null]
 Approval.Core.Authorization.DefaultApprovalPermissionProvider
-  Constructor Void .ctor(Approval.Core.Abstractions.IApprovalIdentityProvider, Approval.Core.ApprovalOptions) [args=NotNull/NotNull,NotNull/NotNull]
+  Constructor Void .ctor() [args=]
   Method System.Threading.Tasks.Task`1[System.Boolean] AuthorizeAsync(Approval.Core.Abstractions.ApprovalPermissionRequest, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull,NotNull/NotNull]
 Approval.Core.Background.ApprovalBackgroundRunner
   Constructor Void .ctor(Approval.Core.Abstractions.IApprovalScopeFactory, Approval.Core.Diagnostics.ApprovalBackgroundState, System.TimeProvider, Microsoft.Extensions.Logging.ILogger`1[Approval.Core.Background.ApprovalBackgroundRunner]) [args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull<NotNull/NotNull>]
   Method System.Threading.Tasks.Task`1[System.Int32] RunAsync(System.String, System.Func`3[System.IServiceProvider,System.Threading.CancellationToken,System.Threading.Tasks.Task`1[System.Int32]], System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull,NotNull/NotNull<NotNull/NotNull,NotNull/NotNull,NotNull/NotNull<NotNull/NotNull>>,NotNull/NotNull default=null]
-Approval.Core.Background.ApprovalMaintenanceWorker
-  Constructor Void .ctor(Approval.Core.Background.ApprovalBackgroundRunner, Approval.Core.ApprovalOptions) [args=NotNull/NotNull,NotNull/NotNull]
-  Constructor Void .ctor(Approval.Core.Background.ApprovalBackgroundRunner, Approval.Core.ApprovalOptions, System.TimeProvider, Microsoft.Extensions.Logging.ILogger`1[Approval.Core.Background.ApprovalMaintenanceWorker]) [args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull<NotNull/NotNull>]
-  Method System.Threading.Tasks.Task`1[System.Int32] RunOnceAsync(System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull default=null]
 Approval.Core.Background.ApprovalOutboxDispatcher
   Constructor Void .ctor(Approval.Core.Background.ApprovalBackgroundRunner) [args=NotNull/NotNull]
   Constructor Void .ctor(Approval.Core.Engine.ApprovalOutboxSignal, Approval.Core.ApprovalOptions, Microsoft.Extensions.Logging.ILogger`1[Approval.Core.Background.ApprovalOutboxDispatcher], Approval.Core.Background.ApprovalBackgroundRunner) [args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull<NotNull/NotNull>,NotNull/NotNull]
@@ -423,7 +381,7 @@ Approval.Core.Background.ApprovalTimeoutScanner
   Constructor Void .ctor(Approval.Core.Abstractions.IApprovalScopeFactory, System.TimeProvider, Microsoft.Extensions.Logging.ILogger`1[Approval.Core.Background.ApprovalTimeoutScanner], Approval.Core.Background.ApprovalBackgroundRunner) [args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull<NotNull/NotNull>,NotNull/NotNull]
   Method System.Threading.Tasks.Task`1[System.Int32] ScanOnceAsync(System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull default=null]
 Approval.Core.Background.ApprovalWorker
-  Constructor Void .ctor(Approval.Core.Background.ApprovalOutboxDispatcher, Approval.Core.Background.ApprovalTimeoutScanner, Approval.Core.Background.ApprovalMaintenanceWorker, Approval.Core.Engine.ApprovalOutboxSignal, Approval.Core.ApprovalOptions, System.TimeProvider, Microsoft.Extensions.Logging.ILogger`1[Approval.Core.Background.ApprovalWorker]) [args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull<NotNull/NotNull>]
+  Constructor Void .ctor(Approval.Core.Background.ApprovalOutboxDispatcher, Approval.Core.Background.ApprovalTimeoutScanner, Approval.Core.Engine.ApprovalOutboxSignal, Approval.Core.ApprovalOptions, System.TimeProvider, Microsoft.Extensions.Logging.ILogger`1[Approval.Core.Background.ApprovalWorker]) [args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull<NotNull/NotNull>]
   Method System.Threading.Tasks.Task RunOnceAsync(System.Threading.CancellationToken) [return=NotNull/NotNull; args=NotNull/NotNull default=null]
 Approval.Core.Conditions.DynamicExpressoConditionEvaluator
   Constructor Void .ctor() [args=]
@@ -471,16 +429,15 @@ Approval.Core.Definitions.FlowDefinition
   Method Approval.Core.Definitions.FlowDefinition ToPublicView() [return=NotNull/NotNull; args=]
   Method Approval.Core.Definitions.FlowNode GetNode(System.String) [return=NotNull/NotNull; args=NotNull/NotNull]
   Method System.String ToJson() [return=NotNull/NotNull; args=]
-  Property Approval.Core.Forms.FlowSettings Settings [Nullable/Nullable]
-  Property Approval.Core.Forms.FormSchema Form [Nullable/Nullable]
+  Property Approval.Core.Definitions.FlowSettings Settings [Nullable/Nullable]
   Property Int32 SchemaVersion [NotNull/NotNull]
   Property System.Collections.Generic.Dictionary`2[System.String,Approval.Core.Definitions.FlowNode] Nodes [NotNull/NotNull<NotNull/NotNull,NotNull/NotNull>]
   Property System.Collections.Generic.List`1[Approval.Core.Definitions.NotificationRule] Notifications [NotNull/NotNull<NotNull/NotNull>]
+  Property System.Object Form [Nullable/Nullable]
   Property System.String StartNodeId [NotNull/NotNull]
 Approval.Core.Definitions.FlowDefinitionValidator
   Method System.Collections.Generic.IReadOnlyList`1[System.String] Validate(Approval.Core.Definitions.FlowDefinition, Approval.Core.Definitions.FlowValidationContext) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull,NotNull/NotNull]
   Method System.Collections.Generic.IReadOnlyList`1[System.String] Validate(Approval.Core.Definitions.FlowDefinition, System.Collections.Generic.IReadOnlySet`1[System.String]) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull,NotNull/NotNull<NotNull/NotNull>]
-  Method System.Collections.Generic.IReadOnlyList`1[System.String] Warnings(Approval.Core.Definitions.FlowDefinition) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull]
 Approval.Core.Definitions.FlowNode
   Constructor Void .ctor() [args=]
   Method System.Collections.Generic.IReadOnlySet`1[System.String] FieldsWith(Approval.Core.Definitions.FieldAccess) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull]
@@ -501,6 +458,13 @@ Approval.Core.Definitions.FlowNode
   Property System.String Id [NotNull/NotNull]
   Property System.String Name [NotNull/NotNull]
   Property System.String Next [Nullable/Nullable]
+Approval.Core.Definitions.FlowSettings
+  Constructor Void .ctor() [args=]
+  Property Boolean Startable [NotNull/NotNull]
+  Property System.Collections.Generic.List`1[System.String] InitiatorRoles [NotNull/NotNull<NotNull/NotNull>]
+  Property System.String Category [Nullable/Nullable]
+  Property System.String Description [Nullable/Nullable]
+  Property System.String TitleTemplate [Nullable/Nullable]
 Approval.Core.Definitions.FlowStructure
   Method Approval.Core.Definitions.FlowStructure Analyze(Approval.Core.Definitions.FlowDefinition) [return=NotNull/NotNull; args=NotNull/NotNull]
   Method Boolean CanReach(System.String, System.String) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull]
@@ -510,6 +474,7 @@ Approval.Core.Definitions.FlowStructure
   Property System.Collections.Generic.IReadOnlyList`1[System.String] Errors [NotNull/Unknown<NotNull/NotNull>]
 Approval.Core.Definitions.FlowValidationContext
   Constructor Void .ctor() [args=]
+  Property Approval.Core.Abstractions.IApprovalDefinitionExtension Extension [Nullable/Nullable]
   Property System.Collections.Generic.IReadOnlyDictionary`2[System.String,Approval.Core.Abstractions.ApproverTypeDescriptor] ApproverDescriptors [Nullable/Nullable<NotNull/NotNull,NotNull/NotNull>]
   Property System.Collections.Generic.IReadOnlySet`1[System.String] ApproverTypes [NotNull/NotNull<NotNull/NotNull>]
   Property System.Collections.Generic.IReadOnlySet`1[System.String] Channels [Nullable/Nullable<NotNull/NotNull>]
@@ -591,13 +556,13 @@ Approval.Core.Diagnostics.ApprovalDiagnosticFinding
   Property System.Guid ResourceId [NotNull/NotNull]
   Property System.String Code [NotNull/NotNull]
 Approval.Core.Diagnostics.ApprovalDiagnosticReport
-  Constructor Void .ctor(Boolean, Boolean, Boolean, Int32, Boolean, Int32, Int32, Int32, System.Nullable`1[System.DateTime], Int32, Int32, Int32, Int32, Boolean, System.Collections.Generic.IReadOnlyList`1[Approval.Core.Diagnostics.ApprovalDiagnosticFinding], System.Collections.Generic.IReadOnlyList`1[Approval.Core.Diagnostics.ApprovalHeartbeat], System.Collections.Generic.IReadOnlyList`1[Approval.Core.Diagnostics.ApprovalDiagnosticContribution]) [args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,Nullable/Nullable,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull<NotNull/NotNull>,NotNull/NotNull<NotNull/NotNull>,NotNull/NotNull<NotNull/NotNull>]
+  Constructor Void .ctor(Boolean, Boolean, Boolean, Int32, Boolean, Int32, Int32, Int32, System.Nullable`1[System.DateTime], Int32, Int32, Int32, Boolean, System.Collections.Generic.IReadOnlyList`1[Approval.Core.Diagnostics.ApprovalDiagnosticFinding], System.Collections.Generic.IReadOnlyList`1[Approval.Core.Diagnostics.ApprovalHeartbeat], System.Collections.Generic.IReadOnlyList`1[Approval.Core.Diagnostics.ApprovalDiagnosticContribution]) [args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,Nullable/Nullable,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull<NotNull/NotNull>,NotNull/NotNull<NotNull/NotNull>,NotNull/NotNull<NotNull/NotNull>]
   Method Approval.Core.Diagnostics.ApprovalDiagnosticReport <Clone>$() [return=NotNull/NotNull; args=]
   Method Boolean Equals(Approval.Core.Diagnostics.ApprovalDiagnosticReport) [return=NotNull/NotNull; args=Nullable/Nullable]
   Method Boolean Equals(System.Object) [return=NotNull/NotNull; args=Nullable/Nullable]
   Method Int32 GetHashCode() [return=NotNull/NotNull; args=]
   Method System.String ToString() [return=NotNull/NotNull; args=]
-  Method Void Deconstruct(Boolean ByRef, Boolean ByRef, Boolean ByRef, Int32 ByRef, Boolean ByRef, Int32 ByRef, Int32 ByRef, Int32 ByRef, System.Nullable`1[System.DateTime] ByRef, Int32 ByRef, Int32 ByRef, Int32 ByRef, Int32 ByRef, Boolean ByRef, System.Collections.Generic.IReadOnlyList`1[Approval.Core.Diagnostics.ApprovalDiagnosticFinding] ByRef, System.Collections.Generic.IReadOnlyList`1[Approval.Core.Diagnostics.ApprovalHeartbeat] ByRef, System.Collections.Generic.IReadOnlyList`1[Approval.Core.Diagnostics.ApprovalDiagnosticContribution] ByRef) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,Nullable/Nullable,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull<NotNull/NotNull>,NotNull/NotNull<NotNull/NotNull>,NotNull/NotNull<NotNull/NotNull>]
+  Method Void Deconstruct(Boolean ByRef, Boolean ByRef, Boolean ByRef, Int32 ByRef, Boolean ByRef, Int32 ByRef, Int32 ByRef, Int32 ByRef, System.Nullable`1[System.DateTime] ByRef, Int32 ByRef, Int32 ByRef, Int32 ByRef, Boolean ByRef, System.Collections.Generic.IReadOnlyList`1[Approval.Core.Diagnostics.ApprovalDiagnosticFinding] ByRef, System.Collections.Generic.IReadOnlyList`1[Approval.Core.Diagnostics.ApprovalHeartbeat] ByRef, System.Collections.Generic.IReadOnlyList`1[Approval.Core.Diagnostics.ApprovalDiagnosticContribution] ByRef) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,Nullable/Nullable,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull<NotNull/NotNull>,NotNull/NotNull<NotNull/NotNull>,NotNull/NotNull<NotNull/NotNull>]
   Property Boolean AssignmentSampleTruncated [NotNull/NotNull]
   Property Boolean DataAvailable [NotNull/NotNull]
   Property Boolean ModelDrift [NotNull/NotNull]
@@ -606,7 +571,6 @@ Approval.Core.Diagnostics.ApprovalDiagnosticReport
   Property Int32 FailedOutbox [NotNull/NotNull]
   Property Int32 MissingBusinessSlots [NotNull/NotNull]
   Property Int32 OverdueTasks [NotNull/NotNull]
-  Property Int32 PendingFileDeletions [NotNull/NotNull]
   Property Int32 PendingMigrations [NotNull/NotNull]
   Property Int32 PendingOutbox [NotNull/NotNull]
   Property Int32 RunningInstances [NotNull/NotNull]
@@ -656,24 +620,6 @@ Approval.Core.Domain.ApprovalAction
   Reassign = 15
   FormEdit = 16
   NodeEntered = 17
-Approval.Core.Domain.ApprovalArchiveRecord
-  Constructor Void .ctor() [args=]
-  Property Approval.Core.Domain.MaintenanceTarget Target [NotNull/NotNull]
-  Property Int64 ConcurrencyStamp [NotNull/NotNull]
-  Property Int64 SourceVersion [NotNull/NotNull]
-  Property System.DateTime ArchivedAt [NotNull/NotNull]
-  Property System.Guid Id [NotNull/NotNull]
-  Property System.Guid ResourceId [NotNull/NotNull]
-  Property System.Nullable`1[System.DateTime] PayloadExpiredAt [Nullable/Nullable]
-  Property System.Nullable`1[System.DateTime] PurgedAt [Nullable/Nullable]
-  Property System.Nullable`1[System.Guid] DefinitionId [Nullable/Nullable]
-  Property System.Nullable`1[System.Guid] InstanceId [Nullable/Nullable]
-  Property System.String BusinessKey [Nullable/Nullable]
-  Property System.String BusinessType [Nullable/Nullable]
-  Property System.String DefinitionKey [Nullable/Nullable]
-  Property System.String SnapshotHash [NotNull/NotNull]
-  Property System.String SnapshotJson [NotNull/NotNull]
-  Property System.String UserId [Nullable/Nullable]
 Approval.Core.Domain.ApprovalBusinessSlot
   Constructor Void .ctor() [args=]
   Property System.Guid Id [NotNull/NotNull]
@@ -735,41 +681,6 @@ Approval.Core.Domain.ApprovalDefinitionManagement
   Property System.String Key [NotNull/NotNull]
   Property System.String Name [NotNull/NotNull]
   Property System.String UpdatedBy [NotNull/NotNull]
-Approval.Core.Domain.ApprovalDraft
-  Constructor Void .ctor() [args=]
-  Property System.DateTime CreatedAt [NotNull/NotNull]
-  Property System.DateTime UpdatedAt [NotNull/NotNull]
-  Property System.Guid Id [NotNull/NotNull]
-  Property System.String Comment [Nullable/Nullable]
-  Property System.String DefinitionKey [NotNull/NotNull]
-  Property System.String FormDataJson [NotNull/NotNull]
-  Property System.String UserId [NotNull/NotNull]
-Approval.Core.Domain.ApprovalFile
-  Constructor Void .ctor() [args=]
-  Property Boolean DeletionPending [NotNull/NotNull]
-  Property Int64 ConcurrencyStamp [NotNull/NotNull]
-  Property Int64 Size [NotNull/NotNull]
-  Property System.DateTime UploadedAt [NotNull/NotNull]
-  Property System.Guid Id [NotNull/NotNull]
-  Property System.Nullable`1[System.Guid] ArchiveId [Nullable/Nullable]
-  Property System.Nullable`1[System.Guid] DraftId [Nullable/Nullable]
-  Property System.Nullable`1[System.Guid] InstanceId [Nullable/Nullable]
-  Property System.String ContentType [NotNull/NotNull]
-  Property System.String FileName [NotNull/NotNull]
-  Property System.String Sha256 [NotNull/NotNull]
-  Property System.String StorageKey [NotNull/NotNull]
-  Property System.String UploadedBy [NotNull/NotNull]
-Approval.Core.Domain.ApprovalFileDeletion
-  Constructor Void .ctor() [args=]
-  Property Approval.Core.Domain.FileDeletionStatus Status [NotNull/NotNull]
-  Property Int32 Attempts [NotNull/NotNull]
-  Property Int64 ConcurrencyStamp [NotNull/NotNull]
-  Property System.DateTime NextAttemptAt [NotNull/NotNull]
-  Property System.Guid FileId [NotNull/NotNull]
-  Property System.Guid Id [NotNull/NotNull]
-  Property System.Nullable`1[System.DateTime] StartedAt [Nullable/Nullable]
-  Property System.String LastErrorCode [Nullable/Nullable]
-  Property System.String StorageKey [NotNull/NotNull]
 Approval.Core.Domain.ApprovalInstance
   Constructor Void .ctor() [args=]
   Property Approval.Core.Domain.InstanceStatus Status [NotNull/NotNull]
@@ -804,33 +715,6 @@ Approval.Core.Domain.ApprovalLog
   Property System.String NodeId [Nullable/Nullable]
   Property System.String NodeName [Nullable/Nullable]
   Property System.String OperatorId [NotNull/NotNull]
-Approval.Core.Domain.ApprovalMaintenanceAudit
-  Constructor Void .ctor() [args=]
-  Property Approval.Core.Domain.MaintenanceTarget Target [NotNull/NotNull]
-  Property Int32 Count [NotNull/NotNull]
-  Property System.DateTime CreatedAt [NotNull/NotNull]
-  Property System.Guid Id [NotNull/NotNull]
-  Property System.Nullable`1[System.Guid] JobId [Nullable/Nullable]
-  Property System.Nullable`1[System.Guid] ResourceId [Nullable/Nullable]
-  Property System.Nullable`1[System.Int32] Batch [Nullable/Nullable]
-  Property System.String Action [NotNull/NotNull]
-  Property System.String ActorId [NotNull/NotNull]
-  Property System.String Reason [Nullable/Nullable]
-Approval.Core.Domain.ApprovalMaintenanceJob
-  Constructor Void .ctor() [args=]
-  Property Approval.Core.Domain.MaintenanceJobStatus Status [NotNull/NotNull]
-  Property Approval.Core.Domain.MaintenanceMode Mode [NotNull/NotNull]
-  Property Approval.Core.Domain.MaintenanceTarget Target [NotNull/NotNull]
-  Property Boolean SystemRequested [NotNull/NotNull]
-  Property Int32 CompletedBatches [NotNull/NotNull]
-  Property Int32 Processed [NotNull/NotNull]
-  Property Int64 ConcurrencyStamp [NotNull/NotNull]
-  Property System.DateTime CreatedAt [NotNull/NotNull]
-  Property System.DateTime Cutoff [NotNull/NotNull]
-  Property System.Guid Id [NotNull/NotNull]
-  Property System.String ActorId [NotNull/NotNull]
-  Property System.String LastErrorCode [Nullable/Nullable]
-  Property System.String PolicyHash [NotNull/NotNull]
 Approval.Core.Domain.ApprovalMessage
   Constructor Void .ctor() [args=]
   Property Approval.Core.Definitions.NotifyEvent Event [NotNull/NotNull]
@@ -876,14 +760,6 @@ Approval.Core.Domain.ApprovalOutboxMessage
   Property System.String NodeId [Nullable/Nullable]
   Property System.String PayloadJson [NotNull/NotNull]
   Property System.String Target [NotNull/NotNull]
-Approval.Core.Domain.ApprovalRetentionHold
-  Constructor Void .ctor() [args=]
-  Property Approval.Core.Domain.MaintenanceTarget Target [NotNull/NotNull]
-  Property System.DateTime CreatedAt [NotNull/NotNull]
-  Property System.Guid Id [NotNull/NotNull]
-  Property System.Guid ResourceId [NotNull/NotNull]
-  Property System.String ActorId [NotNull/NotNull]
-  Property System.String Reason [NotNull/NotNull]
 Approval.Core.Domain.ApprovalTask
   Constructor Void .ctor() [args=]
   Property Approval.Core.Domain.ApprovalTaskKind Kind [NotNull/NotNull]
@@ -928,11 +804,6 @@ Approval.Core.Domain.DefinitionAuditAction
   Enabled = 2
   Disabled = 3
   VersionSelected = 4
-Approval.Core.Domain.FileDeletionStatus
-  Pending = 0
-  Processing = 1
-  Completed = 2
-  Cancelled = 3
 Approval.Core.Domain.IApprovalEntity
 Approval.Core.Domain.InstanceStatus
   Running = 0
@@ -941,24 +812,6 @@ Approval.Core.Domain.InstanceStatus
   Withdrawn = 3
   Terminated = 4
   Returned = 5
-Approval.Core.Domain.MaintenanceJobStatus
-  Pending = 0
-  Running = 1
-  Completed = 2
-  Failed = 3
-Approval.Core.Domain.MaintenanceMode
-  Archive = 0
-  Purge = 1
-Approval.Core.Domain.MaintenanceTarget
-  Instances = 0
-  ReadMessages = 1
-  SucceededOutbox = 2
-  FailedOutbox = 3
-  BusinessDrafts = 4
-  DesignDrafts = 5
-  Operations = 6
-  UnboundFiles = 7
-  ArchivedPayloads = 8
 Approval.Core.Domain.OutboxKind
   Notification = 0
   Event = 1
@@ -977,8 +830,19 @@ Approval.Core.Engine.ApprovalCarbonCopyService
   Method System.Threading.Tasks.Task`1[Approval.Core.Engine.CarbonCopyRecipients] GetRecipientsAsync(System.String, System.Guid, Approval.Core.Engine.PageRequest, System.Threading.CancellationToken, Approval.Core.Abstractions.IApprovalUserDirectory) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull,NotNull/NotNull,Nullable/Nullable default=null,NotNull/NotNull default=null,Nullable/Nullable default=null]
   Method System.Threading.Tasks.Task`1[Approval.Core.Engine.PagedResult`1[Approval.Core.Engine.CarbonCopyItem]] ListAsync(System.String, Boolean, Approval.Core.Engine.InstanceQuery, Approval.Core.Engine.PageRequest, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull<NotNull/NotNull>>; args=NotNull/NotNull,NotNull/NotNull default=false,Nullable/Nullable default=null,Nullable/Nullable default=null,NotNull/NotNull default=null]
   Method System.Threading.Tasks.Task`1[System.Collections.Generic.IReadOnlyList`1[Approval.Core.Engine.CarbonCopyItem]] HistoryAsync(System.String, System.Guid, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull<NotNull/NotNull>>; args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull default=null]
+Approval.Core.Engine.ApprovalDataEdit
+  Constructor Void .ctor(System.String, System.String, System.String) [args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull]
+  Method Approval.Core.Engine.ApprovalDataEdit <Clone>$() [return=NotNull/NotNull; args=]
+  Method Boolean Equals(Approval.Core.Engine.ApprovalDataEdit) [return=NotNull/NotNull; args=Nullable/Nullable]
+  Method Boolean Equals(System.Object) [return=NotNull/NotNull; args=Nullable/Nullable]
+  Method Int32 GetHashCode() [return=NotNull/NotNull; args=]
+  Method System.String ToString() [return=NotNull/NotNull; args=]
+  Method Void Deconstruct(System.String ByRef, System.String ByRef, System.String ByRef) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull]
+  Property System.String ChangesJson [NotNull/NotNull]
+  Property System.String DataJson [NotNull/NotNull]
+  Property System.String Summary [NotNull/NotNull]
 Approval.Core.Engine.ApprovalDefinitionService
-  Constructor Void .ctor(Approval.Core.Persistence.ApprovalDbContextAccessor, System.Collections.Generic.IEnumerable`1[Approval.Core.Abstractions.IApproverResolver], System.Collections.Generic.IEnumerable`1[Approval.Core.Notifications.IApprovalChannel], System.TimeProvider, Approval.Core.ApprovalOptions) [args=NotNull/NotNull,NotNull/NotNull<NotNull/NotNull>,NotNull/NotNull<NotNull/NotNull>,NotNull/NotNull,Nullable/Nullable default=null]
+  Constructor Void .ctor(Approval.Core.Persistence.ApprovalDbContextAccessor, System.Collections.Generic.IEnumerable`1[Approval.Core.Abstractions.IApproverResolver], System.Collections.Generic.IEnumerable`1[Approval.Core.Notifications.ChannelInfo], System.TimeProvider, Approval.Core.ApprovalOptions) [args=NotNull/NotNull,NotNull/NotNull<NotNull/NotNull>,NotNull/NotNull<NotNull/NotNull>,NotNull/NotNull,Nullable/Nullable default=null]
   Method System.Collections.Generic.IReadOnlyList`1[System.String] Validate(Approval.Core.Definitions.FlowDefinition) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull]
   Method System.Collections.Generic.IReadOnlyList`1[System.String] Warnings(Approval.Core.Definitions.FlowDefinition) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull]
   Method System.Threading.Tasks.Task`1[Approval.Core.Domain.ApprovalDefinition] GetByIdAsync(System.Guid, System.Threading.CancellationToken) [return=NotNull/NotNull<Nullable/Nullable>; args=NotNull/NotNull,NotNull/NotNull default=null]
@@ -1002,10 +866,11 @@ Approval.Core.Engine.ApprovalDefinitionService
   Property Approval.Core.Engine.ApprovalMetadata Metadata [NotNull/Unknown]
   Property System.Collections.Generic.IReadOnlyList`1[Approval.Core.Abstractions.ApproverTypeDescriptor] ApproverTypes [NotNull/Unknown<NotNull/NotNull>]
 Approval.Core.Engine.ApprovalEngine
-  Constructor Void .ctor(Approval.Core.Persistence.ApprovalDbContextAccessor, Approval.Core.Abstractions.IApprovalIdentityProvider, System.Collections.Generic.IEnumerable`1[Approval.Core.Abstractions.IApproverResolver], System.Collections.Generic.IEnumerable`1[Approval.Core.Abstractions.IApprovalBusinessHandler], System.Collections.Generic.IEnumerable`1[Approval.Core.Notifications.IApprovalChannel], System.Collections.Generic.IEnumerable`1[Approval.Core.Abstractions.IApprovalNotifier], Approval.Core.Abstractions.IConditionEvaluator, Approval.Core.ApprovalOptions, Approval.Core.Engine.ApprovalOutboxSignal, System.TimeProvider, Microsoft.Extensions.Logging.ILogger`1[Approval.Core.Engine.ApprovalEngine], Approval.Core.Abstractions.IApprovalUserDirectory) [args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull<NotNull/NotNull>,NotNull/NotNull<NotNull/NotNull>,NotNull/NotNull<NotNull/NotNull>,NotNull/NotNull<NotNull/NotNull>,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull<NotNull/NotNull>,Nullable/Nullable default=null]
+  Constructor Void .ctor(Approval.Core.Persistence.ApprovalDbContextAccessor, Approval.Core.Abstractions.IApprovalIdentityProvider, System.Collections.Generic.IEnumerable`1[Approval.Core.Abstractions.IApproverResolver], System.Collections.Generic.IEnumerable`1[Approval.Core.Abstractions.IApprovalBusinessHandler], System.Collections.Generic.IEnumerable`1[Approval.Core.Notifications.ChannelInfo], Approval.Core.Abstractions.IConditionEvaluator, Approval.Core.ApprovalOptions, Approval.Core.Engine.ApprovalOutboxSignal, System.TimeProvider, Microsoft.Extensions.Logging.ILogger`1[Approval.Core.Engine.ApprovalEngine], Approval.Core.Abstractions.IApprovalUserDirectory) [args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull<NotNull/NotNull>,NotNull/NotNull<NotNull/NotNull>,NotNull/NotNull<NotNull/NotNull>,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull<NotNull/NotNull>,Nullable/Nullable default=null]
   Field System.String SystemOperator [NotNull/NotNull] value="system"
   Method System.Threading.Tasks.Task AddSignAsync(System.Guid, System.String, System.Collections.Generic.IReadOnlyList`1[System.String], Approval.Core.Engine.AddSignMode, System.String, System.Threading.CancellationToken) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull<NotNull/NotNull>,NotNull/NotNull,Nullable/Nullable default=null,NotNull/NotNull default=null]
   Method System.Threading.Tasks.Task ApproveAsync(System.Guid, System.String, System.String, System.Threading.CancellationToken) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull,Nullable/Nullable default=null,NotNull/NotNull default=null]
+  Method System.Threading.Tasks.Task ApproveWithDataAsync(System.Guid, System.String, System.String, System.Func`4[Approval.Core.Domain.ApprovalInstance,Approval.Core.Domain.ApprovalTask,Approval.Core.Definitions.FlowDefinition,System.Threading.Tasks.Task`1[Approval.Core.Engine.ApprovalDataEdit]], System.Threading.CancellationToken) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull,Nullable/Nullable,NotNull/NotNull<NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull<Nullable/Nullable>>,NotNull/NotNull]
   Method System.Threading.Tasks.Task ReassignAsync(System.Guid, System.String, System.String, System.String, System.Threading.CancellationToken) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,Nullable/Nullable default=null,NotNull/NotNull default=null]
   Method System.Threading.Tasks.Task RejectAsync(System.Guid, System.String, System.String, System.Threading.CancellationToken) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull default=null]
   Method System.Threading.Tasks.Task ResubmitAsync(System.Guid, System.String, System.String, System.Object, System.Threading.CancellationToken) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull,Nullable/Nullable default=null,Nullable/Nullable default=null,NotNull/NotNull default=null]
@@ -1021,24 +886,6 @@ Approval.Core.Engine.ApprovalEngine
   Method System.Threading.Tasks.Task`1[System.Collections.Generic.IReadOnlyList`1[Approval.Core.Engine.ReturnTarget]] GetReturnTargetsAsync(System.Guid, System.String, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull<NotNull/NotNull>>; args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull default=null]
   Method System.Threading.Tasks.Task`1[System.Collections.Generic.IReadOnlyList`1[System.String]] GetEligibleApproversAsync(Approval.Core.Domain.ApprovalInstance, Approval.Core.Definitions.FlowNode, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull<NotNull/NotNull>>; args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull default=null]
   Method System.Threading.Tasks.Task`1[System.Collections.Generic.IReadOnlyList`1[System.String]] GetStartEligibleApproversAsync(Approval.Core.Engine.StartApprovalRequest, System.String, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull<NotNull/NotNull>>; args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull default=null]
-Approval.Core.Engine.ApprovalFormOptions
-  Constructor Void .ctor() [args=]
-  Property System.String BusinessType [NotNull/NotNull]
-Approval.Core.Engine.ApprovalFormService
-  Constructor Void .ctor(Approval.Core.Persistence.ApprovalDbContextAccessor, Approval.Core.Engine.ApprovalEngine, Approval.Core.Files.ApprovalFileService, Approval.Core.Abstractions.IApprovalIdentityProvider, Approval.Core.Engine.ApprovalFormOptions, Approval.Core.ApprovalOptions, System.TimeProvider, Approval.Core.Abstractions.IApprovalUserDirectory) [args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,Nullable/Nullable default=null]
-  Field Int32 MaxDraftBytes [NotNull/NotNull] value=262144
-  Field Int32 MaxDraftsPerUser [NotNull/NotNull] value=50
-  Method System.Threading.Tasks.Task ApproveAsync(System.Guid, System.String, System.Nullable`1[System.Text.Json.JsonElement], System.String, System.Threading.CancellationToken) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull,Nullable/Nullable,Nullable/Nullable default=null,NotNull/NotNull default=null]
-  Method System.Threading.Tasks.Task DeleteDraftAsync(System.String, System.Guid, System.Threading.CancellationToken) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull default=null]
-  Method System.Threading.Tasks.Task ResubmitAsync(System.Guid, System.String, System.Nullable`1[System.Text.Json.JsonElement], System.String, System.Threading.CancellationToken) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull,Nullable/Nullable,Nullable/Nullable default=null,NotNull/NotNull default=null]
-  Method System.Threading.Tasks.Task`1[Approval.Core.Domain.ApprovalDraft] SaveDraftAsync(System.String, System.String, System.Nullable`1[System.Guid], System.Text.Json.JsonElement, System.String, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull,NotNull/NotNull,Nullable/Nullable,NotNull/NotNull,Nullable/Nullable,NotNull/NotNull default=null]
-  Method System.Threading.Tasks.Task`1[Approval.Core.Domain.ApprovalInstance] StartAsync(System.String, System.String, System.Text.Json.JsonElement, System.String, System.Nullable`1[System.Guid], System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,Nullable/Nullable default=null,Nullable/Nullable default=null,NotNull/NotNull default=null]
-  Method System.Threading.Tasks.Task`1[Approval.Core.Engine.DraftDetail] GetDraftAsync(System.String, System.Guid, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull default=null]
-  Method System.Threading.Tasks.Task`1[Approval.Core.Engine.StartForm] GetStartFormAsync(System.String, System.String, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull default=null]
-  Method System.Threading.Tasks.Task`1[System.Collections.Generic.IReadOnlyList`1[System.String]] GetEditableFieldsAsync(Approval.Core.Domain.ApprovalTask, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull<NotNull/NotNull>>; args=NotNull/NotNull,NotNull/NotNull default=null]
-  Method System.Threading.Tasks.Task`1[System.Collections.Generic.List`1[Approval.Core.Engine.DraftSummary]] ListDraftsAsync(System.String, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull<NotNull/NotNull>>; args=NotNull/NotNull,NotNull/NotNull default=null]
-  Method System.Threading.Tasks.Task`1[System.Collections.Generic.List`1[Approval.Core.Engine.StartableFlow]] ListStartableAsync(System.String, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull<NotNull/NotNull>>; args=NotNull/NotNull,NotNull/NotNull default=null]
-  Property System.String BusinessType [NotNull/Unknown]
 Approval.Core.Engine.ApprovalMessageService
   Constructor Void .ctor(Approval.Core.Persistence.ApprovalDbContextAccessor, System.TimeProvider) [args=NotNull/NotNull,NotNull/NotNull]
   Method System.Threading.Tasks.Task MarkReadAsync(System.String, System.Guid, System.Threading.CancellationToken) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull default=null]
@@ -1059,7 +906,7 @@ Approval.Core.Engine.ApprovalMetadata
   Property System.Collections.Generic.IReadOnlyList`1[Approval.Core.Notifications.ChannelInfo] Channels [NotNull/NotNull<NotNull/NotNull>]
   Property System.Collections.Generic.IReadOnlyList`1[Approval.Core.Templates.TemplateVariableInfo] TemplateVariables [NotNull/NotNull<NotNull/NotNull>]
 Approval.Core.Engine.ApprovalOutboxService
-  Constructor Void .ctor(Approval.Core.Persistence.ApprovalDbContextAccessor, System.Collections.Generic.IEnumerable`1[Approval.Core.Notifications.IApprovalChannel], Approval.Core.ApprovalOptions, System.TimeProvider, Microsoft.Extensions.Logging.ILogger`1[Approval.Core.Engine.ApprovalOutboxService], Approval.Core.Abstractions.IApprovalScopeFactory) [args=NotNull/NotNull,NotNull/NotNull<NotNull/NotNull>,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull<NotNull/NotNull>,Nullable/Nullable default=null]
+  Constructor Void .ctor(Approval.Core.Persistence.ApprovalDbContextAccessor, System.Collections.Generic.IEnumerable`1[Approval.Core.Notifications.ChannelInfo], Approval.Core.ApprovalOptions, System.TimeProvider, Microsoft.Extensions.Logging.ILogger`1[Approval.Core.Engine.ApprovalOutboxService], Approval.Core.Abstractions.IApprovalScopeFactory) [args=NotNull/NotNull,NotNull/NotNull<NotNull/NotNull>,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull<NotNull/NotNull>,Nullable/Nullable default=null]
   Method System.Threading.Tasks.Task RetryAsync(System.Guid, System.Threading.CancellationToken) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull default=null]
   Method System.Threading.Tasks.Task`1[Approval.Core.Engine.PagedResult`1[Approval.Core.Domain.ApprovalOutboxMessage]] ListAsync(Approval.Core.Engine.OutboxQuery, Approval.Core.Engine.PageRequest, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull<NotNull/NotNull>>; args=NotNull/NotNull,Nullable/Nullable default=null,NotNull/NotNull default=null]
   Method System.Threading.Tasks.Task`1[System.Int32] ProcessDueAsync(System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull default=null]
@@ -1069,7 +916,7 @@ Approval.Core.Engine.ApprovalOutboxSignal
   Method System.Threading.Tasks.Task`1[System.Boolean] WaitAsync(System.TimeSpan, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull,NotNull/NotNull]
   Method Void Notify() [return=NotNull/NotNull; args=]
 Approval.Core.Engine.ApprovalQueryService
-  Constructor Void .ctor(Approval.Core.Persistence.ApprovalDbContextAccessor, Approval.Core.Abstractions.IApprovalIdentityProvider, Approval.Core.Abstractions.IApprovalAccessPolicy, Approval.Core.ApprovalOptions, System.TimeProvider) [args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull]
+  Constructor Void .ctor(Approval.Core.Persistence.ApprovalDbContextAccessor, Approval.Core.Abstractions.IApprovalIdentityProvider, Approval.Core.Abstractions.IApprovalAccessPolicy, Approval.Core.ApprovalOptions, System.TimeProvider, Approval.Core.Abstractions.IApprovalDataProjection) [args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,Nullable/Nullable default=null]
   Method System.Threading.Tasks.Task`1[Approval.Core.Domain.ApprovalDefinition] GetPublicDefinitionAsync(System.Guid, Approval.Core.Abstractions.ApprovalViewer, System.Threading.CancellationToken) [return=NotNull/NotNull<Nullable/Nullable>; args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull default=null]
   Method System.Threading.Tasks.Task`1[Approval.Core.Domain.ApprovalInstance] GetInstanceAsync(System.Guid, System.Threading.CancellationToken) [return=NotNull/NotNull<Nullable/Nullable>; args=NotNull/NotNull,NotNull/NotNull default=null]
   Method System.Threading.Tasks.Task`1[Approval.Core.Engine.InstanceDetail] GetInstanceForViewerAsync(System.Guid, Approval.Core.Abstractions.ApprovalViewer, System.Threading.CancellationToken) [return=NotNull/NotNull<Nullable/Nullable>; args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull default=null]
@@ -1216,36 +1063,6 @@ Approval.Core.Engine.DefinitionGovernanceSummary
   Property System.String Category [Nullable/Nullable]
   Property System.String Key [NotNull/NotNull]
   Property System.String Name [NotNull/NotNull]
-Approval.Core.Engine.DraftDetail
-  Constructor Void .ctor(System.Guid, System.String, System.String, System.String, System.String, System.DateTime, System.DateTime, Boolean) [args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,Nullable/Nullable,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull]
-  Method Approval.Core.Engine.DraftDetail <Clone>$() [return=NotNull/NotNull; args=]
-  Method Boolean Equals(Approval.Core.Engine.DraftDetail) [return=NotNull/NotNull; args=Nullable/Nullable]
-  Method Boolean Equals(System.Object) [return=NotNull/NotNull; args=Nullable/Nullable]
-  Method Int32 GetHashCode() [return=NotNull/NotNull; args=]
-  Method System.String ToString() [return=NotNull/NotNull; args=]
-  Method Void Deconstruct(System.Guid ByRef, System.String ByRef, System.String ByRef, System.String ByRef, System.String ByRef, System.DateTime ByRef, System.DateTime ByRef, Boolean ByRef) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,Nullable/Nullable,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull]
-  Property Boolean Adjusted [NotNull/NotNull]
-  Property System.DateTime CreatedAt [NotNull/NotNull]
-  Property System.DateTime UpdatedAt [NotNull/NotNull]
-  Property System.Guid Id [NotNull/NotNull]
-  Property System.String Comment [Nullable/Nullable]
-  Property System.String DefinitionKey [NotNull/NotNull]
-  Property System.String DefinitionName [NotNull/NotNull]
-  Property System.String FormDataJson [NotNull/NotNull]
-Approval.Core.Engine.DraftSummary
-  Constructor Void .ctor(System.Guid, System.String, System.String, System.String, System.DateTime, System.DateTime) [args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,Nullable/Nullable,NotNull/NotNull,NotNull/NotNull]
-  Method Approval.Core.Engine.DraftSummary <Clone>$() [return=NotNull/NotNull; args=]
-  Method Boolean Equals(Approval.Core.Engine.DraftSummary) [return=NotNull/NotNull; args=Nullable/Nullable]
-  Method Boolean Equals(System.Object) [return=NotNull/NotNull; args=Nullable/Nullable]
-  Method Int32 GetHashCode() [return=NotNull/NotNull; args=]
-  Method System.String ToString() [return=NotNull/NotNull; args=]
-  Method Void Deconstruct(System.Guid ByRef, System.String ByRef, System.String ByRef, System.String ByRef, System.DateTime ByRef, System.DateTime ByRef) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,Nullable/Nullable,NotNull/NotNull,NotNull/NotNull]
-  Property System.DateTime CreatedAt [NotNull/NotNull]
-  Property System.DateTime UpdatedAt [NotNull/NotNull]
-  Property System.Guid Id [NotNull/NotNull]
-  Property System.String Comment [Nullable/Nullable]
-  Property System.String DefinitionKey [NotNull/NotNull]
-  Property System.String DefinitionName [NotNull/NotNull]
 Approval.Core.Engine.ExecutionState
   Constructor Void .ctor() [args=]
   Method Approval.Core.Engine.ExecutionState Load(Approval.Core.Domain.ApprovalInstance) [return=NotNull/NotNull; args=NotNull/NotNull]
@@ -1280,11 +1097,6 @@ Approval.Core.Engine.FlowSummary
   Method Void Deconstruct(System.String ByRef, System.String ByRef) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull]
   Property System.String Key [NotNull/NotNull]
   Property System.String Name [NotNull/NotNull]
-Approval.Core.Engine.FormApprovalHandler
-  Constructor Void .ctor(Approval.Core.Engine.ApprovalFormOptions) [args=NotNull/NotNull]
-  Method System.Threading.Tasks.Task OnApprovedAsync(Approval.Core.Domain.ApprovalInstance, System.Threading.CancellationToken) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull]
-  Method System.Threading.Tasks.Task OnRejectedAsync(Approval.Core.Domain.ApprovalInstance, System.Threading.CancellationToken) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull]
-  Property System.String BusinessType [NotNull/Unknown]
 Approval.Core.Engine.InstanceDetail
   Constructor Void .ctor(System.Guid, System.Guid, System.String, Int32, System.String, System.String, System.String, System.String, Approval.Core.Domain.InstanceStatus, System.String, Int32, System.String, System.DateTime, System.Nullable`1[System.DateTime], System.Collections.Generic.IReadOnlyList`1[Approval.Core.Domain.ApprovalTask], System.Collections.Generic.IReadOnlyList`1[Approval.Core.Domain.ApprovalLog], Approval.Core.Abstractions.ApprovalAccessLevel, System.Collections.Generic.IReadOnlyList`1[System.String]) [args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,Nullable/Nullable,NotNull/NotNull,NotNull/NotNull,Nullable/Nullable,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,Nullable/Nullable,NotNull/NotNull<NotNull/NotNull>,NotNull/NotNull<NotNull/NotNull>,NotNull/NotNull,NotNull/NotNull<NotNull/NotNull>]
   Method Approval.Core.Engine.InstanceDetail <Clone>$() [return=NotNull/NotNull; args=]
@@ -1459,33 +1271,6 @@ Approval.Core.Engine.StartApprovalRequest
   Property System.String InitiatorId [NotNull/NotNull]
   Property System.String OperationId [Nullable/Nullable]
   Property System.String Title [Nullable/Nullable]
-Approval.Core.Engine.StartForm
-  Constructor Void .ctor(System.Guid, System.String, System.String, Int32, Approval.Core.Forms.FlowSettings, Approval.Core.Forms.FormSchema) [args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull]
-  Method Approval.Core.Engine.StartForm <Clone>$() [return=NotNull/NotNull; args=]
-  Method Boolean Equals(Approval.Core.Engine.StartForm) [return=NotNull/NotNull; args=Nullable/Nullable]
-  Method Boolean Equals(System.Object) [return=NotNull/NotNull; args=Nullable/Nullable]
-  Method Int32 GetHashCode() [return=NotNull/NotNull; args=]
-  Method System.String ToString() [return=NotNull/NotNull; args=]
-  Method Void Deconstruct(System.Guid ByRef, System.String ByRef, System.String ByRef, Int32 ByRef, Approval.Core.Forms.FlowSettings ByRef, Approval.Core.Forms.FormSchema ByRef) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull]
-  Property Approval.Core.Forms.FlowSettings Settings [NotNull/NotNull]
-  Property Approval.Core.Forms.FormSchema Form [NotNull/NotNull]
-  Property Int32 Version [NotNull/NotNull]
-  Property System.Guid DefinitionId [NotNull/NotNull]
-  Property System.String Key [NotNull/NotNull]
-  Property System.String Name [NotNull/NotNull]
-Approval.Core.Engine.StartableFlow
-  Constructor Void .ctor(System.String, System.String, Int32, System.String, System.String) [args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,Nullable/Nullable,Nullable/Nullable]
-  Method Approval.Core.Engine.StartableFlow <Clone>$() [return=NotNull/NotNull; args=]
-  Method Boolean Equals(Approval.Core.Engine.StartableFlow) [return=NotNull/NotNull; args=Nullable/Nullable]
-  Method Boolean Equals(System.Object) [return=NotNull/NotNull; args=Nullable/Nullable]
-  Method Int32 GetHashCode() [return=NotNull/NotNull; args=]
-  Method System.String ToString() [return=NotNull/NotNull; args=]
-  Method Void Deconstruct(System.String ByRef, System.String ByRef, Int32 ByRef, System.String ByRef, System.String ByRef) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,Nullable/Nullable,Nullable/Nullable]
-  Property Int32 Version [NotNull/NotNull]
-  Property System.String Category [Nullable/Nullable]
-  Property System.String Description [Nullable/Nullable]
-  Property System.String Key [NotNull/NotNull]
-  Property System.String Name [NotNull/NotNull]
 Approval.Core.Engine.StatisticsQuery
   Constructor Void .ctor(System.DateTime, System.DateTime, System.String) [args=NotNull/NotNull,NotNull/NotNull,Nullable/Nullable default=null]
   Method Approval.Core.Engine.StatisticsQuery <Clone>$() [return=NotNull/NotNull; args=]
@@ -1539,125 +1324,6 @@ Approval.Core.Engine.TodoQuery
   Property System.String DefinitionKey [Nullable/Nullable]
   Property System.String InitiatorId [Nullable/Nullable]
   Property System.String Keyword [Nullable/Nullable]
-Approval.Core.Files.ApprovalFileService
-  Constructor Void .ctor(Approval.Core.Persistence.ApprovalDbContextAccessor, Approval.Core.Files.IApprovalFileStore, Approval.Core.Engine.ApprovalQueryService, Approval.Core.ApprovalOptions, System.TimeProvider, Approval.Core.Maintenance.ApprovalLifecycleService) [args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,Nullable/Nullable default=null]
-  Method System.Threading.Tasks.Task`1[Approval.Core.Domain.ApprovalFile] UploadAsync(System.String, System.String, System.IO.Stream, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull default=null]
-  Method System.Threading.Tasks.Task`1[System.Int32] CleanupAsync(System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull default=null]
-  Method System.Threading.Tasks.Task`1[System.Nullable`1[System.ValueTuple`2[Approval.Core.Domain.ApprovalFile,System.IO.Stream]]] OpenAsync(System.Guid, Approval.Core.Abstractions.ApprovalViewer, System.Threading.CancellationToken) [return=NotNull/NotNull<Nullable/Nullable<NotNull/NotNull,NotNull/NotNull>>; args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull default=null]
-Approval.Core.Files.IApprovalFileStore
-  Method System.Threading.Tasks.Task DeleteAsync(System.String, System.Threading.CancellationToken) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull]
-  Method System.Threading.Tasks.Task`1[System.IO.Stream] OpenReadAsync(System.String, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull,NotNull/NotNull]
-  Method System.Threading.Tasks.Task`1[System.String] SaveAsync(System.IO.Stream, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull,NotNull/NotNull]
-Approval.Core.Files.LocalApprovalFileStore
-  Constructor Void .ctor(Approval.Core.ApprovalOptions, System.TimeProvider, Microsoft.Extensions.Hosting.IHostEnvironment) [args=NotNull/NotNull,NotNull/NotNull,Nullable/Nullable default=null]
-  Method System.Threading.Tasks.Task DeleteAsync(System.String, System.Threading.CancellationToken) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull]
-  Method System.Threading.Tasks.Task`1[System.IO.Stream] OpenReadAsync(System.String, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull,NotNull/NotNull]
-  Method System.Threading.Tasks.Task`1[System.String] SaveAsync(System.IO.Stream, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull,NotNull/NotNull]
-Approval.Core.Forms.FlowSettings
-  Constructor Void .ctor() [args=]
-  Property Boolean Startable [NotNull/NotNull]
-  Property System.Collections.Generic.List`1[System.String] InitiatorRoles [NotNull/NotNull<NotNull/NotNull>]
-  Property System.String Category [Nullable/Nullable]
-  Property System.String Description [Nullable/Nullable]
-  Property System.String TitleTemplate [Nullable/Nullable]
-Approval.Core.Forms.FormDataValidator
-  Field Int32 DefaultMaxFiles [NotNull/NotNull] value=10
-  Field Int32 DefaultMaxRows [NotNull/NotNull] value=100
-  Field Int32 MaxTextLength [NotNull/NotNull] value=4000
-  Field Int32 MaxUsers [NotNull/NotNull] value=100
-  Method Approval.Core.Forms.FormValidationResult Validate(Approval.Core.Forms.FormSchema, System.Text.Json.JsonElement) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull]
-  Method System.String NormalizeLenient(Approval.Core.Forms.FormSchema, System.Text.Json.JsonElement) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull]
-  Method System.String ValidateOrThrow(Approval.Core.Forms.FormSchema, System.Text.Json.JsonElement) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull]
-Approval.Core.Forms.FormField
-  Constructor Void .ctor() [args=]
-  Method Boolean IsNumeric(Approval.Core.Forms.FormFieldType) [return=NotNull/NotNull; args=NotNull/NotNull]
-  Method System.String SumKey(System.String, System.String) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull]
-  Property Approval.Core.Forms.FormFieldType Type [NotNull/NotNull]
-  Property Boolean Required [NotNull/NotNull]
-  Property Boolean Sum [NotNull/NotNull]
-  Property Int32 Span [NotNull/NotNull]
-  Property System.Collections.Generic.List`1[Approval.Core.Forms.FormFieldOption] Options [NotNull/NotNull<NotNull/NotNull>]
-  Property System.Collections.Generic.List`1[Approval.Core.Forms.FormField] Columns [NotNull/NotNull<NotNull/NotNull>]
-  Property System.Collections.Generic.List`1[System.String] Accept [NotNull/NotNull<NotNull/NotNull>]
-  Property System.Nullable`1[System.Decimal] Max [Nullable/Nullable]
-  Property System.Nullable`1[System.Decimal] Min [Nullable/Nullable]
-  Property System.Nullable`1[System.Int32] MaxFiles [Nullable/Nullable]
-  Property System.Nullable`1[System.Int32] MaxLength [Nullable/Nullable]
-  Property System.Nullable`1[System.Int32] MaxRows [Nullable/Nullable]
-  Property System.Nullable`1[System.Int32] Precision [Nullable/Nullable]
-  Property System.Nullable`1[System.Text.Json.JsonElement] DefaultValue [Nullable/Nullable]
-  Property System.String Formula [Nullable/Nullable]
-  Property System.String Help [Nullable/Nullable]
-  Property System.String Key [NotNull/NotNull]
-  Property System.String Label [NotNull/NotNull]
-  Property System.String Placeholder [Nullable/Nullable]
-Approval.Core.Forms.FormFieldChange
-  Constructor Void .ctor(System.String, System.String, System.Text.Json.Nodes.JsonNode, System.Text.Json.Nodes.JsonNode) [args=NotNull/NotNull,NotNull/NotNull,Nullable/Nullable,Nullable/Nullable]
-  Method Approval.Core.Forms.FormFieldChange <Clone>$() [return=NotNull/NotNull; args=]
-  Method Boolean Equals(Approval.Core.Forms.FormFieldChange) [return=NotNull/NotNull; args=Nullable/Nullable]
-  Method Boolean Equals(System.Object) [return=NotNull/NotNull; args=Nullable/Nullable]
-  Method Int32 GetHashCode() [return=NotNull/NotNull; args=]
-  Method System.String ToString() [return=NotNull/NotNull; args=]
-  Method Void Deconstruct(System.String ByRef, System.String ByRef, System.Text.Json.Nodes.JsonNode ByRef, System.Text.Json.Nodes.JsonNode ByRef) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull,Nullable/Nullable,Nullable/Nullable]
-  Property System.String Field [NotNull/NotNull]
-  Property System.String Label [NotNull/NotNull]
-  Property System.Text.Json.Nodes.JsonNode After [Nullable/Nullable]
-  Property System.Text.Json.Nodes.JsonNode Before [Nullable/Nullable]
-Approval.Core.Forms.FormFieldOption
-  Constructor Void .ctor(System.String, System.String) [args=NotNull/NotNull,NotNull/NotNull]
-  Method Approval.Core.Forms.FormFieldOption <Clone>$() [return=NotNull/NotNull; args=]
-  Method Boolean Equals(Approval.Core.Forms.FormFieldOption) [return=NotNull/NotNull; args=Nullable/Nullable]
-  Method Boolean Equals(System.Object) [return=NotNull/NotNull; args=Nullable/Nullable]
-  Method Int32 GetHashCode() [return=NotNull/NotNull; args=]
-  Method System.String ToString() [return=NotNull/NotNull; args=]
-  Method Void Deconstruct(System.String ByRef, System.String ByRef) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull]
-  Property System.String Label [NotNull/NotNull]
-  Property System.String Value [NotNull/NotNull]
-Approval.Core.Forms.FormFieldType
-  Text = 0
-  TextArea = 1
-  Number = 2
-  Money = 3
-  Date = 4
-  DateRange = 5
-  Select = 6
-  MultiSelect = 7
-  Radio = 8
-  Switch = 9
-  User = 10
-  Users = 11
-  Table = 12
-  Description = 13
-  Formula = 14
-  File = 15
-Approval.Core.Forms.FormSchema
-  Constructor Void .ctor() [args=]
-  Property System.Collections.Generic.List`1[Approval.Core.Forms.FormField] Fields [NotNull/NotNull<NotNull/NotNull>]
-Approval.Core.Forms.FormSchemaValidator
-  Field Int32 MaxFields [NotNull/NotNull] value=100
-  Field Int32 MaxOptions [NotNull/NotNull] value=200
-  Field System.Collections.Generic.IReadOnlySet`1[System.String] TitleVariables [NotNull/NotNull<NotNull/NotNull>]
-  Method Void Validate(Approval.Core.Definitions.FlowDefinition, System.Collections.Generic.List`1[System.String]) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull<NotNull/NotNull>]
-Approval.Core.Forms.FormValidationResult
-  Constructor Void .ctor(System.String, System.Collections.Generic.IReadOnlyDictionary`2[System.String,System.String[]]) [args=NotNull/NotNull,NotNull/NotNull<NotNull/NotNull,NotNull/NotNull[NotNull/NotNull]>]
-  Method Approval.Core.Forms.FormValidationResult <Clone>$() [return=NotNull/NotNull; args=]
-  Method Boolean Equals(Approval.Core.Forms.FormValidationResult) [return=NotNull/NotNull; args=Nullable/Nullable]
-  Method Boolean Equals(System.Object) [return=NotNull/NotNull; args=Nullable/Nullable]
-  Method Int32 GetHashCode() [return=NotNull/NotNull; args=]
-  Method System.String ToString() [return=NotNull/NotNull; args=]
-  Method Void Deconstruct(System.String ByRef, System.Collections.Generic.IReadOnlyDictionary`2[System.String,System.String[]] ByRef) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull<NotNull/NotNull,NotNull/NotNull[NotNull/NotNull]>]
-  Property Boolean IsValid [NotNull/Unknown]
-  Property System.Collections.Generic.IReadOnlyDictionary`2[System.String,System.String[]] Errors [NotNull/NotNull<NotNull/NotNull,NotNull/NotNull[NotNull/NotNull]>]
-  Property System.String Json [NotNull/NotNull]
-Approval.Core.Forms.Formula
-  Field Int32 MaxLength [NotNull/NotNull] value=500
-  Method Approval.Core.Forms.Formula Parse(System.String) [return=NotNull/NotNull; args=Nullable/Nullable]
-  Method Boolean TryParse(System.String, Approval.Core.Forms.Formula ByRef, System.String ByRef) [return=NotNull/NotNull; args=Nullable/Nullable,Nullable/Nullable,Nullable/Nullable]
-  Method System.Decimal Round(System.Decimal, Int32) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull]
-  Method System.Nullable`1[System.Decimal] Evaluate(System.Func`2[System.String,System.Nullable`1[System.Decimal]]) [return=Nullable/Nullable; args=NotNull/NotNull<NotNull/NotNull,Nullable/Nullable>]
-  Method System.String ToString() [return=NotNull/NotNull; args=]
-  Property System.Collections.Generic.IReadOnlySet`1[System.String] Identifiers [NotNull/Unknown<NotNull/NotNull>]
-  Property System.String Text [NotNull/Unknown]
 Approval.Core.Hosting.ApprovalExecutionContext
   Constructor Void .ctor(Approval.Core.Abstractions.IApprovalContextResolver) [args=Nullable/Nullable default=null]
   Method Void InitializeSystem(System.String, System.Collections.Generic.IReadOnlyCollection`1[System.String]) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull<NotNull/NotNull>]
@@ -1667,97 +1333,10 @@ Approval.Core.Hosting.ApprovalExecutionContext
 Approval.Core.Hosting.ApprovalScope
   Method System.Threading.Tasks.ValueTask DisposeAsync() [return=NotNull/NotNull; args=]
   Property System.IServiceProvider ServiceProvider [NotNull/Unknown]
-Approval.Core.Maintenance.ApprovalLifecycleService
-  Constructor Void .ctor(Approval.Core.Persistence.ApprovalDbContextAccessor, Microsoft.Extensions.DependencyInjection.IServiceScopeFactory, Approval.Core.ApprovalOptions, System.TimeProvider, Approval.Core.Maintenance.ApprovalMaintenanceGate, Approval.Core.Files.IApprovalFileStore, Approval.Core.Abstractions.IApprovalArchiveQueryScope) [args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,Nullable/Nullable default=null,Nullable/Nullable default=null]
-  Method System.Threading.Tasks.Task`1[Approval.Core.Engine.PagedResult`1[Approval.Core.Maintenance.ArchiveSummary]] ListArchivesAsync(Approval.Core.Engine.PageRequest, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull<NotNull/NotNull>>; args=Nullable/Nullable default=null,NotNull/NotNull default=null]
-  Method System.Threading.Tasks.Task`1[Approval.Core.Engine.PagedResult`1[Approval.Core.Maintenance.MaintenanceBatchInfo]] ListBatchesAsync(System.Guid, Approval.Core.Engine.PageRequest, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull<NotNull/NotNull>>; args=NotNull/NotNull,Nullable/Nullable default=null,NotNull/NotNull default=null]
-  Method System.Threading.Tasks.Task`1[Approval.Core.Maintenance.MaintenanceJobInfo] CreateJobAsync(Approval.Core.Domain.MaintenanceTarget, Approval.Core.Domain.MaintenanceMode, System.String, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull default=null]
-  Method System.Threading.Tasks.Task`1[Approval.Core.Maintenance.MaintenanceJobInfo] RunJobAsync(System.Guid, Int32, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull,NotNull/NotNull default=1,NotNull/NotNull default=null]
-  Method System.Threading.Tasks.Task`1[Approval.Core.Maintenance.MaintenancePreview] PreviewAsync(Approval.Core.Domain.MaintenanceTarget, Approval.Core.Domain.MaintenanceMode, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull default=null]
-  Method System.Threading.Tasks.Task`1[System.Boolean] SetHoldAsync(Approval.Core.Domain.MaintenanceTarget, System.Guid, Boolean, System.String, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull default=null]
-  Method System.Threading.Tasks.Task`1[System.Collections.Generic.List`1[Approval.Core.Maintenance.MaintenanceJobInfo]] ListJobsAsync(System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull<NotNull/NotNull>>; args=NotNull/NotNull default=null]
-  Method System.Threading.Tasks.Task`1[System.IO.Stream] OpenArchiveFileAsync(System.Guid, System.Guid, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull default=null]
-  Method System.Threading.Tasks.Task`1[System.Int32] CleanupUnboundFilesAsync(System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull default=null]
-  Method System.Threading.Tasks.Task`1[System.Int32] DrainFileDeletesAsync(System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull default=null]
-  Method System.Threading.Tasks.Task`1[System.String] ExportArchiveAsync(System.Guid, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull,NotNull/NotNull default=null]
-Approval.Core.Maintenance.ApprovalMaintenanceGate
-  Constructor Void .ctor() [args=]
-Approval.Core.Maintenance.ArchiveSummary
-  Constructor Void .ctor(System.Guid, Approval.Core.Domain.MaintenanceTarget, System.Guid, System.String, System.String, System.DateTime, System.Nullable`1[System.DateTime], System.Nullable`1[System.DateTime], System.String) [args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,Nullable/Nullable,Nullable/Nullable,NotNull/NotNull,Nullable/Nullable,Nullable/Nullable,NotNull/NotNull]
-  Method Approval.Core.Maintenance.ArchiveSummary <Clone>$() [return=NotNull/NotNull; args=]
-  Method Boolean Equals(Approval.Core.Maintenance.ArchiveSummary) [return=NotNull/NotNull; args=Nullable/Nullable]
-  Method Boolean Equals(System.Object) [return=NotNull/NotNull; args=Nullable/Nullable]
-  Method Int32 GetHashCode() [return=NotNull/NotNull; args=]
-  Method System.String ToString() [return=NotNull/NotNull; args=]
-  Method Void Deconstruct(System.Guid ByRef, Approval.Core.Domain.MaintenanceTarget ByRef, System.Guid ByRef, System.String ByRef, System.String ByRef, System.DateTime ByRef, System.Nullable`1[System.DateTime] ByRef, System.Nullable`1[System.DateTime] ByRef, System.String ByRef) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,Nullable/Nullable,Nullable/Nullable,NotNull/NotNull,Nullable/Nullable,Nullable/Nullable,NotNull/NotNull]
-  Property Approval.Core.Domain.MaintenanceTarget Target [NotNull/NotNull]
-  Property System.DateTime ArchivedAt [NotNull/NotNull]
-  Property System.Guid Id [NotNull/NotNull]
-  Property System.Guid ResourceId [NotNull/NotNull]
-  Property System.Nullable`1[System.DateTime] PayloadExpiredAt [Nullable/Nullable]
-  Property System.Nullable`1[System.DateTime] PurgedAt [Nullable/Nullable]
-  Property System.String BusinessType [Nullable/Nullable]
-  Property System.String DefinitionKey [Nullable/Nullable]
-  Property System.String SnapshotHash [NotNull/NotNull]
-Approval.Core.Maintenance.MaintenanceBatchInfo
-  Constructor Void .ctor(System.Nullable`1[System.Int32], System.String, Int32, System.String, System.DateTime) [args=Nullable/Nullable,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull]
-  Method Approval.Core.Maintenance.MaintenanceBatchInfo <Clone>$() [return=NotNull/NotNull; args=]
-  Method Boolean Equals(Approval.Core.Maintenance.MaintenanceBatchInfo) [return=NotNull/NotNull; args=Nullable/Nullable]
-  Method Boolean Equals(System.Object) [return=NotNull/NotNull; args=Nullable/Nullable]
-  Method Int32 GetHashCode() [return=NotNull/NotNull; args=]
-  Method System.String ToString() [return=NotNull/NotNull; args=]
-  Method Void Deconstruct(System.Nullable`1[System.Int32] ByRef, System.String ByRef, Int32 ByRef, System.String ByRef, System.DateTime ByRef) [return=NotNull/NotNull; args=Nullable/Nullable,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull]
-  Property Int32 Count [NotNull/NotNull]
-  Property System.DateTime CommittedAt [NotNull/NotNull]
-  Property System.Nullable`1[System.Int32] Batch [Nullable/Nullable]
-  Property System.String Action [NotNull/NotNull]
-  Property System.String ActorId [NotNull/NotNull]
-Approval.Core.Maintenance.MaintenanceJobInfo
-  Constructor Void .ctor(System.Guid, Approval.Core.Domain.MaintenanceTarget, Approval.Core.Domain.MaintenanceMode, Approval.Core.Domain.MaintenanceJobStatus, Int32, Int32, System.String, System.DateTime) [args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,Nullable/Nullable,NotNull/NotNull]
-  Method Approval.Core.Maintenance.MaintenanceJobInfo <Clone>$() [return=NotNull/NotNull; args=]
-  Method Boolean Equals(Approval.Core.Maintenance.MaintenanceJobInfo) [return=NotNull/NotNull; args=Nullable/Nullable]
-  Method Boolean Equals(System.Object) [return=NotNull/NotNull; args=Nullable/Nullable]
-  Method Int32 GetHashCode() [return=NotNull/NotNull; args=]
-  Method System.String ToString() [return=NotNull/NotNull; args=]
-  Method Void Deconstruct(System.Guid ByRef, Approval.Core.Domain.MaintenanceTarget ByRef, Approval.Core.Domain.MaintenanceMode ByRef, Approval.Core.Domain.MaintenanceJobStatus ByRef, Int32 ByRef, Int32 ByRef, System.String ByRef, System.DateTime ByRef) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,Nullable/Nullable,NotNull/NotNull]
-  Property Approval.Core.Domain.MaintenanceJobStatus Status [NotNull/NotNull]
-  Property Approval.Core.Domain.MaintenanceMode Mode [NotNull/NotNull]
-  Property Approval.Core.Domain.MaintenanceTarget Target [NotNull/NotNull]
-  Property Int32 CompletedBatches [NotNull/NotNull]
-  Property Int32 Processed [NotNull/NotNull]
-  Property System.DateTime CreatedAt [NotNull/NotNull]
-  Property System.Guid Id [NotNull/NotNull]
-  Property System.String LastErrorCode [Nullable/Nullable]
-Approval.Core.Maintenance.MaintenancePreview
-  Constructor Void .ctor(Approval.Core.Domain.MaintenanceTarget, Approval.Core.Domain.MaintenanceMode, Boolean, Boolean, System.Nullable`1[System.DateTime], System.String, Int32, System.Collections.Generic.IReadOnlyList`1[System.Guid]) [args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,Nullable/Nullable,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull<NotNull/NotNull>]
-  Method Approval.Core.Maintenance.MaintenancePreview <Clone>$() [return=NotNull/NotNull; args=]
-  Method Boolean Equals(Approval.Core.Maintenance.MaintenancePreview) [return=NotNull/NotNull; args=Nullable/Nullable]
-  Method Boolean Equals(System.Object) [return=NotNull/NotNull; args=Nullable/Nullable]
-  Method Int32 GetHashCode() [return=NotNull/NotNull; args=]
-  Method System.String ToString() [return=NotNull/NotNull; args=]
-  Method Void Deconstruct(Approval.Core.Domain.MaintenanceTarget ByRef, Approval.Core.Domain.MaintenanceMode ByRef, Boolean ByRef, Boolean ByRef, System.Nullable`1[System.DateTime] ByRef, System.String ByRef, Int32 ByRef, System.Collections.Generic.IReadOnlyList`1[System.Guid] ByRef) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,Nullable/Nullable,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull<NotNull/NotNull>]
-  Property Approval.Core.Domain.MaintenanceMode Mode [NotNull/NotNull]
-  Property Approval.Core.Domain.MaintenanceTarget Target [NotNull/NotNull]
-  Property Boolean Configured [NotNull/NotNull]
-  Property Boolean Enabled [NotNull/NotNull]
-  Property Int32 Eligible [NotNull/NotNull]
-  Property System.Collections.Generic.IReadOnlyList`1[System.Guid] SampleIds [NotNull/NotNull<NotNull/NotNull>]
-  Property System.Nullable`1[System.DateTime] Cutoff [Nullable/Nullable]
-  Property System.String PolicyHash [NotNull/NotNull]
-Approval.Core.Notifications.ChannelInfo
-  Constructor Void .ctor(System.String, System.String) [args=NotNull/NotNull,NotNull/NotNull]
-  Method Approval.Core.Notifications.ChannelInfo <Clone>$() [return=NotNull/NotNull; args=]
-  Method Boolean Equals(Approval.Core.Notifications.ChannelInfo) [return=NotNull/NotNull; args=Nullable/Nullable]
-  Method Boolean Equals(System.Object) [return=NotNull/NotNull; args=Nullable/Nullable]
-  Method Int32 GetHashCode() [return=NotNull/NotNull; args=]
-  Method System.String ToString() [return=NotNull/NotNull; args=]
-  Method Void Deconstruct(System.String ByRef, System.String ByRef) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull]
-  Property System.String DisplayName [NotNull/NotNull]
-  Property System.String Name [NotNull/NotNull]
-Approval.Core.Notifications.ChannelMessage
+Approval.Core.Notifications.ApprovalNotificationRequest
   Constructor Void .ctor(System.Guid, Approval.Core.Definitions.NotifyEvent, System.Nullable`1[System.Guid], System.String, System.String, System.String, System.Collections.Generic.IReadOnlyList`1[System.String], System.String) [args=NotNull/NotNull,NotNull/NotNull,Nullable/Nullable,Nullable/Nullable,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull<NotNull/NotNull>,Nullable/Nullable]
-  Method Approval.Core.Notifications.ChannelMessage <Clone>$() [return=NotNull/NotNull; args=]
-  Method Boolean Equals(Approval.Core.Notifications.ChannelMessage) [return=NotNull/NotNull; args=Nullable/Nullable]
+  Method Approval.Core.Notifications.ApprovalNotificationRequest <Clone>$() [return=NotNull/NotNull; args=]
+  Method Boolean Equals(Approval.Core.Notifications.ApprovalNotificationRequest) [return=NotNull/NotNull; args=Nullable/Nullable]
   Method Boolean Equals(System.Object) [return=NotNull/NotNull; args=Nullable/Nullable]
   Method Int32 GetHashCode() [return=NotNull/NotNull; args=]
   Method System.String ToString() [return=NotNull/NotNull; args=]
@@ -1770,10 +1349,16 @@ Approval.Core.Notifications.ChannelMessage
   Property System.String Link [Nullable/Nullable]
   Property System.String NodeId [Nullable/Nullable]
   Property System.String Title [NotNull/NotNull]
-Approval.Core.Notifications.IApprovalChannel
-  Method System.Threading.Tasks.Task SendAsync(Approval.Core.Notifications.ChannelMessage, System.Threading.CancellationToken) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull]
-  Property System.String DisplayName [NotNull/Unknown]
-  Property System.String Name [NotNull/Unknown]
+Approval.Core.Notifications.ChannelInfo
+  Constructor Void .ctor(System.String, System.String) [args=NotNull/NotNull,NotNull/NotNull]
+  Method Approval.Core.Notifications.ChannelInfo <Clone>$() [return=NotNull/NotNull; args=]
+  Method Boolean Equals(Approval.Core.Notifications.ChannelInfo) [return=NotNull/NotNull; args=Nullable/Nullable]
+  Method Boolean Equals(System.Object) [return=NotNull/NotNull; args=Nullable/Nullable]
+  Method Int32 GetHashCode() [return=NotNull/NotNull; args=]
+  Method System.String ToString() [return=NotNull/NotNull; args=]
+  Method Void Deconstruct(System.String ByRef, System.String ByRef) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull]
+  Property System.String DisplayName [NotNull/NotNull]
+  Property System.String Name [NotNull/NotNull]
 Approval.Core.Notifications.InAppChannel
   Field System.String DisplayName [NotNull/NotNull] value="\u7AD9\u5185\u4FE1"
   Field System.String Name [NotNull/NotNull] value="InApp"
@@ -1788,17 +1373,17 @@ Approval.Core.Notifications.NotificationDefaults
   Property System.Collections.Generic.IReadOnlyDictionary`2[Approval.Core.Definitions.NotifyEvent,System.String] Titles [NotNull/Unknown<NotNull/NotNull,NotNull/NotNull>]
   Property System.Collections.Generic.IReadOnlyList`1[Approval.Core.Abstractions.ApproverTypeDescriptor] NotificationRecipientDescriptors [NotNull/Unknown<NotNull/NotNull>]
   Property System.Collections.Generic.IReadOnlyList`1[System.String] NotificationRecipientTypes [NotNull/Unknown<NotNull/NotNull>]
-Approval.Core.Persistence.ApprovalDbContext
-  Method Int32 SaveChanges() [return=NotNull/NotNull; args=]
-  Method Int32 SaveChanges(Boolean) [return=NotNull/NotNull; args=NotNull/NotNull]
-  Method System.Threading.Tasks.Task`1[System.Int32] SaveChangesAsync(Boolean, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull,NotNull/NotNull default=null]
-  Method System.Threading.Tasks.Task`1[System.Int32] SaveChangesAsync(System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull default=null]
 Approval.Core.Persistence.ApprovalDbContextAccessor
-  Constructor Void .ctor(Approval.Core.Persistence.ApprovalDbContext, Approval.Core.Authorization.ApprovalAuthorizationService, Approval.Core.Abstractions.IApprovalCommandExecutor, Approval.Core.Abstractions.IApprovalActorContext) [args=NotNull/NotNull,Nullable/Nullable default=null,Nullable/Nullable default=null,Nullable/Nullable default=null]
+  Constructor Void .ctor(Microsoft.EntityFrameworkCore.DbContext, Approval.Core.Authorization.ApprovalAuthorizationService, Approval.Core.Abstractions.IApprovalCommandExecutor, Approval.Core.Abstractions.IApprovalActorContext) [args=NotNull/NotNull,Nullable/Nullable default=null,Nullable/Nullable default=null,Nullable/Nullable default=null]
   Property Microsoft.EntityFrameworkCore.DbContext Context [NotNull/Unknown]
 Approval.Core.Persistence.ApprovalModelBuilderExtensions
   Method Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder UseUtcDateTimes(Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder) [return=NotNull/NotNull; args=NotNull/NotNull]
-  Method Microsoft.EntityFrameworkCore.ModelBuilder ConfigureApproval(Microsoft.EntityFrameworkCore.ModelBuilder, Approval.Core.Persistence.ApprovalDbContext, System.String) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull default="Approval"]
+  Method Microsoft.EntityFrameworkCore.ModelBuilder ConfigureApproval(Microsoft.EntityFrameworkCore.ModelBuilder, System.String) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull default="Approval"]
+Approval.Core.Persistence.ApprovalPersistence
+  Method Microsoft.EntityFrameworkCore.DbContextOptionsBuilder UseApproval(Microsoft.EntityFrameworkCore.DbContextOptionsBuilder) [return=NotNull/NotNull; args=NotNull/NotNull]
+  Method Microsoft.EntityFrameworkCore.DbContextOptionsBuilder`1[TContext] UseApproval[TContext](Microsoft.EntityFrameworkCore.DbContextOptionsBuilder`1[TContext]) [return=NotNull/NotNull<Unknown/Unknown>; args=NotNull/NotNull<Unknown/Unknown>]
+Approval.Core.Persistence.IApprovalHostContext
+  Property Microsoft.EntityFrameworkCore.DbContext Context [NotNull/Unknown]
 Approval.Core.Resolvers.ApproverLevel
   Constructor Void .ctor(Int32, System.String) [args=NotNull/NotNull,Nullable/Nullable]
   Field Int32 Max [NotNull/NotNull] value=10

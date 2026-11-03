@@ -3,164 +3,171 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "properties": {
     "form": {
-      "properties": {
-        "fields": {
-          "items": {
-            "properties": {
-              "accept": {
-                "items": {
-                  "type": [
-                    "string",
-                    "null"
-                  ]
-                },
-                "type": "array"
-              },
-              "columns": {
-                "items": {
-                  "$ref": "#/properties/form/properties/fields/items"
-                },
-                "type": "array"
-              },
-              "defaultValue": true,
-              "formula": {
-                "type": [
-                  "string",
-                  "null"
-                ]
-              },
-              "help": {
-                "type": [
-                  "string",
-                  "null"
-                ]
-              },
-              "key": {
-                "type": "string"
-              },
-              "label": {
-                "type": "string"
-              },
-              "max": {
-                "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
-                "type": [
-                  "string",
-                  "number",
-                  "null"
-                ]
-              },
-              "maxFiles": {
-                "pattern": "^-?(?:0|[1-9]\\d*)$",
-                "type": [
-                  "string",
-                  "integer",
-                  "null"
-                ]
-              },
-              "maxLength": {
-                "pattern": "^-?(?:0|[1-9]\\d*)$",
-                "type": [
-                  "string",
-                  "integer",
-                  "null"
-                ]
-              },
-              "maxRows": {
-                "pattern": "^-?(?:0|[1-9]\\d*)$",
-                "type": [
-                  "string",
-                  "integer",
-                  "null"
-                ]
-              },
-              "min": {
-                "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
-                "type": [
-                  "string",
-                  "number",
-                  "null"
-                ]
-              },
-              "options": {
-                "items": {
-                  "properties": {
-                    "label": {
-                      "type": "string"
+      "anyOf": [
+        {
+          "properties": {
+            "fields": {
+              "items": {
+                "properties": {
+                  "accept": {
+                    "items": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
                     },
-                    "value": {
-                      "type": "string"
-                    }
+                    "type": "array"
                   },
-                  "required": [
-                    "label",
-                    "value"
-                  ],
-                  "type": [
-                    "object",
-                    "null"
-                  ]
+                  "columns": {
+                    "items": {
+                      "$ref": "#/properties/fields/items"
+                    },
+                    "type": "array"
+                  },
+                  "defaultValue": true,
+                  "formula": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "help": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "key": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "type": "string"
+                  },
+                  "max": {
+                    "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
+                    "type": [
+                      "string",
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "maxFiles": {
+                    "pattern": "^-?(?:0|[1-9]\\d*)$",
+                    "type": [
+                      "string",
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "maxLength": {
+                    "pattern": "^-?(?:0|[1-9]\\d*)$",
+                    "type": [
+                      "string",
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "maxRows": {
+                    "pattern": "^-?(?:0|[1-9]\\d*)$",
+                    "type": [
+                      "string",
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "min": {
+                    "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d\u002B)?$",
+                    "type": [
+                      "string",
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "options": {
+                    "items": {
+                      "properties": {
+                        "label": {
+                          "type": "string"
+                        },
+                        "value": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "label",
+                        "value"
+                      ],
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
+                    "type": "array"
+                  },
+                  "placeholder": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "precision": {
+                    "pattern": "^-?(?:0|[1-9]\\d*)$",
+                    "type": [
+                      "string",
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "required": {
+                    "type": "boolean"
+                  },
+                  "span": {
+                    "pattern": "^-?(?:0|[1-9]\\d*)$",
+                    "type": [
+                      "string",
+                      "integer"
+                    ]
+                  },
+                  "sum": {
+                    "type": "boolean"
+                  },
+                  "type": {
+                    "enum": [
+                      "Text",
+                      "TextArea",
+                      "Number",
+                      "Money",
+                      "Date",
+                      "DateRange",
+                      "Select",
+                      "MultiSelect",
+                      "Radio",
+                      "Switch",
+                      "User",
+                      "Users",
+                      "Table",
+                      "Description",
+                      "Formula",
+                      "File"
+                    ]
+                  }
                 },
-                "type": "array"
-              },
-              "placeholder": {
                 "type": [
-                  "string",
+                  "object",
                   "null"
                 ]
               },
-              "precision": {
-                "pattern": "^-?(?:0|[1-9]\\d*)$",
-                "type": [
-                  "string",
-                  "integer",
-                  "null"
-                ]
-              },
-              "required": {
-                "type": "boolean"
-              },
-              "span": {
-                "pattern": "^-?(?:0|[1-9]\\d*)$",
-                "type": [
-                  "string",
-                  "integer"
-                ]
-              },
-              "sum": {
-                "type": "boolean"
-              },
-              "type": {
-                "enum": [
-                  "Text",
-                  "TextArea",
-                  "Number",
-                  "Money",
-                  "Date",
-                  "DateRange",
-                  "Select",
-                  "MultiSelect",
-                  "Radio",
-                  "Switch",
-                  "User",
-                  "Users",
-                  "Table",
-                  "Description",
-                  "Formula",
-                  "File"
-                ]
-              }
-            },
-            "type": [
-              "object",
-              "null"
-            ]
+              "type": "array"
+            }
           },
-          "type": "array"
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        {
+          "type": "null"
         }
-      },
-      "type": [
-        "object",
-        "null"
       ]
     },
     "nodes": {

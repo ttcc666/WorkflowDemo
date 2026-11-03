@@ -1,0 +1,2 @@
+Approval.Forms.AspNetCore.ApprovalFormsAspNetCoreExtensions
+  Method Microsoft.Extensions.DependencyInjection.IServiceCollection AddApprovalFormsAspNetCore(Microsoft.Extensions.DependencyInjection.IServiceCollection) [return=NotNull/NotNull; args=NotNull/NotNull]
