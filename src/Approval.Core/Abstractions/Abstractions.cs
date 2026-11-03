@@ -129,29 +129,3 @@ public interface IApprovalBusinessHandler
     /// <summary>管理员终止流程。默认按驳回处理（关闭单据、解锁），需要区分时重写。</summary>
     Task OnTerminatedAsync(ApprovalInstance instance, CancellationToken ct) => OnRejectedAsync(instance, ct);
 }
-
-/// <summary>条件分支表达式求值。</summary>
-public interface IConditionEvaluator
-{
-    bool Evaluate(string expression, IReadOnlyDictionary<string, object?> variables);
-}
-
-public enum NotificationKind { TaskCreated, Cc, Completed }
-
-public sealed record ApprovalNotification(
-    NotificationKind Kind,
-    Guid InstanceId,
-    string BusinessType,
-    string BusinessKey,
-    string? Title,
-    InstanceStatus Status,
-    IReadOnlyList<Assignee> Recipients);
-
-/// <summary>
-/// 消息通知（站内信、邮件、企业微信等），可选。
-/// 在事务提交成功后调用，失败只记录日志、不影响审批结果。
-/// </summary>
-public interface IApprovalNotifier
-{
-    Task NotifyAsync(ApprovalNotification notification, CancellationToken ct);
-}

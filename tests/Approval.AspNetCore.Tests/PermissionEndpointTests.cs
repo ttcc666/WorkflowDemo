@@ -1,3 +1,4 @@
+using Approval.Forms;
 using System.Net;
 using Approval.Core;
 using Approval.Core.Abstractions;
@@ -121,7 +122,7 @@ public sealed class PermissionEndpointTests
     [Fact]
     public async Task EveryMappedEndpointHasKnownPermission_AndNewUnclassifiedRouteFailsStartup()
     {
-        await using var host = await ApiHost.StartAsync(build: b => b.AddFormApprovals());
+        await using var host = await ApiHost.StartAsync(build: b => b.AddApprovalForms());
         Assert.True(host.Endpoints.Count >= 40);
         foreach (var endpoint in host.Endpoints)
         {

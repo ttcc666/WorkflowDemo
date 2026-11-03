@@ -1,43 +1,13 @@
-> 当前项目尚未正式使用：不提供旧环境升级或旧程序集/客户端兼容，契约以当前生成基线为准。
+# 契约与发布验证
 
-# 契约与发布验收
+Directory.Build.props 的 ApprovalVersion 与 @approval/ui 的版本一致。四个 NuGet 包分别为 Approval.Core、Approval.AspNetCore、Approval.Forms、Approval.Forms.AspNetCore。Core 和 AspNetCore 不依赖 Forms。
 
-## 契约来源
+在根目录运行 pwsh -NoProfile -File ./eng/verify-packages.ps1。脚本使用 PowerShell 原生枚举复制消费者，不依赖 ripgrep；剔除 bin/obj/node_modules 等产物。NuGet SourceMapping 将 Approval.* 固定到本次 feed，独立缓存中的包 SHA512 与构建的 nupkg 一致。
 
-- `eng/Approval.ContractTool` 映射真实审批/注册证路由，按组在临时回环端口分别导出 OpenAPI，不初始化业务数据库。
-- `contracts/approval.openapi.json` 只描述通用审批 HTTP 接口；`flow.schema.json`、`form.schema.json` 描述嵌入 JSON 的结构。业务规则仍由服务端校验器执行。
-- `contracts/*.api.txt` 只记录两个框架程序集的公开类型、成员、可空性、默认参数和常量。
-- `samples/Approval.Certificate/contracts/` 单独保存注册证示例的 OpenAPI 和公开 API 基线，由 `contracts:check` 校验。
-- `web/packages/approval-ui/src/contracts/http.generated.ts` 仅由框架 OpenAPI 生成；`api.ts` 保留原前端名称和投影，并区分服务端可接受的数字字符串与实际写出的数字。注册证类型留在示例前端。
-- HTTP 响应 DTO 位于 `Approval.AspNetCore/Contracts`，固定 JSON 样例验证其字段、字符串枚举、UTC 日期和空值。C# 查询服务与 HTTP DTO 分别记录当前契约。
+Certificate.Api、ReferenceHost 从复制后的宿主源码构建并引用 NuGet 包。EmbeddedHost 只装 Core/AspNetCore，使用已有 Identity、宿主 SaveChanges 和业务表，实际生成 Migration 并运行无 Forms 的审批能力验证。消费者不引用仓库框架源码。
 
-```powershell
-Set-Location -LiteralPath 'D:\Study\CSharp\Workflow'
-pnpm --dir 'web' contracts:check
-# 有意更改契约后，重新生成并审查差异。
-pnpm --dir 'web' contracts:update
-```
+npm tgz 在独立消费者安装，验证 dist 导出、版本、types、CSS 导入并构建真实 demo。可选 RunBrowser 运行消费者页面 smoke。产物记录在 output/packages/<version>/release-manifest.json，包括源码、包、契约与 changelog 摘要。
 
-## 流程协议版本
+运行 pnpm contracts:update 更新 OpenAPI、JSON schema、四个公共程序集 API 基线与 TypeScript；CI 用 contracts:check 拒绝漂移。前端 types 依赖生成契约，不能把旧生成内容当成当前协议。
 
-`schemaVersion` 与流程发布版本、EF 迁移版本相互独立。该字段省略时默认 v1，新保存定义写出 `schemaVersion: 1`。只接受 JSON 整数值（1 与 1.0 等价），未知版本、字符串和 null 均拒绝；前后端复用 `tests/shared/definition-cases.json`。
-
-发布后的 JSON、DefinitionId 和版本不可改写；正常编辑生成新版本，实例仍绑定发起时版本。当前只支持 v1，未知协议明确拒绝，不提供旧环境读取升级器。
-
-## 独立包验收
-
-```powershell
-pwsh -File './eng/verify.ps1'                         # 本地与 CI 的完整入口
-pwsh -File './eng/verify.ps1' -Scope 'Contracts'      # 生成契约一致性
-pwsh -File './eng/verify.ps1' -Scope 'Packages'       # 打包、独立消费者与浏览器
-```
-
-包版本由 `Directory.Build.props` 的 `ApprovalVersion` 与前端包版本共同校验。构建产物位于 `output/packages/<version>/`，发布清单只包含 `Approval.Core`、`Approval.AspNetCore` 两个 NuGet 包和 `@approval/ui` 的 npm tarball。`Approval.Certificate` 是不可打包的示例项目。
-
-消费者复制示例宿主和注册证示例类库，宿主引用复制后的示例项目，示例通过 PackageReference 消费两个框架包，不引用仓库中的框架项目；前端通过 tarball 消费 UI 包。独立 NuGet 缓存和 PackageSourceMapping 保证框架包来自本次本地 feed；安装后的 SHA512 与原包逐一比较，注册证依赖则必须显示为本地项目。前端检查 dist 导出、独立协议类型和 CSS，并执行真实构建。
-
-多租户参考宿主也复制到独立消费者，改为 PackageReference 后构建；检查 deps.json 中两个框架包的类型与 SHA512，并在该包宿主上执行真实 Kestrel 双租户/撤权/恢复授权冒烟。`verification.json` 的 `ReferenceApiRoot` 标明消费者位置。
-
-浏览器在临时端口、新 SQLite 文件上运行，实际操作打包后的设计器、提交与三级审批，检查终审前台账为空、终审后正式生效。Windows 使用已安装的 Edge；其他环境可预先运行 `pnpm --dir 'web' exec playwright install chromium`，也可设置 `APPROVAL_BROWSER_CHANNEL`。测试进程只清理自己启动的服务。
-
-`release-manifest.json` 关联版本、Git 基线、源文件指纹、契约、CHANGELOG 与包校验和；浏览器的 `passed.json` 进一步关联已验收包。CI 保存清单、测试报告和截图。实际向 NuGet/npm 发布或更新运行中的宿主不由此验收脚本执行。
+GitHub Actions 必须以实际远端运行结果验收。本地通过只提供本地证据；缺失 remote 或服务环境时在交付报告中保留未满足项。

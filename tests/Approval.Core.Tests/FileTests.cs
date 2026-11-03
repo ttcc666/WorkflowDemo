@@ -1,8 +1,10 @@
+using Approval.Forms;
+using Approval.Forms.Runtime;
 using System.Text;
 using System.Text.Json;
 using Approval.Core.Abstractions;
 using Approval.Core.Domain;
-using Approval.Core.Files;
+using Approval.Forms.Attachments;
 using Microsoft.EntityFrameworkCore;
 
 namespace Approval.Core.Tests;
@@ -55,7 +57,7 @@ public sealed class FileTests : IAsyncLifetime
 
     private static readonly InMemoryFileStore Store = new();
 
-    private readonly TestHost _host = new(o => o.Files.MaxFileSizeMb = 1, b => b.AddFormApprovals().AddFileStore<SharedStore>());
+    private readonly TestHost _host = new(build: b => b.AddApprovalForms(o => o.Files.MaxFileSizeMb = 1).AddFileStore<SharedStore>());
 
     /// <summary>每个测试一个存储实例的包装（DI 按类型创建）。</summary>
     public sealed class SharedStore : IApprovalFileStore
@@ -210,36 +212,12 @@ public sealed class FileTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task 清理只删除过期且未绑定的文件()
-    {
-        await _host.RunAsync(sp =>
-        {
-            var options = sp.GetRequiredService<ApprovalOptions>();
-            options.Lifecycle.Enabled = true; options.Lifecycle.AllowDeletion = true; options.Lifecycle.UnboundFilesAfter = options.Files.UnboundRetention;
-            return Task.FromResult(true);
-        });
-        var stale = await UploadAsync("alice", "stale.pdf");
-        var bound = await UploadAsync("alice", "bound.pdf");
-        await StartAsync("alice", bound);
-        _host.Clock.Advance(TimeSpan.FromHours(25));
-        var fresh = await UploadAsync("alice", "fresh.pdf");
-
-        await _host.ScanTimeoutsAsync();
-
-        var remaining = await _host.RunAsync(sp => sp.GetRequiredService<TestDbContext>().Set<ApprovalFile>().Select(f => f.Id).ToListAsync());
-        Assert.DoesNotContain(stale.Id, remaining);
-        Assert.False(Store.Files.ContainsKey(stale.StorageKey));
-        Assert.Contains(bound.Id, remaining);
-        Assert.Contains(fresh.Id, remaining);
-    }
-
-    [Fact]
     public async Task 本地存储按年月保存并拒绝路径穿越()
     {
         var root = Path.Combine(Path.GetTempPath(), "approval-files-" + Guid.NewGuid().ToString("N"));
         try
         {
-            var options = new ApprovalOptions();
+            var options = new ApprovalFormOptions();
             options.Files.RootPath = root;
             var store = new LocalApprovalFileStore(options, _host.Clock);
 

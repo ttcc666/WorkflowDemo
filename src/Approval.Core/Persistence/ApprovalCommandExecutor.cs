@@ -9,7 +9,7 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Approval.Core.Persistence;
 
 internal sealed class ApprovalCommandExecutor<TContext>(IServiceScopeFactory scopes,
-    IApprovalActorContext actor, ApprovalOptions options, TimeProvider clock) : IApprovalCommandExecutor where TContext : ApprovalDbContext
+    IApprovalActorContext actor, ApprovalOptions options, TimeProvider clock) : IApprovalCommandExecutor where TContext : DbContext
 {
     private static readonly JsonSerializerOptions Json = JsonSerializerOptions.Web;
     public async Task<T> ExecuteAsync<T>(ApprovalCommand command, Func<IServiceProvider, CancellationToken, Task<T>> operation, CancellationToken ct = default)
@@ -48,7 +48,7 @@ internal sealed class ApprovalCommandExecutor<TContext>(IServiceScopeFactory sco
                 || previous.RequestHash != hash || previous.HashVersion != 1 || previous.ResultVersion != 2)
                 throw new ApprovalException("同一提交标识不能用于不同内容或不支持的结果版本") { Code = ApprovalErrorCode.Conflict };
             await using var scope = CreateScope(); var sp = scope.ServiceProvider;
-            if (previous.IsTombstone) throw new ApprovalException("原操作结果已结束重放保留期；原键仍永久防重，请查询归档记录") { Code = ApprovalErrorCode.ReplayExpired };
+            if (previous.IsTombstone) throw new ApprovalException("旧版本已清除原操作结果；原键仍防重，请按业务标识查询宿主历史记录") { Code = ApprovalErrorCode.ReplayExpired };
             var auth = sp.GetRequiredService<ApprovalAuthorizationService>();
             var stored = JsonSerializer.Deserialize<StoredResult<T>>(previous.ResultJson, Json)!;
             if (previous.InstanceId is { } id && !identity.IsSystem)
@@ -76,7 +76,7 @@ internal sealed class ApprovalCommandExecutor<TContext>(IServiceScopeFactory sco
                 await sp.GetRequiredService<ApprovalAuthorizationService>().RequireAsync(command.Permission, command.Resource, identity.ActorId, ct);
                 var authorizedResource = await sp.GetRequiredService<ApprovalAuthorizationService>().Inner.ResolveResourceAsync(command.Resource ?? new(), ct);
                 var db = sp.GetRequiredService<TContext>(); var unit = (ApprovalUnitOfWork)sp.GetRequiredService<IApprovalUnitOfWork>();
-                db.TransactionState.OperationSeed = seed; db.TransactionState.Definitions = definitions;
+                ApprovalPersistence.State(db).OperationSeed = seed; ApprovalPersistence.State(db).Definitions = definitions;
                 if (db.ChangeTracker.HasChanges()) throw new InvalidOperationException("命令作用域必须从干净的 DbContext 开始");
                 var committing = false;
                 try
@@ -96,7 +96,7 @@ internal sealed class ApprovalCommandExecutor<TContext>(IServiceScopeFactory sco
                         if (record is not null)
                         {
                             record.ResultJson = JsonSerializer.Serialize(new StoredResult<T>(result, authorizedResource), Json);
-                            record.InstanceId = db.TransactionState.InstanceId; record.DefinitionId = db.TransactionState.DefinitionId;
+                            record.InstanceId = ApprovalPersistence.State(db).InstanceId; record.DefinitionId = ApprovalPersistence.State(db).DefinitionId;
                             record.CommittedAt = clock.GetUtcNow().UtcDateTime;
                         }
                         // Any failure after here is conservatively verified using a separate context.

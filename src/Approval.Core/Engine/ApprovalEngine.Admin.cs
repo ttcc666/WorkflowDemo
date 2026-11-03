@@ -157,7 +157,6 @@ public sealed partial class ApprovalEngine
         // 尚未轮到 / 等待加签的任务在激活时再通知
         if (handed.Status != ApprovalTaskStatus.Pending) return;
         var target = new Assignee(AssigneeKind.User, toUserId);
-        Notify(NotificationKind.TaskCreated, instance, [target]);
         await RaiseAsync(NotifyEvent.Transferred, instance, flow, flow.GetNode(task.NodeId),
             new EventInfo([target]) { OperatorId = operatorId, Comment = reason, TransferTo = toUserId, DueAt = handed.DueAt }, ct);
     }

@@ -11,7 +11,6 @@ internal sealed class ApprovalTransactionState
     public bool DeferredRead;
     public bool Serializable;
     public bool RequireOperationId, SystemActor;
-    public bool AllowLogDeletion;
     public int ExtensionDepth;
     public int ExtensionCommitDepth;
     public Guid? InstanceId, DefinitionId;
@@ -21,9 +20,9 @@ internal sealed class ApprovalTransactionState
     public readonly List<Func<Task>> Callbacks = [];
 }
 
-internal sealed class ApprovalUnitOfWork(ApprovalDbContext db) : IApprovalUnitOfWork
+internal sealed class ApprovalUnitOfWork(DbContext db) : IApprovalUnitOfWork
 {
-    private ApprovalTransactionState State => db.TransactionState;
+    private ApprovalTransactionState State => ApprovalPersistence.State(db);
     public bool IsActive => State.Active;
     internal void Reference(Guid instance, Guid definition) { State.InstanceId = instance; State.DefinitionId = definition; }
     internal Guid NewId(string kind)

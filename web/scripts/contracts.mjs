@@ -14,7 +14,7 @@ const run = spawnSync('dotnet', args, { cwd: root, stdio: 'inherit' })
 if (run.error) throw run.error
 if (run.status !== 0) process.exit(run.status ?? 1)
 
-const files = ['approval.openapi.json', 'flow.schema.json', 'form.schema.json', 'Approval.Core.api.txt', 'Approval.AspNetCore.api.txt']
+const files = ['approval.openapi.json', 'flow.schema.json', 'form.schema.json', 'Approval.Core.api.txt', 'Approval.AspNetCore.api.txt', 'Approval.Forms.api.txt', 'Approval.Forms.AspNetCore.api.txt']
 const sampleDirectory = 'samples/Approval.Certificate/contracts'
 const sampleFiles = ['certificate.openapi.json', 'Approval.Certificate.api.txt']
 const doc = JSON.parse(await readFile(join(generated, files[0]), 'utf8'))
@@ -41,10 +41,6 @@ for (const document of [doc, sampleDoc]) {
       if (!success.length) throw new Error(`Missing success response: ${method} ${path}`)
       for (const [status, response] of success) {
         if (status === '204' || (method === 'get' && path === '/api/approval/files/{id}')) continue
-        if (method === 'get' && path === '/api/approval/archives/{id}/files/{fileId}') {
-          if (!response.content?.['application/octet-stream']) throw new Error(`Missing binary response content: ${method} ${path}`)
-          continue
-        }
         if (!response.content?.['application/json']?.schema) throw new Error(`Missing response schema: ${method} ${path}`)
       }
     }

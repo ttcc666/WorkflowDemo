@@ -36,16 +36,16 @@ public sealed class CertificateRecoveryTests
         await EnableWebhookAsync(host);
         host.Http.Failures = 1;
         await host.RegisterAsync();
-        var queued = await host.DbAsync(db => db.Set<ApprovalOutboxMessage>().AsNoTracking().SingleAsync());
+        var queued = await host.DbAsync(db => db.Set<ApprovalOutboxMessage>().AsNoTracking().SingleAsync(m => m.PayloadJson.Contains("\"eventType\":\"NotificationRequested\"")));
 
         await DispatchAsync(host);
-        var first = await host.DbAsync(db => db.Set<ApprovalOutboxMessage>().AsNoTracking().SingleAsync());
+        var first = await host.DbAsync(db => db.Set<ApprovalOutboxMessage>().AsNoTracking().SingleAsync(m => m.PayloadJson.Contains("\"eventType\":\"NotificationRequested\"")));
         Assert.Equal(OutboxStatus.Pending, first.Status);
         Assert.Equal(1, first.Attempts);
         host.Clock.Advance(TimeSpan.FromMinutes(1));
         await DispatchAsync(host);
 
-        var result = await host.DbAsync(db => db.Set<ApprovalOutboxMessage>().AsNoTracking().SingleAsync());
+        var result = await host.DbAsync(db => db.Set<ApprovalOutboxMessage>().AsNoTracking().SingleAsync(m => m.PayloadJson.Contains("\"eventType\":\"NotificationRequested\"")));
         Assert.Equal(OutboxStatus.Succeeded, result.Status);
         Assert.Equal(2, result.Attempts);
         Assert.Equal(2, host.Http.Calls.Count);
@@ -54,7 +54,7 @@ public sealed class CertificateRecoveryTests
     }
 
     [Fact]
-    public async Task Persisted_delivery_lease_is_reclaimed_after_restart_only_when_expired()
+    public async Task Pending_delivery_survives_restart_and_waits_until_scheduled_retry()
     {
         using var directory = new TestDirectory();
         Guid messageId;
@@ -64,7 +64,7 @@ public sealed class CertificateRecoveryTests
             await first.RegisterAsync();
             messageId = await first.DbAsync(async db =>
             {
-                var message = await db.Set<ApprovalOutboxMessage>().SingleAsync();
+                var message = await db.Set<ApprovalOutboxMessage>().SingleAsync(m => m.PayloadJson.Contains("\"eventType\":\"NotificationRequested\""));
                 message.Attempts = 1;
                 message.ConcurrencyStamp++;
                 message.NextAttemptAt = first.Clock.GetUtcNow().UtcDateTime.AddMinutes(5);
@@ -79,7 +79,7 @@ public sealed class CertificateRecoveryTests
         restarted.Clock.Advance(TimeSpan.FromMinutes(1));
         await DispatchAsync(restarted);
         Assert.Equal(messageId.ToString(), Assert.Single(restarted.Http.Calls).Key);
-        var result = await restarted.DbAsync(db => db.Set<ApprovalOutboxMessage>().AsNoTracking().SingleAsync());
+        var result = await restarted.DbAsync(db => db.Set<ApprovalOutboxMessage>().AsNoTracking().SingleAsync(m => m.PayloadJson.Contains("\"eventType\":\"NotificationRequested\"")));
         Assert.Equal(OutboxStatus.Succeeded, result.Status);
         Assert.Equal(2, result.Attempts);
         Assert.Equal(1, await restarted.DbAsync(db => db.Certificates.CountAsync()));

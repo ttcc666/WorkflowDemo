@@ -1,6 +1,6 @@
 using System.Text.Json;
 using Approval.Core.Definitions;
-using Approval.Core.Forms;
+using Approval.Forms.Schema;
 
 namespace Approval.Core.Tests;
 
@@ -29,9 +29,9 @@ public sealed class DefinitionContractTests
         var restored = FlowDefinition.Parse(saved);
         Assert.Equal(new[] { "end", "start" }, restored.Nodes.Values.Select(node => node.Id).Order());
         Assert.Equal("end", restored.GetNode("start").Next);
-        Assert.Equal(new[] { FormFieldType.Text, FormFieldType.Money }, restored.Form!.Fields.Select(field => field.Type));
-        Assert.True(restored.Form.Fields[0].Required);
-        Assert.Equal(2, restored.Form.Fields[1].Precision);
+        Assert.Equal(new[] { FormFieldType.Text, FormFieldType.Money }, restored.GetForm()!.Fields.Select(field => field.Type));
+        Assert.True(restored.GetForm()!.Fields[0].Required);
+        Assert.Equal(2, restored.GetForm()!.Fields[1].Precision);
     }
 
     [Fact]
@@ -39,7 +39,7 @@ public sealed class DefinitionContractTests
     {
         var definition = FlowDefinition.Parse(Cases().First(item => item.Valid).Json);
         definition.SchemaVersion = 2;
-        Assert.Contains(FlowDefinitionValidator.Validate(definition, new HashSet<string>()), error => error.Contains("协议版本 2"));
+        Assert.Contains(FormDefinitionValidator.Validate(definition, new HashSet<string>()), error => error.Contains("协议版本 2"));
         Assert.Throws<ApprovalException>(() => definition.ToJson());
     }
 }

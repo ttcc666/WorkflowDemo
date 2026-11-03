@@ -1,7 +1,9 @@
+using Approval.Forms;
+using Approval.Forms.Runtime;
 using System.Text.Json;
 using Approval.Core.Definitions;
 using Approval.Core.Domain;
-using Approval.Core.Forms;
+using Approval.Forms.Schema;
 
 namespace Approval.Core.Tests;
 
@@ -39,12 +41,12 @@ public sealed class FormFormulaTests
 
     private static JsonElement Json(string json) => JsonDocument.Parse(json).RootElement;
 
-    private static FormSchema Schema => FlowDefinition.Parse(PurchaseFlow).Form!;
+    private static FormSchema Schema => FlowDefinition.Parse(PurchaseFlow).GetForm()!;
 
     private static List<string> SchemaErrors(Action<FormSchema> change)
     {
         var flow = FlowDefinition.Parse(PurchaseFlow);
-        change(flow.Form!);
+        change(flow.GetForm()!);
         var errors = new List<string>();
         FormSchemaValidator.Validate(flow, errors);
         return errors;
@@ -129,7 +131,7 @@ public sealed class FormFormulaTests
     [Fact]
     public async Task Computed_values_drive_conditions_and_titles()
     {
-        await using var host = new TestHost(build: b => b.AddFormApprovals());
+        await using var host = new TestHost(build: b => b.AddApprovalForms());
         host.Identity.Add("alice");
         await host.PublishAsync("purchase", PurchaseFlow);
         var forms = (IServiceProvider sp) => sp.GetRequiredService<ApprovalFormService>();

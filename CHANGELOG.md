@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.3.0 — 2026-11-03
+
+- 删除默认维护/归档/保留系统、相关 API/UI/Worker；保留诊断、审批审计与 Outbox。
+- 宿主可直接使用 DbContext、IdentityDbContext 或已有基类，EF 拦截器与工作单元保留事务和不可变保护。
+- 拆出可选 Approval.Forms / Approval.Forms.AspNetCore；实际文件存储归宿主，不再自动清理附件。
+- 外部事件统一 IApprovalEventHandler + Outbox；删除渠道及 best-effort Notifier 接口，权限默认拒绝且不推断管理员角色。
+- 保留幂等结果恢复、请求摘要、唯一占用和并发保护；没有自动操作保留调度。旧已擦除结果的防重标记仅用于升级兼容。
+- 九套边界迁移退出维护模型管理，保留历史表、快照及附件数据，不修改历史 Migration。
+- 包验证不依赖 ripgrep；四个 NuGet 包、独立 Identity 消费者和 npm 消费者纳入验证。后端 Forms 已独立，前端表单仍在 @approval/ui。
+
+本轮实际测试与未满足的服务环境/远端验收见 docs/round2-report.md。
+
+## 历史开发记录
+
+以下内容是此前开发快照，不是当前接入方式或当前测试证明。
+
+
 ## Unreleased — 新项目初始化（2026-11-03）
 
 - 根据项目尚未正式使用的约束，九套 EF 上下文统一为当前模型的一条 InitialApproval；删除开发期迁移链、租户/业务占用回填工具、升级副本逻辑及相应兼容测试。

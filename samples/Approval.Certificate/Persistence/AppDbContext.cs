@@ -1,10 +1,14 @@
+using Approval.Forms;
 using Approval.Core.Persistence;
 using Microsoft.EntityFrameworkCore;
 
 namespace Certificate.Api.Certificates;
 
-public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : ApprovalDbContext(options)
+public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
+    protected override void OnConfiguring(DbContextOptionsBuilder options)
+    { base.OnConfiguring(options); options.UseApproval(); }
+
     public DbSet<CertificateEntity> Certificates => Set<CertificateEntity>();
     public DbSet<CertificateRequest> CertificateRequests => Set<CertificateRequest>();
     public DbSet<CertificateNumberReservation> CertificateNumberReservations => Set<CertificateNumberReservation>();
@@ -12,7 +16,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : Appro
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         // 业务和审批共用一个 DbContext，保持回调与审批状态的本地事务。
-        modelBuilder.ConfigureApproval(this);
+        modelBuilder.ConfigureApproval().ConfigureApprovalForms();
         modelBuilder.ConfigureCertificates();
     }
 }

@@ -1,3 +1,4 @@
+using Approval.Forms;
 using System.Collections.Concurrent;
 using System.Data.Common;
 using Approval.Core;
@@ -17,11 +18,14 @@ public sealed class AtomicHostRecord
     public Guid Id { get; set; }
     public int Value { get; set; }
 }
-public sealed class AtomicContractContext(DbContextOptions<AtomicContractContext> options) : ApprovalDbContext(options)
+public sealed class AtomicContractContext(DbContextOptions<AtomicContractContext> options) : DbContext(options)
 {
+    protected override void OnConfiguring(DbContextOptionsBuilder options)
+    { base.OnConfiguring(options); options.UseApproval(); }
+
     protected override void OnModelCreating(ModelBuilder model)
     {
-        model.ConfigureApproval(this);
+        model.ConfigureApproval().ConfigureApprovalForms();
         model.Entity<AtomicHostRecord>(b => { b.ToTable("AtomicHostRecords"); b.HasKey(r => r.Id); b.Property(r => r.Id).HasConversion<string>().HasMaxLength(36).IsUnicode(false);
             });
     }
@@ -67,18 +71,12 @@ internal sealed class AtomicStrategyFactory(ExecutionStrategyDependencies depend
 internal sealed class AtomicFaults : DbTransactionInterceptor
 {
     public int BeforeCommit, AfterCommit, BusinessCalls, ActionCalls;
-    public int MaintenanceBeforeCommit;
-    public bool MaintenancePermanentFailure;
     public bool BlockVerification, FailVerificationAfterCommit, FailCallback, AsyncSaveThenFail, IgnoreActionCancellation;
     public readonly ConcurrentBag<Guid> Contexts = [];
     public readonly ConcurrentBag<Guid> OutboxIds = [];
     public TaskCompletionSource? Entered, Release;
     public override ValueTask<InterceptionResult> TransactionCommittingAsync(DbTransaction transaction, TransactionEventData eventData, InterceptionResult result, CancellationToken ct = default)
     {
-        if (MaintenancePermanentFailure && eventData.Context?.ChangeTracker.Entries<ApprovalMaintenanceAudit>().Any(e => e.Entity.Action == "BatchCommitted") == true)
-            throw new InvalidOperationException("controlled maintenance failure");
-        if (eventData.Context?.ChangeTracker.Entries<ApprovalMaintenanceAudit>().Any(e => e.Entity.Action == "BatchCommitted") == true
-            && Interlocked.Exchange(ref MaintenanceBeforeCommit, 0) == 1) throw new AtomicTransientException();
         if (Interlocked.Exchange(ref BeforeCommit, 0) == 1) throw new AtomicTransientException();
         return ValueTask.FromResult(result);
     }

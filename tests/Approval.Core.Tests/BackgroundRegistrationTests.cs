@@ -22,10 +22,10 @@ public sealed class BackgroundRegistrationTests
         var instance = await host.StartAsync("worker", "one", "alice");
         Task Tick() => host.RunAsync(sp => Assert.IsType<ApprovalWorker>(Assert.Single(sp.GetServices<IHostedService>())).RunOnceAsync());
         await Tick();
-        Assert.Equal(OutboxStatus.Pending, Assert.Single(await host.OutboxAsync()).Status);
+        Assert.Equal(OutboxStatus.Pending, Assert.Single(await host.NotificationOutboxAsync()).Status);
         host.Clock.Advance(TimeSpan.FromMinutes(1));
         await Tick();
-        Assert.Equal(OutboxStatus.Succeeded, Assert.Single(await host.OutboxAsync()).Status);
+        Assert.Equal(OutboxStatus.Succeeded, Assert.Single(await host.NotificationOutboxAsync()).Status);
         Assert.Equal(0, Assert.Single((await host.GetInstanceAsync(instance.Id)).Tasks).RemindCount);
         host.Clock.Advance(TimeSpan.FromMinutes(1));
         await Tick();

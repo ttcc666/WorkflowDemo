@@ -1,3 +1,6 @@
+using Approval.Forms.AspNetCore;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Approval.Forms;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Approval.Core;
@@ -16,9 +19,12 @@ using Microsoft.Extensions.Logging;
 
 namespace Approval.AspNetCore.Tests;
 
-public sealed class ApiDbContext(DbContextOptions<ApiDbContext> options) : ApprovalDbContext(options)
+public sealed class ApiDbContext(DbContextOptions<ApiDbContext> options) : DbContext(options)
 {
-    protected override void OnModelCreating(ModelBuilder modelBuilder) => modelBuilder.ConfigureApproval(this);
+    protected override void OnConfiguring(DbContextOptionsBuilder options)
+    { base.OnConfiguring(options); options.UseApproval(); }
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder) => modelBuilder.ConfigureApproval().ConfigureApprovalForms();
 }
 
 /// <summary>内存用户表，同时作为身份提供者与用户目录。</summary>
@@ -104,6 +110,7 @@ public sealed class ApiHost : IAsyncDisposable
         builder.Services.AddSingleton<IApprovalIdentityProvider>(users);
         if (withDirectory) builder.Services.AddSingleton<IApprovalUserDirectory>(users);
         builder.Services.AddSingleton<IApprovalCurrentUser, HeaderCurrentUser>();
+        builder.Services.AddScoped<IApprovalPermissionProvider>(sp => new ApiFixturePermissionProvider(users, sp.GetRequiredService<Microsoft.AspNetCore.Http.IHttpContextAccessor>(), sp.GetRequiredService<ApprovalAspNetCoreOptions>()));
         builder.Services.AddApprovalAspNetCore(api);
         var approval = builder.Services
             .AddApprovalWorkflow<ApiDbContext>(o =>
@@ -113,6 +120,11 @@ public sealed class ApiHost : IAsyncDisposable
             })
             .AddBusinessHandler<DocHandler>();
         build?.Invoke(approval);
+        if (builder.Services.Any(d => d.ServiceType == typeof(Approval.Forms.Runtime.ApprovalFormService)))
+        {
+            builder.Services.AddApprovalFormsAspNetCore();
+            builder.Services.TryAddScoped<Approval.Forms.Attachments.IApprovalFileStore, Approval.Forms.Attachments.LocalApprovalFileStore>();
+        }
 
         var app = builder.Build();
         if (readiness) app.MapApprovalReadiness();

@@ -22,77 +22,6 @@ namespace Approval.Database.Tests.Migrations.PostgreSql
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
-            modelBuilder.Entity("Approval.Core.Domain.ApprovalArchiveRecord", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("ArchivedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("BusinessKey")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<string>("BusinessType")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<long>("ConcurrencyStamp")
-                        .IsConcurrencyToken()
-                        .HasColumnType("bigint");
-
-                    b.Property<Guid?>("DefinitionId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("DefinitionKey")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<Guid?>("InstanceId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("PayloadExpiredAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("PurgedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("ResourceId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("SnapshotHash")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.Property<string>("SnapshotJson")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<long>("SourceVersion")
-                        .HasColumnType("bigint");
-
-                    b.Property<string>("Target")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("character varying(30)");
-
-                    b.Property<string>("UserId")
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ArchivedAt");
-
-                    b.HasIndex("Target", "ResourceId", "SourceVersion")
-                        .IsUnique();
-
-                    b.ToTable("ApprovalArchives", (string)null);
-                });
-
             modelBuilder.Entity("Approval.Core.Domain.ApprovalBusinessSlot", b =>
                 {
                     b.Property<Guid>("Id")
@@ -358,155 +287,6 @@ namespace Approval.Database.Tests.Migrations.PostgreSql
                     b.ToTable("ApprovalDefinitionManagement", (string)null);
                 });
 
-            modelBuilder.Entity("Approval.Core.Domain.ApprovalDraft", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Comment")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("DefinitionKey")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<string>("FormDataJson")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("UserId")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("UserId", "UpdatedAt");
-
-                    b.ToTable("ApprovalDrafts", (string)null);
-                });
-
-            modelBuilder.Entity("Approval.Core.Domain.ApprovalFile", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid?>("ArchiveId")
-                        .HasColumnType("uuid");
-
-                    b.Property<long>("ConcurrencyStamp")
-                        .IsConcurrencyToken()
-                        .HasColumnType("bigint");
-
-                    b.Property<string>("ContentType")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<bool>("DeletionPending")
-                        .HasColumnType("boolean");
-
-                    b.Property<Guid?>("DraftId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("FileName")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<Guid?>("InstanceId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Sha256")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.Property<long>("Size")
-                        .HasColumnType("bigint");
-
-                    b.Property<string>("StorageKey")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<DateTime>("UploadedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("UploadedBy")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ArchiveId");
-
-                    b.HasIndex("DraftId");
-
-                    b.HasIndex("InstanceId");
-
-                    b.HasIndex("UploadedAt");
-
-                    b.ToTable("ApprovalFiles", (string)null);
-                });
-
-            modelBuilder.Entity("Approval.Core.Domain.ApprovalFileDeletion", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("Attempts")
-                        .HasColumnType("integer");
-
-                    b.Property<long>("ConcurrencyStamp")
-                        .IsConcurrencyToken()
-                        .HasColumnType("bigint");
-
-                    b.Property<Guid>("FileId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("LastErrorCode")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.Property<DateTime>("NextAttemptAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("StartedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.Property<string>("StorageKey")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("FileId")
-                        .IsUnique();
-
-                    b.HasIndex("Status", "NextAttemptAt");
-
-                    b.ToTable("ApprovalFileDeletions", (string)null);
-                });
-
             modelBuilder.Entity("Approval.Core.Domain.ApprovalInstance", b =>
                 {
                     b.Property<Guid>("Id")
@@ -640,115 +420,6 @@ namespace Approval.Database.Tests.Migrations.PostgreSql
                     b.HasIndex("OperatorId", "Action");
 
                     b.ToTable("ApprovalLogs", (string)null);
-                });
-
-            modelBuilder.Entity("Approval.Core.Domain.ApprovalMaintenanceAudit", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Action")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("character varying(30)");
-
-                    b.Property<string>("ActorId")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
-
-                    b.Property<int?>("Batch")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("Count")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("JobId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Reason")
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)");
-
-                    b.Property<Guid?>("ResourceId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Target")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("character varying(30)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("JobId", "Batch")
-                        .IsUnique();
-
-                    b.ToTable("ApprovalMaintenanceAudits", (string)null);
-                });
-
-            modelBuilder.Entity("Approval.Core.Domain.ApprovalMaintenanceJob", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("ActorId")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
-
-                    b.Property<int>("CompletedBatches")
-                        .HasColumnType("integer");
-
-                    b.Property<long>("ConcurrencyStamp")
-                        .IsConcurrencyToken()
-                        .HasColumnType("bigint");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("Cutoff")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("LastErrorCode")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.Property<string>("Mode")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.Property<string>("PolicyHash")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.Property<int>("Processed")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.Property<bool>("SystemRequested")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("Target")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("character varying(30)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Status", "CreatedAt");
-
-                    b.ToTable("ApprovalMaintenanceJobs", (string)null);
                 });
 
             modelBuilder.Entity("Approval.Core.Domain.ApprovalMessage", b =>
@@ -937,41 +608,6 @@ namespace Approval.Database.Tests.Migrations.PostgreSql
                     b.ToTable("ApprovalOutbox", (string)null);
                 });
 
-            modelBuilder.Entity("Approval.Core.Domain.ApprovalRetentionHold", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("ActorId")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Reason")
-                        .IsRequired()
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)");
-
-                    b.Property<Guid>("ResourceId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Target")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("character varying(30)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Target", "ResourceId")
-                        .IsUnique();
-
-                    b.ToTable("ApprovalRetentionHolds", (string)null);
-                });
-
             modelBuilder.Entity("Approval.Core.Domain.ApprovalTask", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1058,6 +694,107 @@ namespace Approval.Database.Tests.Migrations.PostgreSql
                     b.ToTable("ApprovalTasks", (string)null);
                 });
 
+            modelBuilder.Entity("Approval.Forms.Attachments.ApprovalFile", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ArchiveId")
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("ConcurrencyStamp")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<bool>("DeletionPending")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid?>("DraftId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid?>("InstanceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Sha256")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<long>("Size")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("StorageKey")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime>("UploadedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UploadedBy")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DraftId");
+
+                    b.HasIndex("InstanceId");
+
+                    b.HasIndex("UploadedAt");
+
+                    b.ToTable("ApprovalFiles", (string)null);
+                });
+
+            modelBuilder.Entity("Approval.Forms.Runtime.ApprovalDraft", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Comment")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DefinitionKey")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("FormDataJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "UpdatedAt");
+
+                    b.ToTable("ApprovalDrafts", (string)null);
+                });
+
             modelBuilder.Entity("Approval.Core.Domain.ApprovalBusinessSlot", b =>
                 {
                     b.HasOne("Approval.Core.Domain.ApprovalInstance", null)
@@ -1111,24 +848,6 @@ namespace Approval.Database.Tests.Migrations.PostgreSql
                         .OnDelete(DeleteBehavior.NoAction);
                 });
 
-            modelBuilder.Entity("Approval.Core.Domain.ApprovalFile", b =>
-                {
-                    b.HasOne("Approval.Core.Domain.ApprovalArchiveRecord", null)
-                        .WithMany()
-                        .HasForeignKey("ArchiveId")
-                        .OnDelete(DeleteBehavior.NoAction);
-
-                    b.HasOne("Approval.Core.Domain.ApprovalDraft", null)
-                        .WithMany()
-                        .HasForeignKey("DraftId")
-                        .OnDelete(DeleteBehavior.NoAction);
-
-                    b.HasOne("Approval.Core.Domain.ApprovalInstance", null)
-                        .WithMany()
-                        .HasForeignKey("InstanceId")
-                        .OnDelete(DeleteBehavior.NoAction);
-                });
-
             modelBuilder.Entity("Approval.Core.Domain.ApprovalInstance", b =>
                 {
                     b.HasOne("Approval.Core.Domain.ApprovalDefinition", null)
@@ -1170,6 +889,19 @@ namespace Approval.Database.Tests.Migrations.PostgreSql
                         .HasForeignKey("InstanceId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("Approval.Forms.Attachments.ApprovalFile", b =>
+                {
+                    b.HasOne("Approval.Forms.Runtime.ApprovalDraft", null)
+                        .WithMany()
+                        .HasForeignKey("DraftId")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("Approval.Core.Domain.ApprovalInstance", null)
+                        .WithMany()
+                        .HasForeignKey("InstanceId")
+                        .OnDelete(DeleteBehavior.NoAction);
                 });
 
             modelBuilder.Entity("Approval.Core.Domain.ApprovalInstance", b =>

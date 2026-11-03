@@ -15,4 +15,5 @@
     <Content Update="Flows\*.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <ItemGroup><ProjectReference Include="../../src/Approval.Forms.AspNetCore/Approval.Forms.AspNetCore.csproj" /></ItemGroup>
 </Project>

@@ -5,6 +5,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" />
     <PackageReference Include="coverlet.collector" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
     <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
@@ -28,4 +29,5 @@
     <ProjectReference Include="..\..\src\Approval.Core\Approval.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup><ProjectReference Include="../../src/Approval.Forms/Approval.Forms.csproj" /></ItemGroup>
 </Project>

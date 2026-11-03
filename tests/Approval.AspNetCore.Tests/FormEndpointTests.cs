@@ -1,3 +1,4 @@
+using Approval.Forms;
 using System.Text.Json;
 using Approval.Core.Engine;
 using Microsoft.Extensions.DependencyInjection;
@@ -24,7 +25,7 @@ public sealed class FormEndpointTests
     }
     """;
 
-    private static Task<ApiHost> StartAsync() => ApiHost.StartAsync(build: b => b.AddFormApprovals());
+    private static Task<ApiHost> StartAsync() => ApiHost.StartAsync(build: b => b.AddApprovalForms());
 
     [Fact]
     public async Task 发起成功返回实例ID()
@@ -218,7 +219,10 @@ public sealed class FormEndpointTests
     public async Task 未启用表单审批时同意不能修改表单()
     {
         await using var host = await ApiHost.StartAsync();
-        await host.PublishAsync("leave", PermissionFlow);
+        var plainFlow = Approval.Core.Definitions.FlowDefinition.Parse(PermissionFlow);
+        plainFlow.Form = null;
+        foreach (var node in plainFlow.Nodes.Values) node.FieldPermissions.Clear();
+        await host.PublishAsync("leave", plainFlow.ToJson());
         await host.RunAsync(sp => sp.GetRequiredService<ApprovalEngine>()
             .StartAsync(new StartApprovalRequest("leave", DocHandler.Type, "D-1", "alice")));
         var taskId = (await host.GetJsonAsync("/api/approval/todo", "bob")).GetProperty("items")[0].GetProperty("taskId").GetGuid();

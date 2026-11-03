@@ -97,7 +97,7 @@ public sealed class AccessEndpointTests
     [Fact]
     public async Task DefinitionReaders角色可读取完整定义但不能发布()
     {
-        await using var host = await ApiHost.StartAsync(api: o => o.DefinitionReaders.Add("Designer"));
+        await using var host = await ApiHost.StartAsync();
         host.Users.Roles["dora"] = ["Designer"];
         await StartAsync(host);
 

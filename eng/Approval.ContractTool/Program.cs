@@ -1,3 +1,5 @@
+using Approval.Forms.AspNetCore;
+using Approval.Forms;
 using System.Globalization;
 using System.Reflection;
 using System.Text.Json;
@@ -10,7 +12,7 @@ using Approval.Certificate;
 using Approval.Core;
 using Approval.Core.Abstractions;
 using Approval.Core.Definitions;
-using Approval.Core.Forms;
+using Approval.Forms.Schema;
 using Certificate.Api.Certificates;
 using Certificate.Api.Endpoints;
 using Microsoft.AspNetCore.Builder;
@@ -38,8 +40,9 @@ builder.Services.AddOpenApi("certificate");
 builder.Services.AddDbContext<AppDbContext>(options => options.UseSqlite("Data Source=:memory:"));
 builder.Services.AddScoped<IApprovalIdentityProvider, ContractIdentity>();
 builder.Services.AddApprovalWorkflow<AppDbContext>(options => { options.EnableBackgroundServices = false; })
-    .AddFormApprovals().AddCertificateModule();
+    .AddApprovalForms().AddCertificateModule();
 builder.Services.AddApprovalAspNetCore();
+builder.Services.AddApprovalFormsAspNetCore();
 await using var app = builder.Build();
 app.MapGroup("").WithGroupName("approval").MapApprovalEndpoints();
 app.MapGroup("").WithGroupName("certificate").MapCertificateEndpoints();
@@ -61,7 +64,7 @@ try
         foreach (var endpoint in ((IEndpointRouteBuilder)app).DataSources.SelectMany(s => s.Endpoints).OfType<RouteEndpoint>())
         {
             var permissions = endpoint.Metadata.GetMetadata<ApprovalPermissionMetadata>();
-            if (permissions is null || permissions.ResourceKind == "maintenance-run" || permissions.Permissions.Any(p => p is ApprovalPermissions.DefinitionValidate or ApprovalPermissions.FileUpload or ApprovalPermissions.TaskReassignBulk)) continue;
+            if (permissions is null || permissions.Permissions.Any(p => p is ApprovalPermissions.DefinitionValidate or ApprovalPermissions.FileUpload or ApprovalPermissions.TaskReassignBulk)) continue;
             var path = System.Text.RegularExpressions.Regex.Replace(endpoint.RoutePattern.RawText!, @"\{([^}:]+):[^}]+\}", "{$1}");
             foreach (var method in endpoint.Metadata.GetMetadata<HttpMethodMetadata>()!.HttpMethods.Where(m => m is "POST" or "PUT" or "DELETE"))
                 if (document["paths"]?[path]?[method.ToLowerInvariant()] is JsonObject operation) AddCommandHeader(operation, false);
@@ -86,6 +89,7 @@ var flowSchema = json.GetJsonSchemaAsNode(typeof(FlowDefinition));
 flowSchema["$schema"] = "https://json-schema.org/draft/2020-12/schema";
 flowSchema["$id"] = "urn:approval:flow:1";
 flowSchema["properties"]!["schemaVersion"] = new JsonObject { ["type"] = "integer", ["const"] = 1, ["default"] = 1 };
+flowSchema["properties"]!["form"] = new JsonObject { ["anyOf"] = new JsonArray(json.GetJsonSchemaAsNode(typeof(FormSchema)), new JsonObject { ["type"] = "null" }) };
 await WriteJsonAsync("flow.schema.json", flowSchema);
 var formSchema = json.GetJsonSchemaAsNode(typeof(FormSchema));
 formSchema["$schema"] = "https://json-schema.org/draft/2020-12/schema";
@@ -96,6 +100,8 @@ foreach (var (assembly, directory) in new[]
 {
     (typeof(ApprovalOptions).Assembly, output),
     (typeof(ApprovalAspNetCoreOptions).Assembly, output),
+    (typeof(Approval.Forms.Runtime.ApprovalFormOptions).Assembly, output),
+    (typeof(ApprovalFormsAspNetCoreExtensions).Assembly, output),
     (typeof(CertificateService).Assembly, sampleOutput)
 })
 {

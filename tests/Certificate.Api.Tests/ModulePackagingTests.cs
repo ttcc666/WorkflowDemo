@@ -27,7 +27,7 @@ public sealed class ModulePackagingTests
     public void Module_preserves_migration_history_and_model()
     {
         using var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseSqlite("Data Source=:memory:").Options);
-        Assert.EndsWith("_InitialApproval", Assert.Single(db.Database.GetMigrations()));
+        Assert.Equal(new[] { "20261103051646_InitialApproval", "20261103065227_EmbeddedEngineBoundary" }, db.Database.GetMigrations());
         Assert.False(db.Database.HasPendingModelChanges());
     }
 }

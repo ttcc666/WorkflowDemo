@@ -1,6 +1,5 @@
 using System.Text.RegularExpressions;
 using Approval.Core.Abstractions;
-using Approval.Core.Forms;
 using Approval.Core.Notifications;
 using Approval.Core.Resolvers;
 using Approval.Core.Templates;
@@ -10,6 +9,7 @@ namespace Approval.Core.Definitions;
 /// <summary>校验所需的已注册扩展。为 null 的集合不做对应检查。</summary>
 public sealed class FlowValidationContext
 {
+    public IApprovalDefinitionExtension? Extension { get; init; }
     public required IReadOnlySet<string> ApproverTypes { get; init; }
 
     /// <summary>审批人类型描述（参数类型、是否有序），用于校验规则参数与审批方式。</summary>
@@ -49,9 +49,11 @@ public static partial class FlowDefinitionValidator
         if (!nodes.Values.Any(n => n.Type == NodeType.End))
             errors.Add("流程至少需要一个 End 节点");
 
-        var userFields = UserFieldsOf(definition);
+        var userFields = context.Extension?.UserFields(definition);
         ValidateNotifications(errors, "流程级通知", definition.Notifications, null, context, userFields);
-        Forms.FormSchemaValidator.Validate(definition, errors);
+        if (context.Extension is { } extension) extension.Validate(definition, errors);
+        else if (definition.Form is not null || nodes.Values.Any(n => n.FieldPermissions.Count > 0))
+            errors.Add("此定义包含模块快照或字段权限，请注册拥有它的可选模块");
 
         foreach (var (key, node) in nodes)
         {
@@ -116,7 +118,6 @@ public static partial class FlowDefinitionValidator
             if (node.RequireQualifiedAssignee && (node.Type != NodeType.Approval
                 || node.EmptyApproverPolicy == EmptyApproverPolicy.AutoApprove || node.Timeout?.Action == TimeoutAction.AutoApprove))
                 errors.Add($"节点 '{key}' 的岗位资格要求只能用于人工审批，不能设置自动通过");
-            if (node.FieldPermissions.Count > 0) ValidateFieldPermissions(errors, key, node, definition.Form);
         }
 
         if (errors.Count == 0) CheckReachabilityAndCycles(definition, errors);
@@ -124,14 +125,9 @@ public static partial class FlowDefinitionValidator
         return errors;
     }
 
-    /// <summary>表单中的人员字段（User / Users）；没有表单时为 null（字段可能来自业务数据，不做检查）。</summary>
-    private static HashSet<string>? UserFieldsOf(FlowDefinition definition) =>
-        definition.Form?.Fields.Where(f => f.Type is FormFieldType.User or FormFieldType.Users)
-            .Select(f => f.Key).ToHashSet(StringComparer.OrdinalIgnoreCase);
-
     /// <summary>按审批人类型描述校验参数：用户 / 角色不能为空，级数为 1–10，<c>@字段</c> 须为表单人员字段。</summary>
     private static void ValidateRuleValue(List<string> errors, string owner, ApproverRule rule, FlowValidationContext context,
-        HashSet<string>? userFields)
+        IReadOnlySet<string>? userFields)
     {
         if (context.ApproverDescriptors?.GetValueOrDefault(rule.Type) is not { } descriptor) return;
 
@@ -153,7 +149,7 @@ public static partial class FlowDefinitionValidator
     }
 
     private static void ValidateNotifications(List<string> errors, string owner, List<NotificationRule> rules, NodeType? nodeType,
-        FlowValidationContext context, HashSet<string>? userFields)
+        FlowValidationContext context, IReadOnlySet<string>? userFields)
     {
         var allowedEvents = NotificationDefaults.AllowedEvents(nodeType);
         for (var i = 0; i < rules.Count; i++)
@@ -192,91 +188,6 @@ public static partial class FlowDefinitionValidator
         if (timeout.Minutes <= 0) errors.Add($"节点 '{key}' 的时限必须大于 0 分钟");
         if (timeout.RepeatMinutes is <= 0) errors.Add($"节点 '{key}' 的催办间隔必须大于 0 分钟");
         if (timeout.MaxReminders < 1) errors.Add($"节点 '{key}' 的最多提醒次数至少为 1");
-    }
-
-    /// <summary>字段权限：审批节点可设可编辑 / 隐藏，抄送节点只能设隐藏；字段须为表单字段（不区分大小写、不能重复），计算字段不能设为可编辑。</summary>
-    private static void ValidateFieldPermissions(List<string> errors, string key, FlowNode node, FormSchema? form)
-    {
-        if (node.Type is not (NodeType.Approval or NodeType.Cc))
-        {
-            errors.Add($"节点 '{key}' 不是审批或抄送节点，不能设置字段权限");
-            return;
-        }
-        if (form is not { Fields.Count: > 0 })
-        {
-            errors.Add($"节点 '{key}' 设置了字段权限，但流程没有表单");
-            return;
-        }
-
-        var fields = new Dictionary<string, FormField>(StringComparer.OrdinalIgnoreCase);
-        foreach (var field in form.Fields.Where(f => f.Type != FormFieldType.Description)) fields.TryAdd(field.Key, field);
-
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var (name, access) in node.FieldPermissions)
-        {
-            if (!seen.Add(name)) errors.Add($"节点 '{key}' 的字段权限中字段 '{name}' 重复");
-            if (!Enum.IsDefined(access)) errors.Add($"节点 '{key}' 的字段 '{name}' 的权限值无效");
-            if (!fields.TryGetValue(name, out var field))
-            {
-                errors.Add($"节点 '{key}' 的字段权限中，表单没有字段 '{name}'");
-                continue;
-            }
-            if (access != FieldAccess.Editable) continue;
-            if (node.Type == NodeType.Cc) errors.Add($"抄送节点 '{key}' 不能把字段「{field.Label}」设为可编辑");
-            else if (field.Type == FormFieldType.Formula) errors.Add($"节点 '{key}' 的字段「{field.Label}」是计算字段，不能设为可编辑");
-        }
-    }
-
-    /// <summary>
-    /// 不阻止发布的提示：节点隐藏的字段可能通过其他途径间接暴露——标题对所有参与人可见、通知按模板发给接收人、
-    /// 计算字段的结果在该节点仍可见。
-    /// </summary>
-    public static IReadOnlyList<string> Warnings(FlowDefinition definition)
-    {
-        var warnings = new List<string>();
-        if (definition.Form is not { } form) return warnings;
-
-        // 字段 → 隐藏它的节点（含被隐藏明细表的合计字段）
-        var hiddenAt = new Dictionary<string, List<FlowNode>>(StringComparer.OrdinalIgnoreCase);
-        foreach (var node in definition.Nodes.Values)
-        {
-            foreach (var field in FieldVisibility.HiddenFields(definition, [node.Id]))
-            {
-                if (!hiddenAt.TryGetValue(field, out var nodes)) hiddenAt[field] = nodes = [];
-                nodes.Add(node);
-            }
-        }
-        if (hiddenAt.Count == 0) return warnings;
-
-        string NodesOf(string field) => string.Join("、", hiddenAt[field].Select(n => $"「{n.Name}」"));
-
-        void CheckTemplates(string owner, string consequence, params string?[] templates)
-        {
-            var fields = templates.SelectMany(TemplateRenderer.VariableNames)
-                .Select(name => name.Split('.'))
-                .Where(s => s.Length >= 2 && s[0] is "form" or "表单" && hiddenAt.ContainsKey(s[1]))
-                .Select(s => s[1])
-                .Distinct(StringComparer.OrdinalIgnoreCase);
-            foreach (var field in fields) warnings.Add($"{owner}引用了字段 '{field}'，它在节点{NodesOf(field)}被隐藏，{consequence}");
-        }
-
-        CheckTemplates("标题模板", "但标题对所有参与人可见", definition.Settings?.TitleTemplate);
-        foreach (var rule in definition.Notifications) CheckTemplates("流程级通知", "接收人仍会在消息中看到", rule.Title, rule.Content);
-        foreach (var node in definition.Nodes.Values)
-        {
-            foreach (var rule in node.Notifications) CheckTemplates($"节点「{node.Name}」的通知", "接收人仍会在消息中看到", rule.Title, rule.Content);
-        }
-
-        foreach (var field in form.Fields.Where(f => f.Type == FormFieldType.Formula))
-        {
-            if (!Formula.TryParse(field.Formula, out var formula, out _)) continue;
-            foreach (var reference in formula!.Identifiers.Where(hiddenAt.ContainsKey))
-            {
-                foreach (var node in hiddenAt[reference].Where(n => !n.FieldsWith(FieldAccess.Hidden).Contains(field.Key)))
-                    warnings.Add($"计算字段「{field.Label}」引用了 '{reference}'，它在节点「{node.Name}」被隐藏，但计算结果在该节点仍可见");
-            }
-        }
-        return warnings;
     }
 
     private static void CheckReachabilityAndCycles(FlowDefinition definition, List<string> errors)

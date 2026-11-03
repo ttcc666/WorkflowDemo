@@ -25,17 +25,14 @@ public static class ApprovalHttpContextExtensions
         return userId;
     }
 
-    /// <summary>是否管理员：配置了 <see cref="ApprovalAspNetCoreOptions.AdminPolicy"/> 时按授权策略，否则按角色。同一请求内缓存结果。</summary>
+    /// <summary>是否管理员：由宿主授权能力决定。同一请求内缓存结果。</summary>
     public static async Task<bool> IsApprovalAdminAsync(this HttpContext http, CancellationToken ct = default)
     {
         if (http.Items.TryGetValue(IsAdminKey, out var cached) && cached is bool value) return value;
 
         var services = http.RequestServices;
-        var options = services.GetRequiredService<ApprovalAspNetCoreOptions>();
-        var isAdmin = !string.IsNullOrEmpty(options.AdminPolicy)
-            ? (await services.GetRequiredService<IAuthorizationService>().AuthorizeAsync(http.User, options.AdminPolicy)).Succeeded
-            : await services.GetRequiredService<IApprovalIdentityProvider>().IsInRoleAsync(http.GetApprovalUserId(), options.AdminRole, ct);
-
+        var isAdmin = await services.GetRequiredService<Approval.Core.Authorization.ApprovalAuthorizationService>()
+            .CanAsync(ApprovalPermissions.InstanceReadAll, ct: ct);
         http.Items[IsAdminKey] = isAdmin;
         return isAdmin;
     }
@@ -50,7 +47,7 @@ public static class ApprovalHttpContextExtensions
     public static async Task<ApprovalViewer> GetApprovalViewerAsync(this HttpContext http, CancellationToken ct = default) =>
         new(http.GetApprovalUserId(), await http.RequestServices.GetRequiredService<Approval.Core.Authorization.ApprovalAuthorizationService>().CanAsync(ApprovalPermissions.InstanceReadAll, ct: ct));
 
-    /// <summary>能否读取完整流程定义：管理员，或属于 <see cref="ApprovalAspNetCoreOptions.DefinitionReaders"/> 中的角色。</summary>
+    /// <summary>能否读取完整流程定义：由宿主敏感定义读取能力决定。</summary>
     public static Task<bool> CanReadApprovalDefinitionsAsync(this HttpContext http, CancellationToken ct = default) =>
         http.RequestServices.GetRequiredService<Approval.Core.Authorization.ApprovalAuthorizationService>().CanAsync(ApprovalPermissions.DefinitionReadSensitive, ct: ct);
 

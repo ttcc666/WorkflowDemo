@@ -70,8 +70,12 @@ public sealed partial class ApprovalEngine
                 else if (_channels.Contains(channel))
                 {
                     var link = variables.GetValueOrDefault("link") as string;
-                    AddOutbox(OutboxKind.Notification, channel, instance, node, title,
-                        id => new ChannelMessage(id, evt, instance.Id, node?.Id, title, content, users, string.IsNullOrEmpty(link) ? null : link));
+                    AddOutbox(OutboxKind.Event, "Host", instance, node, title,
+                        id => new ApprovalEvent(id, "NotificationRequested", instance.Id, instance.DefinitionId, instance.DefinitionVersion,
+                            instance.BusinessType, instance.BusinessKey, instance.Status, node?.Id, node?.Name, null,
+                            info.OperatorId ?? SystemOperator, info.Comment, Now)
+                        { DeliveryTarget = channel, Notification = new ApprovalNotificationRequest(id, evt, instance.Id, node?.Id,
+                            title, content, users, string.IsNullOrEmpty(link) ? null : link) });
                 }
                 else
                 {

@@ -14,4 +14,5 @@
     <ProjectReference Include="../../samples/Approval.ReferenceHost/Approval.ReferenceHost.csproj" />
   </ItemGroup>
 
+  <ItemGroup><ProjectReference Include="../../src/Approval.Forms.AspNetCore/Approval.Forms.AspNetCore.csproj" /></ItemGroup>
 </Project>

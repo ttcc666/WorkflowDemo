@@ -12,8 +12,8 @@ public sealed class ChannelOverrideTests
         var last = new OverrideChannel("tEsT", "last") { FailNext = true };
         await using var host = new TestHost(build: b =>
         {
-            b.Services.AddSingleton<IApprovalChannel>(first);
-            b.Services.AddSingleton<IApprovalChannel>(last);
+            b.Services.AddSingleton<ITestNotificationTarget>(first);
+            b.Services.AddSingleton<ITestNotificationTarget>(last);
         });
         await host.PublishAsync("channel-override", """
         {
@@ -31,9 +31,9 @@ public sealed class ChannelOverrideTests
         Assert.Equal("last", Assert.Single(metadata.Channels, c => c.Name.Equals("Test", StringComparison.OrdinalIgnoreCase)).DisplayName);
 
         var instance = await host.StartAsync("channel-override", "B1", "alice", new { marker = "payload" });
-        var queued = Assert.Single(await host.OutboxAsync());
+        var queued = Assert.Single(await host.NotificationOutboxAsync());
         await host.DispatchOutboxAsync();
-        var failed = Assert.Single(await host.OutboxAsync());
+        var failed = Assert.Single(await host.NotificationOutboxAsync());
         Assert.Equal(OutboxStatus.Pending, failed.Status);
         Assert.Equal(1, failed.Attempts);
         Assert.Contains("retry selected channel", failed.LastError);
@@ -43,7 +43,7 @@ public sealed class ChannelOverrideTests
 
         host.Clock.Advance(TimeSpan.FromMinutes(1));
         await host.DispatchOutboxAsync();
-        var completed = Assert.Single(await host.OutboxAsync());
+        var completed = Assert.Single(await host.NotificationOutboxAsync());
         Assert.Equal(OutboxStatus.Succeeded, completed.Status);
         Assert.Equal(2, completed.Attempts);
         Assert.Equal(2, last.Attempts.Count);
@@ -58,14 +58,14 @@ public sealed class ChannelOverrideTests
         Assert.Empty(host.Channel.Sent);
     }
 
-    private sealed class OverrideChannel(string type, string label) : IApprovalChannel
+    private sealed class OverrideChannel(string type, string label) : ITestNotificationTarget
     {
         public string Name => type;
         public string DisplayName => label;
         public bool FailNext { get; set; }
-        public List<ChannelMessage> Attempts { get; } = [];
+        public List<ApprovalNotificationRequest> Attempts { get; } = [];
 
-        public Task SendAsync(ChannelMessage message, CancellationToken ct)
+        public Task SendAsync(ApprovalNotificationRequest message, CancellationToken ct)
         {
             Attempts.Add(message);
             if (FailNext)

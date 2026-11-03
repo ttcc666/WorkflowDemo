@@ -1,3 +1,5 @@
+using Approval.Forms;
+using Approval.Forms.Runtime;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -22,12 +24,14 @@ public sealed class OperationEndpointTests
         if (key is not null) request.Headers.Add("Idempotency-Key", key);
         request.Content = JsonContent.Create(body); return await host.Client.SendAsync(request);
     }
-    private static Task Seed(ApiHost host) => host.RunAsync(async sp => { await sp.GetRequiredService<Approval.Core.Abstractions.IApprovalUnitOfWork>().ExecuteAsync(token => sp.GetRequiredService<ApprovalDefinitionService>().PublishAsync("doc", "Doc", Flow, token)); return true; });
+    private static Task Seed(ApiHost host) => host.RunAsync(async sp => { var flow = Approval.Core.Definitions.FlowDefinition.Parse(Flow);
+        if (sp.GetService<Approval.Forms.Runtime.ApprovalFormService>() is null) flow.Form = null;
+        await sp.GetRequiredService<Approval.Core.Abstractions.IApprovalUnitOfWork>().ExecuteAsync(token => sp.GetRequiredService<ApprovalDefinitionService>().PublishAsync("doc", "Doc", flow, token)); return true; });
 
     [Fact]
     public async Task FormIntent_ReplaysBeforeLatestSchemaValidation_AndChangedBodyConflicts()
     {
-        await using var host = await ApiHost.StartAsync(build: b => b.AddFormApprovals()); await Seed(host);
+        await using var host = await ApiHost.StartAsync(build: b => b.AddApprovalForms()); await Seed(host);
         var body = new { formData = new { amount = 1 }, comment = "one" };
         using var first = await Send(host, HttpMethod.Post, "/api/approval/forms/doc/start", "alice", "intent", body);
         Assert.Equal(HttpStatusCode.OK, first.StatusCode); var id = (await first.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("instanceId").GetGuid();
@@ -56,7 +60,7 @@ public sealed class OperationEndpointTests
     [Fact]
     public async Task StrictMode_RejectsMissingKey_ButValidationDoesNotCreateCommandRecord()
     {
-        await using var host = await ApiHost.StartAsync(build: b => b.AddFormApprovals(), workflow: o => o.RequireOperationId = true); await Seed(host);
+        await using var host = await ApiHost.StartAsync(build: b => b.AddApprovalForms(), workflow: o => o.RequireOperationId = true); await Seed(host);
         using var missing = await Send(host, HttpMethod.Post, "/api/approval/forms/doc/start", "alice", null, new { formData = new { amount = 1 } });
         Assert.Equal("OperationIdRequired", (await missing.ProblemAsync(400)).GetProperty("code").GetString());
         using var invalid = await Send(host, HttpMethod.Post, "/api/approval/forms/doc/start", "alice", "recoverable", new { formData = new { } }); await invalid.ProblemAsync(400);
@@ -68,7 +72,7 @@ public sealed class OperationEndpointTests
     [Fact]
     public async Task DraftCreation_UsesStableKeyAndReturnsOriginalDraft()
     {
-        await using var host = await ApiHost.StartAsync(build: b => b.AddFormApprovals()); await Seed(host);
+        await using var host = await ApiHost.StartAsync(build: b => b.AddApprovalForms()); await Seed(host);
         Guid? id = null;
         foreach (var _ in new[] { 1, 2 })
         {

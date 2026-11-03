@@ -63,9 +63,9 @@ public sealed class NotificationTests : IAsyncLifetime
         });
 
         // 外部渠道只写 Outbox，提交后由后台投递
-        var outbox = Assert.Single(await _host.OutboxAsync());
-        Assert.Equal(OutboxKind.Notification, outbox.Kind);
-        Assert.Equal(RecordingChannel.ChannelName, outbox.Target);
+        var outbox = Assert.Single(await _host.NotificationOutboxAsync());
+        Assert.Equal(OutboxKind.Event, outbox.Kind);
+        Assert.Equal("Host", outbox.Target);
         Assert.Equal(OutboxStatus.Pending, outbox.Status);
         Assert.Empty(_host.Channel.Sent);
 
@@ -75,7 +75,7 @@ public sealed class NotificationTests : IAsyncLifetime
         Assert.Equal(outbox.Id, sent.Id); // 消息 ID 即幂等键
         Assert.Equal(["r1", "r2"], sent.Recipients.Order());
         Assert.Equal($"https://app.example.com/approvals/{instance.Id}", sent.Link);
-        Assert.Equal(OutboxStatus.Succeeded, Assert.Single(await _host.OutboxAsync()).Status);
+        Assert.Equal(OutboxStatus.Succeeded, Assert.Single(await _host.NotificationOutboxAsync()).Status);
     }
 
     [Fact]
@@ -113,13 +113,13 @@ public sealed class NotificationTests : IAsyncLifetime
     {
         await _host.StartAsync("notify", "B1", "alice");
         var before = (await _host.MessagesAsync()).Count;
-        var outboxBefore = (await _host.OutboxAsync()).Count;
+        var outboxBefore = (await _host.NotificationOutboxAsync()).Count;
 
         _host.Handler.FailOnApproved = true;
         await Assert.ThrowsAsync<InvalidOperationException>(() => _host.ApproveMyTaskAsync("r1"));
 
         Assert.Equal(before, (await _host.MessagesAsync()).Count);
-        Assert.Equal(outboxBefore, (await _host.OutboxAsync()).Count);
+        Assert.Equal(outboxBefore, (await _host.NotificationOutboxAsync()).Count);
     }
 
     [Fact]
@@ -129,7 +129,7 @@ public sealed class NotificationTests : IAsyncLifetime
         await _host.StartAsync("notify", "B1", "alice");
 
         await _host.DispatchOutboxAsync();
-        var message = Assert.Single(await _host.OutboxAsync());
+        var message = Assert.Single(await _host.NotificationOutboxAsync());
         Assert.Equal(OutboxStatus.Pending, message.Status);
         Assert.Equal(1, message.Attempts);
         Assert.Contains("渠道暂时不可用", message.LastError);
@@ -141,13 +141,13 @@ public sealed class NotificationTests : IAsyncLifetime
 
         _host.Clock.Advance(TimeSpan.FromSeconds(30));
         await _host.DispatchOutboxAsync();
-        message = Assert.Single(await _host.OutboxAsync());
+        message = Assert.Single(await _host.NotificationOutboxAsync());
         Assert.Equal(2, message.Attempts);
         Assert.Equal(_host.Clock.GetUtcNow().UtcDateTime.AddSeconds(60), message.NextAttemptAt);
 
         _host.Clock.Advance(TimeSpan.FromSeconds(60));
         await _host.DispatchOutboxAsync();
-        message = Assert.Single(await _host.OutboxAsync());
+        message = Assert.Single(await _host.NotificationOutboxAsync());
         Assert.Equal(OutboxStatus.Succeeded, message.Status);
         Assert.Single(_host.Channel.Sent);
     }
@@ -164,13 +164,13 @@ public sealed class NotificationTests : IAsyncLifetime
         await host.DispatchOutboxAsync();
         host.Clock.Advance(TimeSpan.FromMinutes(1));
         await host.DispatchOutboxAsync();
-        var message = Assert.Single(await host.OutboxAsync());
+        var message = Assert.Single(await host.NotificationOutboxAsync());
         Assert.Equal(OutboxStatus.Failed, message.Status);
         Assert.Equal(2, message.Attempts);
 
         await host.RunAsync(sp => sp.GetRequiredService<ApprovalOutboxService>().RetryAsync(message.Id));
         await host.DispatchOutboxAsync();
-        Assert.Equal(OutboxStatus.Succeeded, Assert.Single(await host.OutboxAsync()).Status);
+        Assert.Equal(OutboxStatus.Succeeded, Assert.Single(await host.NotificationOutboxAsync()).Status);
     }
 
     [Fact]
@@ -214,7 +214,7 @@ public sealed class NotificationTests : IAsyncLifetime
         Assert.Equal(ApprovalErrorCode.InvalidDefinition, error.Code);
         Assert.Contains("RemovedHostChannel", error.Message);
         Assert.Empty(await _host.MessagesAsync());
-        Assert.Empty(await _host.OutboxAsync());
+        Assert.Empty(await _host.NotificationOutboxAsync());
         Assert.Empty(await _host.RunAsync(sp => sp.GetRequiredService<TestDbContext>().Set<ApprovalInstance>().ToListAsync()));
         Assert.Empty(await _host.RunAsync(sp => sp.GetRequiredService<TestDbContext>().Set<ApprovalTask>().ToListAsync()));
         Assert.Empty(await _host.RunAsync(sp => sp.GetRequiredService<TestDbContext>().Set<ApprovalLog>().ToListAsync()));

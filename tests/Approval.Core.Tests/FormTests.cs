@@ -1,7 +1,9 @@
+using Approval.Forms;
+using Approval.Forms.Runtime;
 using System.Text.Json;
 using Approval.Core.Definitions;
 using Approval.Core.Domain;
-using Approval.Core.Forms;
+using Approval.Forms.Schema;
 
 namespace Approval.Core.Tests;
 
@@ -56,7 +58,7 @@ public sealed class FormTests
 
     private static ApprovalFormService Forms(IServiceProvider sp) => sp.GetRequiredService<ApprovalFormService>();
 
-    private static TestHost NewHost(Action<ApprovalOptions>? configure = null) => new(configure, b => b.AddFormApprovals());
+    private static TestHost NewHost(Action<ApprovalOptions>? configure = null) => new(configure, b => b.AddApprovalForms());
 
     // ───────────── 表单结构校验（发布时） ─────────────
 
@@ -64,7 +66,7 @@ public sealed class FormTests
     public void 表单结构错误在发布时报告()
     {
         var flow = FlowDefinition.Parse(LeaveFlow);
-        flow.Form!.Fields.AddRange(
+        flow.GetForm()!.Fields.AddRange(
         [
             new FormField { Key = "1bad", Label = "非法标识", Type = FormFieldType.Text },
             new FormField { Key = "days", Label = "重复", Type = FormFieldType.Number },
@@ -102,12 +104,12 @@ public sealed class FormTests
     public void 合计字段不能与普通字段重名()
     {
         var flow = FlowDefinition.Parse(LeaveFlow);
-        flow.Form!.Fields.Add(new FormField
+        flow.GetForm()!.Fields.Add(new FormField
         {
             Key = "items", Label = "明细", Type = FormFieldType.Table,
             Columns = [new FormField { Key = "amount", Label = "金额", Type = FormFieldType.Money, Sum = true }]
         });
-        flow.Form.Fields.Add(new FormField { Key = "items_amount_sum", Label = "冲突", Type = FormFieldType.Number });
+        flow.GetForm()!.Fields.Add(new FormField { Key = "items_amount_sum", Label = "冲突", Type = FormFieldType.Number });
 
         Assert.Contains(ValidateForm(flow), e => e.Contains("合计字段 'items_amount_sum' 与已有字段重名"));
     }
@@ -120,8 +122,8 @@ public sealed class FormTests
         Assert.Empty(ValidateForm(flow));
         var roundTrip = FlowDefinition.Parse(flow.ToJson());
         Assert.True(roundTrip.Settings!.Startable);
-        Assert.Equal(FormFieldType.Select, roundTrip.Form!.Fields[0].Type);
-        Assert.Equal(0.5m, roundTrip.Form.Fields[1].Min);
+        Assert.Equal(FormFieldType.Select, roundTrip.GetForm()!.Fields[0].Type);
+        Assert.Equal(0.5m, roundTrip.GetForm()!.Fields[1].Min);
     }
 
     private static IReadOnlyList<string> ValidateForm(FlowDefinition flow)
@@ -136,7 +138,7 @@ public sealed class FormTests
     [Fact]
     public void 数据校验_必填类型选项范围长度()
     {
-        var schema = FlowDefinition.Parse(LeaveFlow).Form!;
+        var schema = FlowDefinition.Parse(LeaveFlow).GetForm()!;
 
         var result = FormDataValidator.Validate(schema, Json("""{ "leaveType": "unknown", "days": 31.25, "reason": "超过十个字符的事由内容" }"""));
 
@@ -154,7 +156,7 @@ public sealed class FormTests
     [Fact]
     public void 数据规范化_类型转换并剔除未定义字段()
     {
-        var schema = FlowDefinition.Parse(LeaveFlow).Form!;
+        var schema = FlowDefinition.Parse(LeaveFlow).GetForm()!;
 
         var result = FormDataValidator.Validate(schema, Json("""{ "LEAVETYPE": "annual", "days": "2.5", "reason": "  休息  ", "hacker": true }"""));
 

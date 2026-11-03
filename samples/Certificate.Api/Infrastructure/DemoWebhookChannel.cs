@@ -13,7 +13,7 @@ public sealed class DemoWebhookOptions
 }
 
 /// <summary>示例宿主自己的通知发送实现；生产宿主可在此对接现有通知服务。</summary>
-public sealed class DemoWebhookChannel(DemoWebhookOptions options, IHttpClientFactory clients) : IApprovalChannel
+public sealed class DemoWebhookChannel(DemoWebhookOptions options, IHttpClientFactory clients) : Approval.Core.Abstractions.IApprovalEventHandler
 {
     public const string HttpClientName = "Certificate.DemoWebhook";
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
@@ -24,7 +24,10 @@ public sealed class DemoWebhookChannel(DemoWebhookOptions options, IHttpClientFa
     public string Name => "Webhook";
     public string DisplayName => "宿主示例 Webhook";
 
-    public async Task SendAsync(ChannelMessage message, CancellationToken ct)
+    public Task HandleAsync(Approval.Core.Abstractions.ApprovalEvent approvalEvent, CancellationToken ct) =>
+        approvalEvent.Notification is { } request && approvalEvent.DeliveryTarget == Name ? SendAsync(request, ct) : Task.CompletedTask;
+
+    public async Task SendAsync(ApprovalNotificationRequest message, CancellationToken ct)
     {
         var body = JsonSerializer.Serialize(message, Json);
         using var request = new HttpRequestMessage(HttpMethod.Post, options.Url)

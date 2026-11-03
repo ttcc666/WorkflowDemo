@@ -15,7 +15,7 @@ const menus = computed(() => [
   ...(canViewDefinitions.value ? [{ path: '/definitions', title: '流程定义' }] : []),
   ...(['approval.instance.read-all', 'approval.statistics.read', 'approval.task.reassign-bulk'].some(can) ? [{ path: '/monitor', title: '流程监控' }] : []),
   ...(can('approval.outbox.read') ? [{ path: '/outbox', title: '投递记录' }] : []),
-  ...(['approval.diagnostics.read', 'approval.archive.read'].some(can) ? [{ path: '/maintenance', title: '诊断与维护' }] : []),
+  ...(can('approval.diagnostics.read') ? [{ path: '/diagnostics', title: '运行诊断' }] : []),
 ])
 
 // 详情页、设计器归属到对应菜单高亮

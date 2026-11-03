@@ -7,7 +7,7 @@ namespace Certificate.Api.Tests;
 
 public sealed class DemoWebhookChannelTests
 {
-    private static readonly ChannelMessage Message = new(
+    private static readonly ApprovalNotificationRequest Message = new(
         Guid.Parse("00000000-0000-0000-0000-000000000001"), NotifyEvent.Approved,
         Guid.Parse("00000000-0000-0000-0000-000000000002"), "review", "Approved", "Approved request", ["u1"], null);
 

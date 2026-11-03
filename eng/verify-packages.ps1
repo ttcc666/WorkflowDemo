@@ -12,7 +12,7 @@ $webRoot = Join-Path $repositoryRoot 'web'
 $uiPackage = Get-Content -LiteralPath (Join-Path $webRoot 'packages/approval-ui/package.json') -Raw | ConvertFrom-Json
 if ($uiPackage.version -ne $version) { throw 'NuGet and npm release versions differ' }
 $packages = Join-Path $repositoryRoot ('output/packages/' + $version)
-$frameworkPackages = @('Approval.Core', 'Approval.AspNetCore')
+$frameworkPackages = @('Approval.Core', 'Approval.AspNetCore', 'Approval.Forms', 'Approval.Forms.AspNetCore')
 New-Item -ItemType 'Directory' -Path $packages -Force | Out-Null
 if (-not $SkipBuild) {
     Invoke-CheckedCommand 'dotnet' @('build', 'Workflow.slnx', '--configuration', 'Release') $repositoryRoot
@@ -36,8 +36,18 @@ function Copy-HostSources {
     param([string]$Source, [string]$Destination)
     $sourceRoot = [IO.Path]::GetFullPath($Source)
     $destinationRoot = [IO.Path]::GetFullPath($Destination) + [IO.Path]::DirectorySeparatorChar
-    $files = & rg --files --hidden $sourceRoot -g '!**/bin/**' -g '!**/obj/**' -g '!**/node_modules/**' -g '!**/wwwroot/**' -g '!**/App_Data/**' -g '!**/dist/**' -g '!**/*.db*' -g '!**/*.test.ts'
-    if ($LASTEXITCODE -ne 0) { throw 'Cannot enumerate the host fixture' }
+    $pendingDirectories = [Collections.Generic.Stack[string]]::new()
+    $pendingDirectories.Push($sourceRoot)
+    $files = [Collections.Generic.List[string]]::new()
+    while ($pendingDirectories.Count -gt 0) {
+        foreach ($entry in (Get-ChildItem -LiteralPath $pendingDirectories.Pop() -Force)) {
+            if ($entry.Attributes -band [IO.FileAttributes]::ReparsePoint) { continue }
+            if ($entry.PSIsContainer) {
+                if ($entry.Name -notin @('bin', 'obj', 'node_modules', 'wwwroot', 'App_Data', 'dist')) { $pendingDirectories.Push($entry.FullName) }
+            }
+            elseif ($entry.Name -notlike '*.db*' -and $entry.Name -notlike '*.test.ts') { $files.Add($entry.FullName) }
+        }
+    }
     foreach ($file in $files) {
         $relative = [IO.Path]::GetRelativePath($sourceRoot, $file)
         $target = [IO.Path]::GetFullPath((Join-Path $Destination $relative))
@@ -89,12 +99,13 @@ $project = @'
   <PropertyGroup><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable><IsPackable>false</IsPackable></PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../samples/Approval.Certificate/Approval.Certificate.csproj" />
+    <PackageReference Include="Approval.Forms.AspNetCore" Version="{1}" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="{0}" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="{0}" PrivateAssets="all" />
     <Content Update="Flows/*.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>
-'@ -f $efVersion
+'@ -f $efVersion, $version
 $project | Set-Content -LiteralPath (Join-Path $apiRoot 'Certificate.Api.csproj')
 foreach ($name in $frameworkPackages) {
     Copy-Item -LiteralPath (Join-Path $packages ($name + '.' + $version + '.nupkg')) -Destination $feed
@@ -163,6 +174,38 @@ $installed = Get-Content -LiteralPath (Join-Path $uiRoot 'node_modules/@approval
 if ($installed.version -ne $version -or $installed.exports.'.'.import -ne './dist/index.js') { throw 'Consumer resolved source exports instead of the release package' }
 Invoke-CheckedCommand 'pnpm' @('build') $uiRoot
 
+# Core-only real package consumer: existing IdentityDbContext + host SaveChanges override.
+$embeddedRoot = Join-Path $consumerRoot 'embedded-host'
+Copy-HostSources (Join-Path $repositoryRoot 'eng/consumers/EmbeddedHost') $embeddedRoot
+$embeddedProjectPath = Join-Path $embeddedRoot 'EmbeddedHost.csproj'
+$embeddedProject = [xml](Get-Content -LiteralPath $embeddedProjectPath -Raw)
+foreach ($reference in $embeddedProject.SelectNodes('/Project/ItemGroup/PackageReference')) {
+    if ($reference.Include -like 'Approval.*') { $reference.SetAttribute('Version', $version) }
+    else {
+        $dependency = $versions.Project.ItemGroup.PackageVersion | Where-Object Include -eq $reference.Include
+        if ($null -eq $dependency) { throw ('Unknown consumer dependency: ' + $reference.Include) }
+        $reference.SetAttribute('Version', $dependency.Version)
+    }
+}
+$embeddedProject.Save($embeddedProjectPath)
+Invoke-CheckedCommand 'dotnet' @('build', 'EmbeddedHost.csproj', '--configuration', 'Release', ('-p:RestorePackagesPath=' + (Join-Path $consumerRoot 'nuget-packages'))) $embeddedRoot
+$embeddedDeps = Get-Content -LiteralPath (Join-Path $embeddedRoot 'bin/Release/net10.0/EmbeddedHost.deps.json') -Raw | ConvertFrom-Json
+if (@($embeddedDeps.libraries.PSObject.Properties.Name | Where-Object { $_ -like 'Approval.Forms/*' -or $_ -like 'Approval.Forms.AspNetCore/*' }).Count -gt 0) { throw 'Core-only consumer implicitly depends on Forms.' }
+foreach ($name in @('Approval.Core', 'Approval.AspNetCore')) {
+    if ($embeddedDeps.libraries.($name + '/' + $version).type -ne 'package') { throw ('Embedded consumer did not use package: ' + $name) }
+}
+$savedConsumerDatabase = $env:APPROVAL_CONSUMER_DATABASE
+$savedConsumerReport = $env:APPROVAL_CONSUMER_REPORT
+try {
+    $env:APPROVAL_CONSUMER_DATABASE = Join-Path $embeddedRoot 'host.db'
+    $env:APPROVAL_CONSUMER_REPORT = Join-Path $embeddedRoot 'verification.json'
+    Invoke-CheckedCommand 'dotnet' @('ef', 'migrations', 'add', 'InitialConsumer', '--project', $embeddedRoot, '--context', 'InvoiceDbContext', '--configuration', 'Release', '--no-build', '--output-dir', 'Migrations') $repositoryRoot
+    Invoke-CheckedCommand 'dotnet' @('run', '--project', 'EmbeddedHost.csproj', '--configuration', 'Release', '--no-restore') $embeddedRoot
+    $embeddedEvidence = Get-Content -LiteralPath $env:APPROVAL_CONSUMER_REPORT -Raw | ConvertFrom-Json
+    if (-not $embeddedEvidence.passed -or $embeddedEvidence.checks.Count -lt 10) { throw 'Core-only package consumer did not execute the required checks.' }
+}
+finally { $env:APPROVAL_CONSUMER_DATABASE = $savedConsumerDatabase; $env:APPROVAL_CONSUMER_REPORT = $savedConsumerReport }
+
 $artifacts = @($tarball) + @($frameworkPackages | ForEach-Object { Join-Path $packages ($_ + '.' + $version + '.nupkg') })
 $hashes = @($artifacts | ForEach-Object { [pscustomobject]@{ File = (Split-Path -Leaf $_); Sha256 = (Get-FileHash -LiteralPath $_).Hash.ToLowerInvariant() } })
 $sourceHasher = [Security.Cryptography.IncrementalHash]::CreateHash([Security.Cryptography.HashAlgorithmName]::SHA256)
@@ -180,7 +223,7 @@ try {
 }
 finally { Pop-Location; $sourceHasher.Dispose() }
 $contractHashes = @(Get-ChildItem -LiteralPath (Join-Path $repositoryRoot 'contracts') -File | ForEach-Object { [pscustomobject]@{ File = $_.Name; Sha256 = (Get-FileHash -LiteralPath $_.FullName).Hash.ToLowerInvariant() } })
-$manifest = [ordered]@{ Version = $version; Commit = $commit; SourceSha256 = $sourceHash; ConsumerRoot = $consumerRoot; ApiRoot = $apiRoot; ReferenceApiRoot = $referenceRoot; UiRoot = $uiRoot; Packages = $hashes; Contracts = $contractHashes; ChangelogSha256 = (Get-FileHash -LiteralPath (Join-Path $repositoryRoot 'CHANGELOG.md')).Hash.ToLowerInvariant() }
+$manifest = [ordered]@{ Version = $version; Commit = $commit; SourceSha256 = $sourceHash; ConsumerRoot = $consumerRoot; ApiRoot = $apiRoot; ReferenceApiRoot = $referenceRoot; EmbeddedApiRoot = $embeddedRoot; UiRoot = $uiRoot; Packages = $hashes; Contracts = $contractHashes; ChangelogSha256 = (Get-FileHash -LiteralPath (Join-Path $repositoryRoot 'CHANGELOG.md')).Hash.ToLowerInvariant() }
 $manifestPath = Join-Path $consumerRoot 'verification.json'
 $manifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $manifestPath
 $manifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $repositoryRoot 'output/engineering/package-verification.json')

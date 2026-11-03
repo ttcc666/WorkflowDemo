@@ -3,7 +3,6 @@ using Approval.Core.Abstractions;
 using Approval.Core.Conditions;
 using Approval.Core.Definitions;
 using Approval.Core.Domain;
-using Approval.Core.Forms;
 using Approval.Core.Engine.Extensions;
 using Approval.Core.Engine.Runtime;
 using Approval.Core.Notifications;
@@ -13,8 +12,8 @@ using Microsoft.Extensions.Logging;
 
 namespace Approval.Core.Engine;
 
-/// <summary>审批中修改表单：修改后的完整表单数据与字段差异（见 <see cref="ApprovalEngine.ApproveWithFormAsync"/>）。</summary>
-internal sealed record FormEdit(string FormDataJson, IReadOnlyList<FormFieldChange> Changes);
+/// <summary>审批中修改表单：修改后的完整表单数据与字段差异（见 <see cref="ApprovalEngine.ApproveWithDataAsync"/>）。</summary>
+public sealed record ApprovalDataEdit(string DataJson, string Summary, string ChangesJson);
 
 /// <summary>
 /// 审批引擎：发起、同意、驳回 / 退回、撤回、转交、加签、超时处理。
@@ -34,7 +33,6 @@ public sealed partial class ApprovalEngine
     private readonly ApprovalAssigneeService _assignees;
     private readonly IReadOnlyDictionary<string, IApprovalBusinessHandler> _handlers;
     private readonly IReadOnlySet<string> _channels;
-    private readonly IReadOnlyList<IApprovalNotifier> _notifiers;
     private readonly IConditionEvaluator _evaluator;
     private readonly ApprovalOptions _options;
     private readonly ApprovalDisplaySettings _displaySettings;
@@ -43,12 +41,11 @@ public sealed partial class ApprovalEngine
     private readonly ILogger<ApprovalEngine> _logger;
     private readonly IApprovalUserDirectory? _directory;
     private readonly Dictionary<Guid, FlowDefinition> _loadedFlows = [];
-    private readonly List<ApprovalNotification> _pendingNotifications = [];
     private readonly Dictionary<FlowDefinition, FlowStructure> _structures = [];
     private readonly Dictionary<Guid, ExecutionState> _states = [];
     private int _steps;
     private Guid? _operationTaskId;
-    internal bool EventsEnabled { get; set; }
+    internal IApprovalDefinitionExtension? DefinitionExtension { get; set; }
     internal IApprovalLifecycleHandler? Lifecycle { get; set; }
     internal IApprovalUserStatusProvider? UserStatus { get => _assignees.UserStatus; set => _assignees.UserStatus = value; }
 
@@ -57,8 +54,7 @@ public sealed partial class ApprovalEngine
         IApprovalIdentityProvider identity,
         IEnumerable<IApproverResolver> resolvers,
         IEnumerable<IApprovalBusinessHandler> handlers,
-        IEnumerable<IApprovalChannel> channels,
-        IEnumerable<IApprovalNotifier> notifiers,
+        IEnumerable<ChannelInfo> channels,
         IConditionEvaluator evaluator,
         ApprovalOptions options,
         ApprovalOutboxSignal outboxSignal,
@@ -67,7 +63,7 @@ public sealed partial class ApprovalEngine
         IApprovalUserDirectory? directory = null)
         : this(accessor, identity,
             new ApprovalExtensionCatalog(() => resolvers, () => handlers, () => channels),
-            notifiers, evaluator, options, outboxSignal, clock, logger, directory)
+            evaluator, options, outboxSignal, clock, logger, directory)
     {
     }
 
@@ -75,7 +71,6 @@ public sealed partial class ApprovalEngine
         ApprovalDbContextAccessor accessor,
         IApprovalIdentityProvider identity,
         ApprovalExtensionCatalog extensions,
-        IEnumerable<IApprovalNotifier> notifiers,
         IConditionEvaluator evaluator,
         ApprovalOptions options,
         ApprovalOutboxSignal outboxSignal,
@@ -91,7 +86,6 @@ public sealed partial class ApprovalEngine
         _assignees = new(identity, extensions.Resolvers, options, directory);
         _handlers = extensions.BusinessHandlers;
         _channels = extensions.ChannelNames;
-        _notifiers = notifiers.ToList();
         _evaluator = evaluator;
         _options = options;
         _displaySettings = new ApprovalDisplaySettings(options.DisplayTimeZone, options.InstanceUrlFormat, options.GlobalVariables);
@@ -186,12 +180,12 @@ public sealed partial class ApprovalEngine
     /// 同意并修改表单（表单审批的节点可编辑字段，由 <see cref="ApprovalFormService"/> 调用）：校验处理权限后由 <paramref name="edit"/>
     /// 计算修改（返回 null 表示没有修改）；表单数据替换为修改后的数据，轨迹先记录修改了哪些字段（差异存入 Details），再记录同意并按新数据流转。
     /// </summary>
-    internal Task ApproveWithFormAsync(Guid taskId, string userId, string? comment,
-        Func<ApprovalInstance, ApprovalTask, FlowDefinition, Task<FormEdit?>> edit, CancellationToken ct) =>
-        _unit.ExecuteCommandAsync(token => ApproveWithFormCoreAsync(taskId, userId, comment, edit, token), ct);
+    public Task ApproveWithDataAsync(Guid taskId, string userId, string? comment,
+        Func<ApprovalInstance, ApprovalTask, FlowDefinition, Task<ApprovalDataEdit?>> edit, CancellationToken ct) =>
+        _unit.ExecuteCommandAsync(token => ApproveWithDataCoreAsync(taskId, userId, comment, edit, token), ct);
 
-    private async Task ApproveWithFormCoreAsync(Guid taskId, string userId, string? comment,
-        Func<ApprovalInstance, ApprovalTask, FlowDefinition, Task<FormEdit?>> edit, CancellationToken ct)
+    private async Task ApproveWithDataCoreAsync(Guid taskId, string userId, string? comment,
+        Func<ApprovalInstance, ApprovalTask, FlowDefinition, Task<ApprovalDataEdit?>> edit, CancellationToken ct)
     {
         await _authorization.RequireAsync(Approval.Core.Abstractions.ApprovalPermissions.TaskApprove, new() { TaskId = taskId }, userId, ct);
         var (instance, task, flow) = await LoadTaskAsync(taskId, ct);
@@ -200,9 +194,9 @@ public sealed partial class ApprovalEngine
 
         if (await edit(instance, task, flow) is { } change)
         {
-            instance.FormDataJson = change.FormDataJson;
-            AddLog(instance, ApprovalAction.FormEdit, userId, FieldVisibility.Summary(change.Changes.Select(c => c.Label)),
-                task.NodeId, task.NodeName, JsonSerializer.Serialize(change.Changes, FormData.JsonOptions));
+            instance.FormDataJson = change.DataJson;
+            AddLog(instance, ApprovalAction.FormEdit, userId, change.Summary,
+                task.NodeId, task.NodeName, change.ChangesJson);
         }
         await ApproveCoreAsync(instance, flow, task, userId, comment, ApprovalAction.Approve, ct);
         await CommitAsync(instance, ct);
@@ -287,7 +281,6 @@ public sealed partial class ApprovalEngine
             task.NodeId, task.NodeName);
 
         var target = new Assignee(AssigneeKind.User, toUserId);
-        Notify(NotificationKind.TaskCreated, instance, [target]);
         await RaiseAsync(NotifyEvent.Transferred, instance, flow, flow.GetNode(task.NodeId),
             new EventInfo([target]) { OperatorId = userId, Comment = comment, TransferTo = toUserId, DueAt = task.DueAt }, ct);
 
@@ -465,7 +458,6 @@ public sealed partial class ApprovalEngine
                             foreach (var recipient in recipients) AddCarbonCopy(instance, node, recipient);
                             AddLog(instance, node, ApprovalAction.Cc, SystemOperator,
                                 "抄送：" + string.Join("、", recipients.Select(Describe)));
-                            Notify(NotificationKind.Cc, instance, recipients);
                             await RaiseAsync(NotifyEvent.Enter, instance, flow, node, new EventInfo(recipients), ct,
                                 fallback: NotificationDefaults.CcRule);
                         }
@@ -539,7 +531,6 @@ public sealed partial class ApprovalEngine
         }
 
         var notified = node.Mode == ApproveMode.Sequential ? assignees.Take(1).ToList() : assignees.ToList();
-        Notify(NotificationKind.TaskCreated, instance, notified);
         await RaiseAsync(NotifyEvent.Enter, instance, flow, node, new EventInfo(notified) { DueAt = dueAt }, ct);
     }
 
@@ -553,7 +544,6 @@ public sealed partial class ApprovalEngine
         next.DueAt = next.NextRemindAt = DueAtFor(node);
         WriteEvent(instance, "TaskCreated", next.NodeId, next.NodeName, next.Id, SystemOperator, null);
         var assignee = new Assignee(next.AssigneeKind, next.AssigneeValue);
-        Notify(NotificationKind.TaskCreated, instance, [assignee]);
         await RaiseAsync(NotifyEvent.Enter, instance, flow, node, new EventInfo([assignee]) { DueAt = next.DueAt }, ct);
         return true;
     }
@@ -592,7 +582,6 @@ public sealed partial class ApprovalEngine
             throw new ApprovalException($"业务类型 '{instance.BusinessType}' 未注册回调处理器") { Code = ApprovalErrorCode.InvalidDefinition };
         }
 
-        Notify(NotificationKind.Completed, instance, [new Assignee(AssigneeKind.User, instance.InitiatorId)]);
         WriteEvent(instance, "Completed", node?.Id, node?.Name, null, info.OperatorId ?? SystemOperator, info.Comment);
         await RaiseAsync(NotifyEvent.Completed, instance, flow, node, info, ct);
     }
@@ -673,6 +662,8 @@ public sealed partial class ApprovalEngine
             .OrderByDescending(d => d.Version).FirstOrDefaultAsync(ct)
             ?? throw new ApprovalException("流程未发布") { Code = ApprovalErrorCode.NotFound };
         var flow = FlowDefinition.Parse(definition.DefinitionJson);
+        if (flow.Form is not null && DefinitionExtension is null)
+            throw new ApprovalException("此定义包含可选模块快照，请注册拥有它的模块") { Code = ApprovalErrorCode.InvalidDefinition };
         if (!flow.Nodes.TryGetValue(nodeId, out var node)) throw new ApprovalException("节点不存在") { Code = ApprovalErrorCode.NotFound };
         return await _assignees.GetEligibleApproversAsync(new ApprovalInstance { DefinitionId = definition.Id, DefinitionKey = definition.Key,
             DefinitionVersion = definition.Version, BusinessType = request.BusinessType, BusinessKey = request.BusinessKey,
@@ -783,7 +774,6 @@ public sealed partial class ApprovalEngine
     private void WriteEvent(ApprovalInstance instance, string type, string? nodeId, string? nodeName, Guid? taskId,
         string operatorId, string? comment)
     {
-        if (!EventsEnabled) return;
         AddOutbox(OutboxKind.Event, "Host", instance, null, type,
             id => new ApprovalEvent(id, type, instance.Id, instance.DefinitionId, instance.DefinitionVersion,
                 instance.BusinessType, instance.BusinessKey, type switch
@@ -792,7 +782,9 @@ public sealed partial class ApprovalEngine
                     "Withdraw" => InstanceStatus.Withdrawn,
                     "Terminate" => InstanceStatus.Terminated,
                     _ => instance.Status
-                }, nodeId, nodeName, taskId, operatorId, comment, Now));
+                }, nodeId, nodeName, taskId, operatorId, comment, Now)
+            { Recipients = taskId is { } tid && instance.Tasks.FirstOrDefault(t => t.Id == tid) is { } task
+                ? [new Assignee(task.AssigneeKind, task.AssigneeValue)] : [] });
     }
 
     private async Task EnsureActiveUserAsync(string userId, CancellationToken ct)
@@ -810,14 +802,6 @@ public sealed partial class ApprovalEngine
 
     private static string Describe(Assignee a) => a.Kind == AssigneeKind.Role ? $"角色[{a.Value}]" : a.Value;
 
-    /// <summary>进程内提交后通知接口 <see cref="IApprovalNotifier"/>：提交后同步调用，失败只记录日志。</summary>
-    private void Notify(NotificationKind kind, ApprovalInstance instance, IReadOnlyList<Assignee> recipients)
-    {
-        if (_notifiers.Count == 0 || recipients.Count == 0) return;
-        _pendingNotifications.Add(new ApprovalNotification(
-            kind, instance.Id, instance.BusinessType, instance.BusinessKey, instance.Title, instance.Status, recipients));
-    }
-
     private async Task CommitAsync(ApprovalInstance instance, CancellationToken ct)
     {
         _unit.Reference(instance.Id, instance.DefinitionId);
@@ -830,9 +814,6 @@ public sealed partial class ApprovalEngine
         }
         _steps = 0;
         _operationTaskId = null;
-
-        var notifications = _pendingNotifications.ToArray();
-        _pendingNotifications.Clear();
 
         try
         {
@@ -854,23 +835,5 @@ public sealed partial class ApprovalEngine
             _unit.AfterCommit(() => { _outboxSignal.Notify(); return Task.CompletedTask; });
         }
 
-        // 通知在事务提交后发送，失败不影响审批结果
-        _unit.AfterCommit(async () =>
-        {
-          foreach (var notification in notifications)
-          {
-            foreach (var notifier in _notifiers)
-            {
-                try
-                {
-                    await notifier.NotifyAsync(notification, CancellationToken.None);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "审批通知发送失败：{Kind} {InstanceId}", notification.Kind, notification.InstanceId);
-                }
-            }
-          }
-        });
     }
 }

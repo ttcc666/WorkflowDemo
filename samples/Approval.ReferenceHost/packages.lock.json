@@ -528,7 +528,7 @@
       "approval.aspnetcore": {
         "type": "Project",
         "dependencies": {
-          "Approval.Core": "[0.2.0, )"
+          "Approval.Core": "[0.3.0, )"
         }
       },
       "approval.core": {
@@ -536,6 +536,19 @@
         "dependencies": {
           "DynamicExpresso.Core": "[2.19.6, )",
           "Microsoft.EntityFrameworkCore.Relational": "[10.0.14, )"
+        }
+      },
+      "approval.forms": {
+        "type": "Project",
+        "dependencies": {
+          "Approval.Core": "[0.3.0, )"
+        }
+      },
+      "approval.forms.aspnetcore": {
+        "type": "Project",
+        "dependencies": {
+          "Approval.AspNetCore": "[0.3.0, )",
+          "Approval.Forms": "[0.3.0, )"
         }
       },
       "DynamicExpresso.Core": {

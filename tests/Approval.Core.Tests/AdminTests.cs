@@ -67,7 +67,8 @@ public sealed class AdminTests : IAsyncLifetime
         Assert.Contains(("Rejected", "T1"), _host.Handler.Calls);   // 默认 OnTerminatedAsync → OnRejectedAsync
         var log = Assert.Single(saved.Logs, l => l.Action == ApprovalAction.Terminate);
         Assert.Equal(("admin", "业务取消"), (log.OperatorId, log.Comment));
-        Assert.Contains(_host.Notifier.Notifications, n => n.Kind == Abstractions.NotificationKind.Completed && n.Status == InstanceStatus.Terminated);
+        await _host.DispatchOutboxAsync();
+        Assert.Contains(_host.Events.TaskEvents, n => n.EventType == "Completed" && n.Status == InstanceStatus.Terminated);
 
         var again = await Assert.ThrowsAsync<ApprovalException>(() => RunEngineAsync(e => e.TerminateAsync(instance.Id, "admin", "再次")));
         Assert.Contains("已结束", again.Message);

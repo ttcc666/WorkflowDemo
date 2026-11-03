@@ -12,7 +12,7 @@ using Microsoft.AspNetCore.Routing;
 
 namespace Approval.AspNetCore.Endpoints;
 
-/// <summary>流程定义：设计器元数据、列表、版本、校验、发布。完整定义含通知配置，仅管理员（及 DefinitionReaders）可读。</summary>
+/// <summary>流程定义：设计器元数据、列表、版本、校验、发布。完整定义按宿主敏感读取能力授权。</summary>
 internal static class DefinitionEndpoints
 {
     public sealed record DesignDraftRequest(string Name, string DefinitionJson, long ExpectedRevision, Guid? SourceDefinitionId = null);

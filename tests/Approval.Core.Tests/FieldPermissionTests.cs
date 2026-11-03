@@ -1,8 +1,10 @@
+using Approval.Forms;
+using Approval.Forms.Runtime;
 using System.Text.Json;
 using Approval.Core.Abstractions;
 using Approval.Core.Definitions;
 using Approval.Core.Domain;
-using Approval.Core.Forms;
+using Approval.Forms.Schema;
 
 namespace Approval.Core.Tests;
 
@@ -41,7 +43,7 @@ public sealed class FieldPermissionTests : IAsyncLifetime
     }
     """;
 
-    private readonly TestHost _host = new(build: b => b.AddFormApprovals());
+    private readonly TestHost _host = new(build: b => b.AddApprovalForms());
 
     public Task InitializeAsync()
     {
@@ -233,7 +235,7 @@ public sealed class FieldPermissionTests : IAsyncLifetime
     public async Task 隐藏明细表时合计字段一并隐藏()
     {
         var flow = FlowDefinition.Parse(Flow);
-        flow.Form!.Fields.Add(new FormField
+        flow.GetForm()!.Fields.Add(new FormField
         {
             Key = "items", Label = "明细", Type = FormFieldType.Table,
             Columns = [new FormField { Key = "amount", Label = "金额", Type = FormFieldType.Money, Sum = true }]
@@ -288,7 +290,7 @@ public sealed class FieldPermissionTests : IAsyncLifetime
     public void 隐藏字段可能间接暴露时给出提示()
     {
         var flow = FlowDefinition.Parse(Flow);
-        Assert.Empty(FlowDefinitionValidator.Warnings(flow));
+        Assert.Empty(new FormDefinitionValidator().Warnings(flow));
 
         flow.Settings!.TitleTemplate = "{申请人} {form.salary}";
         flow.Nodes["finance"].Notifications.Add(new NotificationRule
@@ -297,7 +299,7 @@ public sealed class FieldPermissionTests : IAsyncLifetime
         });
         flow.Nodes["finance"].FieldPermissions["advance"] = FieldAccess.Hidden;
 
-        var warnings = string.Join("\n", FlowDefinitionValidator.Warnings(flow));
+        var warnings = string.Join("\n", new FormDefinitionValidator().Warnings(flow));
 
         Assert.Contains("标题模板引用了字段 'salary'，它在节点「部门审批」、「财务审批」、「抄送」被隐藏", warnings);
         Assert.Contains("节点「财务审批」的通知引用了字段 'note'，它在节点「抄送」被隐藏", warnings);
@@ -305,5 +307,5 @@ public sealed class FieldPermissionTests : IAsyncLifetime
     }
 
     private static IReadOnlyList<string> Validate(FlowDefinition flow) =>
-        FlowDefinitionValidator.Validate(flow, new HashSet<string>(["User", "Role", "Initiator", "FormField"], StringComparer.OrdinalIgnoreCase));
+        FormDefinitionValidator.Validate(flow, new HashSet<string>(["User", "Role", "Initiator", "FormField"], StringComparer.OrdinalIgnoreCase));
 }

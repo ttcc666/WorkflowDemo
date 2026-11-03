@@ -1,3 +1,5 @@
+using Approval.Forms;
+using Approval.Forms.Runtime;
 using System.Text.Json;
 using Approval.Core.Domain;
 
@@ -24,7 +26,7 @@ public sealed class DraftTests : IAsyncLifetime
     }
     """;
 
-    private readonly TestHost _host = new(build: b => b.AddFormApprovals());
+    private readonly TestHost _host = new(build: b => b.AddApprovalForms());
 
     public async Task InitializeAsync()
     {

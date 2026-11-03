@@ -10,7 +10,7 @@ export const approvalRouteNames = {
   monitor: 'approval-monitor',
   start: 'approval-start',
   startForm: 'approval-start-form',
-  maintenance: 'approval-maintenance',
+  diagnostics: 'approval-diagnostics',
 } as const
 
 /**
@@ -28,6 +28,6 @@ export function createApprovalRoutes(): RouteRecordRaw[] {
     { path: 'designer/:key', name: approvalRouteNames.designer, component: () => import('./views/DesignerView.vue') },
     { path: 'outbox', name: approvalRouteNames.outbox, component: () => import('./views/OutboxView.vue') },
     { path: 'monitor', name: approvalRouteNames.monitor, component: () => import('./views/MonitorView.vue') },
-    { path: 'maintenance', name: approvalRouteNames.maintenance, component: () => import('./views/MaintenanceView.vue') },
+    { path: 'diagnostics', name: approvalRouteNames.diagnostics, component: () => import('./views/DiagnosticsView.vue') },
   ]
 }

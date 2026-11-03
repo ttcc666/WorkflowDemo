@@ -1,6 +1,6 @@
 <Project>
   <PropertyGroup>
-    <ApprovalVersion>0.2.0</ApprovalVersion>
+    <ApprovalVersion>0.3.0</ApprovalVersion>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>

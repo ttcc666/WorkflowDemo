@@ -48,10 +48,10 @@ public sealed class FlowDefinition
     public string StartNodeId { get; set; } = "";
 
     /// <summary>发起设置（发起中心、发起角色、标题模板），可选。</summary>
-    public Forms.FlowSettings? Settings { get; set; }
+    public FlowSettings? Settings { get; set; }
 
-    /// <summary>表单结构，可选；随流程版本一起发布，实例按发起时的版本展示与校验。</summary>
-    public Forms.FormSchema? Form { get; set; }
+    /// <summary>可选模块的 JSON 快照；Core 不解释其字段结构，随流程版本固化。</summary>
+    public object? Form { get; set; }
 
     /// <summary>流程级通知规则：对所有审批节点生效，以及流程结束（<see cref="NotifyEvent.Completed"/>）。</summary>
     public List<NotificationRule> Notifications { get; set; } = [];
@@ -224,7 +224,7 @@ public sealed class NotificationRule
 
     public List<ApproverRule> Recipients { get; set; } = [];
 
-    /// <summary>渠道名：InApp（站内信，内置）或已注册的 <see cref="Notifications.IApprovalChannel.Name"/>。</summary>
+    /// <summary>渠道名：InApp（站内信，内置）或宿主声明的通知路由提示。</summary>
     public List<string> Channels { get; set; } = [];
 
     /// <summary>标题模板，为空时按事件使用默认标题。</summary>

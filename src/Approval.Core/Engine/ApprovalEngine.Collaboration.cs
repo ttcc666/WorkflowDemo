@@ -134,7 +134,6 @@ public sealed partial class ApprovalEngine
             Status = ApprovalTaskStatus.Pending,
             CreatedAt = Now
         });
-        Notify(NotificationKind.TaskCreated, instance, [new Assignee(AssigneeKind.User, instance.InitiatorId)]);
     }
 
     /// <summary>退回发起人后重新提交；formData 不为空时替换表单数据（业务单据修改后传入最新数据）。</summary>
@@ -245,7 +244,6 @@ public sealed partial class ApprovalEngine
         }
 
         var assignees = signers.Select(u => new Assignee(AssigneeKind.User, u)).ToList();
-        Notify(NotificationKind.TaskCreated, instance, assignees);
         await RaiseAsync(NotifyEvent.Enter, instance, flow, node, new EventInfo(assignees) { DueAt = dueAt }, ct);
         if (mode == AddSignMode.After)
             await RaiseAsync(NotifyEvent.Approved, instance, flow, node,
@@ -271,7 +269,6 @@ public sealed partial class ApprovalEngine
         WriteEvent(instance, "TaskCreated", parent.NodeId, parent.NodeName, parent.Id, SystemOperator, null);
         parent.DueAt = parent.NextRemindAt = DueAtFor(node);
         var assignee = new Assignee(parent.AssigneeKind, parent.AssigneeValue);
-        Notify(NotificationKind.TaskCreated, instance, [assignee]);
         await RaiseAsync(NotifyEvent.Enter, instance, flow, node, new EventInfo([assignee]) { DueAt = parent.DueAt }, ct);
     }
 }

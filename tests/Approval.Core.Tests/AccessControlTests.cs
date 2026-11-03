@@ -1,3 +1,4 @@
+using Approval.Forms.Schema;
 using System.Text.Json;
 using Approval.Core.Abstractions;
 using Approval.Core.Definitions;
@@ -174,7 +175,7 @@ public sealed class AccessControlTests : IAsyncLifetime
         Assert.Null(view.Nodes["review"].Timeout);
         Assert.Empty(view.Settings!.InitiatorRoles);
         Assert.Equal(new NodePosition(10, 20), view.Nodes["review"].Position);
-        Assert.Equal("amount", Assert.Single(view.Form!.Fields).Key);
+        Assert.Equal("amount", Assert.Single(view.GetForm()!.Fields).Key);
         Assert.Single(flow.Nodes["review"].Notifications);
         Assert.Contains("secret-token", JsonSerializer.Serialize(flow.Nodes["review"].Notifications));
         // 原定义不受影响

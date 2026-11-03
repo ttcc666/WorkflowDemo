@@ -1,3 +1,4 @@
+using Approval.Forms;
 using Approval.Core.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
@@ -6,12 +7,14 @@ namespace Approval.Database.Tests;
 
 // Each provider owns its migration chain. These contexts are test hosts, not a replacement
 // for the application's DbContext or migration history.
-public abstract class ContractDbContext : ApprovalDbContext
+public abstract class ContractDbContext : DbContext
 {
     protected ContractDbContext() { }
     protected abstract string Provider { get; }
-    protected override void ConfigureApprovalOptions(DbContextOptionsBuilder options)
+    protected override void OnConfiguring(DbContextOptionsBuilder options)
     {
+        base.OnConfiguring(options);
+        options.UseApproval();
         var connection = Environment.GetEnvironmentVariable("APPROVAL_TEST_CONNECTION");
         switch (Provider)
         {
@@ -22,7 +25,7 @@ public abstract class ContractDbContext : ApprovalDbContext
             default: throw new InvalidOperationException("Unknown provider.");
         }
     }
-    protected override void OnModelCreating(ModelBuilder modelBuilder) => modelBuilder.ConfigureApproval(this);
+    protected override void OnModelCreating(ModelBuilder modelBuilder) => modelBuilder.ConfigureApproval().ConfigureApprovalForms();
 }
 
 public sealed class MySqlContractContext() : ContractDbContext() { protected override string Provider => "MySql"; }

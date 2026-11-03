@@ -2,14 +2,11 @@ namespace Approval.Core;
 
 public sealed class ApprovalOptions
 {
-    public ApprovalLifecycleOptions Lifecycle { get; } = new();
     public ApprovalBackgroundOptions Background { get; } = new();
     /// <summary>严格模式要求提交标识；默认 false 是旧客户端过渡模式，不提供无键请求防重保障。</summary>
     public bool RequireOperationId { get; set; }
     public TimeSpan CommitVerificationTimeout { get; set; } = TimeSpan.FromSeconds(10);
     public TimeSpan PermissionTimeout { get; set; } = TimeSpan.FromSeconds(5);
-    public string AdminRole { get; set; } = "Admin";
-    public List<string> DefinitionReaders { get; } = [];
     /// <summary>是否允许发起人审批自己的申请（职责分离，默认不允许）。</summary>
     public bool AllowInitiatorApprove { get; set; }
 
@@ -37,32 +34,16 @@ public sealed class ApprovalOptions
     /// <summary>是否注册宿主中的单个后台执行器（Outbox 投递、超时扫描）。</summary>
     public bool EnableBackgroundServices { get; set; } = true;
 
+    /// <summary>宿主提供的通知路由提示；不注册任何发送器。</summary>
+    public List<Notifications.ChannelInfo> NotificationTargets { get; } = [];
+
     public ApprovalOutboxOptions Outbox { get; } = new();
 
-    public ApprovalFileOptions Files { get; } = new();
 
     /// <summary>超时扫描间隔。</summary>
     public TimeSpan TimeoutScanInterval { get; set; } = TimeSpan.FromMinutes(1);
     /// <summary>旧定义的超时自动审批仅在宿主显式允许时执行；默认只提醒。</summary>
     public bool EnableAutomaticTimeoutDecisions { get; set; }
-}
-
-/// <summary>表单附件：本地存储目录、大小与扩展名限制、未绑定文件的保留时间。</summary>
-public sealed class ApprovalFileOptions
-{
-    /// <summary>本地存储目录（<see cref="Files.LocalApprovalFileStore"/>）；相对路径相对于内容根目录。不要放在 wwwroot 下。</summary>
-    public string RootPath { get; set; } = "App_Data/approval-files";
-
-    public int MaxFileSizeMb { get; set; } = 20;
-
-    /// <summary>允许上传的扩展名（不含点，不区分大小写）。</summary>
-    public List<string> AllowedExtensions { get; set; } =
-        ["pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "csv", "png", "jpg", "jpeg", "gif", "zip"];
-
-    /// <summary>上传后未绑定到草稿或实例的文件保留多久后清理。</summary>
-    public TimeSpan UnboundRetention { get; set; } = TimeSpan.FromHours(24);
-
-    public long MaxFileSizeBytes => MaxFileSizeMb * 1024L * 1024L;
 }
 
 public sealed class ApprovalOutboxOptions

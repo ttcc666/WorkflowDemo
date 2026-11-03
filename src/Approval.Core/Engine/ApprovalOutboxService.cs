@@ -53,14 +53,13 @@ public sealed class ApprovalOutboxService
     private readonly DbContext _db;
     private readonly ApprovalUnitOfWork _unit;
     private readonly IApprovalScopeFactory? _scopes;
-    private readonly IReadOnlyDictionary<string, IApprovalChannel> _channels;
     private readonly ApprovalOptions _options;
     private readonly TimeProvider _clock;
     private readonly ILogger<ApprovalOutboxService> _logger;
     private readonly ApprovalOutboxSignal _signal;
     internal IApprovalEventHandler? EventHandler { get; set; }
 
-    public ApprovalOutboxService(ApprovalDbContextAccessor accessor, IEnumerable<IApprovalChannel> channels,
+    public ApprovalOutboxService(ApprovalDbContextAccessor accessor, IEnumerable<ChannelInfo> channels,
         ApprovalOptions options, TimeProvider clock, ILogger<ApprovalOutboxService> logger, IApprovalScopeFactory? scopes = null)
         : this(accessor, new ApprovalExtensionCatalog(() => [], () => [], () => channels), options, clock, logger, scopes)
     {
@@ -73,7 +72,6 @@ public sealed class ApprovalOutboxService
         _db = accessor.Context;
         _unit = accessor.UnitOfWork; _scopes = scopes;
         _authorization = accessor.Authorization;
-        _channels = extensions.Channels;
         _options = options;
         _clock = clock;
         _logger = logger;
@@ -116,7 +114,7 @@ public sealed class ApprovalOutboxService
         {
             await using var scope = await scopes.CreateAsync(ct);
             var worker = scope.ServiceProvider.GetRequiredService<ApprovalOutboxService>();
-            ((ApprovalDbContext)worker._db).TransactionState.DeferredRead = deferredRead;
+            ApprovalPersistence.State(worker._db).DeferredRead = deferredRead;
             return await worker._unit.ExecuteAsync(token => operation(worker, token), ct);
         });
     }
@@ -196,10 +194,16 @@ public sealed class ApprovalOutboxService
                 break;
             case OutboxKind.Notification:
             {
-                var channel = _channels.GetValueOrDefault(message.Target)
-                              ?? throw new InvalidOperationException($"通知渠道 '{message.Target}' 未注册");
-                var payload = JsonSerializer.Deserialize<ChannelMessage>(message.PayloadJson, OutboxJson.Options)!;
-                await channel.SendAsync(payload, ct);
+                // Upgrade existing pending notification rows through the same host event boundary.
+                var payload = JsonSerializer.Deserialize<ApprovalNotificationRequest>(message.PayloadJson, OutboxJson.Options)
+                    ?? throw new InvalidOperationException("旧通知正文无效");
+                var instance = message.InstanceId is { } id
+                    ? await _db.Set<ApprovalInstance>().SingleAsync(i => i.Id == id, ct) : null;
+                await (EventHandler ?? throw new InvalidOperationException("宿主未注册 IApprovalEventHandler"))
+                    .HandleAsync(new ApprovalEvent(message.Id, "NotificationRequested", instance?.Id ?? Guid.Empty,
+                        instance?.DefinitionId ?? Guid.Empty, instance?.DefinitionVersion ?? 0, instance?.BusinessType ?? "",
+                        instance?.BusinessKey ?? "", instance?.Status ?? InstanceStatus.Running, message.NodeId, null, null,
+                        "approval-background", null, message.CreatedAt) { DeliveryTarget = message.Target, Notification = payload }, ct);
                 break;
             }
 

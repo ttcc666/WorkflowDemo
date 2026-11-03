@@ -1,3 +1,5 @@
+using Approval.Forms;
+using Approval.Forms.Runtime;
 using Approval.Core.Abstractions;
 using Approval.Core.Authorization;
 using Approval.Core.Definitions;
@@ -5,7 +7,7 @@ using Approval.Core.Domain;
 using Approval.Core.Engine;
 using Approval.Core.Persistence;
 using Approval.Core.Hosting;
-using Approval.Core.Files;
+using Approval.Forms.Attachments;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 
@@ -48,7 +50,7 @@ public sealed class PermissionTests
             b.Services.AddSingleton<IApprovalPermissionProvider>(permissions);
             if (scope) b.AddQueryScope<Scope>();
             if (customScope is not null) b.Services.AddSingleton(customScope);
-            if (withForms) b.AddFormApprovals();
+            if (withForms) b.AddApprovalForms();
         });
     private static async Task<T> As<T>(TestHost host, string? user, Func<IServiceProvider, Task<T>> action)
     {
@@ -210,7 +212,9 @@ public sealed class PermissionTests
             Assert.Empty(await sp.GetRequiredService<ApprovalMessageService>().ListAsync("bob"));
             Assert.Equal(0, await sp.GetRequiredService<ApprovalMessageService>().UnreadCountAsync("bob"));
             Assert.Equal(0, await sp.GetRequiredService<ApprovalMessageService>().MarkAllReadAsync("bob"));
-            Assert.Equal(0, (await sp.GetRequiredService<ApprovalOutboxService>().ListAsync(new())).Total);
+            var visibleEvents = await sp.GetRequiredService<ApprovalOutboxService>().ListAsync(new());
+            Assert.Equal(3, visibleEvents.Total);
+            Assert.All(visibleEvents.Items, message => Assert.NotEqual(hidden.Id, message.InstanceId));
             await AssertCode(ApprovalErrorCode.NotFound, () => q.GetInstanceAsync(hidden.Id));
             var result = await sp.GetRequiredService<ApprovalEngine>().ReassignUserAsync("bob", "charlie", "bob", "handover");
             Assert.Equal(1, result.Count);
@@ -283,16 +287,11 @@ public sealed class PermissionTests
     }
 
     [Fact]
-    public async Task DefaultRoleMapping_SeparatesDesignAndPublish()
+    public async Task DefaultPermissionProvider_DeniesMembersAndAdministrators()
     {
-        var identity = new FakeIdentityProvider(); identity.Add("designer", "Designers"); identity.Add("admin", "Admin");
-        var options = new ApprovalOptions(); options.DefinitionReaders.Add("Designers");
-        var provider = new DefaultApprovalPermissionProvider(identity, options);
-        Task<bool> Can(string actor, string permission) => provider.AuthorizeAsync(new(new(actor, false), permission, new()), default);
-        Assert.True(await Can("designer", ApprovalPermissions.DefinitionDesign));
-        Assert.True(await Can("designer", ApprovalPermissions.DefinitionValidate));
-        Assert.False(await Can("designer", ApprovalPermissions.DefinitionPublish));
-        Assert.True(await Can("admin", ApprovalPermissions.DefinitionPublish));
-        Assert.False(await Can("bob", ApprovalPermissions.InstanceTerminate));
+        var provider = new DefaultApprovalPermissionProvider();
+        foreach (var actor in new[] { "member", "admin", "designer" })
+        foreach (var permission in ApprovalPermissions.All.Where(p => !p.StartsWith("approval.system.")))
+            Assert.False(await provider.AuthorizeAsync(new(new(actor, false), permission, new()), default));
     }
 }

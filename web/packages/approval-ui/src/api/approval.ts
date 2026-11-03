@@ -9,12 +9,6 @@ import type {
   DefinitionGovernanceSummary,
   DefinitionAudit,
   ApprovalDiagnosticReport,
-  MaintenanceTarget,
-  MaintenanceMode,
-  MaintenancePreview,
-  MaintenanceJobInfo,
-  MaintenanceBatchInfo,
-  ArchiveSummary,
   ApprovalInstance,
   ApprovalMe,
   ApprovalMessage,
@@ -61,17 +55,6 @@ export function createApprovalApi(
       http.post<DefinitionGovernance>(api(`/definitions/${enc(key)}/copy`), body, commandHeaders(operationId)),
     me: (signal?: AbortSignal) => http.get<ApprovalMe>(api('/me'), signal),
     diagnostics: (signal?: AbortSignal) => http.get<ApprovalDiagnosticReport>(api('/diagnostics'), signal),
-    maintenancePreview: (target: MaintenanceTarget, mode: MaintenanceMode, signal?: AbortSignal) =>
-      http.get<MaintenancePreview>(api(`/maintenance/preview?target=${enc(target)}&mode=${enc(mode)}`), signal),
-    maintenanceJobs: (signal?: AbortSignal) => http.get<MaintenanceJobInfo[]>(api('/maintenance/jobs'), signal),
-    maintenanceBatches: (id: string, page = 1) => http.get<PagedResult<MaintenanceBatchInfo>>(api(`/maintenance/jobs/${id}/batches?page=${page}`)),
-    createMaintenanceJob: (body: { target: MaintenanceTarget; mode: MaintenanceMode; policyHash: string }, key: string) =>
-      http.post<MaintenanceJobInfo>(api('/maintenance/jobs'), body, commandHeaders(key)),
-    runMaintenanceJob: (id: string) => http.post<MaintenanceJobInfo>(api(`/maintenance/jobs/${id}/run`), {}),
-    setRetentionHold: (body: { target: MaintenanceTarget; resourceId: string; held: boolean; reason: string }, key: string) =>
-      http.post<boolean>(api('/maintenance/holds'), body, commandHeaders(key)),
-    archives: (page = 1, signal?: AbortSignal) => http.get<PagedResult<ArchiveSummary>>(api(`/archives?page=${page}`), signal),
-    exportArchive: (id: string, signal?: AbortSignal) => http.get<unknown>(api(`/archives/${id}/export`), signal),
     users: (keyword: string, take = 50, signal?: AbortSignal) =>
       http.get<DirectoryUser[]>(api(`/directory/users?keyword=${enc(keyword)}&take=${take}`), signal),
     usersByIds: (ids: string[], signal?: AbortSignal) =>

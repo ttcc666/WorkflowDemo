@@ -23,4 +23,5 @@
     <EmbeddedResource Include="Flows/*.json" />
     <Content Include="Flows/*.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
+  <ItemGroup><ProjectReference Include="../../src/Approval.Forms/Approval.Forms.csproj" /></ItemGroup>
 </Project>

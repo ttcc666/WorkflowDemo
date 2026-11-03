@@ -28,10 +28,6 @@ internal static class ApprovalEndpointPermissions
         {
             ("GET", "/me") => ApprovalPermissions.SessionRead,
             ("GET", "/diagnostics") => ApprovalPermissions.DiagnosticsRead,
-            ("GET", "/maintenance/preview" or "/maintenance/jobs" or "/archives") => ApprovalPermissions.ArchiveRead,
-            ("GET", "/maintenance/jobs/{id:guid}/batches") => ApprovalPermissions.ArchiveRead,
-            ("POST", "/maintenance/jobs" or "/maintenance/jobs/{id:guid}/run" or "/maintenance/holds") => ApprovalPermissions.ArchiveExecute,
-            ("GET", "/archives/{id:guid}/export" or "/archives/{id:guid}/files/{fileId:guid}") => ApprovalPermissions.ArchiveReadSensitive,
             ("GET", "/directory/users" or "/directory/roles") => ApprovalPermissions.DirectoryRead,
             ("GET", "/meta" or "/flows") => ApprovalPermissions.DefinitionRead,
             ("GET", "/definitions" or "/definitions/{key}" or "/definitions/{key}/versions" or "/definitions/by-id/{id:guid}") => ApprovalPermissions.DefinitionReadSensitive,
@@ -76,8 +72,6 @@ internal static class ApprovalEndpointPermissions
         };
         string? kind = path switch
         {
-            "/maintenance/jobs/{id:guid}/run" => "maintenance-run",
-            "/archives/{id:guid}/export" or "/archives/{id:guid}/files/{fileId:guid}" => "archive",
             "/definitions/by-id/{id:guid}" => "definition",
             _ when path.Contains("/tasks/{id:guid}", StringComparison.Ordinal) => "task",
             _ when path.Contains("/instances/{id:guid}", StringComparison.Ordinal) => "instance",
@@ -92,7 +86,6 @@ internal static class ApprovalEndpointPermissions
         Guid? id = Guid.TryParse(Convert.ToString(http.Request.RouteValues["id"]), out var value) ? value : null;
         return new()
         {
-            ArchiveId = metadata.ResourceKind == "archive" ? id : null,
             DefinitionKey = Convert.ToString(http.Request.RouteValues["key"]), DefinitionId = metadata.ResourceKind == "definition" ? id : null,
             InstanceId = metadata.ResourceKind == "instance" ? id : null, TaskId = metadata.ResourceKind == "task" ? id : null,
             FileId = metadata.ResourceKind == "file" ? id : null, DraftId = metadata.ResourceKind == "draft" ? id : null,

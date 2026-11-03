@@ -14,7 +14,7 @@ import DefinitionCategoryFilter from '../features/definitions/DefinitionCategory
 const { api: approvalApi, userKey } = useApprovalClient()
 
 const router = useRouter()
-// 完整流程定义含通知配置，仅管理员（及后端配置的 DefinitionReaders 角色）可查看
+// 完整流程定义含通知配置，按宿主返回的敏感读取能力展示
 const { me, canViewDefinitions, can } = useApprovalUser()
 const categorySelection = shallowRef('')
 const { data: definitions, loading, reload } = useAsyncData(

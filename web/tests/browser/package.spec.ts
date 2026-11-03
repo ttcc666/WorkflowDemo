@@ -124,16 +124,15 @@ test('packaged endpoints reject anonymous access and unsupported protocol versio
   expect((await invalid.json()).title).toContain('协议版本 2')
   expect((await request.get(api + '/api/approval/definitions/unsupported.package', { headers: { 'X-User-Id': 'admin' } })).status()).toBe(404)
 })
-test('packaged diagnostics expose anonymous readiness only and maintenance stays disabled by default', async ({ page, request }) => {
+test('packaged diagnostics expose anonymous readiness only and removed maintenance routes return 404', async ({ page, request }) => {
   await page.addInitScript(() => localStorage.setItem('approval-demo-user', 'admin'))
   const response = await request.get(process.env.APPROVAL_SMOKE_API + '/health/approval')
   expect(response.status()).toBe(200); expect(await response.json()).toEqual({ ready: true })
-  await page.goto('/maintenance')
+  await page.goto('/diagnostics')
   await expect(page.getByText('数据库与迁移已就绪', { exact: true })).toBeVisible()
-  const preview = page.waitForResponse(response => new URL(response.url()).pathname === '/api/approval/maintenance/preview')
-  await page.getByRole('button', { name: '只读预览', exact: true }).click()
-  const data = await (await preview).json(); expect(data.enabled).toBe(false)
-  await expect(page.getByRole('button', { name: '确认并执行一批', exact: true })).toBeDisabled()
+  for (const path of ['/api/approval/maintenance/preview', '/api/approval/maintenance/jobs', '/api/approval/archives']) {
+    expect((await request.get(process.env.APPROVAL_SMOKE_API + path, { headers: { 'X-User-Id': 'admin' } })).status()).toBe(404)
+  }
   expect((await request.get(process.env.APPROVAL_SMOKE_API + '/api/approval/diagnostics')).status()).toBe(401)
 })
 

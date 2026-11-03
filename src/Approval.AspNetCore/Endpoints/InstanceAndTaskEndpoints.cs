@@ -62,7 +62,7 @@ internal static class InstanceEndpoints
         group.MapGet("/instances/{id:guid}/my-task", async (Guid id, HttpContext http, ApprovalEngine e, CancellationToken ct) =>
         {
             var task = await e.FindHandleableTaskAsync(id, http.GetApprovalUserId(), ct);
-            var forms = task is null ? null : http.RequestServices.GetService<ApprovalFormService>();
+            var forms = task is null ? null : http.RequestServices.GetService<IApprovalTaskDataAdapter>();
             return new ApprovalMyTaskResponse(task is null ? null : ApprovalTaskResponse.From(task), forms is null ? [] : await forms.GetEditableFieldsAsync(task!, ct))
             { Capabilities = task is null ? new Dictionary<string, bool>() : await http.RequestServices.GetRequiredService<ApprovalAuthorizationService>().CapabilitiesAsync(new() { TaskId = task.Id }, ct) };
         });
@@ -96,7 +96,7 @@ internal static class InstanceEndpoints
 /// <summary>任务操作：同意、驳回 / 退回、转交、加签、重新提交。</summary>
 internal static class TaskEndpoints
 {
-    public static void Map(RouteGroupBuilder group, bool formsEnabled)
+    public static void Map(RouteGroupBuilder group)
     {
         group.MapGet("/tasks/{id:guid}/can-handle", async (Guid id, HttpContext http, ApprovalEngine e, CancellationToken ct) =>
             new CanHandleResponse(await e.CanHandleAsync(id, http.GetApprovalUserId(), ct)));
@@ -107,8 +107,8 @@ internal static class TaskEndpoints
             var userId = http.GetApprovalUserId();
             if (body.FormData is { ValueKind: not (JsonValueKind.Null or JsonValueKind.Undefined) } formData)
             {
-                if (!formsEnabled) throw new ApprovalException("未启用表单审批，同意时不能修改表单数据");
-                await http.RequestServices.GetRequiredService<ApprovalFormService>().ApproveAsync(id, userId, formData, body.Comment, ct);
+                if (http.RequestServices.GetService<IApprovalTaskDataAdapter>() is null) throw new ApprovalException("未启用表单审批，同意时不能修改表单数据");
+                await http.RequestServices.GetRequiredService<IApprovalTaskDataAdapter>().ApproveAsync(id, userId, formData, body.Comment, ct);
             }
             else
             {
@@ -143,11 +143,12 @@ internal static class TaskEndpoints
         });
 
         // 退回发起人后重新提交；本接口只提交意见，业务数据由业务单据决定。启用表单审批时由 FormEndpoints 提供（可带表单数据）
-        if (formsEnabled) return;
         group.MapPost("/tasks/{id:guid}/resubmit", async (Guid id, ResubmitRequest body, HttpContext http, ApprovalEngine e, CancellationToken ct) =>
         {
+            if (http.RequestServices.GetService<IApprovalTaskDataAdapter>() is { } adapter)
+            { await adapter.ResubmitAsync(id, http.GetApprovalUserId(), body.FormData, body.Comment, ct); return TypedResults.NoContent(); }
             if (body.FormData is { ValueKind: not (JsonValueKind.Null or JsonValueKind.Undefined) })
-                throw new ApprovalException("未启用表单审批，重新提交不能修改表单数据");
+                throw new ApprovalException("未启用数据模块，重新提交不能修改数据");
             await e.ResubmitAsync(id, http.GetApprovalUserId(), body.Comment, ct: ct);
             return TypedResults.NoContent();
         });

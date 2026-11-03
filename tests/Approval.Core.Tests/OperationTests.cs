@@ -43,9 +43,10 @@ public sealed class OperationTests
                 db.Add(new TestRecord { Id = Guid.NewGuid(), Name = "host" });
                 await engine.StartAsync(new("doc", RecordingBusinessHandler.Type, "one", "alice"), token);
                 await engine.StartAsync(new("doc", RecordingBusinessHandler.Type, "two", "alice"), token);
-                Assert.Empty(host.Notifier.Notifications);
+                Assert.Empty(host.Events.TaskEvents);
             });
-            Assert.Equal(2, host.Notifier.Notifications.Count);
+            await host.DispatchOutboxAsync();
+            Assert.Equal(2, host.Events.TaskEvents.Count());
         });
         await host.RunAsync(async sp =>
         {
@@ -72,7 +73,7 @@ public sealed class OperationTests
             Assert.Contains(db.ChangeTracker.Entries<TestRecord>(), e => ReferenceEquals(e.Entity, business));
             await Assert.ThrowsAsync<InvalidOperationException>(() => db.SaveChangesAsync());
         });
-        Assert.Empty(host.Notifier.Notifications);
+        Assert.Empty(host.Events.TaskEvents);
         await host.RunAsync(async sp =>
         {
             var db = sp.GetRequiredService<TestDbContext>(); Assert.Equal(0, await db.Set<TestRecord>().CountAsync());
@@ -96,7 +97,7 @@ public sealed class OperationTests
             await Assert.ThrowsAsync<InvalidOperationException>(() => sp.GetRequiredService<IApprovalUnitOfWork>().ExecuteAsync(
                 token => engine.ReassignUserAsync("bob", "charlie", "admin", "handover", token)));
         });
-        Assert.Empty(host.Notifier.Notifications);
+        Assert.Empty(host.Events.TaskEvents);
     }
 
     [Fact]
@@ -138,7 +139,7 @@ public sealed class OperationTests
                 await sp.GetRequiredService<ApprovalEngine>().StartAsync(new("doc", RecordingBusinessHandler.Type, "one", "alice"), token);
                 before.Cancel(); token.ThrowIfCancellationRequested();
             }, before.Token)));
-        Assert.Empty(host.Notifier.Notifications);
+        Assert.Empty(host.Events.TaskEvents);
         await host.RunAsync(async sp => Assert.Equal(0, await sp.GetRequiredService<TestDbContext>().Set<ApprovalInstance>().CountAsync()));
         using var after = new CancellationTokenSource();
         var id = await host.RunAsync(sp =>
@@ -153,7 +154,8 @@ public sealed class OperationTests
         });
         Assert.True(after.IsCancellationRequested);
         Assert.Equal(id, (await host.GetInstanceAsync(id)).Id);
-        Assert.Single(host.Notifier.Notifications);
+        await host.DispatchOutboxAsync();
+        Assert.Single(host.Events.TaskEvents);
     }
 
 }

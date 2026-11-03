@@ -92,18 +92,16 @@ public static class ApprovalAspNetCoreExtensions
         });
         ApprovalHttpCommands.Add(group);
 
-        // 表单审批为可选能力：未调用 AddFormApprovals() 时不映射相关接口（避免把未注册的服务参数推断为请求体）
-        var formsEnabled = app.ServiceProvider.GetService<IServiceProviderIsService>()?.IsService(typeof(ApprovalFormService)) == true;
-        var formBusinessType = formsEnabled ? app.ServiceProvider.GetService<ApprovalFormOptions>()?.BusinessType : null;
-
+        var modules = app.ServiceProvider.GetServices<IApprovalEndpointModule>().ToArray();
+        var formBusinessType = modules.FirstOrDefault()?.BusinessType;
         InstanceEndpoints.Map(group);
-        TaskEndpoints.Map(group, formsEnabled);
+        TaskEndpoints.Map(group);
         DefinitionEndpoints.Map(group);
         MessageEndpoints.Map(group, options);
         DirectoryEndpoints.Map(group, formBusinessType);
         AdminEndpoints.Map(group);
-        MaintenanceEndpoints.Map(group);
-        if (formsEnabled) FormEndpoints.Map(group, app.ServiceProvider.GetRequiredService<ApprovalOptions>());
+        group.MapGet("/diagnostics", (Approval.Core.Diagnostics.ApprovalDiagnosticsService service, CancellationToken ct) => service.CheckAsync(ct));
+        foreach (var module in modules) module.Map(group);
         return group;
     }
 }

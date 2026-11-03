@@ -7,14 +7,14 @@ using Microsoft.EntityFrameworkCore.Storage;
 
 namespace Approval.Core.Persistence;
 
-internal sealed class ApprovalTransaction(IDbContextTransaction transaction, ApprovalDbContext db, DbTransaction? native = null, bool closeConnection = false) : IAsyncDisposable
+internal sealed class ApprovalTransaction(IDbContextTransaction transaction, DbContext db, DbTransaction? native = null, bool closeConnection = false) : IAsyncDisposable
 {
     public IDbContextTransaction Transaction { get; } = transaction;
     private bool _disposed;
-    public static async Task<ApprovalTransaction> BeginAsync(ApprovalDbContext db, bool deferredRead, CancellationToken ct)
+    public static async Task<ApprovalTransaction> BeginAsync(DbContext db, bool deferredRead, CancellationToken ct)
     {
         if (!deferredRead || db.Database.ProviderName != "Microsoft.EntityFrameworkCore.Sqlite")
-            return new(db.TransactionState.Serializable
+            return new(ApprovalPersistence.State(db).Serializable
                 ? await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct)
                 : await db.Database.BeginTransactionAsync(ct), db);
         // SQLite normally takes a write reservation at BEGIN. A delivery waiting on remote I/O must

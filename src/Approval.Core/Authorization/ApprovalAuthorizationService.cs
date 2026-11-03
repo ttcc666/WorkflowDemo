@@ -36,7 +36,7 @@ public sealed class ApprovalAuthorizationService
 
 internal sealed class DefaultApprovalAuthorization(
     DbContext db, IApprovalActorContext actor,
-    IApprovalPermissionProvider provider, IApprovalQueryScope scope, ApprovalOptions options, IApprovalArchiveQueryScope archives) : IApprovalAuthorization
+    IApprovalPermissionProvider provider, IApprovalQueryScope scope, ApprovalOptions options, IEnumerable<IApprovalResourceResolver> resolvers) : IApprovalAuthorization
 {
     private ApprovalPermissionSubject Subject(string? userId = null)
     {
@@ -81,27 +81,10 @@ internal sealed class DefaultApprovalAuthorization(
     private async Task<ApprovalResource> ResolveAsync(ApprovalResource resource, ApprovalPermissionSubject subject, CancellationToken ct)
     {
         static ApprovalException Missing() => new("资源不存在或无权查看") { Code = ApprovalErrorCode.NotFound };
-        if (resource.ArchiveId is { } archiveId)
-        {
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct); timeout.CancelAfter(options.PermissionTimeout);
-            IQueryable<ApprovalArchiveRecord> visible;
-            try { visible = await archives.ApplyAsync(subject, db.Set<ApprovalArchiveRecord>().AsNoTracking(), timeout.Token).WaitAsync(timeout.Token); }
-            catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
-            catch (Exception ex) { throw new ApprovalException("归档数据范围暂不可用", ex) { Code = ApprovalErrorCode.AuthorizationUnavailable }; }
-            var archived = await visible.SingleOrDefaultAsync(a => a.Id == archiveId, ct) ?? throw Missing();
-            return new ApprovalResource { ArchiveId = archiveId, InstanceId = archived.InstanceId, DefinitionId = archived.DefinitionId,
-                DefinitionKey = archived.DefinitionKey, BusinessType = archived.BusinessType, BusinessKey = archived.BusinessKey, TargetUserId = archived.UserId };
-        }
+        foreach (var resolver in resolvers) resource = await resolver.ResolveAsync(resource, ct);
         Guid? instanceId = resource.InstanceId;
         if (resource.TaskId is { } taskId)
             instanceId = (await db.Set<ApprovalTask>().AsNoTracking().SingleOrDefaultAsync(t => t.Id == taskId, ct) ?? throw Missing()).InstanceId;
-        if (resource.FileId is { } fileId)
-            instanceId = (await db.Set<ApprovalFile>().AsNoTracking().SingleOrDefaultAsync(f => f.Id == fileId, ct) ?? throw Missing()).InstanceId;
-        if (resource.DraftId is { } draftId)
-        {
-            var draft = await db.Set<ApprovalDraft>().AsNoTracking().SingleOrDefaultAsync(d => d.Id == draftId, ct) ?? throw Missing();
-            resource = resource with { DefinitionKey = draft.DefinitionKey, TargetUserId = draft.UserId };
-        }
         if (resource.OutboxId is { } outboxId)
             instanceId = (await db.Set<ApprovalOutboxMessage>().AsNoTracking().SingleOrDefaultAsync(m => m.Id == outboxId, ct) ?? throw Missing()).InstanceId;
         if (resource.MessageId is { } messageId)
@@ -156,19 +139,10 @@ internal sealed class MissingApprovalAuthorization : IApprovalAuthorization
     public Task<IQueryable<ApprovalInstance>> ScopeAsync(IQueryable<ApprovalInstance> query, CancellationToken ct = default) => Task.FromException<IQueryable<ApprovalInstance>>(Missing());
 }
 
-public sealed class DefaultApprovalPermissionProvider(IApprovalIdentityProvider identity, ApprovalOptions options) : IApprovalPermissionProvider
+public sealed class DefaultApprovalPermissionProvider : IApprovalPermissionProvider
 {
-    public async Task<bool> AuthorizeAsync(ApprovalPermissionRequest request, CancellationToken ct)
-    {
-        if (request.Subject.IsSystem) return true; // The mandatory gate has already checked the explicit system grant set.
-        if (!ApprovalPermissions.All.Contains(request.Permission)) return false;
-        if (!ApprovalPermissions.IsManagement(request.Permission) && !ApprovalPermissions.IsDesigner(request.Permission)) return true;
-        if (await identity.IsInRoleAsync(request.Subject.ActorId, options.AdminRole, ct)) return true;
-        if (!ApprovalPermissions.IsDesigner(request.Permission)) return false;
-        foreach (var role in options.DefinitionReaders)
-            if (await identity.IsInRoleAsync(request.Subject.ActorId, role, ct)) return true;
-        return false;
-    }
+    public Task<bool> AuthorizeAsync(ApprovalPermissionRequest request, CancellationToken ct)
+    { ct.ThrowIfCancellationRequested(); return Task.FromResult(request.Subject.IsSystem); }
 }
 internal sealed class DefaultApprovalQueryScope : IApprovalQueryScope
 {

@@ -4,7 +4,7 @@
     <PackageId>Approval.Core</PackageId>
     <Version>$(ApprovalVersion)</Version>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <Description>通用审批流程引擎：多版本流程定义、或签 / 会签 / 依次审批、条件与并行分支、退回 / 转交 / 加签、表单审批、通知与 Outbox 可靠投递、超时处理。基于 EF Core，与宿主业务同一事务。</Description>
+    <Description>通用审批流程引擎：多版本流程定义、或签 / 会签 / 依次审批、条件与并行分支、退回 / 转交 / 加签、宿主事件与 Outbox 可靠投递、超时处理。基于 EF Core，与宿主业务同一事务。</Description>
     <PackageTags>approval;workflow;efcore</PackageTags>
   </PropertyGroup>
 
@@ -16,6 +16,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="Approval.Forms" />
     <InternalsVisibleTo Include="Approval.Core.Tests" />
     <InternalsVisibleTo Include="Approval.AspNetCore.Tests" />
     <None Include="../../README.md" Pack="true" PackagePath="README.md" />

@@ -1,3 +1,4 @@
+using Approval.Forms.Schema;
 using Approval.Core.Definitions;
 using Approval.Core.Domain;
 
@@ -136,7 +137,7 @@ public sealed class ParallelReturnAddSignTests : IAsyncLifetime
             "j": { "name": "合并", "type": "Join", "next": "end" },
             "end": { "name": "结束", "type": "End" } } }
         """);
-        var errors = FlowDefinitionValidator.Validate(flow, new HashSet<string> { "User" });
+        var errors = FormDefinitionValidator.Validate(flow, new HashSet<string> { "User" });
         Assert.Contains(errors, e => e.Contains(error));
     }
 
@@ -144,7 +145,7 @@ public sealed class ParallelReturnAddSignTests : IAsyncLifetime
     public void Validator_rejects_join_without_parallel()
     {
         var flow = FlowDefinition.Parse(Flow(User("a", "A", "j"), """ "j": { "name": "合并", "type": "Join", "next": "end" } """));
-        Assert.Contains(FlowDefinitionValidator.Validate(flow, new HashSet<string> { "User" }), e => e.Contains("没有对应的并行节点"));
+        Assert.Contains(FormDefinitionValidator.Validate(flow, new HashSet<string> { "User" }), e => e.Contains("没有对应的并行节点"));
     }
 
     // ───────────────────────── 退回 ─────────────────────────

@@ -1,5 +1,5 @@
 using System.Text.Json;
-using Approval.Core.Forms;
+using Approval.Forms.Schema;
 
 namespace Approval.Core.Tests;
 

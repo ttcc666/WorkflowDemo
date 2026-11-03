@@ -16,7 +16,6 @@ internal static class ApprovalHttpCommands
 {
     public const string Header = "Idempotency-Key";
     internal static bool Managed(HttpContext http, ApprovalPermissionMetadata metadata) =>
-        metadata.ResourceKind == "maintenance-run" ? false :
         HttpMethods.IsPost(http.Request.Method) || HttpMethods.IsPut(http.Request.Method) || HttpMethods.IsDelete(http.Request.Method)
             ? !metadata.Permissions.Any(p => p is ApprovalPermissions.DefinitionValidate or ApprovalPermissions.FileUpload or ApprovalPermissions.TaskReassignBulk)
             : false;

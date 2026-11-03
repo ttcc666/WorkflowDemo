@@ -59,7 +59,7 @@ const fromId = computed(() => route.query.from as string | undefined)
 const name = shallowRef('')
 const version = shallowRef<number | null>(null)
 
-// 加载：?from=<定义ID> 基于历史版本编辑；否则取最新版本；不存在则新建。完整定义仅管理员（及 DefinitionReaders）可读。
+// 加载：?from=<定义ID> 基于历史版本编辑；否则取最新版本；不存在则新建。完整定义由宿主敏感读取能力授权。
 // 每次身份变化都重新确认当前企业的权限与定义。
 const canLoad = canViewDefinitions
 watch(userKey, () => {

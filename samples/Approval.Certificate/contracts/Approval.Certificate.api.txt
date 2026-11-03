@@ -2,6 +2,8 @@ Approval.Certificate.CertificateFlowTemplates
   Method System.Collections.Generic.IReadOnlyDictionary`2[System.String,System.String] ReadDefaults() [return=NotNull/NotNull<NotNull/NotNull,NotNull/NotNull>; args=]
 Approval.Certificate.CertificateModuleExtensions
   Method Approval.Core.ApprovalBuilder AddCertificateModule(Approval.Core.ApprovalBuilder) [return=NotNull/NotNull; args=NotNull/NotNull]
+Approval.Certificate.Infrastructure.Migrations.EmbeddedEngineBoundary
+  Constructor Void .ctor() [args=]
 Approval.Certificate.Infrastructure.Migrations.InitialApproval
   Constructor Void .ctor() [args=]
 Certificate.Api.Certificates.AppDbContext

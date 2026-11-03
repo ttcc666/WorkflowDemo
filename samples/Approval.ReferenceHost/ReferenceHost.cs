@@ -1,3 +1,5 @@
+using Approval.Forms.AspNetCore;
+using Approval.Forms;
 using Approval.AspNetCore;
 using Approval.Core;
 using Approval.Core.Abstractions;
@@ -45,9 +47,11 @@ public static class ReferenceApplication
             approval.AddIdentityProvider<DirectoryIdentityProvider>()
                 .AddUserDirectory<DirectoryIdentityProvider>()
                 .AddPermissionProvider<DirectoryPermissionProvider>()
-                .AddFormApprovals();
+                .AddApprovalForms(o => o.Files.RootPath = builder.Configuration["Approval:FileRoot"] ?? "App_Data/approval-files").AddFileStore<Approval.Forms.Attachments.LocalApprovalFileStore>();
         });
+        builder.Services.AddSingleton<IApprovalEventHandler, ReferenceEventHandler>();
         builder.Services.AddApprovalAspNetCore();
+        builder.Services.AddApprovalFormsAspNetCore();
         var app = builder.Build();
         app.UseExceptionHandler();
         if (!app.Environment.IsDevelopment())

@@ -1,3 +1,4 @@
+using Approval.Forms;
 using Approval.Core;
 using Approval.Core.Abstractions;
 using Approval.Core.Persistence;
@@ -6,9 +7,12 @@ using Microsoft.EntityFrameworkCore.Design;
 
 namespace Approval.ReferenceHost;
 
-public abstract class ReferenceDbContext(DbContextOptions options) : ApprovalDbContext(options)
+public abstract class ReferenceDbContext(DbContextOptions options) : DbContext(options)
 {
-    protected override void OnModelCreating(ModelBuilder model) => model.ConfigureApproval(this);
+    protected override void OnConfiguring(DbContextOptionsBuilder options)
+    { base.OnConfiguring(options); options.UseApproval(); }
+
+    protected override void OnModelCreating(ModelBuilder model) => model.ConfigureApproval().ConfigureApprovalForms();
 }
 public sealed class SqliteReferenceContext(DbContextOptions<SqliteReferenceContext> options) : ReferenceDbContext(options);
 public sealed class MySqlReferenceContext(DbContextOptions<MySqlReferenceContext> options) : ReferenceDbContext(options);
@@ -51,7 +55,6 @@ public static class ReferenceDatabase
                 o.RequireBusinessHandler = true;
                 o.EnableBackgroundServices = config.GetValue("Approval:EnableBackgroundServices", true);
                 o.DisplayTimeZone = TimeZoneInfo.Utc;
-                o.Files.RootPath = config["Approval:FileRoot"] ?? "App_Data/approval-files";
                 // Lifecycle and deletion stay disabled. Operators must review policy first.
             }));
         }

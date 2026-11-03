@@ -1,88 +1,75 @@
-# Approval.Core — 嵌入式通用审批引擎
+# Approval Workflow
 
-一个供 .NET 业务应用引用的审批类库。单实例、同进程，复用宿主 DI、DbContext 和数据库事务；用户认证、用户/部门/岗位/角色、权限、消息渠道和业务状态由宿主提供。没有多租户运行模式、Redis、消息队列、分布式锁、Leader 选举或脚本沙箱。
+一个轻量、可嵌入 ASP.NET Core 业务系统的通用审批引擎，基于 .NET 10 / EF Core。当前版本 **0.3.0**。
 
-业务表单由宿主提供。可选的现有表单组件用于申请数据快照、变量、条件与附件，不需要建设独立表单平台。
+支持流程定义与不可变版本、或签/会签/依次审批、条件与并行汇聚、转交/加签、退回与重新提交、撤回/终止、抄送及已读、审计、查询、事务幂等和 Outbox。用户、组织、认证、授权、业务数据、通知渠道和实际文件存储由宿主提供。
 
-```mermaid
-flowchart LR
-  UI["@approval/ui
-Vue 3 / Element Plus / Vue Flow"] --> HTTP[Approval.AspNetCore]
-  Host["宿主身份 / 目录 / 组织 / 授权"] --> HTTP
-  HTTP --> Engine["Approval.Core
-定义 / 实例 / 任务 / 抄送 / 轨迹"]
-  Engine --> Tx["宿主 DbContext / 同一个事务"]
-  Tx --> DB[(审批与业务数据库)]
-  Tx --> Outbox[持久审批事件]
-  Worker[单个 ApprovalWorker] --> Outbox
-  Worker --> Timeout[超时提醒]
-  Outbox --> Handler[宿主 IApprovalEventHandler]
-```
+## 安装与接入
 
-## 能力
-
-| 范围 | 已提供行为 |
-|---|---|
-| 定义生命周期 | 新建、保存/恢复设计草稿、只读草稿预览、校验、发布、停用、复制为新草稿、历史版本和基于历史版本编辑；列表按草稿/选用版本分类并由服务端筛选 |
-| 版本不变量 | 发布版本不可修改；实例固定 DefinitionId/Version；发布失败不替换当前版本；停用不影响在途审批 |
-| 审批 | 或签 Any、会签 All、依次 Sequential；指定用户/角色、部门负责人/上级/逐级上级和宿主自定义解析器 |
-| 状态与操作 | Running、Returned、Approved、Rejected、Withdrawn、Terminated；同意、驳回结束、历史节点退回、申请人修改重提、撤回、转交、前/后/并加签、授权终止/改派 |
-| 并行 | 结构化并行分叉/全部汇聚、嵌套条件和并行；保存汇聚激活标识及分支到达去重；拒绝跨分支非法退回；终止/驳回清理全部活动任务 |
-| 抄送中心 | 独立抄送关系、角色接收、分页列表、未读筛选、每用户阅读状态、抄送详情及历史；受权分页查看角色当前人员（明确不是历史快照）；不进入审批待办 |
-| 查询 | 待办、已办、我发起、抄送、实例、轨迹；数据库内过滤/排序/分页，标题/业务编号/实例 ID、状态/定义/业务类型/人员/UTC 时间范围 |
-| 轨迹 | 只追加的 Sequence、操作人、节点、操作、意见、UTC 时间和可选任务 ID；进入节点、退回、重提、转交、加签、结束均记录 |
-| 一致性 | 实例乐观并发、业务单据唯一占用、稳定命令键、事务回滚、提交结果未知核验；业务回调与审批同事务 |
-| 事件 | 注册宿主统一处理器后自动记录生命周期事件；Outbox 至少一次、稳定事件 ID、退避、重试上限与手动重试 |
-| 后台 | 单个 Worker 串行执行投递、超时扫描；默认超时只提醒，自动决定需宿主显式启用；可选维护默认关闭 |
-
-并行默认等待全部分支；没有引入动态循环、任意跳转或通用自动化平台。通用动作执行器、参数模板/输出映射、Sync/Async 步骤和失败继续均已删除。Action 协议、扫描入口和兼容执行代码均已移除，未知节点类型或额外动作字段作为无效输入拒绝。宿主准备工作使用 `IApprovalLifecycleHandler`，结束业务使用 `IApprovalBusinessHandler`，外部副作用使用可靠事件。
-
-## 最小宿主接入
+只需要业务审批时安装 `Approval.Core`、`Approval.AspNetCore`。动态表单额外安装 `Approval.Forms`、`Approval.Forms.AspNetCore`。
 
 ```csharp
-public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : ApprovalDbContext(options)
-{
-    protected override void OnModelCreating(ModelBuilder model) => model.ConfigureApproval(this);
-}
-
-builder.Services.AddScoped<IApprovalIdentityProvider, HostIdentity>();
-builder.Services.AddApprovalAspNetCore(); // 默认从可信 Claims 识别当前用户
-builder.Services.AddApprovalWorkflow<AppDbContext>()
-    .AddUserDirectory<HostDirectory>() // 返回用户及 IsActive，或提供 IApprovalUserStatusProvider
-    .AddOrganizationProvider<HostOrganization>()
-    .AddPermissionProvider<HostPermissions>()
-    .AddBusinessHandler<ContractApprovalHandler>()
+// AppDbContext 可以继承 DbContext、IdentityDbContext 或宿主已有基类。
+services.AddDbContext<AppDbContext>(o => o.UseSqlite(connectionString));
+services.AddApprovalWorkflow<AppDbContext>(o => o.RequireOperationId = true)
+    .AddIdentityProvider<HostIdentityProvider>()
+    .AddUserDirectory<HostUserDirectory>()
+    .AddPermissionProvider<HostPermissionProvider>()
     .AddEventHandler<HostApprovalEventHandler>();
-app.UseExceptionHandler();
+services.AddApprovalAspNetCore();
+```
+
+```csharp
+protected override void OnModelCreating(ModelBuilder modelBuilder)
+{
+    base.OnModelCreating(modelBuilder);
+    modelBuilder.ConfigureApproval(); // 可传 tablePrefix，之后可继续覆盖 ToTable 等宿主配置。
+}
+```
+
+审批 DI 自动为宿主 EF options 安装 `UseApproval()` 写保护；手动构造上下文时在 options 中显式调用该方法。宿主原有 SaveChanges override、EF 拦截器与业务模型继续使用。宿主自行创建和应用 EF Migration。
+
+```csharp
+app.UseAuthentication();
+app.UseAuthorization();
 app.MapApprovalEndpoints().RequireAuthorization();
 ```
 
-宿主必须提供用户目录或状态接口，未知/停用用户不能发起或处理审批、接受转交/加签/改派。引擎校验服务端 Actor 与操作者参数一致；前端提交 userId/operatorId 不会改变可信身份。权限码是引擎向宿主询问的动作标识，不是独立 RBAC 系统。
+未注册宿主权限实现时人工操作默认拒绝。系统操作只接受审批后台创建的显式能力集合；角色命名和管理员身份由宿主决定。
 
-宿主整段业务写入放入 `IApprovalCommandExecutor` 委托，不能把裸外部事务传给引擎。业务完成回调只修改共享 DbContext 的跟踪实体，不自行保存或提交；远程通知使用 `IApprovalEventHandler`，按 ApprovalEvent.Id 幂等。
+## 业务与审批同一事务
 
-前端保持 Vue 3 + Element Plus。用 `ApprovalUI` 或 `createApprovalClient` 接入宿主请求/令牌刷新桥接；`userKey` 随可信用户/会话变化更新。人员选择器调用宿主目录，不再提供手工创建假用户的正式路径。
+通过 `IApprovalCommandExecutor` 执行完整业务委托：委托从新的 DI scope 获取同一个 AppDbContext 和 ApprovalEngine，写入业务数据并启动审批。命令执行器在数据库事务内预约稳定操作键、核验请求摘要并保存结果；数据库提交结果未知时用新上下文恢复已提交结果。
 
-## 项目结构
+`IApprovalUnitOfWork` 可将多个本地审批调用与同一上下文的业务数据组合提交。不支持裸外部事务或假设两个不同 DbContext 自动共享事务。严格模式要求稳定 OperationId / HTTP `Idempotency-Key`。
 
-- `src/Approval.Core`：审批领域、EF 模型、事务、查询、可靠事件和单 Worker。
-- `src/Approval.AspNetCore`：可选 HTTP 适配、可信身份、权限与 DTO。
-- `web/packages/approval-ui`：可引用的 UI；`web/apps/demo` 是示例宿主。
-- `samples/Approval.Certificate` / `Certificate.Api`：证书业务及宿主示例。
-- `samples/Approval.ReferenceHost`：业务无关的单宿主认证/目录/授权参考，不建设组织或 RBAC 产品。
-- 九套 EF 上下文各保留一条当前模型的 `InitialApproval`，直接初始化新库；没有旧库升级、租户回填或程序集转发工具。
+## 可选 Forms
 
-## 文档与验收
-
-- [宿主接入与公共接口](docs/embedded-host-integration.md)
-- [状态、查询、事件与迁移](docs/embedded-approval-completion.md)
-- [审查与前批记录](docs/embedded-approval-review.md)
-- [事务与命令幂等](docs/transactions-and-idempotency.md)
-- [数据库验证](docs/database-validation.md)
-
-```powershell
-Set-Location -LiteralPath 'D:\Study\CSharp\Workflow'
-pwsh -NoProfile -File 'eng/verify.ps1' -Scope 'All'
+```csharp
+services.AddApprovalForms();
+services.AddApprovalFormsAspNetCore();
+services.AddScoped<IApprovalFileStore, HostFileStore>();
+// OnModelCreating 中，在 ConfigureApproval 后调用 ConfigureApprovalForms()。
 ```
 
-入口包含构建、测试、模型漂移、真实 Kestrel 冒烟、前端 typecheck/测试/构建、契约检查及独立 NuGet/npm 消费者和浏览器验证。本地测试制品保存在 `output/`；不自动提交、推送、发布或部署。真实三库和认证/备份/网络演练有独立显式入口，结果以本次实际日志为准。
+Forms 保留动态字段、公式、明细、字段权限、规范化、草稿、快照及附件引用。Core 只持有可选 JSON 快照与业务变量。未注册快照模块时会明确拒绝相应定义，避免丢失字段校验或泄漏隐藏数据。
+
+实际文件存储归宿主；`LocalApprovalFileStore` 仅是宿主可显式选择的 Forms 适配器。审批 Worker 只投递 Outbox 和扫描审批超时，不归档、清理记录或删除文件。
+
+## 事件与前端
+
+所有业务事件随审批事务写入 Outbox，由单个 Worker 至少一次投递给 `IApprovalEventHandler`。Event.Id 稳定，宿主以该 ID 幂等处理外部副作用。旧通知规则可作为 `NotificationRequested` 事件携带接收人、内容与宿主路由提示；Core 不注册任何发送渠道。
+
+前端包 `@approval/ui` 支持 Vue 3 / TypeScript、审批页面与设计器。当前前端仍将表单组件放在同一 npm 包中；后端 Forms 已是独立可选包。CSS 从 `@approval/ui/style.css` 引入，契约从 `@approval/ui/contracts` 引入。
+
+## 文档与验证
+
+- [架构与依赖](docs/architecture.md)
+- [宿主接入](docs/embedded-host-integration.md)
+- [事务与幂等](docs/transactions-and-idempotency.md)
+- [权限](docs/permissions.md)、[事件](docs/events.md)、[Forms](docs/forms.md)
+- [0.3 升级与数据保留](docs/upgrade-0.3.md)
+- [数据库验证](docs/database-validation.md)、[包和契约](docs/contracts-and-release.md)
+- [本轮实际交付报告](docs/round2-report.md)
+
+在仓库根目录执行 `pwsh -NoProfile -File ./eng/verify.ps1`。三个服务数据库由 `eng/verify-databases.ps1` 在独立测试容器中验证；SQLite 纳入默认后端测试。发布验证会打包四个 NuGet 包及 npm 包，复制独立消费者，禁止消费者引用框架源码，验证包摘要并实际构建/运行。

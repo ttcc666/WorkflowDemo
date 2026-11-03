@@ -26,6 +26,7 @@ public sealed partial class ApprovalDefinitionService
     private static readonly string[] BuiltInOrder = ["Role", "User", "FormField", "Initiator", "DeptLeader", "Manager", "ManagerChain"];
     private readonly Approval.Core.Authorization.IApprovalAuthorization _authorization;
     private readonly DbContext _db;
+    internal IApprovalDefinitionExtension? DefinitionExtension { get; set; }
     private readonly ApprovalUnitOfWork _unit;
     private readonly ApprovalOptions _options;
     private readonly TimeProvider _clock;
@@ -34,7 +35,7 @@ public sealed partial class ApprovalDefinitionService
     private readonly IReadOnlyList<ChannelInfo> _channels;
 
     public ApprovalDefinitionService(ApprovalDbContextAccessor accessor, IEnumerable<IApproverResolver> resolvers,
-        IEnumerable<IApprovalChannel> channels, TimeProvider clock, ApprovalOptions? options = null)
+        IEnumerable<ChannelInfo> channels, TimeProvider clock, ApprovalOptions? options = null)
         : this(accessor, new ApprovalExtensionCatalog(() => resolvers, () => [], () => channels), clock, options)
     {
     }
@@ -79,6 +80,7 @@ public sealed partial class ApprovalDefinitionService
     {
         var errors = FlowDefinitionValidator.Validate(flow, new FlowValidationContext
         {
+            Extension = DefinitionExtension,
             ApproverTypes = _approverTypes.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase),
             ApproverDescriptors = _approverTypes,
             Channels = _channels.Select(c => c.Name).ToHashSet(StringComparer.OrdinalIgnoreCase)
@@ -87,7 +89,7 @@ public sealed partial class ApprovalDefinitionService
     }
 
     /// <summary>不阻止发布的提示，如节点隐藏的字段可能通过标题、通知模板或计算字段间接暴露。</summary>
-    public IReadOnlyList<string> Warnings(FlowDefinition flow) => FlowDefinitionValidator.Warnings(flow);
+    public IReadOnlyList<string> Warnings(FlowDefinition flow) => DefinitionExtension?.Warnings(flow) ?? [];
 
     public Task<ApprovalDefinition> PublishAsync(string key, string name, FlowDefinition flow, CancellationToken ct = default) =>
         _unit.ExecuteCommandAsync(token => PublishAsyncCore(key, name, flow, token), ct);

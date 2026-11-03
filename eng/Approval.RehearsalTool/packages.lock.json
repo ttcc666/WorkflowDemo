@@ -317,7 +317,7 @@
       "approval.aspnetcore": {
         "type": "Project",
         "dependencies": {
-          "Approval.Core": "[0.2.0, )"
+          "Approval.Core": "[0.3.0, )"
         }
       },
       "approval.core": {
@@ -327,10 +327,24 @@
           "Microsoft.EntityFrameworkCore.Relational": "[10.0.14, )"
         }
       },
+      "approval.forms": {
+        "type": "Project",
+        "dependencies": {
+          "Approval.Core": "[0.3.0, )"
+        }
+      },
+      "approval.forms.aspnetcore": {
+        "type": "Project",
+        "dependencies": {
+          "Approval.AspNetCore": "[0.3.0, )",
+          "Approval.Forms": "[0.3.0, )"
+        }
+      },
       "approval.referencehost": {
         "type": "Project",
         "dependencies": {
-          "Approval.AspNetCore": "[0.2.0, )",
+          "Approval.AspNetCore": "[0.3.0, )",
+          "Approval.Forms.AspNetCore": "[0.3.0, )",
           "Microsoft.AspNetCore.Authentication.JwtBearer": "[10.0.12, )",
           "Microsoft.EntityFrameworkCore.SqlServer": "[10.0.14, )",
           "Microsoft.EntityFrameworkCore.Sqlite": "[10.0.14, )",

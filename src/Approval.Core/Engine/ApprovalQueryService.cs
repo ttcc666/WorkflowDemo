@@ -1,7 +1,6 @@
 using Approval.Core.Abstractions;
 using Approval.Core.Definitions;
 using Approval.Core.Domain;
-using Approval.Core.Forms;
 using Approval.Core.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -89,7 +88,7 @@ public sealed class ApprovalQueryService(
     IApprovalIdentityProvider identity,
     IApprovalAccessPolicy accessPolicy,
     ApprovalOptions options,
-    TimeProvider clock)
+    TimeProvider clock, IApprovalDataProjection? projection = null)
 {
     private readonly Approval.Core.Authorization.IApprovalAuthorization _authorization = accessor.Authorization;
     private readonly DbContext _db = accessor.Context;
@@ -251,14 +250,15 @@ public sealed class ApprovalQueryService(
         if (!access.CanView) return null;
 
         // 参与人：在其参与的节点都设为隐藏的字段不返回（表单数据、修改轨迹中的字段差异）
-        var hidden = access.Level == ApprovalAccessLevel.Participant && access.VisibleViaNodes.Count > 0
-            ? FieldVisibility.HiddenFields(await FlowOfAsync(instance.DefinitionId, ct), access.VisibleViaNodes)
-            : FieldVisibility.None;
+        var flow = await FlowOfAsync(instance.DefinitionId, ct);
+        if (flow.Form is not null && projection is null)
+            throw new ApprovalException("缺少快照模块的数据可见性适配器") { Code = ApprovalErrorCode.InvalidDefinition };
+        var data = projection?.Project(flow, instance, access) ?? new ApprovalDataView(instance.FormDataJson, instance.Logs, []);
 
         return new InstanceDetail(instance.Id, instance.DefinitionId, instance.DefinitionKey, instance.DefinitionVersion, instance.BusinessType,
             instance.BusinessKey, instance.Title, instance.InitiatorId, instance.Status, instance.CurrentNodeId, instance.Round,
-            FieldVisibility.RemoveFields(instance.FormDataJson, hidden), instance.CreatedAt, instance.CompletedAt, instance.Tasks,
-            FieldVisibility.FilterLogs(instance.Logs, hidden), access.Level, hidden.Order(StringComparer.OrdinalIgnoreCase).ToList())
+            data.DataJson, instance.CreatedAt, instance.CompletedAt, instance.Tasks,
+            data.Logs, access.Level, data.HiddenFields)
         {
             CanWithdraw = ApprovalEngine.CanWithdraw(instance, viewer.UserId, options)
                 && await _authorization.CanAsync(ApprovalPermissions.InstanceWithdraw, new() { InstanceId = instance.Id }, viewer.UserId, ct)

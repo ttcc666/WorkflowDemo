@@ -1,3 +1,4 @@
+using Approval.Forms.Attachments;
 using System.Collections;
 using System.Net;
 using System.Net.Http.Json;
@@ -82,11 +83,7 @@ internal static class Rehearsal
             var tombstone = await db.Set<ApprovalOperation>().SingleAsync(o => o.RequestKey == "expired"); tombstone.IsTombstone = true; tombstone.ResultJson = "";
             db.Add(new ApprovalOutboxMessage { Id = outboxId, InstanceId = running, Kind = OutboxKind.Notification, Target = "RehearsalSink", PayloadJson = "{\"event\":\"recover\"}", Status = OutboxStatus.Pending, MaxAttempts = 3, CreatedAt = DateTime.UtcNow, NextAttemptAt = DateTime.UtcNow }); await db.SaveChangesAsync();
         }
-        var preview = await host.Api(HttpMethod.Get, "/maintenance/preview?target=Instances&mode=Archive", "alpha-admin"); Check(preview.GetProperty("eligible").GetInt32() == 2, "TwoArchiveCandidates");
-        var job = await host.Api(HttpMethod.Post, "/maintenance/jobs", "alpha-admin", "archive-job", new { target = "Instances", mode = "Archive", policyHash = preview.GetProperty("policyHash").GetString() }); var jobId = job.GetProperty("id").GetGuid();
-        var partial = await host.Api(HttpMethod.Post, $"/maintenance/jobs/{jobId}/run", "alpha-admin", "archive-batch");
-        Check(partial.GetProperty("processed").GetInt32() == 1 && partial.GetProperty("completedBatches").GetInt32() == 1, "PartialMaintenanceCommitted");
-        await System.IO.File.WriteAllTextAsync(File("seed-facts.json"), JsonSerializer.Serialize(new { running, second, expired, ended, fileId, outboxId, jobId, fileHash = Convert.ToHexStringLower(SHA256.HashData(bytes)) }, RehearsalHost.Json));
+        await System.IO.File.WriteAllTextAsync(File("seed-facts.json"), JsonSerializer.Serialize(new { running, second, expired, ended, fileId, outboxId, fileHash = Convert.ToHexStringLower(SHA256.HashData(bytes)) }, RehearsalHost.Json));
         await System.IO.File.WriteAllTextAsync(File("source-snapshot.json"), await Snapshot(host)); Check(running != second, "IndependentBusinessInstances");
         await using var versionScope = await host.Scope(); var versionDb = versionScope.ServiceProvider.GetRequiredService<ReferenceDbContext>();
         await versionDb.Database.OpenConnectionAsync();
@@ -122,14 +119,7 @@ internal static class Rehearsal
         var fileId = facts.GetProperty("fileId").GetGuid(); using var download = await host.Send(HttpMethod.Get, "/files/" + fileId);
         Check(download.StatusCode == HttpStatusCode.OK && Convert.ToHexStringLower(SHA256.HashData(await download.Content.ReadAsByteArrayAsync())) == facts.GetProperty("fileHash").GetString(), "RestoredAttachmentBytesAndHash");
         using var foreignFile = await host.Send(HttpMethod.Get, "/files/" + fileId, "outsider"); Check(foreignFile.StatusCode == HttpStatusCode.Forbidden, "RestoredUnknownUserRejected");
-        await Complete(host, running); await Complete(host, second); host.Services.GetRequiredService<ApprovalOptions>().Lifecycle.MaxBatchesPerRun = 3; var jobId = facts.GetProperty("jobId").GetGuid();
-        JsonElement resumed = default;
-        for (var batch = 0; batch < 3; batch++)
-        {
-            resumed = await host.Api(HttpMethod.Post, $"/maintenance/jobs/{jobId}/run", "alpha-admin", "resume-archive-" + batch);
-            if (resumed.GetProperty("status").GetString() == "Completed") break;
-        }
-        Check(resumed.GetProperty("processed").GetInt32() == 2 && resumed.GetProperty("completedBatches").GetInt32() == 2 && resumed.GetProperty("status").GetString() == "Completed", "RestoredMaintenanceResumesFromCommittedCursor");
+        await Complete(host, running); await Complete(host, second);
         await using var scope = await host.Scope(); var db = scope.ServiceProvider.GetRequiredService<ReferenceDbContext>(); Check(await db.Set<ApprovalBusinessSlot>().CountAsync() == 0, "RestoredApprovalReleasesBusinessSlot");
         var originalOutbox = await db.Set<ApprovalOutboxMessage>().SingleAsync(o => o.Id == facts.GetProperty("outboxId").GetGuid()); Check(originalOutbox.Status == OutboxStatus.Pending && originalOutbox.PayloadJson == "{\"event\":\"recover\"}", "RestoredOutboxKeepsOriginalIdAndPayload");
     }

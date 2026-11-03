@@ -1,3 +1,5 @@
+using Approval.Forms.AspNetCore;
+using Approval.Forms;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Approval.AspNetCore;
@@ -42,6 +44,7 @@ public static class CertificateApplication
 
         // 审批接口（/api/approval/*）、ProblemDetails 异常映射、字符串枚举
         builder.Services.AddApprovalAspNetCore();
+        builder.Services.AddApprovalFormsAspNetCore();
         builder.Services.AddExceptionHandler<CertificateDatabaseExceptionHandler>();
         builder.Services.AddAuthorization();
 
@@ -75,15 +78,13 @@ public static class CertificateApplication
                 o.InstanceUrlFormat = baseUrl + "/approvals/{0}";
                 approvalConfig.GetSection("Outbox").Bind(o.Outbox);
                 // 附件：本地目录（相对于内容根目录，不在 wwwroot 下）、大小限制
-                approvalConfig.GetSection("Files").Bind(o.Files);
-                approvalConfig.GetSection("Lifecycle").Bind(o.Lifecycle);
                 approvalConfig.GetSection("Background").Bind(o.Background);
                 o.TimeoutScanInterval = approvalConfig.GetValue("TimeoutScanInterval", o.TimeoutScanInterval);
             })
             .AddCertificateModule()
             // 组织架构：审批人可选“部门负责人”“上级”“逐级上级”（演示数据见 appsettings.json 的 Departments 与 DemoUsers）
             // 表单审批：设置了“可发起”的流程（如 Flows/leave.json、expense.json、purchase.json）可在发起中心直接填写表单发起
-            .AddFormApprovals();
+            .AddApprovalForms(o => approvalConfig.GetSection("Files").Bind(o.Files)).AddFileStore<Approval.Forms.Attachments.LocalApprovalFileStore>();
 
         // 通知发送属于宿主；此适配器只演示当前服务的 Webhook，Core 不依赖任何发送渠道。
         var webhook = new DemoWebhookOptions();
@@ -91,7 +92,9 @@ public static class CertificateApplication
         if (string.IsNullOrEmpty(webhook.Url)) webhook.Url = baseUrl + "/api/demo/webhook/notify";
         builder.Services.AddSingleton(webhook);
         builder.Services.AddHttpClient(DemoWebhookChannel.HttpClientName);
-        approval.AddChannel<DemoWebhookChannel>();
+        approval.AddEventHandler<DemoWebhookChannel>();
+        ((ApprovalOptions)builder.Services.Last(d => d.ServiceType == typeof(ApprovalOptions)).ImplementationInstance!).NotificationTargets.Add(new("Webhook", "宿主示例 Webhook"));
+        if (certificateOptions.DemoMode) approval.AddPermissionProvider<DemoPermissionProvider>();
 
         if (certificateOptions.DemoMode) approval.AddOrganizationProvider<DemoIdentityProvider>();
         configureApproval?.Invoke(approval);
@@ -204,7 +207,7 @@ public static class CertificateApplication
             var name = document.RootElement.TryGetProperty("name", out var n) && n.GetString() is { Length: > 0 } text ? text : key;
             var flow = Approval.Core.Definitions.FlowDefinition.Parse(json);
             if (latest is not null && latest.Name == name
-                && Approval.Core.Definitions.FlowDefinition.Parse(latest.DefinitionJson).ToJson() == flow.ToJson()) continue;
+                && CanonicalFlow(Approval.Core.Definitions.FlowDefinition.Parse(latest.DefinitionJson)) == CanonicalFlow(flow)) continue;
             try
             {
                 var published = await definitions.PublishAsync(key, name, flow, ct);
@@ -216,10 +219,12 @@ public static class CertificateApplication
                 db.ChangeTracker.Clear();
                 var winner = await definitions.GetLatestAsync(key, ct);
                 if (winner is null || winner.Name != name
-                    || Approval.Core.Definitions.FlowDefinition.Parse(winner.DefinitionJson).ToJson() != flow.ToJson()) throw;
+                    || CanonicalFlow(Approval.Core.Definitions.FlowDefinition.Parse(winner.DefinitionJson)) != CanonicalFlow(flow)) throw;
             }
         }
         return count;
     }
+    private static string CanonicalFlow(Approval.Core.Definitions.FlowDefinition flow)
+    { Approval.Forms.Schema.FormSnapshots.GetForm(flow); return flow.ToJson(); }
 }
 

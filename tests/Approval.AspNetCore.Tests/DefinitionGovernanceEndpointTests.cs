@@ -1,3 +1,4 @@
+using Approval.Forms;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -51,7 +52,7 @@ public sealed class DefinitionGovernanceEndpointTests
     [Fact]
     public async Task Disable_HidesStartableButPreservesHistory_AndOrdinaryUserCannotGovern()
     {
-        await using var host = await ApiHost.StartAsync(build: b => b.AddFormApprovals()); await host.PublishAsync("doc", Flow);
+        await using var host = await ApiHost.StartAsync(build: b => b.AddApprovalForms()); await host.PublishAsync("doc", Flow);
         var state = await host.GetJsonAsync("/api/approval/definitions/doc/governance", "admin");
         var disabled = await Command(host, HttpMethod.Post, "enabled", "disable", new { enabled = false, expectedRevision = state.GetProperty("revision").GetInt64(), changeNote = "retired" });
         Assert.False(disabled.GetProperty("isEnabled").GetBoolean()); Assert.Equal(JsonValueKind.Null, disabled.GetProperty("draftJson").ValueKind);

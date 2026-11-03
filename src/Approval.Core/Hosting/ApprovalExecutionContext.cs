@@ -21,7 +21,7 @@ public sealed class ApprovalExecutionContext(IApprovalContextResolver? resolver 
     }
     public void InitializeSystem(string actorId, IReadOnlyCollection<string> permissions) => InitializeTrusted(new(actorId, true), permissions);
     internal void InitializeBackground() => InitializeSystem("approval-background",
-        [ApprovalPermissions.OutboxDispatch, ApprovalPermissions.TaskTimeout, ApprovalPermissions.FileCleanup, ApprovalPermissions.MaintenanceRun]);
+        [ApprovalPermissions.OutboxDispatch, ApprovalPermissions.TaskTimeout]);
 }
 public sealed class ApprovalScope : IAsyncDisposable
 {

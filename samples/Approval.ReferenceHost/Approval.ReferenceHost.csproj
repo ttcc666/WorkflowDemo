@@ -15,4 +15,5 @@
     <PackageReference Include="System.Security.Cryptography.Pkcs" />
   </ItemGroup>
 
+  <ItemGroup><ProjectReference Include="../../src/Approval.Forms.AspNetCore/Approval.Forms.AspNetCore.csproj" /></ItemGroup>
 </Project>

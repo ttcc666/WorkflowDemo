@@ -17,12 +17,13 @@ public sealed class CertificateMigrationTests
         await using var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseSqlite($"Data Source={path};Pooling=False").Options);
         var database = new CertificateDatabase(db);
         await database.InitializeAsync();
-        var initial = Assert.Single(await db.Database.GetAppliedMigrationsAsync()); Assert.EndsWith("_InitialApproval", initial);
+        var initial = (await db.Database.GetAppliedMigrationsAsync()).ToArray();
+        Assert.Equal(new[] { "20261103051646_InitialApproval", "20261103065227_EmbeddedEngineBoundary" }, initial);
         var definition = new ApprovalDefinition { Id = Guid.NewGuid(), Key = "current", Name = "Current", Version = 1, DefinitionJson = "{}", Category = "分类", IsPublished = true };
         db.Add(definition); await db.SaveChangesAsync(); db.ChangeTracker.Clear();
         await database.InitializeAsync();
         var persisted = await db.Set<ApprovalDefinition>().SingleAsync(); Assert.Equal(definition.Id, persisted.Id); Assert.Equal("分类", persisted.Category);
-        Assert.Equal(initial, Assert.Single(await db.Database.GetAppliedMigrationsAsync()));
+        Assert.Equal(initial, (await db.Database.GetAppliedMigrationsAsync()).ToArray());
         Assert.True((await database.CheckAsync()).Ready); Assert.False(db.Database.HasPendingModelChanges());
     }
     [Fact]
@@ -32,10 +33,11 @@ public sealed class CertificateMigrationTests
         var path = Path.Combine(directory.DirectoryPath, "roundtrip.db");
         await using var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseSqlite($"Data Source={path};Pooling=False").Options);
         await db.Database.MigrateAsync();
-        var migration = Assert.Single(await db.Database.GetAppliedMigrationsAsync());
+        var migration = (await db.Database.GetAppliedMigrationsAsync()).ToArray();
+        Assert.Equal(new[] { "20261103051646_InitialApproval", "20261103065227_EmbeddedEngineBoundary" }, migration);
         await db.GetService<IMigrator>().MigrateAsync(Migration.InitialDatabase);
         Assert.Empty(await db.Database.GetAppliedMigrationsAsync());
-        await db.Database.MigrateAsync(); Assert.Equal(migration, Assert.Single(await db.Database.GetAppliedMigrationsAsync()));
+        await db.Database.MigrateAsync(); Assert.Equal(migration, (await db.Database.GetAppliedMigrationsAsync()).ToArray());
         Assert.Empty(await db.Certificates.ToListAsync()); Assert.Empty(await db.CertificateRequests.ToListAsync());
         Assert.False(db.Database.HasPendingModelChanges());
     }

@@ -108,7 +108,7 @@ public sealed partial class DatabaseContractTests(DatabaseFixture fixture) : ICl
         await ClearDataAsync();
         await using var db = fixture.Create();
         var migrations = (await db.Database.GetAppliedMigrationsAsync()).ToArray();
-        Assert.EndsWith("_InitialApproval", Assert.Single(migrations));
+        Assert.Collection(migrations, first => Assert.EndsWith("_InitialApproval", first), boundary => Assert.EndsWith("_EmbeddedEngineBoundary", boundary));
         Assert.False(db.Database.HasPendingModelChanges());
         var migrator = db.GetService<IMigrator>();
         await migrator.MigrateAsync(Migration.InitialDatabase);

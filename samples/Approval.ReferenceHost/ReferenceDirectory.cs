@@ -77,7 +77,7 @@ public sealed class DirectoryPermissionProvider(ReferenceDirectory directory) : 
     {
         ct.ThrowIfCancellationRequested(); var subject = request.Subject;
         return Task.FromResult(subject.IsSystem
-            ? subject.ActorId == "approval-background" && request.Permission is ApprovalPermissions.OutboxDispatch or ApprovalPermissions.TaskTimeout or ApprovalPermissions.FileCleanup or ApprovalPermissions.MaintenanceRun
+            ? subject.ActorId == "approval-background" && request.Permission is ApprovalPermissions.OutboxDispatch or ApprovalPermissions.TaskTimeout
             : !request.Permission.StartsWith("approval.system.", StringComparison.Ordinal) && directory.HasGrant(subject.ActorId, request.Permission));
     }
 }

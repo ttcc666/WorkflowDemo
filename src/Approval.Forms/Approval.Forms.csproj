@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <PackageId>Approval.Forms</PackageId><Version>$(ApprovalVersion)</Version>
+    <PackageReadmeFile>README.md</PackageReadmeFile><Description>可选审批表单模块；实际文件存储由宿主提供。</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Approval.Core/Approval.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup><InternalsVisibleTo Include="Approval.Core.Tests" /></ItemGroup>
+  <ItemGroup><None Include="../../README.md" Pack="true" PackagePath="README.md" /></ItemGroup>
+</Project>

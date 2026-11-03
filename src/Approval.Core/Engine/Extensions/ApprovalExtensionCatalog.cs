@@ -8,7 +8,7 @@ internal sealed class ApprovalExtensionCatalog
 {
     private readonly Lazy<Dictionary<string, IApproverResolver>> _resolvers;
     private readonly Lazy<Dictionary<string, IApprovalBusinessHandler>> _businessHandlers;
-    private readonly Lazy<Dictionary<string, IApprovalChannel>> _channels;
+    private readonly Lazy<Dictionary<string, ChannelInfo>> _channels;
     private readonly Lazy<Dictionary<string, ApproverTypeDescriptor>> _approverDescriptors;
     private readonly Lazy<IReadOnlyList<ChannelInfo>> _channelDescriptors;
     private readonly Lazy<HashSet<string>> _channelNames;
@@ -16,7 +16,7 @@ internal sealed class ApprovalExtensionCatalog
     public ApprovalExtensionCatalog(
         Func<IEnumerable<IApproverResolver>> resolvers,
         Func<IEnumerable<IApprovalBusinessHandler>> businessHandlers,
-        Func<IEnumerable<IApprovalChannel>> channels)
+        Func<IEnumerable<ChannelInfo>> channels)
     {
         _resolvers = new(() => LastByKey(resolvers(), r => r.Type));
         _businessHandlers = new(() => LastByKey(businessHandlers(), h => h.BusinessType));
@@ -33,7 +33,7 @@ internal sealed class ApprovalExtensionCatalog
 
     public IReadOnlyDictionary<string, IApproverResolver> Resolvers => _resolvers.Value;
     public IReadOnlyDictionary<string, IApprovalBusinessHandler> BusinessHandlers => _businessHandlers.Value;
-    public IReadOnlyDictionary<string, IApprovalChannel> Channels => _channels.Value;
+    public IReadOnlyDictionary<string, ChannelInfo> Channels => _channels.Value;
     public IReadOnlyDictionary<string, ApproverTypeDescriptor> ApproverDescriptors => _approverDescriptors.Value;
     public IReadOnlyList<ChannelInfo> ChannelDescriptors => _channelDescriptors.Value;
     public IReadOnlySet<string> ChannelNames => _channelNames.Value;

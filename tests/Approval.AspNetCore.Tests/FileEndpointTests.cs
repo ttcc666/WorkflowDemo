@@ -1,6 +1,7 @@
+using Approval.Forms;
 using System.Net;
 using System.Text;
-using Approval.Core.Files;
+using Approval.Forms.Attachments;
 
 namespace Approval.AspNetCore.Tests;
 
@@ -32,7 +33,7 @@ public sealed class MemoryStore : IApprovalFileStore
 /// <summary>附件接口：原始请求体上传（文件名在请求头）、下载响应头、权限。</summary>
 public sealed class FileEndpointTests
 {
-    private static Task<ApiHost> StartAsync() => ApiHost.StartAsync(build: b => b.AddFormApprovals().AddFileStore<MemoryStore>());
+    private static Task<ApiHost> StartAsync() => ApiHost.StartAsync(build: b => b.AddApprovalForms().AddFileStore<MemoryStore>());
 
     private static Task<HttpResponseMessage> UploadAsync(ApiHost host, string user, string? name, string content)
     {

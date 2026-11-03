@@ -83,8 +83,6 @@ internal sealed class RehearsalHost : IAsyncDisposable
                 }
         });
         var workflow = app.Services.GetRequiredService<ApprovalOptions>(); workflow.CommitVerificationTimeout = TimeSpan.FromSeconds(3);
-        workflow.Lifecycle.Enabled = true; workflow.Lifecycle.AllowDeletion = true; workflow.Lifecycle.ArchiveAfter = TimeSpan.FromDays(1);
-        workflow.Lifecycle.OperationsAfter = TimeSpan.FromDays(1); workflow.Lifecycle.BatchSize = 1; workflow.Lifecycle.MaxBatchesPerRun = 1;
         try { if (migrate) await ReferenceDatabase.MigrateAsync(app.Services); await app.StartAsync(); return new(app); }
         catch { await app.DisposeAsync(); throw; }
     }

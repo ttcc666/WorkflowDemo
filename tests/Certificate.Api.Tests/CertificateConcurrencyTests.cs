@@ -21,7 +21,7 @@ public sealed class CertificateConcurrencyTests
     {
         var barrier = new SubmissionBarrier();
         await using var host = await CertificateHost.StartAsync(configure: services =>
-            services.AddScoped<IApprovalPermissionProvider>(sp => new BarrierPermissions(barrier, new ApprovalPolicyPermissionProvider(sp.GetRequiredService<IHttpContextAccessor>(), sp.GetRequiredService<IApprovalIdentityProvider>(), sp.GetRequiredService<ApprovalAspNetCoreOptions>()))));
+            services.AddScoped<IApprovalPermissionProvider>(sp => new BarrierPermissions(barrier, new Certificate.Api.Infrastructure.DemoPermissionProvider(sp.GetRequiredService<IApprovalIdentityProvider>()))));
         var key = Guid.NewGuid().ToString();
         var data = CertificateHost.ValidData("reg-race");
         var second = sameKey ? data : data with { CertNo = " REG-RACE " };
@@ -80,7 +80,7 @@ public sealed class CertificateConcurrencyTests
     public async Task Concurrent_update_and_revoke_cannot_acquire_the_same_certificate_lock()
     {
         var barrier = new SubmissionBarrier { Enabled = false };
-        await using var host = await CertificateHost.StartAsync(configure: services => services.AddScoped<IApprovalPermissionProvider>(sp => new BarrierPermissions(barrier, new ApprovalPolicyPermissionProvider(sp.GetRequiredService<IHttpContextAccessor>(), sp.GetRequiredService<IApprovalIdentityProvider>(), sp.GetRequiredService<ApprovalAspNetCoreOptions>()))));
+        await using var host = await CertificateHost.StartAsync(configure: services => services.AddScoped<IApprovalPermissionProvider>(sp => new BarrierPermissions(barrier, new Certificate.Api.Infrastructure.DemoPermissionProvider(sp.GetRequiredService<IApprovalIdentityProvider>()))));
         var certificate = await host.RegisterAsync();
         barrier.Enabled = true;
         var responses = await Task.WhenAll(

@@ -1,3 +1,4 @@
+using Approval.Forms;
 using System.Net;
 using Approval.Core.Abstractions;
 using Approval.Core.Background;
@@ -10,11 +11,14 @@ using Microsoft.Extensions.Time.Testing;
 
 namespace Approval.Core.Tests;
 
-public sealed class TestDbContext(DbContextOptions<TestDbContext> options) : ApprovalDbContext(options)
+public sealed class TestDbContext(DbContextOptions<TestDbContext> options) : DbContext(options)
 {
+    protected override void OnConfiguring(DbContextOptionsBuilder options)
+    { base.OnConfiguring(options); options.UseApproval(); }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        modelBuilder.ConfigureApproval(this);
+        modelBuilder.ConfigureApproval().ConfigureApprovalForms();
         modelBuilder.Entity<TestRecord>().HasIndex(x => x.Name).IsUnique();
     }
 }
@@ -109,30 +113,18 @@ public sealed class RecordingBusinessHandler : IApprovalBusinessHandler
     }
 }
 
-public sealed class RecordingNotifier : IApprovalNotifier
-{
-    public List<ApprovalNotification> Notifications { get; } = [];
-
-    public Task NotifyAsync(ApprovalNotification notification, CancellationToken ct)
-    {
-        Notifications.Add(notification);
-        return Task.CompletedTask;
-    }
-}
-
-/// <summary>记录收到的消息；FailTimes &gt; 0 时前几次发送抛异常，用于验证重试。</summary>
-public sealed class RecordingChannel : IApprovalChannel
+public sealed class RecordingChannel : ITestNotificationTarget
 {
     public const string ChannelName = "Test";
 
-    public List<ChannelMessage> Sent { get; } = [];
+    public List<ApprovalNotificationRequest> Sent { get; } = [];
     public int Attempts { get; private set; }
     public int FailTimes { get; set; }
 
     public string Name => ChannelName;
     public string DisplayName => "测试渠道";
 
-    public Task SendAsync(ChannelMessage message, CancellationToken ct)
+    public Task SendAsync(ApprovalNotificationRequest message, CancellationToken ct)
     {
         Attempts++;
         if (Attempts <= FailTimes) throw new HttpRequestException("渠道暂时不可用");
@@ -166,7 +158,7 @@ public sealed class TestHost : IAsyncDisposable
     public FakeIdentityProvider Identity { get; } = new();
     public FakeOrganization Organization { get; } = new();
     public RecordingBusinessHandler Handler { get; } = new();
-    public RecordingNotifier Notifier { get; } = new();
+    public RecordingEvents Events { get; } = new();
     public RecordingChannel Channel { get; } = new();
     public StubHttpHandler Http { get; } = new();
 
@@ -185,15 +177,26 @@ public sealed class TestHost : IAsyncDisposable
         services.AddSingleton<IApprovalUserStatusProvider, FixtureUserStatus>();
         services.AddSingleton(Organization);
         services.AddSingleton<IApprovalBusinessHandler>(Handler);
-        services.AddSingleton<IApprovalNotifier>(Notifier);
-        services.AddSingleton<IApprovalChannel>(Channel);
+        services.AddSingleton<IApprovalPermissionProvider>(new FixturePermissionProvider(Identity));
+        services.AddSingleton(Events);
+        services.AddScoped<IApprovalEventHandler, FixtureEventHandler>();
+        services.AddSingleton<ITestNotificationTarget>(Channel);
         services.AddSingleton<TimeProvider>(Clock);
         var builder = services.AddApprovalWorkflow<TestDbContext>(o =>
         {
             configure?.Invoke(o);
         });
+        services.AddSingleton<Approval.Core.Abstractions.IApprovalDefinitionExtension, Approval.Forms.Schema.FormDefinitionValidator>();
+        services.AddSingleton<Approval.Core.Abstractions.IApprovalDataProjection, Approval.Forms.Runtime.FormDataProjection>();
         build?.Invoke(builder);
 
+        var targets = services.Where(d => d.ServiceType == typeof(ITestNotificationTarget) && d.ImplementationInstance is ITestNotificationTarget)
+            .Select(d => (ITestNotificationTarget)d.ImplementationInstance!).ToList();
+        // Metadata is declared by this host, and actual routing stays in its event handler.
+        {
+            var options = (ApprovalOptions)services.Last(d => d.ServiceType == typeof(ApprovalOptions)).ImplementationInstance!;
+            foreach (var target in targets) options.NotificationTargets.Add(new(target.Name, target.DisplayName));
+        }
         _provider = services.BuildServiceProvider();
         using var scope = _provider.CreateScope();
         scope.ServiceProvider.GetRequiredService<TestDbContext>().Database.EnsureCreated();
@@ -256,6 +259,9 @@ public sealed class TestHost : IAsyncDisposable
 
     public Task<List<ApprovalOutboxMessage>> OutboxAsync() =>
         RunAsync(sp => sp.GetRequiredService<TestDbContext>().Set<ApprovalOutboxMessage>().OrderBy(m => m.CreatedAt).ToListAsync());
+
+    public async Task<List<ApprovalOutboxMessage>> NotificationOutboxAsync() => (await OutboxAsync())
+        .Where(m => m.Kind == OutboxKind.Notification || m.PayloadJson.Contains("\"eventType\":\"NotificationRequested\"", StringComparison.Ordinal)).ToList();
 
     public Task<List<ApprovalLog>> LogsAsync(Guid instanceId) =>
         RunAsync(sp => sp.GetRequiredService<TestDbContext>().Set<ApprovalLog>()

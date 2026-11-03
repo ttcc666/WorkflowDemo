@@ -8,16 +8,14 @@ namespace Approval.Core.Background;
 public sealed class ApprovalWorker(
     ApprovalOutboxDispatcher outbox,
     ApprovalTimeoutScanner timeouts,
-    ApprovalMaintenanceWorker maintenance,
     ApprovalOutboxSignal signal,
     ApprovalOptions options,
     TimeProvider clock,
     ILogger<ApprovalWorker> logger) : BackgroundService
 {
     private DateTimeOffset _nextTimeout = DateTimeOffset.MinValue;
-    private DateTimeOffset _nextMaintenance = DateTimeOffset.MinValue;
 
-    /// <summary>执行一轮；超时和可选维护按各自间隔执行，Outbox 每轮执行一批。</summary>
+    /// <summary>执行一轮；超时按间隔执行，Outbox 每轮执行一批。</summary>
     public async Task RunOnceAsync(CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
@@ -29,11 +27,7 @@ public sealed class ApprovalWorker(
 
         await RunAsync("Outbox 投递", outbox.DispatchOnceAsync, ct);
 
-        if (options.Lifecycle.Enabled && clock.GetUtcNow() >= _nextMaintenance)
-        {
-            await RunAsync("可选维护", async token => { await maintenance.RunOnceAsync(token); }, ct);
-            _nextMaintenance = clock.GetUtcNow() + options.Lifecycle.PollInterval;
-        }
+
     }
 
     private async Task RunAsync(string operation, Func<CancellationToken, Task> run, CancellationToken ct)
@@ -55,7 +49,6 @@ public sealed class ApprovalWorker(
                 var now = clock.GetUtcNow();
                 var delay = options.Outbox.PollInterval;
                 if (_nextTimeout - now < delay) delay = _nextTimeout - now;
-                if (options.Lifecycle.Enabled && _nextMaintenance - now < delay) delay = _nextMaintenance - now;
                 if (delay > TimeSpan.Zero) await signal.WaitAsync(delay, stoppingToken);
             }
         }
