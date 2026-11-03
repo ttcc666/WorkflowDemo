@@ -4,7 +4,7 @@
 
 2026-11-03 用户追加约束：数据库相关专项验证交给 GitHub CLI / Actions，本地不执行，不打开 Docker。后续不在本地运行 Approval.Database.Tests、Provider 容器脚本或完整 Backend 脚本内的数据库门禁；本地只编译及相关业务代码测试，数据库矩阵由当前工作分支的 CI 验证，并核验 head SHA。此前由本任务启动的 Docker 已关闭，本地镜像下载已停止。
 
-状态：五轮代码与本地业务门禁已完成；第四轮 CI 41666657881 已通过，第五轮新增 Provider 回归只编译不在本地执行，最终代码 CI 待核验。依据 [审计报告](../docs/backend-architecture-audit-2026-11-03.md)；起点 HEAD 为 `ca6987815ce0b668bd1401a8b15e50da824ee81b`。
+状态：五轮代码、编译、测试、Diff审查和最终CI验收全部完成。最终代码 `f6342b91569ed3ac66f01a42ea7ac09903e55108` 的 [CI41674494343](https://github.com/ttcc666/WorkflowDemo/actions/runs/41674494343) 全部success；三服务Provider各33passed / 0failed / 0skipped、Windows全量568passed，产物SHA及TRX已核验。数据库专项只在GitHub执行。依据 [审计报告](../docs/backend-architecture-audit-2026-11-03.md)；起点 HEAD 为 `ca6987815ce0b668bd1401a8b15e50da824ee81b`。后续文档提交只补验收记录。
 
 用户已明确要求按计划执行，并授权第二轮直接迁移 C# 接口。本文现为执行记录；最终验收以对应代码 SHA 的 GitHub CI 为准。
 
@@ -285,11 +285,11 @@ Contracts 使用 pnpm 等既有工具。Packages 包含数据库 smoke，由 Git
 | 轮次 | 状态 | Build / Tests / Diff | 遗留项 |
 | --- | --- | --- | --- |
 | 审计 / 方案 | 已完成 | 初始 Release build 0 warnings / 0 errors；548 passed；SQLite smoke 27 checks | 三个真实服务 Provider 本次未运行 |
-| 第一轮 P0 | 本地门禁通过 | 554 passed，0 warnings / errors，模型与 smoke 通过；见 docs/backend-refactoring-round1.md | 三个服务 Provider 本次未运行 |
-| 第二轮 P0 | 本地门禁通过 | 557 passed，Contracts / Packages / browser5 passed；见 docs/backend-refactoring-round2.md | C# 变化已授权；真实服务 Provider 待验证 |
-| 第三轮 P1 | 本地门禁通过 | 530业务tests passed，Contracts passed；见 docs/backend-refactoring-round3.md | DB专项由GitHub CI；friend范围靠签名/IL测试限制 |
+| 第一轮 P0 | 已完成 | 当轮554 passed，0 warnings / errors，模型与 smoke通过；最终CI复验；见 docs/backend-refactoring-round1.md | TaskId跨命令泄漏修正；原SaveChanges保留 |
+| 第二轮 P0 | 已完成 | 当轮557 passed，Contracts / Packages / browser5passed；最终CI复验；见 docs/backend-refactoring-round2.md | C#变化已授权，需同步重新编译宿主 |
+| 第三轮 P1 | 已完成 | 当轮530业务tests passed，Contracts passed；最终CI复验；见 docs/backend-refactoring-round3.md | friend范围靠签名/IL测试限制 |
 | 第四轮 P1 | 已完成 | Release build / 531业务tests / Contracts通过；CI41666657881成功；见 docs/backend-refactoring-round4.md | 不改变 ACL / 注册顺序 |
-| 第五轮 P2 | 代码及本地业务门禁通过，最终CI待核验 | Release build / 535业务tests / Contracts通过；新增两个 Provider 回归只编译；见 docs/backend-refactoring-round5.md | sync Validate / last-wins保留；最终CI待核验 |
+| 第五轮 P2 | 已完成 | Release build / 本地535业务tests / Contracts通过；最终CI41674494343全部成功，三Provider各33passed及Windows568passed；见 docs/backend-refactoring-round5.md | sync Validate / last-wins保留；无生产规模性能测量 |
 
 每轮报告写明：实际结构变化、每个文件及改动、删除的重复实现、模块依赖收敛、性能数据、公共 API / DB / 事务兼容性、精确命令和 Passed / Failed / Skipped、未验证内容与原因。
 

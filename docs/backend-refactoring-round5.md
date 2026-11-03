@@ -21,7 +21,9 @@
 | 人员字段批量读取仍定位原字段错误 | `RuntimeQueryOptimizationTests.UserFields_ShareOneDirectoryReadAndKeepErrorsOnTheOriginalField`：valid / missing 两例，目录1、缺失用户仅 second 字段 |
 | 流式待办汇总保留大小写、数量、时限和最早时间 | `RuntimeQueryOptimizationTests.Backlog_StreamsOrdinalAssigneesAndPreservesCountsDeadlinesAndOldestArrival`：bob与BOB不同组，Count2/1、Overdue2/0、具体最早UTC时间 |
 
-最终本地业务测试 Passed 535, Failed 0, Skipped 0（Core396、HTTP81、Certificate58）；Contracts 成功，HTTP JSON / schema / TS 没有变化。数据库专项和最新代码完整验收结果另由 GitHub CI 精确提交补录。
+最终本地业务测试 Passed 535, Failed 0, Skipped 0（Core396、HTTP81、Certificate58）；Contracts 成功，HTTP JSON / schema / TS 没有变化。
+
+最终代码 `f6342b91569ed3ac66f01a42ea7ac09903e55108` 的 [GitHub CI41674494343](https://github.com/ttcc666/WorkflowDemo/actions/runs/41674494343) 全部success。MySql / PostgreSql / SqlServer各33passed / 0failed / 0skipped，manifest.head与artifact SHA256已核验；Windows全量568passed / 0failed / 0skipped，Contracts / Packages / Core-only18checks / Browser5passed。详见 [最终报告](backend-refactoring-final-report.md)。后续文档提交只补验收记录。
 
 新增 `tests/Approval.Database.Tests/QueryOptimizationDatabaseTests.cs` 的两项 Provider 回归：`GovernanceSummary_TranslatesNullableDraftChangesAndFiltersResourcesOnEachProvider` 验证无草稿、未发布、版本相等 / 不等及逐资源 / 分类过滤；`Backlog_StreamsCaseDistinctAssigneesAndFiltersTasksOnEachProvider` 验证 bob / BOB、数量、nullable 时限、最早时间，以及已结束实例 / 已取消任务过滤。显式 Release build 已通过，数据库测试只交 GitHub 执行。
 

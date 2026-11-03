@@ -1,6 +1,6 @@
 # 后端渐进式重构交付报告
 
-代码起点：`ca6987815ce0b668bd1401a8b15e50da824ee81b`。按既定 P0 → P0 → P1 → P1 → P2 五轮顺序执行，每个主题均有独立编译、测试和 Diff 审查；数据库专项按用户追加要求转 GitHub CLI / Actions。最终代码的 CI 验收编号和结果在末尾补录。
+代码起点：`ca6987815ce0b668bd1401a8b15e50da824ee81b`。按既定 P0 → P0 → P1 → P1 → P2 五轮顺序执行，每个主题均有独立编译、测试和 Diff 审查；数据库专项按用户追加要求转 GitHub CLI / Actions。五轮已完成，最终代码的 CI 验收编号和结果见末尾。
 
 ## 架构变化
 
@@ -98,6 +98,8 @@ Backlog 保留内存从任务行集合变为不同审批人的计数字典，不
 
 Engine 公共命令方式、状态机、Parallel / Join、Any / All / Sequential、加签、转交、退回、撤回、超时、业务原子提交和写保护保持。明确保留原 SaveChanges 次数 / 时点及失败 scope 不能复用规则。
 
+第一轮同时修正操作状态泄漏造成的日志归属错误：此前读取任务或未到期超时检查留下的 TaskId，不再出现在下一次独立启动的自动通过日志中。`NextStart_DoesNotReuseTaskIdFromReadOrNoopTimeout` 的两种输入在原实现实证失败，独立操作上下文后通过；这项修正不改变审批状态机和事务算法。
+
 ## 回归证据
 
 本地最终：Release build 0 warnings / 0 errors；业务测试 Passed535 / Failed0 / Skipped0（Core396、HTTP81、Certificate58），Contracts 成功。用户追加约定后未在本地运行数据库专项或启动 Docker。
@@ -123,4 +125,32 @@ Engine 公共命令方式、状态机、Parallel / Join、Any / All / Sequential
 
 ## 最终 GitHub CI 验收
 
-最新代码提交、run URL、各 Provider 的 TRX / manifest、Windows全量 / package消费者结果待完成后补录；不以旧head的绿色结果代替。
+代码验收提交：`f6342b91569ed3ac66f01a42ea7ac09903e55108`，分支 `codex/backend-progressive-refactoring`。[GitHub Run 41674494343](https://github.com/ttcc666/WorkflowDemo/actions/runs/41674494343)。报告后续的文档提交仅补验收记录；代码与测试以该 SHA 的结果为准。
+
+| Provider | Passed | Failed | Skipped | 核验 |
+| --- | --- | --- | --- | --- |
+| MySql | 33 | 0 | 0 | manifest.head匹配、validated=true、testExitCode=0、全部artifact SHA256匹配 |
+| PostgreSql | 33 | 0 | 0 | 同上 |
+| SqlServer | 33 | 0 | 0 | 同上 |
+
+三 Provider 的33项均实际执行，包含新增 `GovernanceSummary_TranslatesNullableDraftChangesAndFiltersResourcesOnEachProvider` 和 `Backlog_StreamsCaseDistinctAssigneesAndFiltersTasksOnEachProvider`，未使用skip或旧提交证据。报告保存在 `output/backend-refactoring/ci/41674494343`。
+
+整个 Run 已 completed / success，四个作业全部 success。Windows 执行 `./eng/verify.ps1`，最后输出 `Verification succeeded: All`：
+
+- Release solution build 0 warnings / 0 errors；后端 Passed568 / Failed0 / Skipped0（Core396、HTTP81、SQLite数据库专项33、Certificate58）。SQLite专项也只在 GitHub 执行。
+- 九项 EF Migration 模型漂移门禁、ReferenceHost smoke、前端 boundary / typecheck / tests / build、`pnpm contracts:check --no-build` 全部通过。
+- 独立 NuGet / npm、Certificate、ReferenceHost、Core-only 消费者通过；release-manifest.Commit 与上述代码 SHA 一致。Core-only `verification.json` 为passed=true，18个真实检查，包含共享事务、SaveChanges override、写保护、Parallel / Join、回放及无Forms程序集。
+- Browser `results.json` 为expected=5、unexpected=0、skipped=0、flaky=0；metadata.ci.commitHash匹配。两个 ReferenceHost smoke 报告各passed=true / checks=27。
+
+CI 产物已下载并核对，Windows日志为 `output/backend-refactoring/ci/41674494343/windows.log`。C# 编译无警告；CI另有现有前端大chunk提示与GitHub Actions的Node20弃用提示，不属于本轮后端编译警告。
+
+在仓库根目录可复制执行的验证命令如下；数据库专项通过 GitHub 查询，本地不运行数据库测试或 Docker。
+
+```powershell
+Set-Location -LiteralPath 'D:\Study\CSharp\Workflow'
+dotnet build 'Workflow.slnx' --configuration 'Release' --no-restore --verbosity 'minimal'
+dotnet test 'tests/Approval.Core.Tests/Approval.Core.Tests.csproj' --configuration 'Release' --no-build --no-restore --verbosity 'minimal'
+dotnet test 'tests/Approval.AspNetCore.Tests/Approval.AspNetCore.Tests.csproj' --configuration 'Release' --no-build --no-restore --verbosity 'minimal'
+dotnet test 'tests/Certificate.Api.Tests/Certificate.Api.Tests.csproj' --configuration 'Release' --no-build --no-restore --verbosity 'minimal'
+gh run view '41674494343' --repo 'ttcc666/WorkflowDemo' --json 'headSha,status,conclusion,jobs,url'
+```

@@ -20,3 +20,5 @@
 本轮仅内部 C# 结构变化，数据库模型、HTTP JSON、公共 nullable 契约不变。未来重复注册策略若要从 last-wins 改为拒绝，应作为明确配置行为变化处理，未静默改动。
 
 第三轮提交 `896befad5573a5a693f3562c463af48557dcbc5a` 的 GitHub Run `41661918415` 已完整 success。三种服务数据库各 31 passed / 0 failed / 0 skipped，manifest.head 与该提交一致，证据位于 `output/backend-refactoring/ci/41661918415`。此证据属于前三轮；本轮及最终代码仍需在新提交的 CI 补验。
+
+补验已完成：本轮提交 `d7a1404e4eb144361d0e8016352d987e2277a760` 的 CI41666657881 成功；全部五轮最终代码 `f6342b91569ed3ac66f01a42ea7ac09903e55108` 的 [CI41674494343](https://github.com/ttcc666/WorkflowDemo/actions/runs/41674494343) 也全部成功，三服务 Provider各33passed / 0failed / 0skipped及Windows完整门禁通过，详见最终报告。
