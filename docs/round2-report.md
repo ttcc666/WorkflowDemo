@@ -85,8 +85,8 @@ flowchart BT
 | npm | tgz 独立安装、dist exports、types、CSS、消费者构建通过 | consumer-*/web |
 | 浏览器 | 5 项消费者回归通过：发布及审批、匿名/协议拒绝、诊断/维护路由移除、退回重提/抄送已读、分类过滤 | consumer-*/browser/results.json |
 | SQL Server / PostgreSQL / MySQL 本地 | 三入口实际退出 1：Docker daemon 不可用 | output/database-tests 各 provider 报告 |
-| SQL Server / PostgreSQL / MySQL GitHub | run 41595865430 中各 30 项实际通过，验证脚本因过时的至少 33 项阈值退出；已改为核验本次 TRX 完整性和关键病例，待新 run 确认 | output/round2/*-ci.log |
-| GitHub Actions | 当前改造尚待本次分支提交的远端执行确认 | 下述远端验收记录更新后才算完成 |
+| SQL Server / PostgreSQL / MySQL GitHub | 各 30 通过、0 失败、0 跳过；本次三个 Job 全绿 | run 41597075461，下载的 TRX 位于 output/round2/ci-001b63c |
+| GitHub Actions | 提交 001b63c 的 Windows verify + MySQL/SQL Server/PostgreSQL 全部 success | [实际运行 41597075461](https://github.com/ttcc666/WorkflowDemo/actions/runs/41597075461) |
 
 改造前远端 run 41585928243 的实际失败已核对：SQL Server/PostgreSQL 失败在被移除的维护双 Worker 病例；Windows verify 失败在缺失 rg。它们不是本轮运行结果。
 
@@ -105,11 +105,11 @@ flowchart BT
 
 ## 剩余问题与架构判断
 
-- P0：本次远端 CI 的服务三库与 Windows verify 状态仍须执行确认；本地 Docker 缺失不能代替此验收。
+- P0：无剩余阻塞。服务三库与 Windows verify 已由本次 GitHub Actions 实际通过；本地 Docker 仍不可用，不能将本地服务库入口标记为通过。
 - P1：前端独立 `@approval/forms` 包属于后续阶段，当前 npm 包内仍包含表单组件。
 - P2：无已知阻塞的文档/配置遗留；旧物理维护表及防重标记由明确升级策略保留，非默认运行子系统。
 
-当前后端已经是可嵌入审批引擎，可直接集成已有 ASP.NET Core/Identity DbContext，不要求审批基类，并已通过不安装 Forms 的真实包消费。身份、组织、授权、外部通知与实际存储由宿主负责。审批核心仍保留必要的事务/审计/可靠事件复杂度；维护平台复杂度已移除。最终“本轮全完成”仍以本次远端 CI 全绿为条件。
+当前后端已经是可嵌入审批引擎，可直接集成已有 ASP.NET Core/Identity DbContext，不要求审批基类，并已通过不安装 Forms 的真实包消费。身份、组织、授权、外部通知与实际存储由宿主负责。审批核心仍保留必要的事务/审计/可靠事件复杂度；维护平台复杂度已移除。本轮后端、四库、独立发布包消费者与 CI 验收已完成；前端单独 Forms 包按允许的后续阶段保留。
 
 ## 可复现命令
 
@@ -125,3 +125,9 @@ pwsh -NoProfile -File 'eng/verify-databases.ps1' -Provider 'MySql'
 ```
 
 `eng/verify.ps1` 包含前端、契约、独立包消费者与浏览器验证。所有命令依据实际退出码，失败不得标记为通过。
+
+## 远端验收补充
+
+2026-11-03 15:40（Asia/Shanghai），run 41597075461 完成，四个 Job 全部 success，head 为 001b63cf941ae5bca756055b4016960e40acdddd。本报告之后的提交仅同步交付说明，不变更已验收的生产代码。
+
+修复过程中没有跳过核心测试。数据库脚本的旧“至少 33 项”阈值改为核验本次 TRX 的定义数/结果数/执行数/通过数一致、零失败/零跳过，以及关键迁移/事务病例实际执行；完整校验块和全部工程 PowerShell 脚本均已解析验证。
