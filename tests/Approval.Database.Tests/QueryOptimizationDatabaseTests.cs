@@ -29,7 +29,7 @@ public sealed partial class DatabaseContractTests
                 });
             await db.SaveChangesAsync();
         }
-        host.GetRequiredService<AtomicPermissions>().Rule = r => r.Resource.DefinitionKey != "hidden";
+        ((AtomicPermissions)host.GetRequiredService<IApprovalPermissionProvider>()).Rule = r => r.Resource.DefinitionKey != "hidden";
         var values = await AtomicRun(host, "alice", sp =>
             sp.GetRequiredService<ApprovalDefinitionService>().ListGovernanceAsync("team"));
         Assert.Equal(new[] { "absent", "changed", "equal", "unpublished" }, values.Select(v => v.Key));
