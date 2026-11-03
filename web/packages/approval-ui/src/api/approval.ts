@@ -1,12 +1,13 @@
-import { approvalConfig, type ResolvedApprovalUIOptions } from '../config'
-import { http, type ApprovalHttpClient } from './http'
+import { type ResolvedApprovalUIOptions } from '../config'
+import { type ApprovalHttpClient } from './http'
 import type {
   AddSignMode,
+  CarbonCopyItem,
+  CarbonCopyRecipients,
   ApprovalDefinition,
   DefinitionGovernance,
   DefinitionGovernanceSummary,
   DefinitionAudit,
-  SynchronousActionScan,
   ApprovalDiagnosticReport,
   MaintenanceTarget,
   MaintenanceMode,
@@ -51,11 +52,13 @@ export function queryString(query: object = {}) {
 /** API 方法绑定到指定客户端，异步回调不会重新读取其他应用的配置。 */
 export function createApprovalApi(
   http: ApprovalHttpClient,
-  getConfig: () => Pick<ResolvedApprovalUIOptions, 'apiBase'> = approvalConfig,
+  getConfig: () => Pick<ResolvedApprovalUIOptions, 'apiBase'>,
 ) {
   const api = (path: string) => getConfig().apiBase + path
   const commandHeaders = (key?: string) => key ? { 'Idempotency-Key': key } : undefined
   return {
+    copyDefinition: (key: string, body: { targetKey: string; name: string; sourceDefinitionId?: string }, operationId?: string) =>
+      http.post<DefinitionGovernance>(api(`/definitions/${enc(key)}/copy`), body, commandHeaders(operationId)),
     me: (signal?: AbortSignal) => http.get<ApprovalMe>(api('/me'), signal),
     diagnostics: (signal?: AbortSignal) => http.get<ApprovalDiagnosticReport>(api('/diagnostics'), signal),
     maintenancePreview: (target: MaintenanceTarget, mode: MaintenanceMode, signal?: AbortSignal) =>
@@ -95,11 +98,16 @@ export function createApprovalApi(
       http.get<PagedResult<InstanceListItem>>(api(`/started${queryString(query)}`), signal),
     /** 抄送我的（含抄送给我所在角色的） */
     cc: (query: ListQuery = {}, signal?: AbortSignal) => http.get<PagedResult<InstanceListItem>>(api(`/cc${queryString(query)}`), signal),
+    carbonCopies: (query: ListQuery = {}, signal?: AbortSignal) => http.get<PagedResult<CarbonCopyItem>>(api(`/carbon-copies${queryString(query)}`), signal),
+    carbonCopyRecipients: (id: string, page = 1, pageSize = 20, signal?: AbortSignal) =>
+      http.get<CarbonCopyRecipients>(api(`/carbon-copies/${id}/recipients${queryString({ page, pageSize })}`), signal),
+    readCarbonCopy: (id: string, operationId?: string) => http.post(api(`/carbon-copies/${id}/read`), {}, commandHeaders(operationId)),
+    carbonCopyHistory: (id: string, signal?: AbortSignal) => http.get<CarbonCopyItem[]>(api(`/instances/${id}/carbon-copies`), signal),
     /** 已发布流程的标识与名称（筛选下拉） */
     flows: (signal?: AbortSignal) => http.get<FlowSummary[]>(api('/flows'), signal),
 
     instance: (id: string, signal?: AbortSignal) => http.get<ApprovalInstance>(api(`/instances/${id}`), signal),
-    /** 实例绑定版本的流程定义（公开视图：不含动作参数、通知与时限配置），用于画流程图、展示表单 */
+    /** 实例绑定版本的流程定义（公开视图：不含通知与时限配置），用于画流程图、展示表单 */
     instanceDefinition: (id: string, signal?: AbortSignal) => http.get<ApprovalDefinition>(api(`/instances/${id}/definition`), signal),
     byBusiness: (businessType: string, businessKey: string) =>
       http.get<ApprovalInstance[]>(api(`/instances?businessType=${enc(businessType)}&businessKey=${enc(businessKey)}`)),
@@ -135,7 +143,8 @@ export function createApprovalApi(
 
     meta: () => http.get<ApprovalMeta>(api('/meta')),
     definitions: (signal?: AbortSignal) => http.get<ApprovalDefinition[]>(api('/definitions'), signal),
-    governanceDefinitions: (signal?: AbortSignal) => http.get<DefinitionGovernanceSummary[]>(api('/definitions/governance'), signal),
+    governanceDefinitions: (signal?: AbortSignal, category?: string, uncategorized = false) => http.get<DefinitionGovernanceSummary[]>(api(`/definitions/governance${queryString({ category, uncategorized })}`), signal),
+    definitionCategories: (signal?: AbortSignal) => http.get<string[]>(api('/definitions/categories'), signal),
     definitionGovernance: (key: string, signal?: AbortSignal) => http.get<DefinitionGovernance>(api(`/definitions/${enc(key)}/governance`), signal),
     saveDesignDraft: (key: string, body: { name: string; definitionJson: string; expectedRevision: number; sourceDefinitionId: string | null }, operationId: string) =>
       http.put<DefinitionGovernance>(api(`/definitions/${enc(key)}/draft`), body, commandHeaders(operationId)),
@@ -146,7 +155,6 @@ export function createApprovalApi(
     selectDefinitionVersion: (key: string, body: { definitionId: string; expectedRevision: number; changeNote: string }, operationId: string) =>
       http.post<DefinitionGovernance>(api(`/definitions/${enc(key)}/select-version`), body, commandHeaders(operationId)),
     definitionAudit: (key: string, page = 1, signal?: AbortSignal) => http.get<PagedResult<DefinitionAudit>>(api(`/definitions/${enc(key)}/audit?page=${page}`), signal),
-    scanSynchronousActions: (page = 1, signal?: AbortSignal) => http.get<SynchronousActionScan>(api(`/definitions/synchronous-actions?page=${page}`), signal),
     latestDefinition: (key: string) => http.get<ApprovalDefinition>(api(`/definitions/${enc(key)}`)),
     definitionById: (id: string, signal?: AbortSignal) => http.get<ApprovalDefinition>(api(`/definitions/by-id/${id}`), signal),
     versions: (key: string, signal?: AbortSignal) => http.get<ApprovalDefinition[]>(api(`/definitions/${enc(key)}/versions`), signal),
@@ -181,4 +189,3 @@ export function createApprovalApi(
 }
 
 export type ApprovalApiClient = ReturnType<typeof createApprovalApi>
-export const approvalApi = createApprovalApi(http, approvalConfig)

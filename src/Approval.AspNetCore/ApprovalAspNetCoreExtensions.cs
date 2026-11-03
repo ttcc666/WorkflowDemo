@@ -75,11 +75,6 @@ public static class ApprovalAspNetCoreExtensions
             {
                 context.HttpContext.GetApprovalUserId();
                 var services = context.HttpContext.RequestServices;
-                var tenantId = services.GetRequiredService<IApprovalTenantContext>().TenantId;
-                if (services.GetRequiredService<ApprovalOptions>().MultiTenant &&
-                    !(await services.GetRequiredService<IApprovalTenantCatalog>().GetTenantsAsync(context.HttpContext.RequestAborted))
-                        .Any(t => t.Enabled && t.TenantId == tenantId))
-                    throw new ApprovalException("租户不存在或已停用") { Code = ApprovalErrorCode.Forbidden };
                 var metadata = context.HttpContext.GetEndpoint()?.Metadata.GetMetadata<ApprovalPermissionMetadata>() ?? throw new InvalidOperationException("审批端点缺少权限元数据");
                 var authorization = services.GetRequiredService<ApprovalAuthorizationService>();
                 var keyedCommand = ApprovalHttpCommands.Managed(context.HttpContext, metadata) && context.HttpContext.Request.Headers.ContainsKey(ApprovalHttpCommands.Header);

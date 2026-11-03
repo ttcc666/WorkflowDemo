@@ -2,15 +2,7 @@ Approval.Certificate.CertificateFlowTemplates
   Method System.Collections.Generic.IReadOnlyDictionary`2[System.String,System.String] ReadDefaults() [return=NotNull/NotNull<NotNull/NotNull,NotNull/NotNull>; args=]
 Approval.Certificate.CertificateModuleExtensions
   Method Approval.Core.ApprovalBuilder AddCertificateModule(Approval.Core.ApprovalBuilder) [return=NotNull/NotNull; args=NotNull/NotNull]
-Approval.Certificate.Infrastructure.Migrations.AtomicOperations
-  Constructor Void .ctor() [args=]
-Approval.Certificate.Infrastructure.Migrations.DefinitionGovernance
-  Constructor Void .ctor() [args=]
-Approval.Certificate.Infrastructure.Migrations.ExpandApprovalTenants
-  Constructor Void .ctor() [args=]
-Approval.Certificate.Infrastructure.Migrations.LifecycleMaintenance
-  Constructor Void .ctor() [args=]
-Approval.Certificate.Infrastructure.Migrations.TenantIsolation
+Approval.Certificate.Infrastructure.Migrations.InitialApproval
   Constructor Void .ctor() [args=]
 Certificate.Api.Certificates.AppDbContext
   Constructor Void .ctor(Microsoft.EntityFrameworkCore.DbContextOptions`1[Certificate.Api.Certificates.AppDbContext]) [args=NotNull/NotNull<NotNull/NotNull>]
@@ -70,10 +62,6 @@ Certificate.Api.Certificates.CertificateEntity
   Property System.String Name [NotNull/NotNull]
   Property System.String NormalizedCertNo [Nullable/Nullable]
   Property System.String RegisteredBy [Nullable/Nullable]
-Certificate.Api.Certificates.CertificateExpiryCheckAction
-  Constructor Void .ctor(Certificate.Api.Certificates.AppDbContext, System.TimeProvider) [args=NotNull/NotNull,NotNull/NotNull]
-  Method System.Threading.Tasks.Task`1[Approval.Core.Actions.ApprovalActionResult] ExecuteAsync(Approval.Core.Actions.ApprovalActionContext, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull,NotNull/NotNull]
-  Property Approval.Core.Actions.ApprovalActionDescriptor Descriptor [NotNull/Unknown]
 Certificate.Api.Certificates.CertificateModelBuilderExtensions
   Method Void ConfigureCertificates(Microsoft.EntityFrameworkCore.ModelBuilder) [return=NotNull/NotNull; args=NotNull/NotNull]
 Certificate.Api.Certificates.CertificateNumberReservation
@@ -249,10 +237,9 @@ Certificate.Api.Infrastructure.AppDbContextFactory
   Constructor Void .ctor() [args=]
   Method Certificate.Api.Certificates.AppDbContext CreateDbContext(System.String[]) [return=NotNull/NotNull; args=NotNull/NotNull[NotNull/NotNull]]
 Certificate.Api.Infrastructure.CertificateDatabase
-  Constructor Void .ctor(Certificate.Api.Certificates.AppDbContext, System.TimeProvider) [args=NotNull/NotNull,NotNull/NotNull]
+  Constructor Void .ctor(Certificate.Api.Certificates.AppDbContext) [args=NotNull/NotNull]
   Method System.Threading.Tasks.Task InitializeAsync(System.Threading.CancellationToken) [return=NotNull/NotNull; args=NotNull/NotNull default=null]
   Method System.Threading.Tasks.Task`1[Certificate.Api.Infrastructure.DatabaseCopyResult] BackupAsync(System.String, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull,NotNull/NotNull default=null]
-  Method System.Threading.Tasks.Task`1[Certificate.Api.Infrastructure.DatabaseCopyResult] UpgradeCopyAsync(System.String, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull,NotNull/NotNull default=null]
   Method System.Threading.Tasks.Task`1[Certificate.Api.Infrastructure.DatabaseReadiness] CheckAsync(System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull default=null]
 Certificate.Api.Infrastructure.CertificateDatabaseExceptionHandler
   Constructor Void .ctor(Microsoft.Extensions.Logging.ILogger`1[Certificate.Api.Infrastructure.CertificateDatabaseExceptionHandler]) [args=NotNull/NotNull<NotNull/NotNull>]
@@ -299,10 +286,6 @@ Certificate.Api.Infrastructure.DatabaseReadiness
   Method Void Deconstruct(Boolean ByRef, System.Collections.Generic.IReadOnlyList`1[System.String] ByRef) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull<NotNull/NotNull>]
   Property Boolean Ready [NotNull/NotNull]
   Property System.Collections.Generic.IReadOnlyList`1[System.String] Problems [NotNull/NotNull<NotNull/NotNull>]
-Certificate.Api.Infrastructure.Migrations.CertificateBaseline
-  Constructor Void .ctor() [args=]
-Certificate.Api.Infrastructure.Migrations.CertificatePilotHardening
-  Constructor Void .ctor() [args=]
 Certificate.Api.Infrastructure.UnstaffedTask
   Constructor Void .ctor(System.Guid, System.Guid, System.String, System.String) [args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull]
   Method Boolean Equals(Certificate.Api.Infrastructure.UnstaffedTask) [return=NotNull/NotNull; args=Nullable/Nullable]

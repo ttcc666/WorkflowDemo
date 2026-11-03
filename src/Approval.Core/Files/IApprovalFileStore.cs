@@ -17,14 +17,13 @@ public interface IApprovalFileStore
 }
 
 /// <summary>本地磁盘存储：按 <c>yyyy/MM/随机名</c> 保存（不含用户提供的文件名与扩展名）。</summary>
-public sealed class LocalApprovalFileStore(ApprovalOptions options, TimeProvider clock, IApprovalTenantContext tenant, IHostEnvironment? environment = null) : IApprovalFileStore
+public sealed class LocalApprovalFileStore(ApprovalOptions options, TimeProvider clock, IHostEnvironment? environment = null) : IApprovalFileStore
 {
-    private readonly string _tenantPrefix = "tenants/" + Convert.ToHexStringLower(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(tenant.TenantId))) + "/";
     private readonly string _root = Path.GetFullPath(Path.Combine(environment?.ContentRootPath ?? AppContext.BaseDirectory, options.Files.RootPath));
 
     public async Task<string> SaveAsync(Stream content, CancellationToken ct)
     {
-        var key = $"{_tenantPrefix}{clock.GetUtcNow():yyyy/MM}/{Guid.NewGuid():N}";
+        var key = $"{clock.GetUtcNow():yyyy/MM}/{Guid.NewGuid():N}";
         var path = PathOf(key);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         try
@@ -54,8 +53,6 @@ public sealed class LocalApprovalFileStore(ApprovalOptions options, TimeProvider
     {
         if (!System.Text.RegularExpressions.Regex.IsMatch(key, "^(?:tenants/[0-9a-f]{64}/)?[0-9]{4}/[0-9]{2}/[0-9a-f]{32}$", System.Text.RegularExpressions.RegexOptions.CultureInvariant))
             throw new ApprovalException("无效的存储键");
-        if (key.StartsWith("tenants/", StringComparison.Ordinal) && !key.StartsWith(_tenantPrefix, StringComparison.Ordinal))
-            throw new ApprovalException("附件不属于当前租户") { Code = ApprovalErrorCode.Forbidden };
         var path = Path.GetFullPath(Path.Combine(_root, key));
         if (!path.StartsWith(_root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
             throw new ApprovalException("无效的存储键");

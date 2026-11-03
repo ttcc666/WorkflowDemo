@@ -37,7 +37,7 @@ builder.Services.AddOpenApi("approval");
 builder.Services.AddOpenApi("certificate");
 builder.Services.AddDbContext<AppDbContext>(options => options.UseSqlite("Data Source=:memory:"));
 builder.Services.AddScoped<IApprovalIdentityProvider, ContractIdentity>();
-builder.Services.AddApprovalWorkflow<AppDbContext>(options => { options.FixedTenantId = "certificate"; options.EnableBackgroundServices = false; })
+builder.Services.AddApprovalWorkflow<AppDbContext>(options => { options.EnableBackgroundServices = false; })
     .AddFormApprovals().AddCertificateModule();
 builder.Services.AddApprovalAspNetCore();
 await using var app = builder.Build();
@@ -112,9 +112,6 @@ foreach (var (assembly, directory) in new[]
     }
     await File.WriteAllTextAsync(Path.Combine(directory, assembly.GetName().Name + ".api.txt"), string.Join('\n', lines) + "\n");
 }
-var legacy = typeof(global::Certificate.Api.CertificateApplication).Assembly;
-await File.WriteAllTextAsync(Path.Combine(sampleOutput, "Certificate.Api.forwards.txt"), string.Join('\n', legacy.GetForwardedTypes()
-    .Select(type => $"{type.FullName} -> {type.Assembly.GetName().Name}").Order(StringComparer.Ordinal)) + "\n");
 Console.WriteLine($"Generated contracts in {output}");
 
 string NullableContract(MemberInfo member) => member switch

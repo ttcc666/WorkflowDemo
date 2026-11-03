@@ -4,7 +4,7 @@ using Approval.Core.Definitions;
 using Approval.Core.Domain;
 using Approval.Core.Engine;
 using Approval.Core.Persistence;
-using Approval.Core.Tenancy;
+using Approval.Core.Hosting;
 using Approval.Core.Files;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
@@ -21,7 +21,7 @@ public sealed class PermissionTests
     private sealed class Actor : IApprovalContextResolver
     {
         public string? User { get; set; }
-        public ApprovalExecutionIdentity Resolve() => new("tests", User);
+        public ApprovalExecutionIdentity Resolve() => new(User);
     }
     private sealed class Permissions : IApprovalPermissionProvider
     {
@@ -163,7 +163,7 @@ public sealed class PermissionTests
             var auth = sp.GetRequiredService<ApprovalAuthorizationService>();
             Assert.True(await auth.CanAsync(ApprovalPermissions.TaskApprove, new() { TaskId = task.TaskId, BusinessKey = "forged" }));
             var call = Assert.Single(permissions.Calls);
-            Assert.Equal(new ApprovalPermissionSubject("tests", "bob", false), call.Subject);
+            Assert.Equal(new ApprovalPermissionSubject("bob", false), call.Subject);
             Assert.Equal(task.InstanceId, call.Resource.InstanceId); Assert.Equal("doc", call.Resource.DefinitionKey);
             Assert.Equal("visible", call.Resource.BusinessKey); Assert.NotNull(call.Resource.DefinitionId);
             permissions.Decide = (_, _) => Task.FromResult(false);
@@ -260,7 +260,7 @@ public sealed class PermissionTests
     {
         var permissions = new Permissions(); await using var host = Host(permissions);
         await using var scope = host.NewScope(authorize: true); var sp = scope.ServiceProvider;
-        sp.GetRequiredService<ApprovalExecutionContext>().InitializeSystem("tests", "worker", [ApprovalPermissions.OutboxDispatch]);
+        sp.GetRequiredService<ApprovalExecutionContext>().InitializeSystem("worker", [ApprovalPermissions.OutboxDispatch]);
         var auth = sp.GetRequiredService<ApprovalAuthorizationService>();
         Assert.True(await auth.CanAsync(ApprovalPermissions.OutboxDispatch));
         Assert.False(await auth.CanAsync(ApprovalPermissions.DefinitionPublish));
@@ -288,7 +288,7 @@ public sealed class PermissionTests
         var identity = new FakeIdentityProvider(); identity.Add("designer", "Designers"); identity.Add("admin", "Admin");
         var options = new ApprovalOptions(); options.DefinitionReaders.Add("Designers");
         var provider = new DefaultApprovalPermissionProvider(identity, options);
-        Task<bool> Can(string actor, string permission) => provider.AuthorizeAsync(new(new("tests", actor, false), permission, new()), default);
+        Task<bool> Can(string actor, string permission) => provider.AuthorizeAsync(new(new(actor, false), permission, new()), default);
         Assert.True(await Can("designer", ApprovalPermissions.DefinitionDesign));
         Assert.True(await Can("designer", ApprovalPermissions.DefinitionValidate));
         Assert.False(await Can("designer", ApprovalPermissions.DefinitionPublish));

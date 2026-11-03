@@ -10,6 +10,7 @@ import { useApprovalUser } from '../composables/useApprovalUser'
 import { useDirectory } from '../composables/useDirectory'
 import BranchInspector from '../features/designer/BranchInspector.vue'
 import DesignerToolbar from '../features/designer/DesignerToolbar.vue'
+import DesignerPreview from '../features/designer/DesignerPreview.vue'
 import NodeInspector from '../features/designer/NodeInspector.vue'
 import NodePalette from '../features/designer/NodePalette.vue'
 import NotificationRulesEditor from '../features/designer/NotificationRulesEditor.vue'
@@ -43,6 +44,9 @@ const flowKey = computed(() => route.params.key as string)
 const governance = useDefinitionGovernance(() => flowKey.value)
 const intent = governance.intent
 const saving = shallowRef(false)
+const previewVisible = shallowRef(false)
+const previewDefinition = shallowRef<FlowDefinition>(newFlowDefinition())
+function previewDraft() { previewDefinition.value = designer.buildDefinition(); previewVisible.value = true }
 const changeNote = shallowRef('')
 const canGovern = (permission: string) => governance.state.value?.capabilities[permission] ?? can(permission)
 async function restartPublish() {
@@ -93,7 +97,6 @@ watch(loader.data, (definition) => {
 const emptyMeta: ApprovalMeta = {
   approverTypes: [],
   recipientTypes: [],
-  actions: [],
   channels: [],
   templateVariables: [],
   defaultTemplates: {},
@@ -233,10 +236,12 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', onBeforeUnload)
         @validate="validate"
         @publish="publish"
         @save="saveDraft"
+        @preview="previewDraft"
       />
     </el-card>
 
     <ValidationResult :errors="designer.errors.value" :warnings="designer.warnings.value" />
+    <DesignerPreview v-model="previewVisible" :definition="previewDefinition" />
     <el-input v-model="changeNote" placeholder="发布变更说明（最多 1000 字符）" maxlength="1000" />
     <el-alert v-if="governance.state.value && !governance.state.value.isEnabled" type="warning" :closable="false" title="此流程已停用；保存或发布不会自动启用" />
     <el-alert v-if="governance.state.value?.hasDraftChanges" type="info" :closable="false" title="设计草稿已保存，尚未发布；新申请继续使用选用的发布版本" />

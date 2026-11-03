@@ -1,5 +1,4 @@
 using Approval.Core.Domain;
-using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
@@ -20,6 +19,8 @@ public static class ApprovalModelBuilderExtensions
             b.HasKey(x => x.Id);
             b.Property(x => x.Key).HasMaxLength(100);
             b.Property(x => x.Name).HasMaxLength(200);
+            b.Property(x => x.Category).HasMaxLength(100);
+            b.HasIndex(x => x.Category);
             b.HasIndex(x => new { x.Key, x.Version }).IsUnique();
         });
 
@@ -121,6 +122,15 @@ public static class ApprovalModelBuilderExtensions
             b.HasIndex(x => new { x.UserId, x.IsRead, x.CreatedAt });
         });
 
+        modelBuilder.Entity<ApprovalCarbonCopyRead>(b =>
+        {
+            b.ToTable($"{tablePrefix}CarbonCopyReads"); b.HasKey(r => r.Id);
+            b.Property(r => r.UserId).HasMaxLength(100);
+            b.HasIndex(r => new { r.CarbonCopyId, r.UserId }).IsUnique();
+            b.HasOne<ApprovalCarbonCopy>().WithMany().HasForeignKey(r => new { r.CarbonCopyId })
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
         modelBuilder.Entity<ApprovalOutboxMessage>(b =>
         {
             b.ToTable($"{tablePrefix}Outbox");
@@ -151,19 +161,20 @@ public static class ApprovalModelBuilderExtensions
             b.Property(s => s.LookupHash).HasMaxLength(64); b.HasIndex(s => s.LookupHash).IsUnique();
             b.Property(s => s.BusinessType).HasMaxLength(100); b.Property(s => s.BusinessKey).HasMaxLength(200);
             b.HasIndex(s => s.InstanceId).IsUnique();
-            b.HasOne<ApprovalInstance>().WithMany().HasForeignKey(s => new { s.TenantId, s.InstanceId })
-                .HasPrincipalKey(i => new { i.TenantId, i.Id }).OnDelete(DeleteBehavior.NoAction);
+            b.HasOne<ApprovalInstance>().WithMany().HasForeignKey(s => new { s.InstanceId })
+                .OnDelete(DeleteBehavior.NoAction);
         });
         modelBuilder.Entity<ApprovalDefinitionManagement>(b =>
         {
             b.ToTable($"{tablePrefix}DefinitionManagement"); b.HasKey(x => x.Id);
             b.Property(x => x.Key).HasMaxLength(100); b.Property(x => x.Name).HasMaxLength(200);
+            b.Property(x => x.Category).HasMaxLength(100); b.HasIndex(x => x.Category);
             b.Property(x => x.UpdatedBy).HasMaxLength(256); b.Property(x => x.Revision).IsConcurrencyToken();
-            b.HasIndex(x => new { x.TenantId, x.Key }).IsUnique();
-            b.HasOne<ApprovalDefinition>().WithMany().HasForeignKey(x => new { x.TenantId, x.ActiveDefinitionId })
-                .HasPrincipalKey(x => new { x.TenantId, x.Id }).OnDelete(DeleteBehavior.NoAction);
-            b.HasOne<ApprovalDefinition>().WithMany().HasForeignKey(x => new { x.TenantId, x.DraftSourceDefinitionId })
-                .HasPrincipalKey(x => new { x.TenantId, x.Id }).OnDelete(DeleteBehavior.NoAction);
+            b.HasIndex(x => new { x.Key }).IsUnique();
+            b.HasOne<ApprovalDefinition>().WithMany().HasForeignKey(x => new { x.ActiveDefinitionId })
+                .OnDelete(DeleteBehavior.NoAction);
+            b.HasOne<ApprovalDefinition>().WithMany().HasForeignKey(x => new { x.DraftSourceDefinitionId })
+                .OnDelete(DeleteBehavior.NoAction);
         });
         modelBuilder.Entity<ApprovalDefinitionAudit>(b =>
         {
@@ -171,59 +182,42 @@ public static class ApprovalModelBuilderExtensions
             b.Property(x => x.Key).HasMaxLength(100); b.Property(x => x.ActorId).HasMaxLength(256);
             b.Property(x => x.Action).HasConversion<string>().HasMaxLength(30);
             b.Property(x => x.ChangeNote).HasMaxLength(1000); b.Property(x => x.DefinitionHash).HasMaxLength(64);
-            b.HasIndex(x => new { x.TenantId, x.Key, x.Revision }).IsUnique();
-            b.HasOne<ApprovalDefinition>().WithMany().HasForeignKey(x => new { x.TenantId, x.DefinitionId })
-                .HasPrincipalKey(x => new { x.TenantId, x.Id }).OnDelete(DeleteBehavior.NoAction);
-            b.HasOne<ApprovalDefinition>().WithMany().HasForeignKey(x => new { x.TenantId, x.SourceDefinitionId })
-                .HasPrincipalKey(x => new { x.TenantId, x.Id }).OnDelete(DeleteBehavior.NoAction);
+            b.HasIndex(x => new { x.Key, x.Revision }).IsUnique();
+            b.HasOne<ApprovalDefinition>().WithMany().HasForeignKey(x => new { x.DefinitionId })
+                .OnDelete(DeleteBehavior.NoAction);
+            b.HasOne<ApprovalDefinition>().WithMany().HasForeignKey(x => new { x.SourceDefinitionId })
+                .OnDelete(DeleteBehavior.NoAction);
         });
         ApprovalMaintenanceModel.Configure(modelBuilder, tablePrefix);
         foreach (var type in new[]
                  {
                      typeof(ApprovalDefinition), typeof(ApprovalInstance), typeof(ApprovalTask), typeof(ApprovalLog),
-                     typeof(ApprovalCarbonCopy), typeof(ApprovalDraft), typeof(ApprovalFile), typeof(ApprovalMessage), typeof(ApprovalOutboxMessage),
+                     typeof(ApprovalCarbonCopy), typeof(ApprovalCarbonCopyRead), typeof(ApprovalDraft), typeof(ApprovalFile), typeof(ApprovalMessage), typeof(ApprovalOutboxMessage),
                      typeof(ApprovalOperation), typeof(ApprovalBusinessSlot), typeof(ApprovalDefinitionManagement), typeof(ApprovalDefinitionAudit),
                      typeof(ApprovalArchiveRecord), typeof(ApprovalMaintenanceJob), typeof(ApprovalRetentionHold), typeof(ApprovalFileDeletion), typeof(ApprovalMaintenanceAudit)
                  })
         {
             var entity = modelBuilder.Entity(type);
             entity.UseUtcDateTimes();
-            entity.Property(nameof(IApprovalTenantEntity.TenantId)).HasMaxLength(64).IsRequired().IsConcurrencyToken();
-            var parameter = Expression.Parameter(type, "entity");
-            entity.HasQueryFilter("ApprovalTenant", Expression.Lambda(Expression.Equal(
-                Expression.Property(parameter, nameof(IApprovalTenantEntity.TenantId)),
-                Expression.Property(Expression.Constant(context, typeof(ApprovalDbContext)), nameof(ApprovalDbContext.TenantId))), parameter));
+
         }
 
         modelBuilder.Entity<ApprovalInstance>().HasOne<ApprovalDefinition>().WithMany()
-            .HasForeignKey(x => new { x.TenantId, x.DefinitionId }).HasPrincipalKey(x => new { x.TenantId, x.Id }).OnDelete(DeleteBehavior.NoAction);
+            .HasForeignKey(x => new { x.DefinitionId }).OnDelete(DeleteBehavior.NoAction);
         modelBuilder.Entity<ApprovalInstance>().HasMany(x => x.Tasks).WithOne()
-            .HasForeignKey(x => new { x.TenantId, x.InstanceId }).HasPrincipalKey(x => new { x.TenantId, x.Id }).OnDelete(DeleteBehavior.Cascade);
+            .HasForeignKey(x => new { x.InstanceId }).OnDelete(DeleteBehavior.Cascade);
         modelBuilder.Entity<ApprovalInstance>().HasMany(x => x.Logs).WithOne()
-            .HasForeignKey(x => new { x.TenantId, x.InstanceId }).HasPrincipalKey(x => new { x.TenantId, x.Id }).OnDelete(DeleteBehavior.Cascade);
+            .HasForeignKey(x => new { x.InstanceId }).OnDelete(DeleteBehavior.Cascade);
         modelBuilder.Entity<ApprovalCarbonCopy>().HasOne<ApprovalInstance>().WithMany()
-            .HasForeignKey(x => new { x.TenantId, x.InstanceId }).HasPrincipalKey(x => new { x.TenantId, x.Id }).OnDelete(DeleteBehavior.Cascade);
+            .HasForeignKey(x => new { x.InstanceId }).OnDelete(DeleteBehavior.Cascade);
         modelBuilder.Entity<ApprovalFile>().HasOne<ApprovalInstance>().WithMany()
-            .HasForeignKey(x => new { x.TenantId, x.InstanceId }).HasPrincipalKey(x => new { x.TenantId, x.Id }).OnDelete(DeleteBehavior.NoAction);
+            .HasForeignKey(x => new { x.InstanceId }).OnDelete(DeleteBehavior.NoAction);
         modelBuilder.Entity<ApprovalFile>().HasOne<ApprovalDraft>().WithMany()
-            .HasForeignKey(x => new { x.TenantId, x.DraftId }).HasPrincipalKey(x => new { x.TenantId, x.Id }).OnDelete(DeleteBehavior.NoAction);
+            .HasForeignKey(x => new { x.DraftId }).OnDelete(DeleteBehavior.NoAction);
         modelBuilder.Entity<ApprovalMessage>().HasOne<ApprovalInstance>().WithMany()
-            .HasForeignKey(x => new { x.TenantId, x.InstanceId }).HasPrincipalKey(x => new { x.TenantId, x.Id }).OnDelete(DeleteBehavior.NoAction);
+            .HasForeignKey(x => new { x.InstanceId }).OnDelete(DeleteBehavior.NoAction);
         modelBuilder.Entity<ApprovalOutboxMessage>().HasOne<ApprovalInstance>().WithMany()
-            .HasForeignKey(x => new { x.TenantId, x.InstanceId }).HasPrincipalKey(x => new { x.TenantId, x.Id }).OnDelete(DeleteBehavior.NoAction);
-
-        foreach (var type in modelBuilder.Model.GetEntityTypes().Where(t => typeof(IApprovalTenantEntity).IsAssignableFrom(t.ClrType)).ToArray())
-        {
-            var entity = modelBuilder.Entity(type.ClrType);
-            foreach (var index in type.GetIndexes().ToArray())
-            {
-                if (index.Properties[0].Name == nameof(IApprovalTenantEntity.TenantId)) continue;
-                var columns = index.Properties.Select(p => p.Name).ToArray();
-                var unique = index.IsUnique;
-                type.RemoveIndex(index);
-                entity.HasIndex([nameof(IApprovalTenantEntity.TenantId), .. columns]).IsUnique(unique);
-            }
-        }
+            .HasForeignKey(x => new { x.InstanceId }).OnDelete(DeleteBehavior.NoAction);
 
         return modelBuilder;
     }

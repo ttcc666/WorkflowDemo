@@ -71,9 +71,9 @@ pwsh -File 'samples/Certificate.Api/smoke-test.ps1' -Base 'http://localhost:5199
 dotnet run --project 'samples/Certificate.Api' --launch-profile 'http' -- '--Certificate:DatabaseOperation=publish-flows'
 ```
 
-相同内容和名称不会重复发布。新申请绑定已经通过预检的 DefinitionId，避免预检与启动之间被另一次发布替换；运行中的实例继续沿用原定义。注册证登记入口要求完整的固定三审与岗位保护；旧库升级后如仍是旧版流程，应先显式发布新模板。
+相同内容和名称不会重复发布。新申请绑定已经通过预检的 DefinitionId，避免预检与启动之间被另一次发布替换；运行中的实例继续沿用原定义。注册证登记入口要求完整的固定三审与岗位保护。
 
-## 数据库备份和旧库升级
+## 数据库初始化与备份
 
 维护操作不会启动 HTTP 服务。目标必须是新的文件，程序拒绝覆盖现有目标或源库。命令输出目标路径与记录数量。
 
@@ -87,25 +87,7 @@ dotnet 'samples/Certificate.Api/bin/Debug/net10.0/Certificate.Api.dll' '--Certif
 
 备份使用 SQLite Backup API，包含 WAL 中已提交的数据，并检查完整性。恢复时保留备份，把它复制/备份到另一新路径，再将连接字符串指向恢复副本；不要把运行中库的单个 .db 文件直接覆盖回来。
 
-旧 EnsureCreated 库或带业务数据的旧迁移库必须先停止旧服务写入，再显式升级副本。以下从旧示例配置读取连接字符串；目标文件唯一，不覆盖任何已有库：
-
-```powershell
-$pilotUpgrade = 'D:\Study\CSharp\Workflow\output\registration-upgraded-' + [Guid]::NewGuid().ToString('N') + '.db'
-Push-Location 'samples/Certificate.Api'
-$legacyConnection = (Get-Content -Raw 'appsettings.json' | ConvertFrom-Json).ConnectionStrings.Default
-dotnet 'bin/Debug/net10.0/Certificate.Api.dll' '--Certificate:DatabaseOperation=upgrade' '--Certificate:ConfirmOffline=true' ('--ConnectionStrings:Default={0}' -f $legacyConnection) ('--Certificate:Destination={0}' -f $pilotUpgrade)
-Pop-Location
-```
-
-升级先检查已知模式、迁移历史、外键完整性、规范化证号冲突、申请实例关联和编辑锁。失败不会修改源库，也不会自动合并或删除记录。通过预检后复制源库，在副本接纳基线、执行迁移并回填占用与关联；无法还原的历史 BeforeSnapshot 保持未知。升级过程中失败的副本可保留用于排查，不应作为业务库启动。
-
-切换前必须核对命令结果、台账数量、申请和待办，再启动指向新文件的本地服务：
-
-```powershell
-dotnet run --project 'samples/Certificate.Api' --launch-profile 'http' -- ('--ConnectionStrings:Default=Data Source={0}' -f $pilotUpgrade)
-```
-
-不要直接用 `dotnet ef database update` 跳过旧库预检。`CertificateBaseline` 记录历史模式，`CertificatePilotHardening` 增加本次约束；旧库的数据关联/占用回填由显式升级操作完成。
+当前项目尚未正式使用，只提供当前 `InitialApproval` 初始化；旧库升级、升级副本命令及预检回填代码已删除。
 
 ## 运行检查与故障处理
 

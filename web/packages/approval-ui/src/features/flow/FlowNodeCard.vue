@@ -16,7 +16,6 @@ const typeIcons: Record<NodeType, string> = {
   Approval: '✔',
   Cc: '✉',
   Condition: '◆',
-  Action: '⚙',
   Parallel: '⇉',
   Join: '⇶',
   End: '■',

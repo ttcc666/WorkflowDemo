@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Certificate.Api.Certificates;
 
-public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : ApprovalDbContext(options, new Approval.Core.Abstractions.FixedApprovalTenantContext("certificate"))
+public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : ApprovalDbContext(options)
 {
     public DbSet<CertificateEntity> Certificates => Set<CertificateEntity>();
     public DbSet<CertificateRequest> CertificateRequests => Set<CertificateRequest>();

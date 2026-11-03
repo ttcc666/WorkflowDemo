@@ -7,10 +7,9 @@ public enum MaintenanceMode { Archive, Purge }
 public enum MaintenanceJobStatus { Pending, Running, Completed, Failed }
 public enum FileDeletionStatus { Pending, Processing, Completed, Cancelled }
 
-public sealed class ApprovalArchiveRecord : IApprovalTenantEntity
+public sealed class ApprovalArchiveRecord : IApprovalEntity
 {
     public Guid Id { get; set; }
-    [JsonIgnore] public string TenantId { get; set; } = string.Empty;
     public MaintenanceTarget Target { get; set; }
     public Guid ResourceId { get; set; }
     public long SourceVersion { get; set; }
@@ -27,10 +26,9 @@ public sealed class ApprovalArchiveRecord : IApprovalTenantEntity
     public required string SnapshotHash { get; set; }
     public long ConcurrencyStamp { get; set; }
 }
-public sealed class ApprovalMaintenanceAudit : IApprovalTenantEntity
+public sealed class ApprovalMaintenanceAudit : IApprovalEntity
 {
     public Guid Id { get; set; }
-    [JsonIgnore] public string TenantId { get; set; } = string.Empty;
     public Guid? JobId { get; set; }
     public int? Batch { get; set; }
     public Guid? ResourceId { get; set; }
@@ -41,10 +39,9 @@ public sealed class ApprovalMaintenanceAudit : IApprovalTenantEntity
     public int Count { get; set; }
     public DateTime CreatedAt { get; set; }
 }
-public sealed class ApprovalMaintenanceJob : IApprovalTenantEntity
+public sealed class ApprovalMaintenanceJob : IApprovalEntity
 {
     public Guid Id { get; set; }
-    [JsonIgnore] public string TenantId { get; set; } = string.Empty;
     public MaintenanceTarget Target { get; set; }
     public MaintenanceMode Mode { get; set; }
     public required string ActorId { get; set; }
@@ -53,32 +50,27 @@ public sealed class ApprovalMaintenanceJob : IApprovalTenantEntity
     public DateTime Cutoff { get; set; }
     public DateTime CreatedAt { get; set; }
     public MaintenanceJobStatus Status { get; set; }
-    public Guid? LeaseId { get; set; }
-    public DateTime? LeaseUntil { get; set; }
     public int CompletedBatches { get; set; }
     public int Processed { get; set; }
     public string? LastErrorCode { get; set; }
     public long ConcurrencyStamp { get; set; }
 }
-public sealed class ApprovalRetentionHold : IApprovalTenantEntity
+public sealed class ApprovalRetentionHold : IApprovalEntity
 {
     public Guid Id { get; set; }
-    [JsonIgnore] public string TenantId { get; set; } = string.Empty;
     public MaintenanceTarget Target { get; set; }
     public Guid ResourceId { get; set; }
     public required string Reason { get; set; }
     public required string ActorId { get; set; }
     public DateTime CreatedAt { get; set; }
 }
-public sealed class ApprovalFileDeletion : IApprovalTenantEntity
+public sealed class ApprovalFileDeletion : IApprovalEntity
 {
     public Guid Id { get; set; }
-    [JsonIgnore] public string TenantId { get; set; } = string.Empty;
     public Guid FileId { get; set; }
     [JsonIgnore] public required string StorageKey { get; set; }
     public FileDeletionStatus Status { get; set; }
     public int Attempts { get; set; }
-    public Guid? LeaseId { get; set; }
     public DateTime? StartedAt { get; set; }
     public DateTime NextAttemptAt { get; set; }
     public string? LastErrorCode { get; set; }

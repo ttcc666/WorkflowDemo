@@ -13,10 +13,10 @@ public sealed class DatabaseFixture : IAsyncLifetime
 
     public ContractDbContext Create(string tenant = "database-tests") => Provider switch
     {
-        "MySql" => new MySqlContractContext(new Approval.Core.Abstractions.FixedApprovalTenantContext(tenant)),
-        "SqlServer" => new SqlServerContractContext(new Approval.Core.Abstractions.FixedApprovalTenantContext(tenant)),
-        "PostgreSql" => new PostgreSqlContractContext(new Approval.Core.Abstractions.FixedApprovalTenantContext(tenant)),
-        "Sqlite" => new SqliteContractContext(new Approval.Core.Abstractions.FixedApprovalTenantContext(tenant)),
+        "MySql" => new MySqlContractContext(),
+        "SqlServer" => new SqlServerContractContext(),
+        "PostgreSql" => new PostgreSqlContractContext(),
+        "Sqlite" => new SqliteContractContext(),
         _ => throw new InvalidOperationException($"Unsupported test provider: {Provider}")
     };
 
@@ -74,7 +74,7 @@ public sealed partial class DatabaseContractTests(DatabaseFixture fixture) : ICl
     private async Task ClearDataAsync()
     {
         await using var db = fixture.Create(); await db.Database.OpenConnectionAsync();
-        foreach (var table in new[] { "MaintenanceAudits", "MaintenanceJobs", "RetentionHolds", "FileDeletions", "DefinitionAudits", "DefinitionManagement", "Operations", "BusinessSlots", "Files", "Archives", "Logs", "Tasks", "Messages", "Outbox", "CarbonCopies", "Instances", "Drafts", "Definitions" })
+        foreach (var table in new[] { "CarbonCopyReads", "MaintenanceAudits", "MaintenanceJobs", "RetentionHolds", "FileDeletions", "DefinitionAudits", "DefinitionManagement", "Operations", "BusinessSlots", "Files", "Archives", "Logs", "Tasks", "Messages", "Outbox", "CarbonCopies", "Instances", "Drafts", "Definitions" })
         {
             await using var command = db.Database.GetDbConnection().CreateCommand();
             var name = "Approval" + table;
@@ -108,7 +108,7 @@ public sealed partial class DatabaseContractTests(DatabaseFixture fixture) : ICl
         await ClearDataAsync();
         await using var db = fixture.Create();
         var migrations = (await db.Database.GetAppliedMigrationsAsync()).ToArray();
-        Assert.Equal(6, migrations.Length);
+        Assert.EndsWith("_InitialApproval", Assert.Single(migrations));
         Assert.False(db.Database.HasPendingModelChanges());
         var migrator = db.GetService<IMigrator>();
         await migrator.MigrateAsync(Migration.InitialDatabase);

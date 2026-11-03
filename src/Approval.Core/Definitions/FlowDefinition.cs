@@ -9,8 +9,6 @@ public enum NodeType
     Approval,
     Cc,
     Condition,
-    /// <summary>自动动作：依次执行 <see cref="FlowNode.Actions"/>（HTTP、脚本、注册动作）后进入下一节点。</summary>
-    Action,
     /// <summary>并行分叉：<see cref="FlowNode.Branches"/> 中的所有分支同时进行，必须由一个 <see cref="Join"/> 合并。</summary>
     Parallel,
     /// <summary>并行合并：等待对应并行节点的所有分支到达后进入下一节点。</summary>
@@ -43,7 +41,7 @@ public sealed class FlowDefinition
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
-        Converters = { new JsonStringEnumConverter() },
+        Converters = { new JsonStringEnumConverter(allowIntegerValues: false) },
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
 
@@ -70,18 +68,29 @@ public sealed class FlowDefinition
         FlowDefinition definition;
         try
         {
+            using var document = JsonDocument.Parse(json);
+            if (document.RootElement.TryGetProperty("nodes", out var nodeMap) && nodeMap.ValueKind == JsonValueKind.Object
+                && nodeMap.EnumerateObject().GroupBy(p => p.Name, StringComparer.Ordinal).Any(g => g.Count() > 1))
+                throw new ApprovalException("流程包含重复节点 ID") { Code = ApprovalErrorCode.InvalidDefinition };
             definition = JsonSerializer.Deserialize<FlowDefinition>(json, JsonOptions)
                          ?? throw new ApprovalException("流程定义为空");
         }
         catch (JsonException ex)
         {
-            throw new ApprovalException($"流程定义 JSON 格式错误：{ex.Message}", ex);
+            throw new ApprovalException($"流程定义 JSON 格式错误：{ex.Message}", ex) { Code = ApprovalErrorCode.InvalidDefinition };
         }
 
         definition.EnsureSupportedSchema();
+        if (definition.Nodes is null || definition.Nodes.Values.Any(n => n is null))
+            throw new ApprovalException("节点集合不能为空或包含空节点") { Code = ApprovalErrorCode.InvalidDefinition };
         // 字典 key 即节点 ID，未显式填写 Id 时以 key 为准
         foreach (var (key, node) in definition.Nodes)
         {
+            node.Name ??= "";
+            node.Branches ??= []; node.Approvers ??= []; node.Notifications ??= []; node.FieldPermissions ??= [];
+            if (node.Branches.Any(b => b is null || string.IsNullOrWhiteSpace(b.Next))
+                || node.Approvers.Any(r => r is null || string.IsNullOrWhiteSpace(r.Type)))
+                throw new ApprovalException("节点包含空的分支、审批人或扩展配置") { Code = ApprovalErrorCode.InvalidDefinition };
             if (string.IsNullOrWhiteSpace(node.Id)) node.Id = key;
         }
         return definition;
@@ -100,7 +109,7 @@ public sealed class FlowDefinition
     }
 
     /// <summary>
-    /// 公开视图（给实例的查看者画流程图、展示表单）：去掉动作参数与输出变量（HTTP 请求头、令牌等）、通知规则、时限策略和发起角色，
+    /// 公开视图（给实例的查看者画流程图、展示表单）：去掉通知规则、时限策略和发起角色，
     /// 保留节点、连线、名称、类型、坐标与表单结构。完整定义仅管理员可读。
     /// </summary>
     public FlowDefinition ToPublicView()
@@ -112,16 +121,13 @@ public sealed class FlowDefinition
         {
             node.Notifications = [];
             node.Timeout = null;
-            foreach (var step in node.Actions)
-            {
-                step.Parameters = [];
-                step.OutputVariable = null;
-            }
+
         }
         return view;
     }
 }
 
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed class FlowNode
 {
     public string Id { get; set; } = "";
@@ -153,9 +159,7 @@ public sealed class FlowNode
 
     /// <summary>处理、改派和加签时重新核对原审批人规则与用户目录，避免岗位任务变为任意用户任务。</summary>
     public bool RequireQualifiedAssignee { get; set; }
-
-    /// <summary>动作步骤（仅 Action 节点），按顺序执行。</summary>
-    public List<ActionStep> Actions { get; set; } = [];
+    public bool RequireComment { get; set; }
 
     /// <summary>节点通知规则。</summary>
     public List<NotificationRule> Notifications { get; set; } = [];
@@ -196,7 +200,7 @@ public sealed record ConditionBranch(int Priority, string? Expression, string Ne
 /// <summary>触发通知的事件。</summary>
 public enum NotifyEvent
 {
-    /// <summary>到达节点（审批节点生成待办、抄送、动作节点开始执行）。</summary>
+    /// <summary>到达节点（审批节点生成待办或抄送）。</summary>
     Enter,
     Approved,
     Rejected,
@@ -204,7 +208,9 @@ public enum NotifyEvent
     /// <summary>待办超过处理时限。</summary>
     Timeout,
     /// <summary>流程结束（通过、驳回、撤回）。</summary>
-    Completed
+    Completed,
+    Returned,
+    Resubmitted
 }
 
 /// <summary>
@@ -249,32 +255,4 @@ public sealed class TimeoutPolicy
 
     /// <summary>最多提醒次数（含第一次）。</summary>
     public int MaxReminders { get; set; } = 3;
-}
-
-public enum ActionMode
-{
-    /// <summary>在审批事务内执行，失败则本次审批操作回滚；输出可写入表单变量供后续分支使用。</summary>
-    Sync,
-    /// <summary>事务提交后由后台任务执行，失败自动重试；适合调用外部系统等有副作用的操作。</summary>
-    Async
-}
-
-/// <summary>动作节点中的一个步骤。</summary>
-public sealed class ActionStep
-{
-    /// <summary>动作类型，对应 <see cref="Actions.ApprovalActionDescriptor.Type"/>，如 Http / Script。</summary>
-    public string Type { get; set; } = "";
-
-    public string? Name { get; set; }
-
-    public ActionMode Mode { get; set; } = ActionMode.Sync;
-
-    /// <summary>动作参数；支持模板占位符（如 <c>{form.amount}</c>、<c>{标题}</c>），脚本代码类参数除外。</summary>
-    public Dictionary<string, string> Parameters { get; set; } = [];
-
-    /// <summary>同步动作的输出写入的表单变量名。</summary>
-    public string? OutputVariable { get; set; }
-
-    /// <summary>同步动作失败时记录轨迹并继续流转，而不是回滚本次操作。</summary>
-    public bool ContinueOnError { get; set; }
 }

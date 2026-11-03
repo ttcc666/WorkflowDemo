@@ -8,7 +8,7 @@ namespace Approval.Database.Tests;
 // for the application's DbContext or migration history.
 public abstract class ContractDbContext : ApprovalDbContext
 {
-    protected ContractDbContext(Approval.Core.Abstractions.IApprovalTenantContext? tenant = null) : base(tenant ?? new Approval.Core.Abstractions.FixedApprovalTenantContext("database-tests")) { }
+    protected ContractDbContext() { }
     protected abstract string Provider { get; }
     protected override void ConfigureApprovalOptions(DbContextOptionsBuilder options)
     {
@@ -25,10 +25,10 @@ public abstract class ContractDbContext : ApprovalDbContext
     protected override void OnModelCreating(ModelBuilder modelBuilder) => modelBuilder.ConfigureApproval(this);
 }
 
-public sealed class MySqlContractContext(Approval.Core.Abstractions.IApprovalTenantContext? tenant = null) : ContractDbContext(tenant) { protected override string Provider => "MySql"; }
-public sealed class SqlServerContractContext(Approval.Core.Abstractions.IApprovalTenantContext? tenant = null) : ContractDbContext(tenant) { protected override string Provider => "SqlServer"; }
-public sealed class PostgreSqlContractContext(Approval.Core.Abstractions.IApprovalTenantContext? tenant = null) : ContractDbContext(tenant) { protected override string Provider => "PostgreSql"; }
-public sealed class SqliteContractContext(Approval.Core.Abstractions.IApprovalTenantContext? tenant = null) : ContractDbContext(tenant) { protected override string Provider => "Sqlite"; }
+public sealed class MySqlContractContext() : ContractDbContext() { protected override string Provider => "MySql"; }
+public sealed class SqlServerContractContext() : ContractDbContext() { protected override string Provider => "SqlServer"; }
+public sealed class PostgreSqlContractContext() : ContractDbContext() { protected override string Provider => "PostgreSql"; }
+public sealed class SqliteContractContext() : ContractDbContext() { protected override string Provider => "Sqlite"; }
 
 public sealed class MySqlDesignFactory : IDesignTimeDbContextFactory<MySqlContractContext>
 { public MySqlContractContext CreateDbContext(string[] args) => new(); }

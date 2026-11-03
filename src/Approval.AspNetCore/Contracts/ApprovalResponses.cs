@@ -60,8 +60,10 @@ public sealed record ApprovalLogResponse(
     string? Details,
     DateTime CreatedAt)
 {
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public Guid? TaskId { get; init; }
     public static ApprovalLogResponse From(ApprovalLog value) => new(
-        value.Id, value.InstanceId, value.Sequence, value.NodeId, value.NodeName, value.Action, value.OperatorId, value.Comment, value.Details, value.CreatedAt);
+        value.Id, value.InstanceId, value.Sequence, value.NodeId, value.NodeName, value.Action, value.OperatorId, value.Comment, value.Details, value.CreatedAt) { TaskId = value.TaskId };
 }
 
 /// <summary>ApprovalMessage 的 HTTP 快照；保持既有 JSON 字段与 UTC 日期表示。</summary>
@@ -125,7 +127,6 @@ public sealed record ApprovalInstanceResponse(
 public sealed record ApprovalMeResponse(string UserId, string Name, IReadOnlyList<string> Roles,
     bool IsAdmin, bool CanViewDefinitions, bool FormsEnabled, string? FormBusinessType)
 {
-    public string TenantId { get; init; } = string.Empty;
     public IReadOnlyDictionary<string, bool> Capabilities { get; init; } = new Dictionary<string, bool>();
 }
 /// <summary>当前用户可处理的任务和允许编辑的字段。</summary>

@@ -24,6 +24,7 @@ import ReassignDialog from '../features/approval/ReassignDialog.vue'
 import { businessPanelOf } from '../features/approval/businessPanels'
 import { useApprovalDetail } from '../features/approval/useApprovalDetail'
 import FlowViewer from '../features/flow/FlowViewer.vue'
+import CarbonCopyHistory from '../features/approval/CarbonCopyHistory.vue'
 
 const { api: approvalApi, config: approvalConfig } = useApprovalClient()
 
@@ -119,7 +120,7 @@ const onTransfer = (to: string, comment: string) => run(() => intent.run(`transf
 const onWithdraw = (comment: string) => run(() => intent.run(`withdraw:${instanceId.value}`, { instanceId: instanceId.value, comment }, (body, id) => approvalApi.withdraw(body.instanceId, body.comment, id)), '已撤回')
 
 // ───── 管理员：终止流程、改派待办 ─────
-const canTerminate = computed(() => instance.value?.status === 'Running' && instance.value.capabilities?.['approval.instance.terminate'] === true)
+const canTerminate = computed(() => (instance.value?.status === 'Running' || instance.value?.status === 'Returned') && instance.value.capabilities?.['approval.instance.terminate'] === true)
 const canReassign = computed(() => instance.value?.status === 'Running')
 const onTerminate = (reason: string) => run(() => intent.run(`terminate:${instanceId.value}`, { instanceId: instanceId.value, reason }, (body, id) => approvalApi.terminate(body.instanceId, body.reason, id)), '已终止流程')
 const reassignVisible = shallowRef(false)
@@ -154,6 +155,7 @@ const onReassign = (task: ApprovalTask, to: string, reason: string) =>
         :allow-return="nodeOptions.allowReturn"
         :allow-add-sign="nodeOptions.allowAddSign"
         :allow-transfer="nodeOptions.allowTransfer"
+        :require-comment="nodeOptions.requireComment"
         :busy="busy"
         :resubmit-form="resubmitForm"
         :form-data="formValues"
@@ -193,6 +195,7 @@ const onReassign = (task: ApprovalTask, to: string, reason: string) =>
           </el-card>
         </el-col>
         <el-col :span="10" class="detail-col">
+          <CarbonCopyHistory :instance-id="instance.id" />
           <el-card shadow="never" header="审批轨迹">
             <ApprovalTimeline :logs="instance.logs" :tasks="instance.tasks" :form="formSchema" :can-reassign="canReassign"
               @reassign="openReassign" />

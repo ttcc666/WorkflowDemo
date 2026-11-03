@@ -10,12 +10,16 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
+                    ApproverId?: string;
+                    BusinessKey?: string;
+                    BusinessType?: string;
                     DefinitionKey?: string;
                     From?: string;
                     InitiatorId?: string;
                     Keyword?: string;
                     Page?: number | string;
                     PageSize?: number | string;
+                    Sort?: components["schemas"]["ApprovalSort"];
                     Status?: components["schemas"]["InstanceStatus"];
                     To?: string;
                 };
@@ -928,6 +932,422 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/approval/carbon-copies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    ApproverId?: string;
+                    BusinessKey?: string;
+                    BusinessType?: string;
+                    DefinitionKey?: string;
+                    From?: string;
+                    InitiatorId?: string;
+                    Keyword?: string;
+                    Page?: number | string;
+                    PageSize?: number | string;
+                    Sort?: components["schemas"]["ApprovalSort"];
+                    Status?: components["schemas"]["InstanceStatus"];
+                    To?: string;
+                    unreadOnly?: boolean;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["PagedResultOfCarbonCopyItem"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Gone */
+                410: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Service Unavailable */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/approval/carbon-copies/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["CarbonCopyItem"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Gone */
+                410: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Service Unavailable */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/approval/carbon-copies/{id}/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: {
+                    /** @description Stable key for one logical command; required when ApprovalOptions.RequireOperationId is enabled. Same content replays the committed result; changed content returns 409. Retain the key after unknown outcomes. */
+                    "Idempotency-Key"?: string;
+                };
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Gone */
+                410: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Service Unavailable */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/approval/carbon-copies/{id}/recipients": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    page?: number | string;
+                    pageSize?: number | string;
+                };
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["CarbonCopyRecipients"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Gone */
+                410: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Service Unavailable */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/approval/cc": {
         parameters: {
             query?: never;
@@ -938,12 +1358,16 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
+                    ApproverId?: string;
+                    BusinessKey?: string;
+                    BusinessType?: string;
                     DefinitionKey?: string;
                     From?: string;
                     InitiatorId?: string;
                     Keyword?: string;
                     Page?: number | string;
                     PageSize?: number | string;
+                    Sort?: components["schemas"]["ApprovalSort"];
                     Status?: components["schemas"]["InstanceStatus"];
                     To?: string;
                 };
@@ -1421,6 +1845,113 @@ export interface paths {
         };
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/approval/definitions/{key}/copy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: {
+                    /** @description Stable key for one logical command; required when ApprovalOptions.RequireOperationId is enabled. Same content replays the committed result; changed content returns 409. Retain the key after unknown outcomes. */
+                    "Idempotency-Key"?: string;
+                };
+                path: {
+                    key: string;
+                };
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["CopyDefinitionRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["DefinitionGovernance"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Gone */
+                410: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Service Unavailable */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;
@@ -2151,7 +2682,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/approval/definitions/governance": {
+    "/api/approval/definitions/categories": {
         parameters: {
             query?: never;
             header?: never;
@@ -2173,7 +2704,7 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": components["schemas"]["DefinitionGovernanceSummary"][];
+                        "application/json": string[];
                     };
                 };
                 /** @description Bad Request */
@@ -2249,7 +2780,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/approval/definitions/synchronous-actions": {
+    "/api/approval/definitions/governance": {
         parameters: {
             query?: never;
             header?: never;
@@ -2259,8 +2790,8 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
-                    page?: number | string;
-                    pageSize?: number | string;
+                    category?: string;
+                    uncategorized?: boolean;
                 };
                 header?: never;
                 path?: never;
@@ -2274,7 +2805,7 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": components["schemas"]["SynchronousActionScan"];
+                        "application/json": components["schemas"]["DefinitionGovernanceSummary"][];
                     };
                 };
                 /** @description Bad Request */
@@ -2778,12 +3309,16 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
+                    ApproverId?: string;
+                    BusinessKey?: string;
+                    BusinessType?: string;
                     DefinitionKey?: string;
                     From?: string;
                     InitiatorId?: string;
                     Keyword?: string;
                     Page?: number | string;
                     PageSize?: number | string;
+                    Sort?: components["schemas"]["ApprovalSort"];
                     Status?: components["schemas"]["InstanceStatus"];
                     To?: string;
                 };
@@ -3990,6 +4525,106 @@ export interface paths {
                     };
                     content: {
                         "application/json": components["schemas"]["ApprovalInstanceResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Gone */
+                410: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Service Unavailable */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/approval/instances/{id}/carbon-copies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["CarbonCopyItem"][];
                     };
                 };
                 /** @description Bad Request */
@@ -5776,12 +6411,16 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
+                    ApproverId?: string;
+                    BusinessKey?: string;
+                    BusinessType?: string;
                     DefinitionKey?: string;
                     From?: string;
                     InitiatorId?: string;
                     Keyword?: string;
                     Page?: number | string;
                     PageSize?: number | string;
+                    Sort?: components["schemas"]["ApprovalSort"];
                     Status?: components["schemas"]["InstanceStatus"];
                     To?: string;
                 };
@@ -6608,11 +7247,19 @@ export interface paths {
         get: {
             parameters: {
                 query?: {
+                    ApproverId?: string;
+                    BusinessKey?: string;
+                    BusinessType?: string;
                     DefinitionKey?: string;
+                    From?: string;
+                    InitiatorId?: string;
                     Keyword?: string;
                     OverdueOnly?: boolean;
                     Page?: number | string;
                     PageSize?: number | string;
+                    Sort?: components["schemas"]["ApprovalSort"];
+                    Status?: components["schemas"]["InstanceStatus"];
+                    To?: string;
                 };
                 header?: never;
                 path?: never;
@@ -6805,33 +7452,6 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /** @enum {unknown} */
-        ActionMode: "Sync" | "Async";
-        ActionParameter: {
-            defaultValue?: null | string;
-            help?: null | string;
-            kind?: components["schemas"]["ActionParameterKind"];
-            label: string;
-            name: string;
-            options?: null | string[];
-            required?: boolean;
-            template?: null | components["schemas"]["TemplateEncoding"];
-        };
-        /**
-         * @default Text
-         * @enum {unknown}
-         */
-        ActionParameterKind: "Text" | "TextArea" | "Code" | "Number" | "Select" | "Boolean";
-        ActionStep: {
-            continueOnError?: boolean;
-            mode?: components["schemas"]["ActionMode"];
-            name?: null | string;
-            outputVariable?: null | string;
-            parameters?: {
-                [key: string]: string;
-            };
-            type?: string;
-        };
-        /** @enum {unknown} */
         AddSignMode: "Before" | "After" | "Parallel";
         AddSignRequest: {
             comment: null | string;
@@ -6841,15 +7461,7 @@ export interface components {
         /** @enum {unknown} */
         ApprovalAccessLevel: "None" | "Participant" | "Full";
         /** @enum {unknown} */
-        ApprovalAction: "Submit" | "Approve" | "Reject" | "Withdraw" | "Transfer" | "AutoApprove" | "Cc" | "Complete" | "Action" | "Remind" | "TimeoutApprove" | "TimeoutReject" | "Return" | "AddSign" | "Resubmit" | "Terminate" | "Reassign" | "FormEdit";
-        ApprovalActionDescriptor: {
-            description?: null | string;
-            displayName: string;
-            parameters: components["schemas"]["ActionParameter"][];
-            supportsAsync?: boolean;
-            supportsSync?: boolean;
-            type: string;
-        };
+        ApprovalAction: "Submit" | "Approve" | "Reject" | "Withdraw" | "Transfer" | "AutoApprove" | "Cc" | "Complete" | "Remind" | "TimeoutApprove" | "TimeoutReject" | "Return" | "AddSign" | "Resubmit" | "Terminate" | "Reassign" | "FormEdit" | "NodeEntered";
         ApprovalDefinitionAudit: {
             action?: components["schemas"]["DefinitionAuditAction"];
             actorId: string;
@@ -6896,8 +7508,6 @@ export interface components {
             assignmentSampleTruncated: boolean;
             contributions: components["schemas"]["ApprovalDiagnosticContribution"][];
             dataAvailable: boolean;
-            /** Format: int32 */
-            expiredLeases: number | string;
             /** Format: int32 */
             failedOutbox: number | string;
             findings: components["schemas"]["ApprovalDiagnosticFinding"][];
@@ -6989,6 +7599,8 @@ export interface components {
             operatorId: string;
             /** Format: int32 */
             sequence: number | string;
+            /** Format: uuid */
+            taskId?: null | string;
         };
         ApprovalMeResponse: {
             canViewDefinitions: boolean;
@@ -7000,7 +7612,6 @@ export interface components {
             isAdmin: boolean;
             name: string;
             roles: string[];
-            tenantId?: string;
             userId: string;
         };
         ApprovalMessageResponse: {
@@ -7020,7 +7631,6 @@ export interface components {
             userId: string;
         };
         ApprovalMetadata: {
-            actions: components["schemas"]["ApprovalActionDescriptor"][];
             approverTypes: components["schemas"]["ApproverTypeDescriptor"][];
             channels: components["schemas"]["ChannelInfo"][];
             defaultTemplates: {
@@ -7068,6 +7678,8 @@ export interface components {
             /** Format: int32 */
             version: number | string;
         };
+        /** @enum {unknown} */
+        ApprovalSort: "Newest" | "Oldest" | "Title" | null;
         ApprovalStartedResponse: {
             /** Format: uuid */
             instanceId: string;
@@ -7128,6 +7740,7 @@ export interface components {
         ApprovalTaskStatus: "Waiting" | "Pending" | "Approved" | "Rejected" | "Canceled" | "Transferred" | "Suspended";
         ApprovalUser: {
             id: string;
+            isActive?: boolean;
             name: string;
             roles: string[];
         };
@@ -7186,6 +7799,52 @@ export interface components {
         CanHandleResponse: {
             canHandle: boolean;
         };
+        CarbonCopyItem: {
+            assigneeKind?: components["schemas"]["AssigneeKind"];
+            assigneeValue: string;
+            businessKey: string;
+            businessType: string;
+            /** Format: date-time */
+            createdAt?: string;
+            definitionKey: string;
+            definitionName: string;
+            /** Format: int32 */
+            definitionVersion?: number | string;
+            /** Format: uuid */
+            id?: string;
+            initiatorId: string;
+            /** Format: uuid */
+            instanceId?: string;
+            nodeId: string;
+            /** Format: date-time */
+            readAt?: null | string;
+            /** Format: int32 */
+            round?: number | string;
+            status?: components["schemas"]["InstanceStatus"];
+            title?: null | string;
+        };
+        CarbonCopyRecipient: {
+            isActive: null | boolean;
+            isKnown: boolean;
+            name: null | string;
+            userId: string;
+        };
+        CarbonCopyRecipients: {
+            assigneeKind: components["schemas"]["AssigneeKind"];
+            assigneeValue: string;
+            /** Format: uuid */
+            carbonCopyId: string;
+            isCurrentRoleMembership: boolean;
+            items: components["schemas"]["CarbonCopyRecipient"][];
+            /** Format: int32 */
+            page: number | string;
+            /** Format: int32 */
+            pageSize: number | string;
+            /** Format: date-time */
+            queriedAt: string;
+            /** Format: int32 */
+            total: number | string;
+        };
         ChannelInfo: {
             displayName: string;
             name: string;
@@ -7198,6 +7857,12 @@ export interface components {
             next: string;
             /** Format: int32 */
             priority: number | string;
+        };
+        CopyDefinitionRequest: {
+            name: string;
+            /** Format: uuid */
+            sourceDefinitionId?: null | string;
+            targetKey: string;
         };
         CountResponse: {
             /** Format: int32 */
@@ -7216,6 +7881,7 @@ export interface components {
             capabilities: {
                 [key: string]: boolean;
             };
+            category?: null | string;
             draftJson: null | string;
             /** Format: uuid */
             draftSourceDefinitionId: null | string;
@@ -7237,6 +7903,7 @@ export interface components {
             capabilities: {
                 [key: string]: boolean;
             };
+            category?: null | string;
             hasDraftChanges: boolean;
             isEnabled: boolean;
             key: string;
@@ -7302,7 +7969,6 @@ export interface components {
             startNodeId?: string;
         };
         FlowNode: {
-            actions?: components["schemas"]["ActionStep"][];
             allowAddSign?: boolean;
             allowReturn?: boolean;
             allowTransfer?: boolean;
@@ -7318,6 +7984,7 @@ export interface components {
             next?: null | string;
             notifications?: components["schemas"]["NotificationRule"][];
             position?: null | components["schemas"]["NodePosition"];
+            requireComment?: boolean;
             requireQualifiedAssignee?: boolean;
             timeout?: null | components["schemas"]["TimeoutPolicy"];
             type?: components["schemas"]["NodeType"];
@@ -7340,6 +8007,8 @@ export interface components {
             p90Minutes: null | number | string;
             /** Format: int32 */
             rejected: number | string;
+            /** Format: int32 */
+            returned?: number | string;
             /** Format: int32 */
             running: number | string;
             /** Format: int32 */
@@ -7409,7 +8078,7 @@ export interface components {
             title: null | string;
         };
         /** @enum {unknown} */
-        InstanceStatus: "Running" | "Approved" | "Rejected" | "Withdrawn" | "Terminated";
+        InstanceStatus: "Running" | "Approved" | "Rejected" | "Withdrawn" | "Terminated" | "Returned" | null;
         JsonElement: unknown;
         MaintenanceBatchInfo: {
             action: string;
@@ -7472,7 +8141,7 @@ export interface components {
             overdue: number | string;
         };
         /** @enum {unknown} */
-        NodeType: "Start" | "Approval" | "Cc" | "Condition" | "Action" | "Parallel" | "Join" | "End";
+        NodeType: "Start" | "Approval" | "Cc" | "Condition" | "Parallel" | "Join" | "End";
         NotificationRule: {
             channels?: string[];
             content?: null | string;
@@ -7481,9 +8150,9 @@ export interface components {
             title?: null | string;
         };
         /** @enum {unknown} */
-        NotifyEvent: "Enter" | "Approved" | "Rejected" | "Transferred" | "Timeout" | "Completed";
+        NotifyEvent: "Enter" | "Approved" | "Rejected" | "Transferred" | "Timeout" | "Completed" | "Returned" | "Resubmitted";
         /** @enum {unknown} */
-        OutboxKind: "Notification" | "Action";
+        OutboxKind: "Notification" | "Event";
         /** @enum {unknown} */
         OutboxStatus: "Pending" | "Succeeded" | "Failed";
         PagedResultOfApprovalDefinitionAudit: {
@@ -7506,6 +8175,15 @@ export interface components {
         };
         PagedResultOfArchiveSummary: {
             items: components["schemas"]["ArchiveSummary"][];
+            /** Format: int32 */
+            page: number | string;
+            /** Format: int32 */
+            pageSize: number | string;
+            /** Format: int32 */
+            total: number | string;
+        };
+        PagedResultOfCarbonCopyItem: {
+            items: components["schemas"]["CarbonCopyItem"][];
             /** Format: int32 */
             page: number | string;
             /** Format: int32 */
@@ -7631,32 +8309,6 @@ export interface components {
             draftId?: null | string;
             formData: components["schemas"]["JsonElement"];
         };
-        SynchronousActionFinding: {
-            actionType: null | string;
-            /** Format: uuid */
-            definitionId: string;
-            key: string;
-            nodeId: null | string;
-            reason: string;
-            /** Format: int32 */
-            runningInstances: number | string;
-            stepName: null | string;
-            /** Format: int32 */
-            version: number | string;
-        };
-        SynchronousActionScan: {
-            /** Format: int32 */
-            definitionsScanned: number | string;
-            findings: components["schemas"]["SynchronousActionFinding"][];
-            /** Format: int32 */
-            page: number | string;
-            /** Format: int32 */
-            pageSize: number | string;
-            /** Format: int32 */
-            totalDefinitions: number | string;
-        };
-        /** @enum {unknown} */
-        TemplateEncoding: "Raw" | "Json" | "Url" | null;
         TemplateVariableInfo: {
             alias: string;
             description: string;

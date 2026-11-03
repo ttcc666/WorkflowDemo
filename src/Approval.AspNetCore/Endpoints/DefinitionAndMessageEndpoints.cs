@@ -12,24 +12,26 @@ using Microsoft.AspNetCore.Routing;
 
 namespace Approval.AspNetCore.Endpoints;
 
-/// <summary>流程定义：设计器元数据、列表、版本、校验、发布。完整定义含动作参数与通知配置，仅管理员（及 DefinitionReaders）可读。</summary>
+/// <summary>流程定义：设计器元数据、列表、版本、校验、发布。完整定义含通知配置，仅管理员（及 DefinitionReaders）可读。</summary>
 internal static class DefinitionEndpoints
 {
     public sealed record DesignDraftRequest(string Name, string DefinitionJson, long ExpectedRevision, Guid? SourceDefinitionId = null);
     public sealed record PublishDesignDraftRequest(long ExpectedRevision, string? ChangeNote = null);
+    public sealed record CopyDefinitionRequest(string TargetKey, string Name, Guid? SourceDefinitionId = null);
     public sealed record EnableDefinitionRequest(bool Enabled, long ExpectedRevision, string? ChangeNote = null);
     public sealed record SelectDefinitionVersionRequest(Guid DefinitionId, long ExpectedRevision, string? ChangeNote = null);
     public static void Map(RouteGroupBuilder group)
     {
-        group.MapGet("/definitions/governance", (ApprovalDefinitionService d, CancellationToken ct) => d.ListGovernanceAsync(ct));
+        group.MapGet("/definitions/governance", (string? category, bool? uncategorized, ApprovalDefinitionService d, CancellationToken ct) => d.ListGovernanceAsync(category, uncategorized ?? false, ct));
+        group.MapGet("/definitions/categories", (ApprovalDefinitionService d, CancellationToken ct) => d.ListCategoriesAsync(ct));
         group.MapGet("/definitions/{key}/governance", async (string key, ApprovalDefinitionService d, CancellationToken ct) =>
             await d.GetGovernanceAsync(key, ct) is { } value ? Results.Ok(value) : Results.NotFound()).Produces<DefinitionGovernance>().Produces(404);
         group.MapGet("/definitions/{key}/audit", (string key, int? page, int? pageSize, ApprovalDefinitionService d, CancellationToken ct) =>
             d.ListAuditAsync(key, new PageRequest(page ?? 1, pageSize ?? 20), ct));
-        group.MapGet("/definitions/synchronous-actions", (int? page, int? pageSize, ApprovalDefinitionService d, CancellationToken ct) =>
-            d.ScanSynchronousActionsAsync(new PageRequest(page ?? 1, pageSize ?? 20), ct));
         group.MapPut("/definitions/{key}/draft", (string key, DesignDraftRequest request, ApprovalDefinitionService d, CancellationToken ct) =>
             d.SaveDesignDraftAsync(key, request.Name, request.DefinitionJson, request.ExpectedRevision, request.SourceDefinitionId, ct));
+        group.MapPost("/definitions/{key}/copy", (string key, CopyDefinitionRequest request, ApprovalDefinitionService d, CancellationToken ct) =>
+            d.CopyAsync(key, request.TargetKey, request.Name, request.SourceDefinitionId, ct));
         group.MapPost("/definitions/{key}/publish-draft", async (string key, PublishDesignDraftRequest request, ApprovalDefinitionService d, CancellationToken ct) =>
         {
             var result = await d.PublishDesignDraftAsync(key, request.ExpectedRevision, request.ChangeNote, ct);
@@ -39,7 +41,7 @@ internal static class DefinitionEndpoints
             d.SetEnabledAsync(key, request.Enabled, request.ExpectedRevision, request.ChangeNote, ct));
         group.MapPost("/definitions/{key}/select-version", (string key, SelectDefinitionVersionRequest request, ApprovalDefinitionService d, CancellationToken ct) =>
             d.SelectVersionAsync(key, request.DefinitionId, request.ExpectedRevision, request.ChangeNote, ct));
-        // 设计器元数据：审批人类型、通知接收人类型、动作（含参数描述）、渠道、模板变量（不含敏感配置，所有登录用户可读）
+        // 设计器元数据：审批人类型、通知接收人类型、渠道、模板变量（不含敏感配置，所有登录用户可读）
         group.MapGet("/meta", (ApprovalDefinitionService d) => d.Metadata);
 
         // 流程标识与名称（列表的流程筛选），所有登录用户可读
@@ -151,7 +153,7 @@ internal static class DirectoryEndpoints
             return new ApprovalMeResponse(userId, user?.Name ?? userId,
                 await identity.GetRolesAsync(userId, ct), await http.IsApprovalAdminAsync(ct),
                 await http.CanReadApprovalDefinitionsAsync(ct), formBusinessType is not null, formBusinessType)
-                { TenantId = http.RequestServices.GetRequiredService<IApprovalTenantContext>().TenantId,
+                {
                   Capabilities = await http.RequestServices.GetRequiredService<ApprovalAuthorizationService>().CapabilitiesAsync(ct: ct) };
         });
 

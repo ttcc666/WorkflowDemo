@@ -16,10 +16,10 @@
     <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" />
     <Using Include="Xunit" />
     <Compile Include="../shared/ReferenceHostScenario.cs" Link="Infrastructure/ReferenceHostScenario.cs" />
-    <None Include="../../samples/Approval.MultiTenant.Api/appsettings.json" Link="ReferenceHostConfiguration.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../samples/Approval.ReferenceHost/appsettings.json" Link="ReferenceHostConfiguration.json" CopyToOutputDirectory="PreserveNewest" />
     <ProjectReference Include="../../src/Approval.Core/Approval.Core.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\samples\Approval.MultiTenant.Api\Approval.MultiTenant.Api.csproj" />
+    <ProjectReference Include="..\..\samples\Approval.ReferenceHost\Approval.ReferenceHost.csproj" />
   </ItemGroup>
 </Project>

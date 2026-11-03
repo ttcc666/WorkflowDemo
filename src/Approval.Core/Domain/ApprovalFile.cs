@@ -4,11 +4,8 @@ namespace Approval.Core.Domain;
 /// 附件元数据，内容由 <see cref="Files.IApprovalFileStore"/> 保存。未绑定（草稿、实例都为空）时只有上传者可访问，
 /// 超过保留时间后被后台清理；绑定实例后按实例的查看权限访问。
 /// </summary>
-public class ApprovalFile : IApprovalTenantEntity
+public class ApprovalFile : IApprovalEntity
 {
-    [System.Text.Json.Serialization.JsonIgnore]
-    public string TenantId { get; set; } = string.Empty;
-
     public Guid Id { get; set; }
 
     /// <summary>清洗后的原始文件名（仅用于显示与下载时的文件名）。</summary>

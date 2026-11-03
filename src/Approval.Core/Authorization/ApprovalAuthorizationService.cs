@@ -35,7 +35,7 @@ public sealed class ApprovalAuthorizationService
 }
 
 internal sealed class DefaultApprovalAuthorization(
-    DbContext db, IApprovalTenantContext tenant, IApprovalActorContext actor,
+    DbContext db, IApprovalActorContext actor,
     IApprovalPermissionProvider provider, IApprovalQueryScope scope, ApprovalOptions options, IApprovalArchiveQueryScope archives) : IApprovalAuthorization
 {
     private ApprovalPermissionSubject Subject(string? userId = null)
@@ -44,7 +44,7 @@ internal sealed class DefaultApprovalAuthorization(
         if (string.IsNullOrWhiteSpace(id)) throw new ApprovalException("缺少可信操作人") { Code = ApprovalErrorCode.Unauthorized };
         if (userId is not null && !string.Equals(userId, id, StringComparison.Ordinal))
             throw new ApprovalException("操作人参数与当前身份不一致") { Code = ApprovalErrorCode.Forbidden };
-        return new(tenant.TenantId, id, actor.IsSystem);
+        return new(id, actor.IsSystem);
     }
     public async Task RequireAsync(string permission, ApprovalResource? resource = null, string? userId = null, CancellationToken ct = default)
     {
@@ -56,7 +56,7 @@ internal sealed class DefaultApprovalAuthorization(
         ct.ThrowIfCancellationRequested();
         if (!ApprovalPermissions.All.Contains(permission)) throw new ArgumentException("未知审批权限码", nameof(permission));
         var subject = Subject(userId);
-        var resolved = await ResolveAsync(resource ?? new(), subject, ct); // Tenant ownership precedes external authorization.
+        var resolved = await ResolveAsync(resource ?? new(), subject, ct); // Resolve actual resource ownership before asking the host.
         return await AuthorizeResolvedAsync(permission, subject, resolved, ct);
     }
     public Task<ApprovalResource> ResolveResourceAsync(ApprovalResource resource, CancellationToken ct) => ResolveAsync(resource, Subject(), ct);

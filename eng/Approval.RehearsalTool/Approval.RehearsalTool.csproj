@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -11,7 +11,7 @@
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <PackageReference Include="Microsoft.AspNetCore.TestHost" />
-    <ProjectReference Include="../../samples/Approval.MultiTenant.Api/Approval.MultiTenant.Api.csproj" />
+    <ProjectReference Include="../../samples/Approval.ReferenceHost/Approval.ReferenceHost.csproj" />
   </ItemGroup>
 
 </Project>

@@ -1,6 +1,5 @@
 using System.Text.RegularExpressions;
 using Approval.Core.Abstractions;
-using Approval.Core.Actions;
 using Approval.Core.Forms;
 using Approval.Core.Notifications;
 using Approval.Core.Resolvers;
@@ -19,7 +18,6 @@ public sealed class FlowValidationContext
     /// <summary>可用的通知渠道（含站内信 InApp）。</summary>
     public IReadOnlySet<string>? Channels { get; init; }
 
-    public IReadOnlyDictionary<string, IApprovalActionHandler>? Actions { get; init; }
 }
 
 /// <summary>发布前对流程定义做结构校验，避免运行时才发现配置错误。</summary>
@@ -57,6 +55,10 @@ public static partial class FlowDefinitionValidator
 
         foreach (var (key, node) in nodes)
         {
+            if (string.IsNullOrWhiteSpace(key) || key.Length > 100 || node.Name.Length > 200)
+                errors.Add($"节点 '{key}' 的标识或名称长度无效");
+            if (!Enum.IsDefined(node.Type) || !Enum.IsDefined(node.Mode) || !Enum.IsDefined(node.EmptyApproverPolicy))
+                errors.Add($"节点 '{key}' 包含未知节点类型或审批策略");
             if (node.Id != key)
                 errors.Add($"节点 key '{key}' 与其 Id '{node.Id}' 不一致");
 
@@ -67,6 +69,9 @@ public static partial class FlowDefinitionValidator
                     break;
 
                 case NodeType.Condition:
+                    foreach (var branch in node.Branches.Where(b => !string.IsNullOrWhiteSpace(b.Expression)))
+                        if (Conditions.DynamicExpressoConditionEvaluator.ValidateSyntax(branch.Expression!) is { } syntax)
+                            errors.Add($"条件节点 '{key}' 的表达式无效：{syntax}");
                     if (node.Branches.Count == 0) errors.Add($"条件节点 '{key}' 没有分支");
                     if (node.Branches.Count(b => string.IsNullOrWhiteSpace(b.Expression)) > 1)
                         errors.Add($"条件节点 '{key}' 只能有一个默认分支");
@@ -100,21 +105,12 @@ public static partial class FlowDefinitionValidator
                             errors.Add($"节点 '{key}' 的审批人「{ordered.DisplayName}」需按顺序审批，审批方式请改为依次审批");
                         goto default;
                     }
-
-                case NodeType.Action:
-                    if (node.Actions.Count == 0) errors.Add($"动作节点 '{key}' 未配置任何动作");
-                    for (var i = 0; i < node.Actions.Count; i++)
-                        ValidateAction(errors, $"动作节点 '{key}' 的第 {i + 1} 个动作", node.Actions[i], context);
-                    goto default;
-
                 default:
                     if (node.Next is null) errors.Add($"节点 '{key}' 缺少 Next");
                     else if (!nodes.ContainsKey(node.Next)) errors.Add($"节点 '{key}' 的 Next 指向不存在的节点 '{node.Next}'");
                     break;
             }
 
-            if (node.Type != NodeType.Action && node.Actions.Count > 0)
-                errors.Add($"节点 '{key}' 不是动作节点，不能配置动作");
             ValidateNotifications(errors, $"节点 '{key}'", node.Notifications, node.Type, context, userFields);
             if (node.Timeout is { } timeout) ValidateTimeout(errors, key, node, timeout);
             if (node.RequireQualifiedAssignee && (node.Type != NodeType.Approval
@@ -281,39 +277,6 @@ public static partial class FlowDefinitionValidator
             }
         }
         return warnings;
-    }
-
-    private static void ValidateAction(List<string> errors, string name, ActionStep step, FlowValidationContext context)
-    {
-        if (string.IsNullOrWhiteSpace(step.Type))
-        {
-            errors.Add($"{name}未选择动作类型");
-            return;
-        }
-        if (!string.IsNullOrWhiteSpace(step.OutputVariable))
-        {
-            if (step.Mode == ActionMode.Async) errors.Add($"{name}是异步动作，不能设置输出变量");
-            if (!Identifier().IsMatch(step.OutputVariable)) errors.Add($"{name}的输出变量名 '{step.OutputVariable}' 只能包含字母、数字和下划线");
-        }
-
-        if (context.Actions is null) return;
-        if (!context.Actions.TryGetValue(step.Type, out var handler))
-        {
-            errors.Add($"{name}使用了未注册的动作类型 '{step.Type}'");
-            return;
-        }
-
-        var descriptor = handler.Descriptor;
-        if (step.Mode == ActionMode.Async && !descriptor.SupportsAsync) errors.Add($"{name}（{descriptor.DisplayName}）不支持异步执行");
-        if (step.Mode == ActionMode.Sync && !descriptor.SupportsSync) errors.Add($"{name}（{descriptor.DisplayName}）不支持同步执行");
-
-        var parameters = new Dictionary<string, string>(step.Parameters, StringComparer.OrdinalIgnoreCase);
-        foreach (var parameter in descriptor.Parameters.Where(p => p.Required && p.DefaultValue is null))
-        {
-            if (!parameters.TryGetValue(parameter.Name, out var value) || string.IsNullOrWhiteSpace(value))
-                errors.Add($"{name}缺少必填参数「{parameter.Label}」");
-        }
-        errors.AddRange(handler.ValidateParameters(parameters).Select(e => $"{name}：{e}"));
     }
 
     private static void CheckReachabilityAndCycles(FlowDefinition definition, List<string> errors)

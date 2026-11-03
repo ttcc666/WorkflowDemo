@@ -1,181 +1,108 @@
-using Approval.Core.Actions;
+using Approval.Core.Abstractions;
 using Approval.Core.Domain;
 using Microsoft.EntityFrameworkCore;
 
 namespace Approval.Core.Tests;
 
-/// <summary>
-/// 写宿主业务表的动作。mode：ok 成功；fail 写入后抛异常；save-then-fail 自行 SaveChanges 后抛异常；
-/// touch-then-fail 写入并修改审批实例标题后抛异常。
-/// </summary>
-public sealed class WriteRecordAction(TestDbContext db) : IApprovalActionHandler
+public sealed class CallbackFaults
 {
-    public ApprovalActionDescriptor Descriptor { get; } = new("WriteRecord", "写业务记录",
-    [
-        new ActionParameter("name", "名称") { Required = true },
-        new ActionParameter("mode", "模式") { DefaultValue = "ok" }
-    ]);
-
-    public async Task<ApprovalActionResult> ExecuteAsync(ApprovalActionContext context, CancellationToken ct)
-    {
-        db.Add(new TestRecord { Id = Guid.NewGuid(), Name = context.Get("name")! });
-        switch (context.Get("mode"))
-        {
-            case "fail":
-                throw new InvalidOperationException("动作失败");
-            case "save-then-fail":
-                await db.SaveChangesAsync(ct);
-                throw new InvalidOperationException("保存后失败");
-            case "touch-then-fail":
-                context.Instance.Title = "被动作修改";
-                throw new InvalidOperationException("修改实例后失败");
-            default:
-                return ApprovalActionResult.Empty;
-        }
-    }
+    public string Mode = "ok";
+    public bool Starting;
+    public bool Completing;
 }
-
-/// <summary>动作失败时撤销其做了一半的数据修改（异步：Outbox 投递；同步：失败继续）。</summary>
+public sealed class WriteRecordCallback(TestDbContext db, CallbackFaults faults) : IApprovalLifecycleHandler, IApprovalEventHandler, IApprovalBusinessHandler
+{
+    public string BusinessType => RecordingBusinessHandler.Type;
+    private async Task Write(ApprovalInstance? instance, CancellationToken ct)
+    {
+        db.Add(new TestRecord { Id = Guid.NewGuid(), Name = "R1" });
+        if (faults.Mode == "save-then-fail") { await db.SaveChangesAsync(ct); throw new InvalidOperationException("保存后失败"); }
+        if (faults.Mode == "touch-then-fail") { instance!.Title = "被回调修改"; throw new InvalidOperationException("修改实例后失败"); }
+        if (faults.Mode == "fail") throw new InvalidOperationException("回调失败");
+    }
+    public Task OnStartingAsync(ApprovalInstance instance, CancellationToken ct) => faults.Starting ? Write(instance, ct) : Task.CompletedTask;
+    public Task HandleAsync(ApprovalEvent approvalEvent, CancellationToken ct) => !faults.Starting && !faults.Completing && approvalEvent.EventType == "Submit" ? Write(null, ct) : Task.CompletedTask;
+    public Task OnApprovedAsync(ApprovalInstance instance, CancellationToken ct) => faults.Completing ? Write(instance, ct) : Task.CompletedTask;
+    public Task OnRejectedAsync(ApprovalInstance instance, CancellationToken ct) => Task.CompletedTask;
+}
 public sealed class ActionRollbackTests : IAsyncLifetime
 {
-    private readonly TestHost _host = new(build: b => b.AddActionHandler<WriteRecordAction>());
-
+    private readonly CallbackFaults _faults = new();
+    private TestHost _host = null!;
+    private const string Flow = """
+        {"startNodeId":"start","nodes":{"start":{"type":"Start","name":"提交","next":"review"},
+        "review":{"type":"Approval","name":"审核","approvers":[{"type":"Role","value":"Reviewer"}],"next":"end"},"end":{"type":"End","name":"结束"}}}
+        """;
     public Task InitializeAsync()
     {
-        _host.Identity.Add("alice");
-        _host.Identity.Add("bob", "Reviewer");
+        _host = new TestHost(build: b => {
+            b.Services.AddSingleton(_faults);
+            b.AddLifecycleHandler<WriteRecordCallback>().AddEventHandler<WriteRecordCallback>().AddBusinessHandler<WriteRecordCallback>();
+        });
+        _host.Identity.Add("alice"); _host.Identity.Add("bob", "Reviewer");
         return Task.CompletedTask;
     }
-
     public async Task DisposeAsync() => await _host.DisposeAsync();
-
-    /// <summary>提交 → 动作 →（可选）审核 → 结束。</summary>
-    private static string Flow(string mode, string actionMode = "Async", bool continueOnError = false, bool reviewFirst = false, string name = "R1") =>
-        $$"""
-        {
-          "startNodeId": "start",
-          "nodes": {
-            "start":  { "name": "提交", "type": "Start", "next": "{{(reviewFirst ? "review" : "act")}}" },
-            "review": { "name": "审核", "type": "Approval", "approvers": [{ "type": "Role", "value": "Reviewer" }], "next": "{{(reviewFirst ? "act" : "end")}}" },
-            "act":    { "name": "写记录", "type": "Action", "next": "{{(reviewFirst ? "end" : "review")}}",
-                        "actions": [{ "type": "WriteRecord", "mode": "{{actionMode}}", "continueOnError": {{(continueOnError ? "true" : "false")}},
-                                      "parameters": { "name": "{{name}}", "mode": "{{mode}}" } }] },
-            "end":    { "name": "结束", "type": "End" }
-          }
-        }
-        """;
-
-    private Task<List<string>> RecordsAsync() =>
-        _host.RunAsync(sp => sp.GetRequiredService<TestDbContext>().Set<TestRecord>().Select(r => r.Name).OrderBy(n => n).ToListAsync());
-
-    // ───────────── 异步动作（Outbox） ─────────────
-
+    private Task<List<string>> Records() => _host.RunAsync(sp => sp.GetRequiredService<TestDbContext>().Set<TestRecord>().Select(r => r.Name).ToListAsync());
+    private async Task<ApprovalOutboxMessage> Submit() => Assert.Single(await _host.OutboxAsync(), m => m.Description == "Submit");
     [Theory]
     [InlineData("fail")]
     [InlineData("save-then-fail")]
-    public async Task Async_failure_discards_partial_changes_and_records_the_error(string mode)
+    public async Task Event_failure_rolls_back_partial_writes_and_counts_each_attempt(string mode)
     {
-        await _host.PublishAsync("f", Flow(mode));
-        await _host.StartAsync("f", "B1", "alice");
-
+        _faults.Mode = mode; await _host.PublishAsync("f", Flow); await _host.StartAsync("f", "B1", "alice");
         await _host.DispatchOutboxAsync();
-
-        Assert.Empty(await RecordsAsync());
-        var message = Assert.Single(await _host.OutboxAsync());
-        Assert.Equal(OutboxStatus.Pending, message.Status);
-        Assert.Equal(1, message.Attempts);
-        Assert.Contains("失败", message.LastError);
-
-        // 重试仍失败：不会累积写入
-        _host.Clock.Advance(TimeSpan.FromHours(1));
-        await _host.DispatchOutboxAsync();
-        Assert.Empty(await RecordsAsync());
-        Assert.Equal(2, Assert.Single(await _host.OutboxAsync()).Attempts);
+        Assert.Empty(await Records()); var message = await Submit();
+        Assert.Equal(OutboxStatus.Pending, message.Status); Assert.Equal(1, message.Attempts); Assert.Contains("失败", message.LastError);
+        _host.Clock.Advance(TimeSpan.FromHours(1)); await _host.DispatchOutboxAsync();
+        Assert.Empty(await Records()); Assert.Equal(2, (await Submit()).Attempts);
     }
-
     [Fact]
-    public async Task Async_success_commits_changes_with_the_result()
+    public async Task Event_success_commits_host_write_and_delivery_result_together()
     {
-        await _host.PublishAsync("f", Flow("ok"));
-        await _host.StartAsync("f", "B1", "alice");
-
-        await _host.DispatchOutboxAsync();
-
-        Assert.Equal(["R1"], await RecordsAsync());
-        Assert.Equal(OutboxStatus.Succeeded, Assert.Single(await _host.OutboxAsync()).Status);
+        await _host.PublishAsync("f", Flow); await _host.StartAsync("f", "B1", "alice"); await _host.DispatchOutboxAsync();
+        Assert.Equal(["R1"], await Records()); Assert.Equal(OutboxStatus.Succeeded, (await Submit()).Status);
     }
-
     [Fact]
-    public async Task Async_changes_that_cannot_be_saved_count_as_a_failed_attempt()
+    public async Task Event_unique_constraint_failure_is_recorded_as_failed_attempt()
     {
-        await _host.RunAsync(async sp =>
-        {
-            var db = sp.GetRequiredService<TestDbContext>();
-            db.Add(new TestRecord { Id = Guid.NewGuid(), Name = "R1" });
-            await db.SaveChangesAsync();
-        });
-        await _host.PublishAsync("f", Flow("ok"));
-        await _host.StartAsync("f", "B1", "alice");
-
-        await _host.DispatchOutboxAsync();
-
-        // 唯一约束冲突：记录失败并安排重试，而不是停在租约中
-        Assert.Equal(["R1"], await RecordsAsync());
-        var message = Assert.Single(await _host.OutboxAsync());
-        Assert.Equal(OutboxStatus.Pending, message.Status);
-        Assert.Equal(1, message.Attempts);
-        Assert.Contains("DbUpdateException", message.LastError);
+        await _host.RunAsync(async sp => { var db = sp.GetRequiredService<TestDbContext>(); db.Add(new TestRecord { Id = Guid.NewGuid(), Name = "R1" }); await db.SaveChangesAsync(); });
+        await _host.PublishAsync("f", Flow); await _host.StartAsync("f", "B1", "alice"); await _host.DispatchOutboxAsync();
+        Assert.Equal(["R1"], await Records()); var message = await Submit();
+        Assert.Equal(OutboxStatus.Pending, message.Status); Assert.Equal(1, message.Attempts); Assert.Contains("DbUpdateException", message.LastError);
     }
-
-    // ───────────── 同步动作：失败继续 ─────────────
-
     [Fact]
-    public async Task Sync_continue_on_error_discards_changes_made_before_the_failure()
+    public async Task Starting_failure_rolls_back_entire_operation_without_continue_on_error()
     {
-        await _host.PublishAsync("f", Flow("touch-then-fail", "Sync", continueOnError: true));
-
+        _faults.Starting = true; _faults.Mode = "touch-then-fail"; await _host.PublishAsync("f", Flow);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => _host.StartAsync("f", "B1", "alice"));
+        Assert.Empty(await Records());
+        await _host.RunAsync(async sp => { var db = sp.GetRequiredService<TestDbContext>(); Assert.Empty(await db.Set<ApprovalInstance>().ToListAsync()); Assert.Empty(await db.Set<ApprovalBusinessSlot>().ToListAsync()); Assert.Empty(await db.Set<ApprovalOutboxMessage>().ToListAsync()); });
+    }
+    [Fact]
+    public async Task Completion_failure_restores_pending_task_title_and_running_instance()
+    {
+        _faults.Completing = true; _faults.Mode = "touch-then-fail"; await _host.PublishAsync("f", Flow);
         var instance = await _host.StartAsync("f", "B1", "alice");
-
+        await Assert.ThrowsAsync<InvalidOperationException>(() => _host.ApproveMyTaskAsync("bob"));
         var saved = await _host.GetInstanceAsync(instance.Id);
-        Assert.Equal("review", saved.CurrentNodeId);
-        Assert.Equal("证书 B1", saved.Title);
-        Assert.Empty(await RecordsAsync());
-        Assert.Contains(await _host.LogsAsync(instance.Id), l => l.Comment?.Contains("执行失败（已忽略）") == true);
+        Assert.Equal(InstanceStatus.Running, saved.Status); Assert.Equal("review", saved.CurrentNodeId); Assert.Equal("证书 B1", saved.Title);
+        Assert.Equal(ApprovalTaskStatus.Pending, Assert.Single(saved.Tasks).Status); Assert.Empty(await Records());
+        _faults.Mode = "ok"; await _host.ApproveMyTaskAsync("bob");
+        Assert.Equal(InstanceStatus.Approved, (await _host.GetInstanceAsync(instance.Id)).Status); Assert.Equal(["R1"], await Records());
     }
-
     [Fact]
-    public async Task Sync_rollback_keeps_engine_changes_made_before_the_action()
+    public async Task Starting_callback_cannot_save_early_or_leak_writes()
     {
-        // 审核通过后才执行动作：实例在动作前已被引擎修改（状态、当前节点），回滚只撤销动作的修改
-        await _host.PublishAsync("f", Flow("touch-then-fail", "Sync", continueOnError: true, reviewFirst: true));
-        var instance = await _host.StartAsync("f", "B1", "alice");
-
-        await _host.ApproveMyTaskAsync("bob");
-
-        var saved = await _host.GetInstanceAsync(instance.Id);
-        Assert.Equal(InstanceStatus.Approved, saved.Status);
-        Assert.Equal("证书 B1", saved.Title);
-        Assert.Contains(saved.Tasks, t => t.Status == ApprovalTaskStatus.Approved && t.HandledBy == "bob");
-        Assert.Empty(await RecordsAsync());
+        _faults.Starting = true; _faults.Mode = "save-then-fail"; await _host.PublishAsync("f", Flow);
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => _host.StartAsync("f", "B1", "alice"));
+        Assert.Contains("SaveChanges", error.Message); Assert.Empty(await Records());
+        await _host.RunAsync(async sp => Assert.Empty(await sp.GetRequiredService<TestDbContext>().Set<ApprovalInstance>().ToListAsync()));
     }
-
     [Fact]
-    public async Task Sync_action_cannot_save_early_and_continue_on_error_leaks_no_writes()
+    public async Task Starting_success_commits_host_write_with_approval()
     {
-        await _host.PublishAsync("f", Flow("save-then-fail", "Sync", continueOnError: true));
-        var instance = await _host.StartAsync("f", "B1", "alice");
-        Assert.Empty(await RecordsAsync());
-        Assert.Equal("review", (await _host.GetInstanceAsync(instance.Id)).CurrentNodeId);
-        Assert.Contains(await _host.LogsAsync(instance.Id), log => log.Comment?.Contains("SaveChanges") == true);
-    }
-
-    [Fact]
-    public async Task Sync_success_saves_changes_with_the_approval()
-    {
-        await _host.PublishAsync("f", Flow("ok", "Sync"));
-
-        await _host.StartAsync("f", "B1", "alice");
-
-        Assert.Equal(["R1"], await RecordsAsync());
+        _faults.Starting = true; await _host.PublishAsync("f", Flow); var instance = await _host.StartAsync("f", "B1", "alice");
+        Assert.Equal(["R1"], await Records()); Assert.Equal("review", (await _host.GetInstanceAsync(instance.Id)).CurrentNodeId);
     }
 }

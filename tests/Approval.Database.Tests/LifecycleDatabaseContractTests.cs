@@ -74,9 +74,9 @@ public sealed partial class DatabaseContractTests
         await LifecycleHold(host, id, false);
         var purge = await LifecycleJob(host, MaintenanceTarget.Instances, MaintenanceMode.Purge); Assert.Equal(1, (await LifecycleRun(host, purge.Id)).Processed);
         var expired = await Assert.ThrowsAsync<ApprovalException>(() => AtomicStart(host, faults, "first", "same-business")); Assert.Equal(ApprovalErrorCode.ReplayExpired, expired.Code); Assert.Equal(1, faults.BusinessCalls);
-        var other = await AtomicStart(host, faults, "first", "same-business", tenant: "a"); Assert.NotEqual(id, other);
-        await AtomicRun(host, "alice", async sp => { var db = sp.GetRequiredService<AtomicContractContext>(); Assert.Empty(await db.Set<ApprovalInstance>().ToListAsync()); Assert.True((await db.Set<ApprovalOperation>().SingleAsync(o => o.Kind == "atomic.start")).IsTombstone); Assert.Single(await db.Set<ApprovalArchiveRecord>().ToListAsync()); return true; });
-        await AtomicRun(host, "alice", async sp => { Assert.Empty(await sp.GetRequiredService<AtomicContractContext>().Set<ApprovalArchiveRecord>().ToListAsync()); return true; }, "a");
+        var other = await AtomicStart(host, faults, "different-key", "different-business"); Assert.NotEqual(id, other);
+        await AtomicRun(host, "alice", async sp => { var db = sp.GetRequiredService<AtomicContractContext>(); Assert.Single(await db.Set<ApprovalInstance>().ToListAsync()); Assert.True((await db.Set<ApprovalOperation>().SingleAsync(o => o.Kind == "atomic.start" && o.RequestKey == "first")).IsTombstone); Assert.Single(await db.Set<ApprovalArchiveRecord>().ToListAsync()); return true; });
+        await AtomicRun(host, "alice", async sp => { Assert.Single(await sp.GetRequiredService<AtomicContractContext>().Set<ApprovalArchiveRecord>().ToListAsync()); return true; }, "a");
     }
     [Fact]
     public async Task Lifecycle_OperationRetentionPersistsTombstoneThroughScopedSubqueries()

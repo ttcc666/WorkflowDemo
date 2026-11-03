@@ -21,7 +21,7 @@
     <Using Include="Xunit" />
     <Compile Include="../shared/FlowFixtureAuthorization.cs" Link="Infrastructure/FlowFixtureAuthorization.cs" />
     <Compile Include="../shared/ReferenceHostScenario.cs" Link="Infrastructure/ReferenceHostScenario.cs" />
-    <None Include="../../samples/Approval.MultiTenant.Api/appsettings.json" Link="ReferenceHostConfiguration.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../samples/Approval.ReferenceHost/appsettings.json" Link="ReferenceHostConfiguration.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
@@ -30,7 +30,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\samples\Approval.MultiTenant.Api\Approval.MultiTenant.Api.csproj" />
+    <ProjectReference Include="..\..\samples\Approval.ReferenceHost\Approval.ReferenceHost.csproj" />
   </ItemGroup>
 
 </Project>

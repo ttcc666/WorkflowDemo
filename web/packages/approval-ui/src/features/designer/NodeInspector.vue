@@ -8,7 +8,6 @@ import {
   type ApproveMode,
   type FlowNodeData,
 } from '../flow/flowModel'
-import ActionStepsEditor from './ActionStepsEditor.vue'
 import ApproverRulesEditor from './ApproverRulesEditor.vue'
 import FieldPermissionsEditor from './FieldPermissionsEditor.vue'
 import NotificationRulesEditor from './NotificationRulesEditor.vue'
@@ -68,6 +67,9 @@ const modeHelp: Record<ApproveMode, string> = {
             <div class="inspector__help">{{ modeHelp[data.mode] }}</div>
           </el-form-item>
 
+          <el-form-item v-if="data.type === 'Approval'" label="审批意见">
+            <el-checkbox :model-value="data.requireComment" @update:model-value="(v) => emit('update', { requireComment: !!v })">同意时必须填写意见</el-checkbox>
+          </el-form-item>
           <el-form-item v-if="hasApprovers" :label="data.type === 'Cc' ? '抄送人' : '审批人'" required>
             <ApproverRulesEditor :model-value="data.approvers" :types="meta.approverTypes" :roles="roles"
               @update:model-value="(v) => emit('update', { approvers: v })" />
@@ -115,8 +117,6 @@ const modeHelp: Record<ApproveMode, string> = {
           </div>
         </el-form>
 
-        <ActionStepsEditor v-if="data.type === 'Action'" :model-value="data.actions" :actions="meta.actions"
-          @update:model-value="(v) => emit('update', { actions: v })" />
       </el-tab-pane>
 
       <el-tab-pane v-if="notifyEvents.length" :label="`通知${data.notifications.length ? ` (${data.notifications.length})` : ''}`">

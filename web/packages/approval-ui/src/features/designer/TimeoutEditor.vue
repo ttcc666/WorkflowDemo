@@ -72,6 +72,7 @@ const amount = (minutes: number, u: Unit) => +(minutes / unitMinutes[u]).toFixed
       </template>
 
       <div class="timeout__help">
+        <p v-if="timeout.action !== 'Remind'">自动决定仅在宿主显式启用时生效；默认仍执行超时提醒。</p>
         <template v-if="timeout.action === 'Remind'">
           提醒内容在“通知”中配置（事件选“超时提醒”，接收人可选当前审批人或其上级角色实现催办）；未配置时默认发站内信给当前审批人。
         </template>

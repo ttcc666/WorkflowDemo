@@ -3,6 +3,12 @@ import { queryString } from '../api/approval'
 import { emptyFilters, localDayStart, readListState, toListQuery } from './usePagedList'
 
 describe('列表查询参数', () => {
+  it('业务编号、类型、人员、排序与抄送未读条件一起传给服务端', () => {
+    const filters = { ...emptyFilters(), businessKey: ' CC-7 ', businessType: ' Contract ', initiatorId: ' alice ', approverId: ' bob ', sort: 'Title', unreadOnly: true }
+    expect(toListQuery(filters, 3, 10)).toMatchObject({ page: 3, pageSize: 10, businessKey: 'CC-7', businessType: 'Contract', initiatorId: 'alice', approverId: 'bob', sort: 'Title', unreadOnly: true })
+    const state = readListState({ cc_unreadOnly: '1', cc_sort: 'Oldest', cc_businessKey: 'CC-7' }, 'cc_', 20)
+    expect(state.filters).toMatchObject({ unreadOnly: true, sort: 'Oldest', businessKey: 'CC-7' })
+  })
   it('空条件不传，日期区间转为 [开始日 0 点, 结束日次日 0 点)', () => {
     const filters = { ...emptyFilters(), keyword: ' 报销 ', status: 'Running', from: '2026-10-01', to: '2026-10-31' }
     const query = toListQuery(filters, 2, 50)

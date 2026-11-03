@@ -16,6 +16,7 @@ internal sealed class ApprovalAssigneeService(
     private readonly IReadOnlyDictionary<string, IApproverResolver> _resolvers = resolvers;
     private readonly ApprovalOptions _options = options;
     private readonly IApprovalUserDirectory? _directory = directory;
+    internal IApprovalUserStatusProvider? UserStatus { get; set; }
 
     public bool CanResolve(string type) => _resolvers.ContainsKey(type);
 
@@ -65,6 +66,21 @@ internal sealed class ApprovalAssigneeService(
                 ? _options.AllowInitiatorApprove || assignee.Value != instance.InitiatorId
                 : (await _identity.GetUserIdsInRoleAsync(assignee.Value, ct))
                     .Any(id => _options.AllowInitiatorApprove || id != instance.InitiatorId);
+            if (ok && _directory is not null)
+            {
+                var ids = assignee.Kind == AssigneeKind.User ? new[] { assignee.Value }
+                    : (await _identity.GetUserIdsInRoleAsync(assignee.Value, ct)).ToArray();
+                ok = (await _directory.GetUsersAsync(ids, ct)).Any(u => u.IsActive
+                    && (_options.AllowInitiatorApprove || u.Id != instance.InitiatorId));
+            }
+            if (ok && UserStatus is not null)
+            {
+                var ids = assignee.Kind == AssigneeKind.User ? new[] { assignee.Value }
+                    : (await _identity.GetUserIdsInRoleAsync(assignee.Value, ct)).ToArray();
+                ok = false;
+                foreach (var id in ids)
+                    if ((_options.AllowInitiatorApprove || id != instance.InitiatorId) && await UserStatus.IsActiveAsync(id, ct)) { ok = true; break; }
+            }
             if (ok) eligible.Add(assignee);
         }
         return eligible;
@@ -82,7 +98,7 @@ internal sealed class ApprovalAssigneeService(
             throw new ApprovalException("岗位资格校验需要注册用户目录") { Code = ApprovalErrorCode.InvalidDefinition };
         if (_directory is not null)
         {
-            var known = (await _directory.GetUsersAsync(ids, ct)).Select(u => u.Id).ToHashSet();
+            var known = (await _directory.GetUsersAsync(ids, ct)).Where(u => u.IsActive).Select(u => u.Id).ToHashSet();
             ids.RemoveAll(id => !known.Contains(id));
         }
         return ids;

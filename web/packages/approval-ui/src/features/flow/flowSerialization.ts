@@ -25,7 +25,7 @@ export function toFlowElements(definition: FlowDefinition): { nodes: FlowNode[];
       allowAddSign: def.allowAddSign ?? true,
       allowTransfer: def.allowTransfer ?? true,
       requireQualifiedAssignee: def.requireQualifiedAssignee ?? false,
-      actions: clone(def.actions ?? []),
+      requireComment: def.requireComment ?? false,
       notifications: clone(def.notifications ?? []),
       timeout: def.timeout ? { ...def.timeout } : null,
       fieldPermissions: { ...def.fieldPermissions },
@@ -42,7 +42,7 @@ export function toFlowElements(definition: FlowDefinition): { nodes: FlowNode[];
     return def.next ? [createEdge(def.id, def.next)] : []
   })
 
-  // 旧定义（没有保存坐标）自动排版
+  // 未指定坐标的节点自动排版
   const needsLayout = defs.some((d) => !d.position)
   return { nodes: needsLayout ? layoutNodes(nodes, edges) : nodes, edges }
 }
@@ -75,10 +75,10 @@ export function toDefinition(nodes: FlowNode[], edges: FlowEdge[], flowNotificat
       if (!data.allowReturn) def.allowReturn = false
       if (!data.allowAddSign) def.allowAddSign = false
       if (!data.allowTransfer) def.allowTransfer = false
+      if (data.requireComment) def.requireComment = true
       if (data.requireQualifiedAssignee) def.requireQualifiedAssignee = true
       if (data.timeout) def.timeout = { ...data.timeout }
     }
-    if (data.type === 'Action') def.actions = clone(data.actions)
     if (notifyEventsFor(data.type).length && data.notifications.length) def.notifications = clone(data.notifications)
     if (data.type === 'Condition') {
       def.branches = outgoing.map((e) => ({

@@ -187,7 +187,7 @@ public sealed partial class ApprovalFormService(
         return new FormEdit(json, changes);
     }
 
-    /// <summary>表单之外的变量（如同步动作的输出变量）原样保留：流程继续流转，后续条件分支可能用到。</summary>
+    /// <summary>表单之外的宿主准备变量和历史快照值原样保留：流程继续流转，后续条件分支可能用到。</summary>
     private static string KeepNonFormVariables(string original, string normalized)
     {
         if (JsonNode.Parse(original) is not JsonObject before) return normalized;
@@ -248,7 +248,7 @@ public sealed partial class ApprovalFormService(
         variables["form"] = form;
         variables["表单"] = form;
 
-        var tz = accessor.TenantSettings?.DisplayTimeZone ?? options.DisplayTimeZone;
+        var tz = options.DisplayTimeZone;
         var title = TemplateRenderer.Render(template, variables, timeZone: tz).Trim();
         if (title.Length == 0) title = flowName;
         return title.Length > MaxTitleLength ? title[..MaxTitleLength] : title;

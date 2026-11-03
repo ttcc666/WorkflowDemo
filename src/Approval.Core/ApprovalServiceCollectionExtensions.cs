@@ -1,5 +1,4 @@
 using Approval.Core.Abstractions;
-using Approval.Core.Actions;
 using Approval.Core.Background;
 using Approval.Core.Conditions;
 using Approval.Core.Engine;
@@ -8,7 +7,7 @@ using Approval.Core.Files;
 using Approval.Core.Notifications;
 using Approval.Core.Persistence;
 using Approval.Core.Resolvers;
-using Approval.Core.Tenancy;
+using Approval.Core.Hosting;
 using Approval.Core.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -27,13 +26,14 @@ public static class ApprovalServiceCollectionExtensions
     {
         var options = new ApprovalOptions();
         configure?.Invoke(options);
-        if (options.MultiTenant && options.FixedTenantId is not null) throw new InvalidOperationException("多租户模式不能设置 FixedTenantId");
-        if (!options.MultiTenant) ApprovalTenantIds.Validate(options.FixedTenantId ?? throw new InvalidOperationException("请显式配置 FixedTenantId，或启用 MultiTenant"));
         services.AddSingleton(options);
+        if (options.Outbox.PollInterval <= TimeSpan.Zero || options.TimeoutScanInterval <= TimeSpan.Zero
+            || options.Outbox.BaseRetryDelay <= TimeSpan.Zero || options.Outbox.MaxRetryDelay < options.Outbox.BaseRetryDelay
+            || options.Outbox.BatchSize < 1 || options.Outbox.MaxAttempts < 1)
+            throw new InvalidOperationException("后台轮询间隔、重试间隔、批量和最大投递次数必须有效");
         if (options.Lifecycle.BatchSize is < 1 or > 100 || options.Lifecycle.MaxBatchesPerRun is < 1 or > 10
-            || options.Background.MaxTenantsPerSweep is < 1 or > 100 || options.Background.AssignmentSampleSize is < 1 or > 100
-            || options.Background.TenantBudget <= TimeSpan.Zero || options.Background.TenantBudget > TimeSpan.FromMinutes(1)
-            || options.Lifecycle.LeaseDuration <= TimeSpan.Zero || options.Lifecycle.PollInterval <= TimeSpan.Zero)
+            || options.Background.AssignmentSampleSize is < 1 or > 100
+            || options.Lifecycle.PollInterval <= TimeSpan.Zero)
             throw new InvalidOperationException("维护批量、扫描预算或租约配置无效");
         foreach (var target in Enum.GetValues<Approval.Core.Domain.MaintenanceTarget>())
         foreach (var mode in Enum.GetValues<Approval.Core.Domain.MaintenanceMode>())
@@ -45,30 +45,20 @@ public static class ApprovalServiceCollectionExtensions
         services.TryAddScoped<IApprovalArchiveQueryScope, DefaultApprovalArchiveQueryScope>();
         services.AddScoped<IApprovalCommandExecutor, ApprovalCommandExecutor<TContext>>();
         services.AddScoped<IApprovalUnitOfWork>(sp => sp.GetRequiredService<ApprovalDbContextAccessor>().UnitOfWork);
-        services.AddScoped<IApprovalAuthorization>(sp => new DefaultApprovalAuthorization(sp.GetRequiredService<TContext>(), sp.GetRequiredService<IApprovalTenantContext>(), sp.GetRequiredService<IApprovalActorContext>(), sp.GetRequiredService<IApprovalPermissionProvider>(), sp.GetRequiredService<IApprovalQueryScope>(), options, sp.GetRequiredService<IApprovalArchiveQueryScope>()));
+        services.AddScoped<IApprovalAuthorization>(sp => new DefaultApprovalAuthorization(sp.GetRequiredService<TContext>(), sp.GetRequiredService<IApprovalActorContext>(), sp.GetRequiredService<IApprovalPermissionProvider>(), sp.GetRequiredService<IApprovalQueryScope>(), options, sp.GetRequiredService<IApprovalArchiveQueryScope>()));
         services.AddScoped(sp => new ApprovalAuthorizationService(sp.GetRequiredService<IApprovalAuthorization>()));
         services.TryAddScoped<ApprovalExecutionContext>();
-        services.TryAddScoped<IApprovalTenantContext>(sp => sp.GetRequiredService<ApprovalExecutionContext>());
         services.TryAddScoped<IApprovalActorContext>(sp => sp.GetRequiredService<ApprovalExecutionContext>());
-        services.TryAddScoped<IApprovalTenantCatalog, FixedApprovalTenantCatalog>();
-        services.TryAddSingleton<IApprovalTenantScopeFactory, ApprovalTenantScopeFactory>();
+        services.TryAddSingleton<IApprovalScopeFactory, ApprovalScopeFactory>();
 
         services.TryAddSingleton(TimeProvider.System);
         services.TryAddSingleton<IConditionEvaluator, DynamicExpressoConditionEvaluator>();
         services.AddScoped(sp =>
         {
-            if (options.MultiTenant)
-            {
-                var adapters = new[] { typeof(IApprovalIdentityProvider), typeof(IApprovalUserDirectory), typeof(IApprovalOrganizationProvider), typeof(IApprovalContactProvider) };
-                if (services.Any(d => adapters.Contains(d.ServiceType) && d.Lifetime == ServiceLifetime.Singleton))
-                    throw new InvalidOperationException("多租户身份/目录/组织/联系方式适配器必须按租户作用域注册");
-            }
             var db = sp.GetRequiredService<TContext>();
             db.TransactionState.RequireOperationId = options.RequireOperationId;
             db.TransactionState.SystemActor = sp.GetRequiredService<IApprovalActorContext>().IsSystem;
-            if (db.TenantId != sp.GetRequiredService<IApprovalTenantContext>().TenantId)
-                throw new InvalidOperationException("DbContext 租户与当前审批作用域不一致");
-            return new ApprovalDbContextAccessor(db, sp.GetService<IApprovalTenantSettingsProvider>(), sp.GetRequiredService<ApprovalAuthorizationService>(), sp.GetRequiredService<IApprovalCommandExecutor>(), sp.GetRequiredService<IApprovalActorContext>());
+            return new ApprovalDbContextAccessor(db, sp.GetRequiredService<ApprovalAuthorizationService>(), sp.GetRequiredService<IApprovalCommandExecutor>(), sp.GetRequiredService<IApprovalActorContext>());
         });
 
         services.AddSingleton<IApproverResolver, UserApproverResolver>();
@@ -76,29 +66,9 @@ public static class ApprovalServiceCollectionExtensions
         services.AddSingleton<IApproverResolver, FormFieldApproverResolver>();
         services.AddSingleton<IApproverResolver, InitiatorApproverResolver>();
 
-        // 内置动作：HTTP 请求、脚本
-        services.AddHttpClient(HttpActionHandler.HttpClientName)
-            .ConfigurePrimaryHttpMessageHandler((handler, _) =>
-            {
-                // 白名单只允许显式请求的地址；禁止传输层自动跳转，保留宿主的代理等配置。
-                switch (handler)
-                {
-                    case SocketsHttpHandler sockets:
-                        sockets.AllowAutoRedirect = false;
-                        break;
-                    case HttpClientHandler http:
-                        http.AllowAutoRedirect = false;
-                        break;
-                }
-            });
-        services.AddHttpClient(ChannelJson.HttpClientName);
-        services.AddScoped<IApprovalActionHandler, HttpActionHandler>();
-        services.AddScoped<IApprovalActionHandler, ScriptActionHandler>();
-
         services.AddScoped(sp => new ApprovalExtensionCatalog(
             () => sp.GetServices<IApproverResolver>(),
             () => sp.GetServices<IApprovalBusinessHandler>(),
-            () => sp.GetServices<IApprovalActionHandler>(),
             () => sp.GetServices<IApprovalChannel>()));
         services.AddScoped(sp => new ApprovalEngine(
             sp.GetRequiredService<ApprovalDbContextAccessor>(),
@@ -110,7 +80,12 @@ public static class ApprovalServiceCollectionExtensions
             sp.GetRequiredService<ApprovalOutboxSignal>(),
             sp.GetRequiredService<TimeProvider>(),
             sp.GetRequiredService<ILogger<ApprovalEngine>>(),
-            sp.GetService<IApprovalUserDirectory>()));
+            sp.GetService<IApprovalUserDirectory>())
+        {
+            EventsEnabled = sp.GetService<IApprovalEventHandler>() is not null,
+            Lifecycle = sp.GetService<IApprovalLifecycleHandler>(),
+            UserStatus = sp.GetService<IApprovalUserStatusProvider>()
+        });
         services.AddScoped<ApprovalQueryService>();
         services.TryAddScoped<IApprovalAccessPolicy, DefaultApprovalAccessPolicy>();
         services.AddScoped(sp => new ApprovalDefinitionService(
@@ -118,18 +93,24 @@ public static class ApprovalServiceCollectionExtensions
             sp.GetRequiredService<ApprovalExtensionCatalog>(),
             sp.GetRequiredService<TimeProvider>(), sp.GetRequiredService<ApprovalOptions>()));
         services.AddScoped<ApprovalMessageService>();
+        services.AddScoped<ApprovalCarbonCopyService>();
         services.AddScoped(sp => new ApprovalOutboxService(
             sp.GetRequiredService<ApprovalDbContextAccessor>(),
             sp.GetRequiredService<ApprovalExtensionCatalog>(),
             sp.GetRequiredService<ApprovalOptions>(),
             sp.GetRequiredService<TimeProvider>(),
             sp.GetRequiredService<ILogger<ApprovalOutboxService>>(),
-            sp.GetRequiredService<IApprovalTenantScopeFactory>()));
+            sp.GetRequiredService<IApprovalScopeFactory>(),
+            sp.GetRequiredService<ApprovalOutboxSignal>())
+        {
+            EventHandler = sp.GetService<IApprovalEventHandler>()
+        });
         services.AddScoped<ApprovalStatisticsService>();
         services.AddScoped<Approval.Core.Diagnostics.ApprovalDiagnosticsService>();
         services.AddScoped<Approval.Core.Maintenance.ApprovalLifecycleService>();
+        services.AddSingleton<Approval.Core.Maintenance.ApprovalMaintenanceGate>();
         services.AddSingleton<Approval.Core.Diagnostics.ApprovalBackgroundState>();
-        services.AddSingleton<ApprovalTenantSweeper>();
+        services.AddSingleton<ApprovalBackgroundRunner>();
         services.AddSingleton<ApprovalMaintenanceWorker>();
 
         // 后台任务：注册为单例以便宿主 / 测试直接调用 DispatchOnceAsync、ScanOnceAsync
@@ -138,9 +119,7 @@ public static class ApprovalServiceCollectionExtensions
         services.AddSingleton<ApprovalTimeoutScanner>();
         if (options.EnableBackgroundServices)
         {
-            services.AddHostedService(sp => sp.GetRequiredService<ApprovalOutboxDispatcher>());
-            services.AddHostedService(sp => sp.GetRequiredService<ApprovalTimeoutScanner>());
-            services.AddHostedService(sp => sp.GetRequiredService<ApprovalMaintenanceWorker>());
+            services.AddHostedService<ApprovalWorker>();
         }
 
         return new ApprovalBuilder(services);
@@ -237,10 +216,10 @@ public sealed class ApprovalBuilder(IServiceCollection services)
         return this;
     }
 
-    /// <summary>注册自定义动作（设计器中自动出现）；Type 与内置动作同名时覆盖内置实现。</summary>
-    public ApprovalBuilder AddActionHandler<T>() where T : class, IApprovalActionHandler
+    /// <summary>注册宿主本地开始回调；只负责审批事务中的校验/准备，不由流程图编排。</summary>
+    public ApprovalBuilder AddLifecycleHandler<T>() where T : class, IApprovalLifecycleHandler
     {
-        Services.AddScoped<IApprovalActionHandler, T>();
+        Services.Replace(ServiceDescriptor.Scoped<IApprovalLifecycleHandler, T>());
         return this;
     }
 
@@ -251,55 +230,18 @@ public sealed class ApprovalBuilder(IServiceCollection services)
         return this;
     }
 
-    /// <summary>注册用户联系方式提供者（邮件地址、企业微信 / 钉钉 UserId）。</summary>
-    public ApprovalBuilder AddContactProvider<T>() where T : class, IApprovalContactProvider
+    /// <summary>注册统一的宿主审批事件处理器；事件与审批同事务写入 Outbox。</summary>
+    public ApprovalBuilder AddEventHandler<T>() where T : class, IApprovalEventHandler
     {
-        Services.AddScoped<IApprovalContactProvider, T>();
+        Services.Replace(ServiceDescriptor.Scoped<IApprovalEventHandler, T>());
         return this;
     }
 
-    public ApprovalBuilder AddWebhookChannel(Action<WebhookChannelOptions> configure)
-    {
-        var options = Configure(configure);
-        Services.AddScoped<IApprovalChannel>(sp => new WebhookChannel(options, sp.GetRequiredService<IHttpClientFactory>()));
-        return this;
-    }
-
-    public ApprovalBuilder AddWeComRobotChannel(Action<WeComRobotChannelOptions> configure)
-    {
-        var options = Configure(configure);
-        Services.AddScoped<IApprovalChannel>(sp =>
-            new WeComRobotChannel(options, sp.GetRequiredService<IHttpClientFactory>(), sp.GetService<IApprovalContactProvider>()));
-        return this;
-    }
-
-    public ApprovalBuilder AddDingTalkRobotChannel(Action<DingTalkRobotChannelOptions> configure)
-    {
-        var options = Configure(configure);
-        Services.AddScoped<IApprovalChannel>(sp => new DingTalkRobotChannel(options, sp.GetRequiredService<IHttpClientFactory>(),
-            sp.GetRequiredService<TimeProvider>(), sp.GetService<IApprovalContactProvider>()));
-        return this;
-    }
-
-    public ApprovalBuilder AddEmailChannel(Action<EmailChannelOptions> configure)
-    {
-        var options = Configure(configure);
-        Services.AddScoped<IApprovalChannel>(sp =>
-            new EmailChannel(options, sp.GetRequiredService<ILogger<EmailChannel>>(), sp.GetService<IApprovalContactProvider>()));
-        return this;
-    }
-
-    /// <summary>旧版通知接口：提交后同步调用、失败只记录日志。新代码建议使用通知渠道（可靠投递）。</summary>
+    /// <summary>进程内提交后通知：失败只记录日志。需要可靠投递时使用宿主事件或通知渠道。</summary>
     public ApprovalBuilder AddNotifier<T>() where T : class, IApprovalNotifier
     {
         Services.AddScoped<IApprovalNotifier, T>();
         return this;
     }
 
-    private static T Configure<T>(Action<T> configure) where T : new()
-    {
-        var options = new T();
-        configure(options);
-        return options;
-    }
 }

@@ -1,6 +1,5 @@
 using System.Text.Json;
 using Approval.Core.Abstractions;
-using Approval.Core.Actions;
 using Approval.Core.Conditions;
 using Approval.Core.Definitions;
 using Approval.Core.Domain;
@@ -19,8 +18,8 @@ internal sealed record FormEdit(string FormDataJson, IReadOnlyList<FormFieldChan
 
 /// <summary>
 /// 审批引擎：发起、同意、驳回 / 退回、撤回、转交、加签、超时处理。
-/// 每个公开方法是一次完整操作：校验 → 修改状态 → 同步动作 / 业务回调 → 写入站内信与 Outbox → SaveChanges（同一事务）。
-/// 外部通知与异步动作由后台任务在提交后投递（见 <see cref="Background.ApprovalOutboxDispatcher"/>）。
+/// 每个公开方法是一次完整操作：校验 → 修改状态 → 宿主生命周期 / 业务回调 → 写入站内信与 Outbox → SaveChanges（同一事务）。
+/// 外部通知与可靠事件由后台任务在提交后投递（见 <see cref="Background.ApprovalOutboxDispatcher"/>）。
 /// </summary>
 public sealed partial class ApprovalEngine
 {
@@ -34,12 +33,11 @@ public sealed partial class ApprovalEngine
     private readonly IApprovalIdentityProvider _identity;
     private readonly ApprovalAssigneeService _assignees;
     private readonly IReadOnlyDictionary<string, IApprovalBusinessHandler> _handlers;
-    private readonly IReadOnlyDictionary<string, IApprovalActionHandler> _actions;
     private readonly IReadOnlySet<string> _channels;
     private readonly IReadOnlyList<IApprovalNotifier> _notifiers;
     private readonly IConditionEvaluator _evaluator;
     private readonly ApprovalOptions _options;
-    private readonly ApprovalTenantSettings _tenantSettings;
+    private readonly ApprovalDisplaySettings _displaySettings;
     private readonly ApprovalOutboxSignal _outboxSignal;
     private readonly TimeProvider _clock;
     private readonly ILogger<ApprovalEngine> _logger;
@@ -49,13 +47,16 @@ public sealed partial class ApprovalEngine
     private readonly Dictionary<FlowDefinition, FlowStructure> _structures = [];
     private readonly Dictionary<Guid, ExecutionState> _states = [];
     private int _steps;
+    private Guid? _operationTaskId;
+    internal bool EventsEnabled { get; set; }
+    internal IApprovalLifecycleHandler? Lifecycle { get; set; }
+    internal IApprovalUserStatusProvider? UserStatus { get => _assignees.UserStatus; set => _assignees.UserStatus = value; }
 
     public ApprovalEngine(
         ApprovalDbContextAccessor accessor,
         IApprovalIdentityProvider identity,
         IEnumerable<IApproverResolver> resolvers,
         IEnumerable<IApprovalBusinessHandler> handlers,
-        IEnumerable<IApprovalActionHandler> actions,
         IEnumerable<IApprovalChannel> channels,
         IEnumerable<IApprovalNotifier> notifiers,
         IConditionEvaluator evaluator,
@@ -65,7 +66,7 @@ public sealed partial class ApprovalEngine
         ILogger<ApprovalEngine> logger,
         IApprovalUserDirectory? directory = null)
         : this(accessor, identity,
-            new ApprovalExtensionCatalog(() => resolvers, () => handlers, () => actions, () => channels),
+            new ApprovalExtensionCatalog(() => resolvers, () => handlers, () => channels),
             notifiers, evaluator, options, outboxSignal, clock, logger, directory)
     {
     }
@@ -89,12 +90,11 @@ public sealed partial class ApprovalEngine
         _identity = identity;
         _assignees = new(identity, extensions.Resolvers, options, directory);
         _handlers = extensions.BusinessHandlers;
-        _actions = extensions.Actions;
         _channels = extensions.ChannelNames;
         _notifiers = notifiers.ToList();
         _evaluator = evaluator;
         _options = options;
-        _tenantSettings = accessor.TenantSettings ?? new(options.DisplayTimeZone, options.InstanceUrlFormat, options.GlobalVariables);
+        _displaySettings = new ApprovalDisplaySettings(options.DisplayTimeZone, options.InstanceUrlFormat, options.GlobalVariables);
         _outboxSignal = outboxSignal;
         _clock = clock;
         _logger = logger;
@@ -108,6 +108,7 @@ public sealed partial class ApprovalEngine
     private async Task<ApprovalInstance> StartAsyncCore(StartApprovalRequest request, CancellationToken ct = default)
     {
         await _authorization.RequireAsync(Approval.Core.Abstractions.ApprovalPermissions.InstanceStart, new() { DefinitionKey = request.DefinitionKey, DefinitionId = request.DefinitionId, BusinessType = request.BusinessType, BusinessKey = request.BusinessKey }, request.InitiatorId, ct);
+        await EnsureActiveUserAsync(request.InitiatorId, ct);
         if (await _db.Set<ApprovalDefinitionManagement>().AnyAsync(m => m.Key == request.DefinitionKey && !m.IsEnabled, ct))
             throw new ApprovalException($"流程 '{request.DefinitionKey}' 已停用，不能发起新审批");
         var pinned = _unit.PinnedDefinition(request.DefinitionKey);
@@ -124,11 +125,13 @@ public sealed partial class ApprovalEngine
             (await _db.Set<ApprovalInstance>().AsNoTracking().Where(i =>
                 i.BusinessType == request.BusinessType &&
                 i.BusinessKey == request.BusinessKey &&
-                i.Status == InstanceStatus.Running).Select(i => new { i.BusinessType, i.BusinessKey }).ToListAsync(ct))
+                (i.Status == InstanceStatus.Running || i.Status == InstanceStatus.Returned)).Select(i => new { i.BusinessType, i.BusinessKey }).ToListAsync(ct))
                 .Any(i => string.Equals(i.BusinessType, request.BusinessType, StringComparison.Ordinal) && string.Equals(i.BusinessKey, request.BusinessKey, StringComparison.Ordinal)))
         {
             throw new ApprovalException("该业务单据已有进行中的审批") { Code = ApprovalErrorCode.Conflict };
         }
+
+        var selectedFlow = FlowDefinition.Parse(definition.DefinitionJson);
 
         var instance = new ApprovalInstance
         {
@@ -150,7 +153,13 @@ public sealed partial class ApprovalEngine
             _db.Set<ApprovalBusinessSlot>().Add(new() { Id = _unit.NewId("ApprovalEngine"), InstanceId = instance.Id,
                 LookupHash = ApprovalCommandHash.Of(instance.BusinessType, instance.BusinessKey), BusinessType = instance.BusinessType, BusinessKey = instance.BusinessKey });
 
-        var flow = FlowDefinition.Parse(definition.DefinitionJson);
+        if (Lifecycle is not null)
+        {
+            using var callback = _unit.Extension();
+            await Lifecycle.OnStartingAsync(instance, ct);
+        }
+
+        var flow = selectedFlow;
         var start = flow.GetNode(flow.StartNodeId);
         AddLog(instance, start, ApprovalAction.Submit, request.InitiatorId, request.Comment);
 
@@ -227,7 +236,7 @@ public sealed partial class ApprovalEngine
             .FirstOrDefaultAsync(i => i.Id == instanceId, ct)
             ?? throw new ApprovalException("流程不存在") { Code = ApprovalErrorCode.NotFound };
 
-        if (instance.Status != InstanceStatus.Running) throw new ApprovalException("流程已结束，无法撤回");
+        if (instance.Status is not (InstanceStatus.Running or InstanceStatus.Returned)) throw new ApprovalException("流程已结束，无法撤回");
         if (instance.InitiatorId != userId)
             throw new ApprovalException("只有发起人可以撤回") { Code = ApprovalErrorCode.Forbidden };
         if (!CanWithdraw(instance, userId, _options))
@@ -245,7 +254,7 @@ public sealed partial class ApprovalEngine
 
     /// <summary>详情中的撤回能力与实际操作共用的规则；instance 必须已加载任务。退回发起人后始终可撤回。</summary>
     internal static bool CanWithdraw(ApprovalInstance instance, string userId, ApprovalOptions options) =>
-        instance.Status == InstanceStatus.Running && instance.InitiatorId == userId
+        (instance.Status is InstanceStatus.Running or InstanceStatus.Returned) && instance.InitiatorId == userId
         && (options.AllowWithdrawAfterApproval
             || instance.Tasks.Any(t => t.Kind == ApprovalTaskKind.Resubmit && t.Status == ApprovalTaskStatus.Pending)
             || !instance.Tasks.Any(t => t.Status == ApprovalTaskStatus.Approved));
@@ -258,6 +267,7 @@ public sealed partial class ApprovalEngine
     {
         await _authorization.RequireAsync(Approval.Core.Abstractions.ApprovalPermissions.TaskTransfer, new() { TaskId = taskId }, userId, ct);
         if (string.IsNullOrWhiteSpace(toUserId) || toUserId == userId) throw new ApprovalException("转交对象无效");
+        await EnsureActiveUserAsync(toUserId, ct);
 
         var (instance, task, flow) = await LoadTaskAsync(taskId, ct);
         await EnsureCanHandleAsync(instance, task, userId, ct);
@@ -330,8 +340,10 @@ public sealed partial class ApprovalEngine
     private async Task ApproveCoreAsync(ApprovalInstance instance, FlowDefinition flow, ApprovalTask task, string userId,
         string? comment, ApprovalAction action, CancellationToken ct)
     {
-        CompleteTask(task, ApprovalTaskStatus.Approved, userId, comment);
         var node = flow.GetNode(task.NodeId);
+        if (node.RequireComment && userId != SystemOperator && string.IsNullOrWhiteSpace(comment))
+            throw new ApprovalException("该节点必须填写审批意见");
+        CompleteTask(task, ApprovalTaskStatus.Approved, userId, comment);
         AddLog(instance, node, action, userId, comment);
 
         var nodeTasks = CurrentTasksOf(instance, node.Id);
@@ -358,7 +370,7 @@ public sealed partial class ApprovalEngine
         if (IsNodeFinished(node, nodeTasks))
         {
             CancelOpenTasks(nodeTasks);
-            await MoveToAsync(instance, flow, node.Next!, ct);
+            await MoveToAsync(instance, flow, node.Next!, ct, node.Id);
         }
     }
 
@@ -393,15 +405,19 @@ public sealed partial class ApprovalEngine
     /// 从 nodeId 开始自动推进，直到停在需要人工处理的节点、到达结束节点，或在合并节点等待其他分支。
     /// 并行节点对每个分支递归推进。
     /// </summary>
-    private async Task MoveToAsync(ApprovalInstance instance, FlowDefinition flow, string nodeId, CancellationToken ct)
+    private async Task MoveToAsync(ApprovalInstance instance, FlowDefinition flow, string nodeId, CancellationToken ct,
+        string? sourceNodeId = null, ParallelScope? directBranch = null)
     {
+        IReadOnlyList<ParallelScope> branchScope = StructureOf(flow).ScopeOf(sourceNodeId ?? nodeId);
+        if (directBranch is { } branch) branchScope = [.. branchScope, branch];
         while (instance.Status == InstanceStatus.Running)
         {
             if (++_steps > MaxAutoSteps)
                 throw new ApprovalException("流程自动推进步数超限，请检查流程定义") { Code = ApprovalErrorCode.InvalidDefinition };
 
             var node = flow.GetNode(nodeId);
-            // 同步动作可能修改了表单，每一步都使用最新值
+            AddLog(instance, node, ApprovalAction.NodeEntered, SystemOperator, "进入节点");
+            // 每次推进从实例快照读取最新表单值
             var form = FormData.Parse(instance.FormDataJson);
 
             switch (node.Type)
@@ -420,7 +436,8 @@ public sealed partial class ApprovalEngine
 
                 case NodeType.Parallel:
                     StateOf(instance).Joins[StructureOf(flow).JoinOf(node.Id)] = new JoinState { Expected = node.Branches.Count };
-                    foreach (var branch in node.Branches) await MoveToAsync(instance, flow, branch.Next, ct);
+                    for (var branchIndex = 0; branchIndex < node.Branches.Count; branchIndex++)
+                        await MoveToAsync(instance, flow, node.Branches[branchIndex].Next, ct, node.Id, new(node.Id, branchIndex));
                     return;
 
                 case NodeType.Join:
@@ -428,17 +445,17 @@ public sealed partial class ApprovalEngine
                         var joins = StateOf(instance).Joins;
                         if (!joins.TryGetValue(node.Id, out var join))
                             throw new ApprovalException($"合并节点 '{node.Name}' 没有进行中的并行分支") { Code = ApprovalErrorCode.InvalidDefinition };
-                        if (++join.Arrived < join.Expected) return;   // 等待其他分支
+                        if (branchScope.Count == 0 || StructureOf(flow).JoinOf(branchScope[^1].ForkId) != node.Id)
+                            throw new ApprovalException("并行汇聚来源无效") { Code = ApprovalErrorCode.InvalidDefinition };
+                        if (!join.ArrivedBranches.Add(branchScope[^1].Branch)) return;
+                        if (++join.Arrived < join.Expected) return;
+                        if (join.Arrived > join.Expected) throw new ApprovalException("并行分支到达数无效") { Code = ApprovalErrorCode.InvalidDefinition };
+                        branchScope = branchScope.Take(branchScope.Count - 1).ToArray();
                         joins.Remove(node.Id);
                         nodeId = node.Next!;
                         continue;
                     }
 
-                case NodeType.Action:
-                    await RaiseAsync(NotifyEvent.Enter, instance, flow, node, new EventInfo([]), ct);
-                    await RunActionsAsync(instance, node, ct);
-                    nodeId = node.Next!;
-                    continue;
 
                 case NodeType.Cc:
                     {
@@ -534,6 +551,7 @@ public sealed partial class ApprovalEngine
 
         next.Status = ApprovalTaskStatus.Pending;
         next.DueAt = next.NextRemindAt = DueAtFor(node);
+        WriteEvent(instance, "TaskCreated", next.NodeId, next.NodeName, next.Id, SystemOperator, null);
         var assignee = new Assignee(next.AssigneeKind, next.AssigneeValue);
         Notify(NotificationKind.TaskCreated, instance, [assignee]);
         await RaiseAsync(NotifyEvent.Enter, instance, flow, node, new EventInfo([assignee]) { DueAt = next.DueAt }, ct);
@@ -575,6 +593,7 @@ public sealed partial class ApprovalEngine
         }
 
         Notify(NotificationKind.Completed, instance, [new Assignee(AssigneeKind.User, instance.InitiatorId)]);
+        WriteEvent(instance, "Completed", node?.Id, node?.Name, null, info.OperatorId ?? SystemOperator, info.Comment);
         await RaiseAsync(NotifyEvent.Completed, instance, flow, node, info, ct);
     }
 
@@ -589,6 +608,7 @@ public sealed partial class ApprovalEngine
 
         var flow = await LoadFlowAsync(instance, ct);
         Touch(instance);
+        _operationTaskId = taskId;
         return (instance, instance.Tasks.Single(t => t.Id == taskId), flow);
     }
 
@@ -601,7 +621,10 @@ public sealed partial class ApprovalEngine
 
     private async Task EnsureCanHandleAsync(ApprovalInstance instance, ApprovalTask task, string userId, CancellationToken ct)
     {
-        if (instance.Status != InstanceStatus.Running) throw new ApprovalException("流程已结束");
+        await EnsureActiveUserAsync(userId, ct);
+        if (instance.Status is not (InstanceStatus.Running or InstanceStatus.Returned)) throw new ApprovalException("流程已结束");
+        if (instance.Status == InstanceStatus.Returned && task.Kind != ApprovalTaskKind.Resubmit)
+            throw new ApprovalException("申请正在等待发起人修改");
         // 只有 Pending 才能处理：保证重复提交时幂等，也挡住依次审批中尚未轮到的人、等待加签的人
         if (task.Status != ApprovalTaskStatus.Pending) throw new ApprovalException("任务已处理或尚未轮到");
 
@@ -611,7 +634,11 @@ public sealed partial class ApprovalEngine
         if (!isAssignee) throw new ApprovalException("无权处理该任务") { Code = ApprovalErrorCode.Forbidden };
 
         // 重新提交任务本来就属于发起人
-        if (task.Kind == ApprovalTaskKind.Resubmit) return;
+        if (task.Kind == ApprovalTaskKind.Resubmit)
+        {
+            if (userId != instance.InitiatorId) throw new ApprovalException("只有发起人可以重新提交") { Code = ApprovalErrorCode.Forbidden };
+            return;
+        }
 
         if (!_options.AllowInitiatorApprove && instance.InitiatorId == userId)
             throw new ApprovalException("不能审批自己发起的申请") { Code = ApprovalErrorCode.Forbidden };
@@ -712,6 +739,8 @@ public sealed partial class ApprovalEngine
         _db.Set<ApprovalTask>().Add(task);
         // EF relationship fixup 可能已经加入导航集合，避免同一任务在内存中重复出现。
         if (!instance.Tasks.Contains(task)) instance.Tasks.Add(task);
+        if (task.Status == ApprovalTaskStatus.Pending)
+            WriteEvent(instance, "TaskCreated", task.NodeId, task.NodeName, task.Id, SystemOperator, null);
     }
 
     private void AddCarbonCopy(ApprovalInstance instance, FlowNode node, Assignee recipient) =>
@@ -730,11 +759,15 @@ public sealed partial class ApprovalEngine
         AddLog(instance, action, operatorId, comment, node?.Id, node?.Name);
 
     private void AddLog(ApprovalInstance instance, ApprovalAction action, string operatorId, string? comment,
-        string? nodeId, string? nodeName, string? details = null) =>
+        string? nodeId, string? nodeName, string? details = null)
+    {
+        var taskId = action is ApprovalAction.Submit or ApprovalAction.Complete or ApprovalAction.NodeEntered or ApprovalAction.Cc
+            or ApprovalAction.Withdraw or ApprovalAction.Terminate ? null : _operationTaskId;
         _db.Set<ApprovalLog>().Add(new ApprovalLog
         {
             Id = _unit.NewId("ApprovalEngine"),
             InstanceId = instance.Id,
+            TaskId = taskId,
             Sequence = ++instance.LogSequence,
             NodeId = nodeId,
             NodeName = nodeName,
@@ -744,13 +777,40 @@ public sealed partial class ApprovalEngine
             Details = details,
             CreatedAt = Now
         });
+        WriteEvent(instance, action.ToString(), nodeId, nodeName, taskId, operatorId, comment);
+    }
+
+    private void WriteEvent(ApprovalInstance instance, string type, string? nodeId, string? nodeName, Guid? taskId,
+        string operatorId, string? comment)
+    {
+        if (!EventsEnabled) return;
+        AddOutbox(OutboxKind.Event, "Host", instance, null, type,
+            id => new ApprovalEvent(id, type, instance.Id, instance.DefinitionId, instance.DefinitionVersion,
+                instance.BusinessType, instance.BusinessKey, type switch
+                {
+                    "Reject" or "TimeoutReject" => InstanceStatus.Rejected,
+                    "Withdraw" => InstanceStatus.Withdrawn,
+                    "Terminate" => InstanceStatus.Terminated,
+                    _ => instance.Status
+                }, nodeId, nodeName, taskId, operatorId, comment, Now));
+    }
+
+    private async Task EnsureActiveUserAsync(string userId, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(userId)) throw new ApprovalException("用户不能为空");
+        if (UserStatus is null && _directory is null)
+            throw new ApprovalException("宿主必须提供用户目录或用户状态适配器") { Code = ApprovalErrorCode.InvalidDefinition };
+        var active = UserStatus is not null ? await UserStatus.IsActiveAsync(userId, ct)
+            : (await _directory!.GetUsersAsync([userId], ct)).Any(u => u.Id == userId && u.IsActive);
+        if (!active) throw new ApprovalException("宿主用户不存在或已停用") { Code = ApprovalErrorCode.Forbidden };
+    }
 
     /// <summary>递增并发令牌：并发操作同一实例时，后提交者 SaveChanges 失败而不是静默覆盖。</summary>
     private static void Touch(ApprovalInstance instance) => instance.ConcurrencyStamp++;
 
     private static string Describe(Assignee a) => a.Kind == AssigneeKind.Role ? $"角色[{a.Value}]" : a.Value;
 
-    /// <summary>旧版通知接口 <see cref="IApprovalNotifier"/>：提交后同步调用，失败只记录日志。</summary>
+    /// <summary>进程内提交后通知接口 <see cref="IApprovalNotifier"/>：提交后同步调用，失败只记录日志。</summary>
     private void Notify(NotificationKind kind, ApprovalInstance instance, IReadOnlyList<Assignee> recipients)
     {
         if (_notifiers.Count == 0 || recipients.Count == 0) return;
@@ -763,12 +823,13 @@ public sealed partial class ApprovalEngine
         _unit.Reference(instance.Id, instance.DefinitionId);
         // 保存运行时状态与当前活动节点（并行时为多个）
         StateOf(instance).SaveTo(instance);
-        if (instance.Status == InstanceStatus.Running)
+        if (instance.Status is InstanceStatus.Running or InstanceStatus.Returned)
         {
             var current = string.Join(",", OpenTasks(instance).OrderBy(t => t.CreatedAt).Select(t => t.NodeId).Distinct());
             instance.CurrentNodeId = current.Length == 0 ? null : current.Length <= 500 ? current : current[..500];
         }
         _steps = 0;
+        _operationTaskId = null;
 
         var notifications = _pendingNotifications.ToArray();
         _pendingNotifications.Clear();

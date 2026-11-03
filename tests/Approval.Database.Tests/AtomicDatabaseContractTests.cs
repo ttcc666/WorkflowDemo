@@ -2,7 +2,6 @@ using System.Collections.Concurrent;
 using System.Data.Common;
 using Approval.Core;
 using Approval.Core.Abstractions;
-using Approval.Core.Actions;
 using Approval.Core.Domain;
 using Approval.Core.Engine;
 using Approval.Core.Persistence;
@@ -16,33 +15,31 @@ namespace Approval.Database.Tests;
 public sealed class AtomicHostRecord
 {
     public Guid Id { get; set; }
-    public required string TenantId { get; set; }
     public int Value { get; set; }
 }
-public sealed class AtomicContractContext(DbContextOptions<AtomicContractContext> options, IApprovalTenantContext tenant) : ApprovalDbContext(options, tenant)
+public sealed class AtomicContractContext(DbContextOptions<AtomicContractContext> options) : ApprovalDbContext(options)
 {
     protected override void OnModelCreating(ModelBuilder model)
     {
         model.ConfigureApproval(this);
         model.Entity<AtomicHostRecord>(b => { b.ToTable("AtomicHostRecords"); b.HasKey(r => r.Id); b.Property(r => r.Id).HasConversion<string>().HasMaxLength(36).IsUnicode(false);
-            b.Property(r => r.TenantId).HasMaxLength(64); b.HasQueryFilter("HostTenant", r => r.TenantId == TenantId); });
+            });
     }
 }
 internal sealed class AtomicResolver : IApprovalContextResolver
 {
     public string Tenant { get; set; } = "database-tests";
     public string User { get; set; } = "alice";
-    public ApprovalExecutionIdentity Resolve() => new(Tenant, User);
+    public ApprovalExecutionIdentity Resolve() => new(User);
 }
-internal sealed class AtomicCatalog : IApprovalTenantCatalog
-{ public Task<IReadOnlyList<ApprovalTenant>> GetTenantsAsync(CancellationToken ct) => Task.FromResult<IReadOnlyList<ApprovalTenant>>([new("database-tests"), new("a"), new("b")]); }
 internal sealed class AtomicPermissions : IApprovalPermissionProvider
 {
     public Func<ApprovalPermissionRequest, bool> Rule { get; set; } = _ => true;
     public Task<bool> AuthorizeAsync(ApprovalPermissionRequest request, CancellationToken ct) => Task.FromResult(Rule(request));
 }
-internal sealed class AtomicIdentity : IApprovalIdentityProvider
+internal sealed class AtomicIdentity : IApprovalIdentityProvider, IApprovalUserStatusProvider
 {
+    public Task<bool> IsActiveAsync(string userId, CancellationToken ct) => Task.FromResult(!string.IsNullOrWhiteSpace(userId));
     public Task<bool> IsInRoleAsync(string userId, string role, CancellationToken ct) => Task.FromResult(false);
     public Task<IReadOnlyList<string>> GetUserIdsInRoleAsync(string role, CancellationToken ct) => Task.FromResult<IReadOnlyList<string>>([]);
     public Task<IReadOnlyList<string>> GetRolesAsync(string userId, CancellationToken ct) => Task.FromResult<IReadOnlyList<string>>([]);
@@ -72,7 +69,7 @@ internal sealed class AtomicFaults : DbTransactionInterceptor
     public int BeforeCommit, AfterCommit, BusinessCalls, ActionCalls;
     public int MaintenanceBeforeCommit;
     public bool MaintenancePermanentFailure;
-    public bool BlockVerification, FailVerificationAfterCommit, FailCallback, AsyncSaveThenFail;
+    public bool BlockVerification, FailVerificationAfterCommit, FailCallback, AsyncSaveThenFail, IgnoreActionCancellation;
     public readonly ConcurrentBag<Guid> Contexts = [];
     public readonly ConcurrentBag<Guid> OutboxIds = [];
     public TaskCompletionSource? Entered, Release;
@@ -104,28 +101,31 @@ internal sealed class AtomicBusiness(AtomicContractContext db, AtomicFaults faul
     public const string Type = "Atomic";
     public string BusinessType => Type;
     public Task OnApprovedAsync(ApprovalInstance instance, CancellationToken ct)
-    { db.Add(new AtomicHostRecord { Id = Guid.NewGuid(), TenantId = db.TenantId, Value = 10 }); if (faults.FailCallback) throw new InvalidOperationException("business callback failed"); return Task.CompletedTask; }
+    { db.Add(new AtomicHostRecord { Id = Guid.NewGuid(), Value = 10 }); if (faults.FailCallback) throw new InvalidOperationException("business callback failed"); return Task.CompletedTask; }
     public Task OnRejectedAsync(ApprovalInstance instance, CancellationToken ct) => Task.CompletedTask;
 }
-internal sealed class AtomicAction(AtomicContractContext db, AtomicFaults faults) : IApprovalActionHandler
+internal sealed class AtomicAction(AtomicContractContext db, AtomicFaults faults) : IApprovalEventHandler
 {
-    public ApprovalActionDescriptor Descriptor => new("AtomicWrite", "Atomic write", []);
-    public async Task<ApprovalActionResult> ExecuteAsync(ApprovalActionContext context, CancellationToken ct)
+    public async Task HandleAsync(ApprovalEvent approvalEvent, CancellationToken ct)
     {
+        if (approvalEvent.EventType != "Submit") return;
         var number = Interlocked.Increment(ref faults.ActionCalls);
-        if (number == 1 && faults.Entered is not null) { faults.Entered.TrySetResult(); await faults.Release!.Task.WaitAsync(ct); }
-        db.Add(new AtomicHostRecord { Id = Guid.NewGuid(), TenantId = db.TenantId, Value = 20 });
+        if (number == 1 && faults.Entered is not null)
+        {
+            faults.Entered.TrySetResult();
+            if (faults.IgnoreActionCancellation) await faults.Release!.Task;
+            else await faults.Release!.Task.WaitAsync(ct);
+        }
+        db.Add(new AtomicHostRecord { Id = Guid.NewGuid(), Value = 20 });
         await db.SaveChangesAsync(ct);
         if (faults.AsyncSaveThenFail) throw new InvalidOperationException("async action failed after saving");
-        return new();
     }
 }
 
 public sealed partial class DatabaseContractTests
 {
     private const string AtomicFlow = """
-        {"startNodeId":"start","nodes":{"start":{"type":"Start","name":"Start","next":"enqueue"},
-        "enqueue":{"type":"Action","name":"Enqueue","actions":[{"type":"AtomicWrite","mode":"Async"}],"next":"review"},
+        {"startNodeId":"start","nodes":{"start":{"type":"Start","name":"Start","next":"review"},
         "review":{"type":"Approval","name":"Review","approvers":[{"type":"User","value":"bob"}],"next":"end"},"end":{"type":"End","name":"End"}}}
         """;
     private async Task<ServiceProvider> AtomicHostAsync(AtomicFaults faults, bool initializeDatabase = true, Action<ApprovalOptions>? configure = null, Action<IServiceCollection>? configureServices = null)
@@ -138,15 +138,16 @@ public sealed partial class DatabaseContractTests
                 await schema.Database.OpenConnectionAsync(); await using var command = schema.Database.GetDbConnection().CreateCommand();
                 var q = fixture.Provider == "MySql" ? '`' : '"';
                 var table = $"{q}AtomicHostRecords{q}";
-                var create = $"CREATE TABLE {table} ({q}Id{q} varchar(36) NOT NULL PRIMARY KEY, {q}TenantId{q} varchar(64) NOT NULL, {q}Value{q} integer NOT NULL)";
+                var create = $"CREATE TABLE {table} ({q}Id{q} varchar(36) NOT NULL PRIMARY KEY, {q}Value{q} integer NOT NULL)";
                 command.CommandText = fixture.Provider == "SqlServer" ? $"IF OBJECT_ID('AtomicHostRecords', 'U') IS NULL {create}" : create.Replace("CREATE TABLE", "CREATE TABLE IF NOT EXISTS");
                 await command.ExecuteNonQueryAsync(); command.CommandText = $"DELETE FROM {table}"; await command.ExecuteNonQueryAsync();
                 if (fixture.Provider == "Sqlite") { command.CommandText = "PRAGMA journal_mode=WAL"; await command.ExecuteScalarAsync(); }
             }
         }
         var services = new ServiceCollection(); services.AddLogging(); services.AddSingleton(faults);
-        services.AddScoped<IApprovalContextResolver, AtomicResolver>(); services.AddScoped<IApprovalTenantCatalog, AtomicCatalog>();
+        services.AddScoped<IApprovalContextResolver, AtomicResolver>();
         services.AddScoped<IApprovalIdentityProvider, AtomicIdentity>(); services.AddSingleton<IApprovalPermissionProvider, AtomicPermissions>();
+        services.AddScoped<IApprovalUserStatusProvider, AtomicIdentity>();
         services.AddDbContext<AtomicContractContext>(options =>
         {
             var connection = Environment.GetEnvironmentVariable("APPROVAL_TEST_CONNECTION");
@@ -159,15 +160,17 @@ public sealed partial class DatabaseContractTests
             }
             options.ReplaceService<IExecutionStrategyFactory, AtomicStrategyFactory>(); options.AddInterceptors(faults, new AtomicVerificationFault(faults));
         });
-        services.AddApprovalWorkflow<AtomicContractContext>(o => { o.MultiTenant = true; o.EnableBackgroundServices = false; configure?.Invoke(o); })
-            .AddBusinessHandler<AtomicBusiness>().AddActionHandler<AtomicAction>();
+        services.AddApprovalWorkflow<AtomicContractContext>(o => { o.EnableBackgroundServices = false; configure?.Invoke(o); })
+            .AddBusinessHandler<AtomicBusiness>().AddEventHandler<AtomicAction>();
         configureServices?.Invoke(services);
         var provider = services.BuildServiceProvider();
-        foreach (var tenant in initializeDatabase ? new[] { "database-tests", "a", "b" } : Array.Empty<string>())
+        foreach (var tenant in initializeDatabase ? new[] { "database-tests" } : Array.Empty<string>())
         {
             await using var scope = provider.CreateAsyncScope(); ((AtomicResolver)scope.ServiceProvider.GetRequiredService<IApprovalContextResolver>()).Tenant = tenant;
             var db = scope.ServiceProvider.GetRequiredService<AtomicContractContext>();
-            db.Add(new ApprovalDefinition { Id = Guid.NewGuid(), Key = "doc", Name = "Atomic", Version = 1, DefinitionJson = AtomicFlow, IsPublished = true, CreatedAt = Timestamp });
+            var definition = new ApprovalDefinition { Id = Guid.NewGuid(), Key = "doc", Name = "Atomic", Version = 1, DefinitionJson = AtomicFlow, IsPublished = true, CreatedAt = Timestamp };
+            db.Add(definition);
+            db.Add(new ApprovalDefinitionManagement { Id = Guid.NewGuid(), Key = "doc", Name = "Atomic", LastVersion = 1, ActiveDefinitionId = definition.Id, UpdatedAt = Timestamp, UpdatedBy = "admin" });
             await db.SaveChangesAsync();
         }
         return provider;
@@ -183,9 +186,9 @@ public sealed partial class DatabaseContractTests
             async (fresh, ct) =>
             {
                 Interlocked.Increment(ref faults.BusinessCalls); var db = fresh.GetRequiredService<AtomicContractContext>(); faults.Contexts.Add(db.ContextId.InstanceId);
-                db.Add(new AtomicHostRecord { Id = Guid.NewGuid(), TenantId = db.TenantId, Value = amount });
+                db.Add(new AtomicHostRecord { Id = Guid.NewGuid(), Value = amount });
                 var instance = await fresh.GetRequiredService<ApprovalEngine>().StartAsync(new("doc", AtomicBusiness.Type, business, "alice"), ct);
-                faults.OutboxIds.Add(await db.Set<ApprovalOutboxMessage>().Where(m => m.InstanceId == instance.Id).Select(m => m.Id).SingleAsync(ct));
+                faults.OutboxIds.Add(await db.Set<ApprovalOutboxMessage>().Where(m => m.Description == "Submit").Where(m => m.InstanceId == instance.Id).Select(m => m.Id).SingleAsync(ct));
                 return instance.Id;
             }), tenant);
 
@@ -200,7 +203,7 @@ public sealed partial class DatabaseContractTests
         await AtomicRun(host, "alice", async sp => { var db = sp.GetRequiredService<AtomicContractContext>();
             Assert.Equal(1, await db.Set<AtomicHostRecord>().CountAsync()); Assert.Equal(1, await db.Set<ApprovalInstance>().CountAsync());
             Assert.Equal(1, await db.Set<ApprovalOperation>().CountAsync()); Assert.Equal(1, await db.Set<ApprovalBusinessSlot>().CountAsync());
-            Assert.Equal(1, await db.Set<ApprovalTask>().CountAsync()); Assert.Equal(1, await db.Set<ApprovalOutboxMessage>().CountAsync());
+            Assert.Equal(1, await db.Set<ApprovalTask>().CountAsync()); Assert.Equal(1, await db.Set<ApprovalOutboxMessage>().Where(m => m.Description == "Submit").CountAsync());
             return true; });
     }
 
@@ -218,13 +221,13 @@ public sealed partial class DatabaseContractTests
     }
 
     [Fact]
-    public async Task AtomicCommands_TenantIsolationAndReplayAuthorizationRemainMandatory()
+    public async Task AtomicCommands_ReplayStillRequiresCurrentReadAuthorization()
     {
         var faults = new AtomicFaults(); await using var host = await AtomicHostAsync(faults);
-        var a = await AtomicStart(host, faults, "same", tenant: "a"); var b = await AtomicStart(host, faults, "same", tenant: "b"); Assert.NotEqual(a, b);
+        var a = await AtomicStart(host, faults, "same"); Assert.Equal(a, await AtomicStart(host, faults, "same"));
         ((AtomicPermissions)host.GetRequiredService<IApprovalPermissionProvider>()).Rule = r => r.Permission != ApprovalPermissions.InstanceRead;
         var error = await Assert.ThrowsAsync<ApprovalException>(() => AtomicStart(host, faults, "same", tenant: "a")); Assert.Equal(ApprovalErrorCode.Forbidden, error.Code);
-        Assert.Equal(2, faults.BusinessCalls);
+        Assert.Equal(1, faults.BusinessCalls);
     }
 
     [Fact]
@@ -275,7 +278,7 @@ public sealed partial class DatabaseContractTests
             async (fresh, ct) =>
             {
                 var db = fresh.GetRequiredService<AtomicContractContext>();
-                db.Add(new AtomicHostRecord { Id = Guid.NewGuid(), TenantId = db.TenantId, Value = 30 });
+                db.Add(new AtomicHostRecord { Id = Guid.NewGuid(), Value = 30 });
                 var engine = fresh.GetRequiredService<ApprovalEngine>();
                 await engine.StartAsync(new("doc", AtomicBusiness.Type, "one", "alice"), ct);
                 await engine.StartAsync(new("doc", AtomicBusiness.Type, "two", "alice"), ct);
@@ -290,7 +293,7 @@ public sealed partial class DatabaseContractTests
             Assert.Equal(0, await db.Set<ApprovalInstance>().CountAsync());
             Assert.Equal(0, await db.Set<ApprovalOperation>().CountAsync());
             Assert.Equal(0, await db.Set<ApprovalBusinessSlot>().CountAsync());
-            Assert.Equal(0, await db.Set<ApprovalOutboxMessage>().CountAsync());
+            Assert.Equal(0, await db.Set<ApprovalOutboxMessage>().Where(m => m.Description == "Submit").CountAsync());
             return true;
         });
         fail = false; Assert.True(await Execute()); Assert.True(await Execute());
@@ -301,7 +304,7 @@ public sealed partial class DatabaseContractTests
             Assert.Equal(2, await db.Set<ApprovalInstance>().CountAsync());
             Assert.Equal(1, await db.Set<ApprovalOperation>().CountAsync());
             Assert.Equal(2, await db.Set<ApprovalBusinessSlot>().CountAsync());
-            Assert.Equal(2, await db.Set<ApprovalOutboxMessage>().CountAsync());
+            Assert.Equal(2, await db.Set<ApprovalOutboxMessage>().Where(m => m.Description == "Submit").CountAsync());
             return true;
         });
     }
@@ -320,10 +323,10 @@ public sealed partial class DatabaseContractTests
         await AtomicRun(host, "alice", async sp => { var db = sp.GetRequiredService<AtomicContractContext>(); Assert.Equal(2, await db.Set<AtomicHostRecord>().CountAsync()); Assert.Equal(0, await db.Set<ApprovalBusinessSlot>().CountAsync()); return true; });
     }
 
-    private static async Task DispatchAtomic(ServiceProvider host)
+    private static async Task DispatchAtomic(ServiceProvider host, CancellationToken ct = default)
     {
-        await using var scope = await host.GetRequiredService<IApprovalTenantScopeFactory>().CreateAsync("database-tests");
-        await scope.ServiceProvider.GetRequiredService<ApprovalOutboxService>().ProcessDueAsync();
+        await using var scope = await host.GetRequiredService<IApprovalScopeFactory>().CreateAsync();
+        await scope.ServiceProvider.GetRequiredService<ApprovalOutboxService>().ProcessDueAsync(ct);
     }
     [Fact]
     public async Task AtomicOutbox_SaveThenFail_RollsBackActionEvenWithRetryStrategy()
@@ -331,28 +334,82 @@ public sealed partial class DatabaseContractTests
         var faults = new AtomicFaults(); await using var host = await AtomicHostAsync(faults); await AtomicStart(host, faults, "start"); faults.AsyncSaveThenFail = true;
         await DispatchAtomic(host);
         await AtomicRun(host, "alice", async sp => { var db = sp.GetRequiredService<AtomicContractContext>(); Assert.Equal(1, await db.Set<AtomicHostRecord>().CountAsync());
-            var message = await db.Set<ApprovalOutboxMessage>().SingleAsync(); Assert.Equal(OutboxStatus.Pending, message.Status); Assert.Equal(1, message.Attempts); Assert.Null(message.LeaseId); return true; });
+            var message = await db.Set<ApprovalOutboxMessage>().Where(m => m.Description == "Submit").SingleAsync(); Assert.Equal(OutboxStatus.Pending, message.Status); Assert.Equal(1, message.Attempts); return true; });
         faults.AsyncSaveThenFail = false;
-        var messageId = await AtomicRun(host, "alice", sp => sp.GetRequiredService<AtomicContractContext>().Set<ApprovalOutboxMessage>().Select(m => m.Id).SingleAsync());
+        var messageId = await AtomicRun(host, "alice", sp => sp.GetRequiredService<AtomicContractContext>().Set<ApprovalOutboxMessage>().Where(m => m.Description == "Submit").Select(m => m.Id).SingleAsync());
         await AtomicRun(host, "alice", async sp => { await sp.GetRequiredService<IApprovalCommandExecutor>().ExecuteAsync(new("outbox.retry", messageId.ToString(), "retry", new { messageId }, ApprovalPermissions.OutboxRetry, new() { OutboxId = messageId }), async (fresh, ct) => { await fresh.GetRequiredService<ApprovalOutboxService>().RetryAsync(messageId, ct); return true; }); return true; });
         await DispatchAtomic(host);
-        await AtomicRun(host, "alice", async sp => { var db = sp.GetRequiredService<AtomicContractContext>(); Assert.Equal(2, await db.Set<AtomicHostRecord>().CountAsync()); var message = await db.Set<ApprovalOutboxMessage>().SingleAsync(); Assert.Equal(messageId, message.Id); Assert.Equal(OutboxStatus.Succeeded, message.Status); return true; });
+        await AtomicRun(host, "alice", async sp => { var db = sp.GetRequiredService<AtomicContractContext>(); Assert.Equal(2, await db.Set<AtomicHostRecord>().CountAsync()); var message = await db.Set<ApprovalOutboxMessage>().Where(m => m.Description == "Submit").SingleAsync(); Assert.Equal(messageId, message.Id); Assert.Equal(OutboxStatus.Succeeded, message.Status); return true; });
     }
 
     [Fact]
-    public async Task AtomicOutbox_ReplacedLeaseRejectsLateWorkerAndRollsBackItsWrites()
+    public async Task AtomicOutbox_RetryDuringDeliveryIsRejected_AndConcurrentDispatchDoesNotDuplicate()
     {
         var faults = new AtomicFaults { Entered = new(TaskCreationOptions.RunContinuationsAsynchronously), Release = new(TaskCreationOptions.RunContinuationsAsynchronously) };
         await using var host = await AtomicHostAsync(faults); await AtomicStart(host, faults, "start");
         var old = DispatchAtomic(host); await faults.Entered.Task.WaitAsync(TimeSpan.FromSeconds(30));
-        var messageId = await AtomicRun(host, "alice", sp => sp.GetRequiredService<AtomicContractContext>().Set<ApprovalOutboxMessage>().Select(m => m.Id).SingleAsync());
+        var messageId = await AtomicRun(host, "alice", sp => sp.GetRequiredService<AtomicContractContext>().Set<ApprovalOutboxMessage>().Where(m => m.Description == "Submit").Select(m => m.Id).SingleAsync());
         try
         {
-            await AtomicRun(host, "alice", async sp => { await sp.GetRequiredService<IApprovalCommandExecutor>().ExecuteAsync(new("outbox.retry", messageId.ToString(), "retry", null, ApprovalPermissions.OutboxRetry, new() { OutboxId = messageId }), async (fresh, ct) => { await fresh.GetRequiredService<ApprovalOutboxService>().RetryAsync(messageId, ct); return true; }); return true; });
+            var error = await Assert.ThrowsAsync<ApprovalException>(() => AtomicRun(host, "alice", async sp => { await sp.GetRequiredService<IApprovalCommandExecutor>().ExecuteAsync(new("outbox.retry", messageId.ToString(), "retry", null, ApprovalPermissions.OutboxRetry, new() { OutboxId = messageId }), async (fresh, ct) => { await fresh.GetRequiredService<ApprovalOutboxService>().RetryAsync(messageId, ct); return true; }); return true; }));
+            Assert.Equal(ApprovalErrorCode.Conflict, error.Code);
             await DispatchAtomic(host);
+            Assert.Equal(1, faults.ActionCalls);
         }
         finally { faults.Release.TrySetResult(); await old; }
-        await AtomicRun(host, "alice", async sp => { var db = sp.GetRequiredService<AtomicContractContext>(); var message = await db.Set<ApprovalOutboxMessage>().SingleAsync();
+        await AtomicRun(host, "alice", async sp => { var db = sp.GetRequiredService<AtomicContractContext>(); var message = await db.Set<ApprovalOutboxMessage>().Where(m => m.Description == "Submit").SingleAsync();
             Assert.Equal(OutboxStatus.Succeeded, message.Status); Assert.Equal(1, message.Attempts); Assert.Equal(2, await db.Set<AtomicHostRecord>().CountAsync()); return true; });
+        await DispatchAtomic(host);
+        Assert.Equal(1, faults.ActionCalls);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AtomicOutbox_CanceledDeliveryRemainsDue_AndCanResumeWithSameId(bool ignoreCancellation)
+    {
+        var faults = new AtomicFaults { Entered = new(TaskCreationOptions.RunContinuationsAsynchronously), Release = new(TaskCreationOptions.RunContinuationsAsynchronously), IgnoreActionCancellation = ignoreCancellation };
+        await using var host = await AtomicHostAsync(faults); await AtomicStart(host, faults, "start");
+        var messageId = await AtomicRun(host, "alice", sp => sp.GetRequiredService<AtomicContractContext>().Set<ApprovalOutboxMessage>().Where(m => m.Description == "Submit").Select(m => m.Id).SingleAsync());
+        using var stop = new CancellationTokenSource();
+        var dispatch = DispatchAtomic(host, stop.Token);
+        try
+        {
+            await faults.Entered.Task.WaitAsync(TimeSpan.FromSeconds(30));
+            stop.Cancel();
+            if (ignoreCancellation)
+            {
+                Assert.False(dispatch.IsCompleted);
+                await DispatchAtomic(host);
+                Assert.Equal(1, faults.ActionCalls);
+            }
+            faults.Release.TrySetResult();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => dispatch);
+        }
+        finally
+        {
+            stop.Cancel(); faults.Release.TrySetResult();
+            try { await dispatch; }
+            catch (OperationCanceledException) when (stop.IsCancellationRequested) { }
+        }
+        await AtomicRun(host, "alice", async sp =>
+        {
+            var db = sp.GetRequiredService<AtomicContractContext>();
+            var message = await db.Set<ApprovalOutboxMessage>().Where(m => m.Description == "Submit").SingleAsync();
+            Assert.Equal(messageId, message.Id); Assert.Equal(OutboxStatus.Pending, message.Status);
+            Assert.Equal(0, message.Attempts); Assert.Null(message.CompletedAt);
+            Assert.True(message.NextAttemptAt <= DateTime.UtcNow);
+            Assert.Equal(1, await db.Set<AtomicHostRecord>().CountAsync());
+            return true;
+        });
+        await DispatchAtomic(host);
+        await AtomicRun(host, "alice", async sp =>
+        {
+            var db = sp.GetRequiredService<AtomicContractContext>();
+            var message = await db.Set<ApprovalOutboxMessage>().Where(m => m.Description == "Submit").SingleAsync();
+            Assert.Equal(messageId, message.Id); Assert.Equal(OutboxStatus.Succeeded, message.Status);
+            Assert.Equal(1, message.Attempts); Assert.Equal(2, await db.Set<AtomicHostRecord>().CountAsync());
+            return true;
+        });
     }
 }

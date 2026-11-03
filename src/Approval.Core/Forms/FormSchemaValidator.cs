@@ -77,7 +77,8 @@ public static partial class FormSchemaValidator
     private static void ValidateSettings(List<string> errors, FlowSettings settings, HashSet<string> keys, bool hasForm)
     {
         if (settings.InitiatorRoles.Any(string.IsNullOrWhiteSpace)) errors.Add("发起设置中的发起角色不能为空");
-        if (settings.Category is { Length: > 50 }) errors.Add("发起设置中的分类不能超过 50 个字符");
+        if (settings.Category?.Trim() is { } category && (category.Length > 100 || category.Any(char.IsControl)))
+            errors.Add("流程分类不能超过100字符或包含控制字符");
         if (settings.Description is { Length: > 500 }) errors.Add("发起设置中的描述不能超过 500 个字符");
         if (settings.TitleTemplate is { Length: > 200 }) errors.Add("标题模板不能超过 200 个字符");
 

@@ -1,28 +1,28 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { effectScope, ref, type EffectScope } from 'vue'
-import { approvalApi } from '../../api/approval'
+import { createApp, effectScope, ref, type EffectScope } from 'vue'
+import { createApprovalClient, type ApprovalClient } from '../../client'
 import { ApiError } from '../../api/http'
 import type { ApprovalInstance, ApprovalTask } from '../../contracts/api'
 import { useApprovalDetail } from './useApprovalDetail'
 
-vi.mock('../../api/approval', () => ({
-  approvalApi: { instance: vi.fn(), instanceDefinition: vi.fn(), myTask: vi.fn() },
-}))
 vi.mock('element-plus', () => ({ ElMessage: { error: vi.fn() } }))
 
-const api = vi.mocked(approvalApi)
+const api = { instance: vi.fn(), instanceDefinition: vi.fn(), myTask: vi.fn() }
+let client: ApprovalClient
 let scope: EffectScope
 
 beforeEach(() => {
   vi.resetAllMocks()
   scope = effectScope()
+  client = createApprovalClient()
+  Object.assign(client.api, api)
   api.instanceDefinition.mockResolvedValue({
     id: 'definition', key: 'doc', version: 1, name: '文档审批', definitionJson: '{"nodes":{}}', isPublished: true, createdAt: '2026-11-01T00:00:00Z',
   })
   api.myTask.mockResolvedValue({ task: null, editableFields: [], capabilities: {} })
 })
 
-afterEach(() => scope.stop())
+afterEach(() => { scope.stop(); client.dispose() })
 
 function instance(canWithdraw: boolean, tasks: ApprovalTask[] = []): ApprovalInstance {
   return {
@@ -34,7 +34,7 @@ function instance(canWithdraw: boolean, tasks: ApprovalTask[] = []): ApprovalIns
 }
 
 function detail() {
-  return scope.run(() => useApprovalDetail(ref('instance')))!
+  return scope.run(() => createApp({}).use(client).runWithContext(() => useApprovalDetail(ref('instance'))))!
 }
 
 describe('审批详情的撤回能力', () => {

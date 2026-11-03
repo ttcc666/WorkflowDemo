@@ -1,5 +1,4 @@
 using Approval.Core;
-using Approval.Core.Actions;
 using Approval.Core.Abstractions;
 using Approval.Core.Domain;
 using Approval.Core.Engine;
@@ -8,14 +7,13 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Approval.Database.Tests;
 
-internal sealed class FinalSyncAction(AtomicContractContext db, AtomicFaults faults) : IApprovalActionHandler
+internal sealed class FinalSyncAction(AtomicContractContext db, AtomicFaults faults) : IApprovalLifecycleHandler
 {
-    public ApprovalActionDescriptor Descriptor => new("FinalSync", "Final synchronous contract", []);
-    public Task<ApprovalActionResult> ExecuteAsync(ApprovalActionContext context, CancellationToken ct)
+    public Task OnStartingAsync(ApprovalInstance instance, CancellationToken ct)
     {
-        db.Add(new AtomicHostRecord { Id = Guid.NewGuid(), TenantId = db.TenantId, Value = 20 });
+        db.Add(new AtomicHostRecord { Id = Guid.NewGuid(), Value = 20 });
         if (faults.FailCallback) throw new InvalidOperationException("controlled synchronous action failure");
-        return Task.FromResult(new ApprovalActionResult());
+        return Task.CompletedTask;
     }
 }
 public sealed partial class DatabaseContractTests
@@ -24,13 +22,14 @@ public sealed partial class DatabaseContractTests
     public async Task FinalAcceptance_SynchronousActionFailureRollsBackHostApprovalOperationAndOutbox()
     {
         var faults = new AtomicFaults { FailCallback = true };
-        await using var host = await AtomicHostAsync(faults, configureServices: s => s.AddScoped<IApprovalActionHandler, FinalSyncAction>());
-        var flow = AtomicFlow.Replace("\"next\":\"review\"", "\"next\":\"sync\"")
-            .Replace("\"review\":{", "\"sync\":{\"type\":\"Action\",\"name\":\"Sync\",\"actions\":[{\"type\":\"FinalSync\",\"mode\":\"Sync\"}],\"next\":\"review\"},\"review\":{");
+        await using var host = await AtomicHostAsync(faults, configureServices: s => s.AddScoped<IApprovalLifecycleHandler, FinalSyncAction>());
+        var flow = AtomicFlow;
         await AtomicRun(host, "alice", async sp =>
         {
             var db = sp.GetRequiredService<AtomicContractContext>();
-            db.Add(new ApprovalDefinition { Id = Guid.NewGuid(), Key = "sync", Name = "Sync", Version = 1, IsPublished = true, DefinitionJson = flow, CreatedAt = Timestamp });
+            var definition = new ApprovalDefinition { Id = Guid.NewGuid(), Key = "sync", Name = "Sync", Version = 1, DefinitionJson = flow, IsPublished = true, CreatedAt = Timestamp };
+            db.Add(definition);
+            db.Add(new ApprovalDefinitionManagement { Id = Guid.NewGuid(), Key = "sync", Name = "Sync", LastVersion = 1, ActiveDefinitionId = definition.Id, UpdatedAt = Timestamp, UpdatedBy = "admin" });
             await db.SaveChangesAsync(); return true;
         });
         Task<Guid> Start() => AtomicRun(host, "alice", sp => sp.GetRequiredService<IApprovalCommandExecutor>().ExecuteAsync(
@@ -38,11 +37,11 @@ public sealed partial class DatabaseContractTests
             async (fresh, ct) =>
             {
                 var db = fresh.GetRequiredService<AtomicContractContext>();
-                db.Add(new AtomicHostRecord { Id = Guid.NewGuid(), TenantId = db.TenantId, Value = 1 });
+                db.Add(new AtomicHostRecord { Id = Guid.NewGuid(), Value = 1 });
                 return (await fresh.GetRequiredService<ApprovalEngine>().StartAsync(new("sync", AtomicBusiness.Type, "one", "alice"), ct)).Id;
             }));
-        var failure = await Assert.ThrowsAsync<ApprovalException>(Start);
-        Assert.Equal("controlled synchronous action failure", Assert.IsType<InvalidOperationException>(failure.InnerException).Message);
+        var failure = await Assert.ThrowsAsync<InvalidOperationException>(Start);
+        Assert.Equal("controlled synchronous action failure", failure.Message);
         await AtomicRun(host, "alice", async sp =>
         {
             var db = sp.GetRequiredService<AtomicContractContext>();
@@ -52,7 +51,7 @@ public sealed partial class DatabaseContractTests
             Assert.Equal(0, await db.Set<ApprovalLog>().CountAsync());
             Assert.Equal(0, await db.Set<ApprovalOperation>().CountAsync());
             Assert.Equal(0, await db.Set<ApprovalBusinessSlot>().CountAsync());
-            Assert.Equal(0, await db.Set<ApprovalOutboxMessage>().CountAsync());
+            Assert.Equal(0, await db.Set<ApprovalOutboxMessage>().Where(m => m.Description == "Submit").CountAsync());
             return true;
         });
         faults.FailCallback = false;
@@ -65,7 +64,7 @@ public sealed partial class DatabaseContractTests
             Assert.Equal(1, await db.Set<ApprovalTask>().CountAsync());
             Assert.Equal(1, await db.Set<ApprovalOperation>().CountAsync());
             Assert.Equal(1, await db.Set<ApprovalBusinessSlot>().CountAsync());
-            Assert.Equal(1, await db.Set<ApprovalOutboxMessage>().CountAsync());
+            Assert.Equal(1, await db.Set<ApprovalOutboxMessage>().Where(m => m.Description == "Submit").CountAsync());
             return true;
         });
     }
@@ -75,11 +74,11 @@ public sealed partial class DatabaseContractTests
         var faults = new AtomicFaults(); await using var host = await AtomicHostAsync(faults);
         var allowed = await AtomicStart(host, faults, "first", "first");
         var blocked = await AtomicStart(host, faults, "second", "second");
-        var foreign = await AtomicStart(host, faults, "first", "first", tenant: "a");
+        var foreign = await AtomicStart(host, faults, "foreign", "foreign");
         var permissions = (AtomicPermissions)host.GetRequiredService<IApprovalPermissionProvider>();
-        permissions.Rule = request => request.Permission != ApprovalPermissions.TaskReassign || request.Resource.InstanceId != blocked;
+        permissions.Rule = request => request.Permission != ApprovalPermissions.TaskReassign || request.Resource.InstanceId != blocked && request.Resource.InstanceId != foreign;
         var result = await AtomicRun(host, "admin", sp => sp.GetRequiredService<ApprovalEngine>().ReassignUserAsync("bob", "charlie", "admin", "handover"));
-        Assert.Equal(1, result.Count); Assert.Equal(blocked, Assert.Single(result.Skipped).InstanceId);
+        Assert.Equal(1, result.Count); Assert.Equal(new[] { blocked, foreign }.Order(), result.Skipped.Select(s => s.InstanceId).Order());
         await AtomicRun(host, "admin", async sp =>
         {
             var db = sp.GetRequiredService<AtomicContractContext>();

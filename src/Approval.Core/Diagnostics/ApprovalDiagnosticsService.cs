@@ -13,13 +13,13 @@ public sealed record ApprovalDiagnosticContribution(string Code, bool Healthy, l
 public interface IApprovalDiagnosticsContributor { Task<ApprovalDiagnosticContribution> CheckAsync(CancellationToken ct); }
 public sealed record ApprovalDiagnosticFinding(string Code, Guid ResourceId);
 public sealed record ApprovalDiagnosticReport(bool Ready, bool DataAvailable, bool SchemaManaged, int PendingMigrations, bool ModelDrift,
-    int RunningInstances, int PendingOutbox, int FailedOutbox, DateTime? OldestPendingAt, int ExpiredLeases, int OverdueTasks,
+    int RunningInstances, int PendingOutbox, int FailedOutbox, DateTime? OldestPendingAt, int OverdueTasks,
     int MissingBusinessSlots, int StaleBusinessSlots, int PendingFileDeletions, bool AssignmentSampleTruncated,
     IReadOnlyList<ApprovalDiagnosticFinding> Findings, IReadOnlyList<ApprovalHeartbeat> Heartbeats,
     IReadOnlyList<ApprovalDiagnosticContribution> Contributions);
 
 public sealed class ApprovalDiagnosticsService(ApprovalDbContextAccessor accessor, ApprovalEngine engine,
-    IApprovalTenantContext tenant, ApprovalOptions options, TimeProvider clock, ApprovalBackgroundState background,
+    ApprovalOptions options, TimeProvider clock, ApprovalBackgroundState background,
     IEnumerable<IApprovalDiagnosticsContributor> contributors)
 {
     private readonly DbContext _db = accessor.Context;
@@ -32,10 +32,10 @@ public sealed class ApprovalDiagnosticsService(ApprovalDbContextAccessor accesso
         var pending = 0; var drift = false;
         try { pending = managed ? (await _db.Database.GetPendingMigrationsAsync(ct)).Count() : 0; drift = managed && _db.Database.HasPendingModelChanges(); }
         catch (Exception) when (!ct.IsCancellationRequested) { ready = false; }
-        if (!ready) return new(false, false, managed, pending, drift, 0, 0, 0, null, 0, 0, 0, 0, 0, false, [], background.ForTenant(tenant.TenantId), []);
+        if (!ready) return new(false, false, managed, pending, drift, 0, 0, 0, null, 0, 0, 0, 0, false, [], background.Snapshot(), []);
         var instances = await accessor.Authorization.ScopeAsync(_db.Set<ApprovalInstance>().AsNoTracking(), ct);
         var outbox = _db.Set<ApprovalOutboxMessage>().AsNoTracking().Where(o => o.InstanceId == null || instances.Any(i => i.Id == o.InstanceId));
-        var tasks = _db.Set<ApprovalTask>().AsNoTracking().Where(t => t.Status == ApprovalTaskStatus.Pending && instances.Any(i => i.Id == t.InstanceId && i.Status == InstanceStatus.Running));
+        var tasks = _db.Set<ApprovalTask>().AsNoTracking().Where(t => t.Status == ApprovalTaskStatus.Pending && instances.Any(i => i.Id == t.InstanceId && (i.Status == InstanceStatus.Running || i.Status == InstanceStatus.Returned)));
         var total = await tasks.CountAsync(ct);
         var sample = await tasks.OrderBy(t => t.CreatedAt).ThenBy(t => t.Id).Take(options.Background.AssignmentSampleSize).ToListAsync(ct);
         var findings = new List<ApprovalDiagnosticFinding>();
@@ -66,18 +66,17 @@ public sealed class ApprovalDiagnosticsService(ApprovalDbContextAccessor accesso
             }
             catch (Exception) when (!ct.IsCancellationRequested) { contributions.Add(new("contributor_unavailable", false, 0)); }
         }
-        var running = instances.Where(i => i.Status == InstanceStatus.Running);
+        var running = instances.Where(i => (i.Status == InstanceStatus.Running || i.Status == InstanceStatus.Returned));
         var slots = _db.Set<ApprovalBusinessSlot>().AsNoTracking();
-        var stale = slots.Where(s => ! _db.Set<ApprovalInstance>().Any(i => i.Id == s.InstanceId && i.Status == InstanceStatus.Running)
+        var stale = slots.Where(s => ! _db.Set<ApprovalInstance>().Any(i => i.Id == s.InstanceId && (i.Status == InstanceStatus.Running || i.Status == InstanceStatus.Returned))
             && (!_db.Set<ApprovalInstance>().Any(i => i.Id == s.InstanceId) || instances.Any(i => i.Id == s.InstanceId)));
         return new(ready && pending == 0 && !drift, true, managed, pending, drift, await running.CountAsync(ct),
             await outbox.CountAsync(o => o.Status == OutboxStatus.Pending, ct), await outbox.CountAsync(o => o.Status == OutboxStatus.Failed, ct),
             await outbox.Where(o => o.Status == OutboxStatus.Pending).MinAsync(o => (DateTime?)o.CreatedAt, ct),
-            await outbox.CountAsync(o => o.Status == OutboxStatus.Pending && o.LeaseId != null && o.NextAttemptAt <= now, ct),
             await tasks.CountAsync(t => t.DueAt != null && t.DueAt <= now, ct),
             options.SingleRunningInstancePerBusiness ? await running.CountAsync(i => !slots.Any(s => s.InstanceId == i.Id), ct) : 0,
             await stale.CountAsync(ct), await _db.Set<ApprovalFileDeletion>().CountAsync(d => d.Status == FileDeletionStatus.Pending || d.Status == FileDeletionStatus.Processing, ct),
-            total > sample.Count, findings, background.ForTenant(tenant.TenantId), contributions);
+            total > sample.Count, findings, background.Snapshot(), contributions);
     }
     public static async Task<bool> ReadinessAsync(DbContext db, CancellationToken ct = default)
     {

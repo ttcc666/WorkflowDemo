@@ -1,11 +1,10 @@
 import type { FlowSettings, FormSchema } from './forms'
 
-export type NodeType = 'Start' | 'Approval' | 'Cc' | 'Condition' | 'Action' | 'Parallel' | 'Join' | 'End'
+export type NodeType = 'Start' | 'Approval' | 'Cc' | 'Condition' | 'Parallel' | 'Join' | 'End'
 export type ApproveMode = 'Any' | 'All' | 'Sequential'
 export type EmptyApproverPolicy = 'Error' | 'AutoApprove'
-export type NotifyEvent = 'Enter' | 'Approved' | 'Rejected' | 'Transferred' | 'Timeout' | 'Completed'
+export type NotifyEvent = 'Enter' | 'Approved' | 'Rejected' | 'Transferred' | 'Timeout' | 'Completed' | 'Returned' | 'Resubmitted'
 export type TimeoutAction = 'Remind' | 'AutoApprove' | 'AutoReject'
-export type ActionMode = 'Sync' | 'Async'
 /** 表单字段在节点的权限：可编辑（审批节点，表单审批的审批人同意时可修改）/ 隐藏；未设置为只读 */
 export type FieldAccess = 'Editable' | 'Hidden'
 
@@ -38,17 +37,6 @@ export interface TimeoutPolicy {
   maxReminders?: number
 }
 
-/** 动作节点中的一个步骤 */
-export interface ActionStep {
-  type: string
-  name?: string | null
-  mode: ActionMode
-  parameters: Record<string, string>
-  /** 同步动作的输出写入该表单变量，供后续条件分支、模板使用 */
-  outputVariable?: string | null
-  continueOnError?: boolean
-}
-
 export interface FlowNodeDef {
   id: string
   name: string
@@ -63,8 +51,8 @@ export interface FlowNodeDef {
   /** 审批节点：允许加签，默认 true */
   allowAddSign?: boolean
   allowTransfer?: boolean
+  requireComment?: boolean
   requireQualifiedAssignee?: boolean
-  actions?: ActionStep[]
   notifications?: NotificationRule[]
   timeout?: TimeoutPolicy | null
   /** 表单字段权限（审批节点：可编辑 / 隐藏；抄送节点：隐藏），字段标识 → 权限 */

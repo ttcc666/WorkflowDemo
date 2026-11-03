@@ -2,7 +2,7 @@ using Approval.Core.Abstractions;
 using Approval.Core.Domain;
 using Approval.Core.Engine;
 using Approval.Core.Persistence;
-using Approval.Core.Tenancy;
+using Approval.Core.Hosting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
@@ -70,7 +70,7 @@ public sealed partial class ApprovalLifecycleService
     private AsyncServiceScope OwnerScope(ApprovalMaintenanceJob job)
     {
         var scope = scopes.CreateAsyncScope();
-        scope.ServiceProvider.GetRequiredService<ApprovalExecutionContext>().InitializeTrusted(new(tenant.TenantId, job.ActorId, job.SystemRequested),
+        scope.ServiceProvider.GetRequiredService<ApprovalExecutionContext>().InitializeTrusted(new(job.ActorId, job.SystemRequested),
             job.SystemRequested ? [ApprovalPermissions.FileCleanup, ApprovalPermissions.MaintenanceRun] : []);
         return scope;
     }
@@ -81,8 +81,7 @@ public sealed partial class ApprovalLifecycleService
         {
             await using var scope = OwnerScope(job);
             var worker = scope.ServiceProvider.GetRequiredService<ApprovalLifecycleService>();
-            if (options.MultiTenant && !(await scope.ServiceProvider.GetRequiredService<IApprovalTenantCatalog>().GetTenantsAsync(ct)).Any(t => t.Enabled && t.TenantId == tenant.TenantId))
-                throw new ApprovalException("租户已停用") { Code = ApprovalErrorCode.Forbidden };
+
             worker._db.TransactionState.Serializable = true;
             return await worker._unit.ExecuteAsync(token => operation(worker, token), ct);
         });
@@ -99,7 +98,7 @@ public sealed partial class ApprovalLifecycleService
     {
         await Auth.RequireAsync(ApprovalPermissions.MaintenanceRun, ct: ct);
         if (!Policy.Enabled) return 0;
-        var jobs = await _db.Set<ApprovalMaintenanceJob>().AsNoTracking().Where(j => j.Status == MaintenanceJobStatus.Pending || j.Status == MaintenanceJobStatus.Running && j.LeaseUntil <= Now)
+        var jobs = await _db.Set<ApprovalMaintenanceJob>().AsNoTracking().Where(j => j.Status == MaintenanceJobStatus.Pending || j.Status == MaintenanceJobStatus.Running)
             .OrderBy(j => j.CreatedAt).ThenBy(j => j.Id).Take(2).ToListAsync(ct);
         foreach (var job in jobs) await ProcessJobAsync(job, 1, ct);
         return jobs.Count;
@@ -107,15 +106,15 @@ public sealed partial class ApprovalLifecycleService
     private async Task<MaintenanceJobInfo> ProcessJobAsync(ApprovalMaintenanceJob job, int maxBatches, CancellationToken ct)
     {
         CheckPolicy(job.Target, job.Mode);
-        var lease = Guid.NewGuid();
+        using var run = gate.TryEnter(job.Id) ?? throw new ApprovalException("此维护任务正在执行") { Code = ApprovalErrorCode.Conflict };
         bool claimed;
         try { claimed = await RunOwnedAsync(job, async (w, token) =>
         {
             var current = await w._db.Set<ApprovalMaintenanceJob>().SingleAsync(j => j.Id == job.Id, token);
-            if (current.Status == MaintenanceJobStatus.Completed || current.Status == MaintenanceJobStatus.Running && current.LeaseUntil > w.Now) return false;
+            if (current.Status == MaintenanceJobStatus.Completed) return false;
             await w.AuthorizeJobAsync(current, null, token);
             if (current.PolicyHash != w.Hash(current.Target, current.Mode)) throw new ApprovalException("保留策略变化，请重新预览并创建任务") { Code = ApprovalErrorCode.Conflict };
-            current.Status = MaintenanceJobStatus.Running; current.LeaseId = lease; current.LeaseUntil = w.Now + w.Policy.LeaseDuration; current.LastErrorCode = null; current.ConcurrencyStamp++;
+            current.Status = MaintenanceJobStatus.Running; current.LastErrorCode = null; current.ConcurrencyStamp++;
             return true;
         }, ct); }
         catch (DbUpdateConcurrencyException) { claimed = false; }
@@ -124,14 +123,14 @@ public sealed partial class ApprovalLifecycleService
             try
             {
                 for (var batch = 0; batch < maxBatches; batch++)
-                    if (!await RunOwnedAsync(job, (w, token) => w.BatchAsync(job.Id, lease, token), ct)) break;
+                    if (!await RunOwnedAsync(job, (w, token) => w.BatchAsync(job.Id, token), ct)) break;
                 await RunOwnedAsync(job, async (w, token) => { var current = await w._db.Set<ApprovalMaintenanceJob>().SingleAsync(j => j.Id == job.Id, token);
-                    if (current.LeaseId == lease) { if (current.Status == MaintenanceJobStatus.Running) current.Status = MaintenanceJobStatus.Pending; current.LeaseId = null; current.LeaseUntil = null; current.ConcurrencyStamp++; } return true; }, ct);
+                    if (current.Status == MaintenanceJobStatus.Running) { current.Status = MaintenanceJobStatus.Pending; current.ConcurrencyStamp++; } return true; }, ct);
             }
             catch (Exception ex) when (!ct.IsCancellationRequested)
             {
-                try { await RunOwnedAsync(job, async (w, token) => { var current = await w._db.Set<ApprovalMaintenanceJob>().SingleAsync(j => j.Id == job.Id, token);
-                    if (current.LeaseId == lease) { current.Status = MaintenanceJobStatus.Failed; current.LastErrorCode = ex is ApprovalException a ? a.Code.ToString() : ex.GetType().Name; current.LeaseId = null; current.LeaseUntil = null; current.ConcurrencyStamp++; } return true; }, ct); } catch { /* The lease expires; no lost cursor is manufactured. */ }
+                await RunOwnedAsync(job, async (w, token) => { var current = await w._db.Set<ApprovalMaintenanceJob>().SingleAsync(j => j.Id == job.Id, token);
+                    current.Status = MaintenanceJobStatus.Failed; current.LastErrorCode = ex is ApprovalException a ? a.Code.ToString() : ex.GetType().Name; current.ConcurrencyStamp++; return true; }, ct);
                 throw;
             }
         }
@@ -146,10 +145,10 @@ public sealed partial class ApprovalLifecycleService
         }
         else { await Auth.RequireAsync(ApprovalPermissions.ArchiveExecute, resource, ct: ct); if (job.Mode == MaintenanceMode.Purge) await Auth.RequireAsync(ApprovalPermissions.ArchivePurge, resource, ct: ct); }
     }
-    private async Task<bool> BatchAsync(Guid id, Guid lease, CancellationToken ct)
+    private async Task<bool> BatchAsync(Guid id, CancellationToken ct)
     {
         var job = await _db.Set<ApprovalMaintenanceJob>().SingleAsync(j => j.Id == id, ct);
-        if (job.LeaseId != lease || job.LeaseUntil <= Now || job.Status != MaintenanceJobStatus.Running) throw new DbUpdateConcurrencyException("Maintenance lease replaced");
+        if (job.Status != MaintenanceJobStatus.Running) throw new DbUpdateConcurrencyException("维护任务状态已变化");
         CheckPolicy(job.Target, job.Mode); await AuthorizeJobAsync(job, null, ct);
         if (job.PolicyHash != Hash(job.Target, job.Mode)) throw new ApprovalException("保留策略已变化") { Code = ApprovalErrorCode.Conflict };
         var candidates = await SelectAsync(job.Target, job.Mode, job.Cutoff, Policy.BatchSize, ct);
@@ -160,7 +159,7 @@ public sealed partial class ApprovalLifecycleService
             var record = await SnapshotAsync(job.Target, candidate, job.Mode == MaintenanceMode.Purge, ct);
             if (job.Mode == MaintenanceMode.Purge) { await PurgeAsync(job.Target, candidate, record, ct); record.PurgedAt ??= Now; record.ConcurrencyStamp++; }
         }
-        job.Processed += candidates.Items.Count; job.CompletedBatches++; job.LeaseUntil = Now + Policy.LeaseDuration; job.ConcurrencyStamp++;
+        job.Processed += candidates.Items.Count; job.CompletedBatches++; job.ConcurrencyStamp++;
         Audit("BatchCommitted", job.Target, job: job, count: candidates.Items.Count);
         return true;
     }
@@ -207,6 +206,8 @@ public sealed partial class ApprovalLifecycleService
                 _db.RemoveRange(await _db.Set<ApprovalMessage>().Where(x => x.InstanceId == instance.Id).ToListAsync(ct));
                 _db.RemoveRange(await _db.Set<ApprovalOutboxMessage>().Where(x => x.InstanceId == instance.Id).ToListAsync(ct));
                 _db.RemoveRange(await _db.Set<ApprovalTask>().Where(x => x.InstanceId == instance.Id).ToListAsync(ct));
+                // 只有已授权且已归档的维护清理可以删除在线轨迹；普通业务只能追加。
+                _db.TransactionState.AllowLogDeletion = true;
                 _db.RemoveRange(await _db.Set<ApprovalLog>().Where(x => x.InstanceId == instance.Id).ToListAsync(ct));
                 _db.RemoveRange(await _db.Set<ApprovalCarbonCopy>().Where(x => x.InstanceId == instance.Id).ToListAsync(ct));
                 _db.Remove(instance); break;
@@ -221,7 +222,7 @@ public sealed partial class ApprovalLifecycleService
                 file.DeletionPending = true;
                 var deletion = await _db.Set<ApprovalFileDeletion>().SingleOrDefaultAsync(d => d.FileId == file.Id, ct);
                 if (deletion is null) _db.Add(new ApprovalFileDeletion { Id = Guid.NewGuid(), FileId = file.Id, StorageKey = file.StorageKey, NextAttemptAt = Now });
-                else { deletion.Status = FileDeletionStatus.Pending; deletion.NextAttemptAt = Now; deletion.LeaseId = null; deletion.ConcurrencyStamp++; }
+                else { deletion.Status = FileDeletionStatus.Pending; deletion.NextAttemptAt = Now; deletion.ConcurrencyStamp++; }
                 break;
             case ApprovalMessage message: _db.Remove(message); break;
             case ApprovalOutboxMessage outbox when outbox.Status == OutboxStatus.Succeeded: _db.Remove(outbox); break;

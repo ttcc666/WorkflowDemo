@@ -14,11 +14,11 @@ public static class ApprovalInstrumentation
     internal static readonly Histogram<double> CommandDuration = Metrics.CreateHistogram<double>("approval.command.duration", "ms");
     internal static readonly Histogram<double> BackgroundDuration = Metrics.CreateHistogram<double>("approval.background.duration", "ms");
     internal static readonly Histogram<double> TransactionDuration = Metrics.CreateHistogram<double>("approval.transaction.duration", "ms");
-    internal static IDisposable Command(string tenant, string kind, string? key)
+    internal static IDisposable Command(string kind, string? key)
     {
         Commands.Add(1);
         var activity = Activities.StartActivity("approval.command");
-        activity?.SetTag("approval.tenant.id", tenant); activity?.SetTag("approval.command.kind", kind); activity?.SetTag("approval.operation.id", key);
+        activity?.SetTag("approval.command.kind", kind); activity?.SetTag("approval.operation.id", key);
         return new Observation(CommandDuration, activity);
     }
     internal static IDisposable Transaction() => new Observation(TransactionDuration, Activities.StartActivity("approval.transaction"));

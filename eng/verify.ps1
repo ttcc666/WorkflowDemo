@@ -20,7 +20,8 @@ if ($Scope -in @('All', 'Backend')) {
     Invoke-CheckedCommand 'dotnet' @('test', 'Workflow.slnx', '--no-build', '--no-restore', '--configuration', 'Release', '--verbosity', 'minimal')
     Invoke-CheckedCommand 'dotnet' @('ef', 'migrations', 'has-pending-model-changes', '--project', 'samples/Approval.Certificate', '--startup-project', 'samples/Certificate.Api', '--configuration', 'Release', '--no-build')
     foreach ($provider in @('Sqlite', 'MySql', 'SqlServer', 'PostgreSql')) {
-        Invoke-CheckedCommand 'dotnet' @('ef', 'migrations', 'has-pending-model-changes', '--project', 'samples/Approval.MultiTenant.Api', '--context', ($provider + 'ReferenceContext'), '--configuration', 'Release', '--no-build')
+        Invoke-CheckedCommand 'dotnet' @('ef', 'migrations', 'has-pending-model-changes', '--project', 'samples/Approval.ReferenceHost', '--context', ($provider + 'ReferenceContext'), '--configuration', 'Release', '--no-build')
+        Invoke-CheckedCommand 'dotnet' @('ef', 'migrations', 'has-pending-model-changes', '--project', 'tests/Approval.Database.Tests', '--context', ($provider + 'ContractContext'), '--configuration', 'Release', '--no-build')
     }
     Invoke-CheckedCommand 'pwsh' @('-NoProfile', '-File', (Join-Path $PSScriptRoot 'verify-reference-host.ps1'), '-SkipBuild') $repositoryRoot
 

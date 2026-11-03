@@ -31,7 +31,9 @@ public static class NotificationDefaults
         [NotifyEvent.Rejected] = "审批驳回：{标题}",
         [NotifyEvent.Transferred] = "转交待办：{标题}",
         [NotifyEvent.Timeout] = "审批催办：{标题}",
-        [NotifyEvent.Completed] = "审批{结果}：{标题}"
+        [NotifyEvent.Completed] = "审批{结果}：{标题}",
+        [NotifyEvent.Returned] = "审批退回：{标题}",
+        [NotifyEvent.Resubmitted] = "审批重新提交：{标题}"
     };
 
     public static IReadOnlyDictionary<NotifyEvent, string> Contents { get; } = new Dictionary<NotifyEvent, string>
@@ -41,7 +43,9 @@ public static class NotificationDefaults
         [NotifyEvent.Rejected] = "【已驳回】{标题}，{操作人} 在 {节点} 驳回：{意见}",
         [NotifyEvent.Transferred] = "【转交】{标题}，{操作人} 将 {节点} 转交给你",
         [NotifyEvent.Timeout] = "【催办】{标题} 在 {节点} 已超过处理时限（截止 {截止时间}），请尽快处理",
-        [NotifyEvent.Completed] = "【{结果}】{标题}"
+        [NotifyEvent.Completed] = "【{结果}】{标题}",
+        [NotifyEvent.Returned] = "【退回】{标题} 被 {操作人} 退回：{意见}，请修改后重新提交",
+        [NotifyEvent.Resubmitted] = "【重新提交】{标题}，{操作人} 已修改并重新提交"
     };
 
     /// <summary>抄送节点未配置通知规则时，默认给抄送人发站内信。</summary>
@@ -57,7 +61,7 @@ public static class NotificationDefaults
     /// <summary>退回发起人时，若没有配置驳回通知规则，默认给发起人发站内信。</summary>
     public static NotificationRule ReturnedToInitiatorRule { get; } = new()
     {
-        Events = [NotifyEvent.Rejected],
+        Events = [NotifyEvent.Returned],
         Recipients = [new ApproverRule(AssigneesRecipient, "")],
         Channels = [InAppChannel.Name],
         Title = "申请被退回：{标题}",
@@ -76,7 +80,7 @@ public static class NotificationDefaults
     public static IReadOnlyList<NotifyEvent> AllowedEvents(NodeType? nodeType) => nodeType switch
     {
         null or NodeType.Approval => Enum.GetValues<NotifyEvent>(),
-        NodeType.Cc or NodeType.Action => [NotifyEvent.Enter],
+        NodeType.Cc => [NotifyEvent.Enter],
         NodeType.End => [NotifyEvent.Completed],
         _ => []
     };

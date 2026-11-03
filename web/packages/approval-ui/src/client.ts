@@ -1,7 +1,7 @@
 import { computed, effectScope, watch, hasInjectionContext, inject, type App, type ComputedRef, type InjectionKey } from 'vue'
-import { approvalApi, createApprovalApi, type ApprovalApiClient } from './api/approval'
-import { http, createHttpClient, type ApprovalHttpClient } from './api/http'
-import { approvalConfig, approvalIdentityKey, resolveApprovalUIOptions, type ApprovalUIOptions, type ResolvedApprovalUIOptions } from './config'
+import { createApprovalApi, type ApprovalApiClient } from './api/approval'
+import { createHttpClient, type ApprovalHttpClient } from './api/http'
+import { approvalIdentityKey, resolveApprovalUIOptions, type ApprovalUIOptions, type ResolvedApprovalUIOptions } from './config'
 
 export interface ApprovalClient {
   readonly api: ApprovalApiClient
@@ -55,7 +55,7 @@ function managedClient(
   return client
 }
 
-/** 独立客户端，也可作为 Vue 插件安装；不修改兼容单实例的配置。 */
+/** 独立客户端，也可作为 Vue 插件安装；每个实例持有自己的配置与资源。 */
 export function createApprovalClient(options: ApprovalUIOptions = {}): ApprovalClient {
   const resolved = resolveApprovalUIOptions(options)
   const config = () => resolved
@@ -64,10 +64,9 @@ export function createApprovalClient(options: ApprovalUIOptions = {}): ApprovalC
   return managedClient(config, () => transport, () => api)
 }
 
-/** ApprovalUI、approvalApi、http 的兼容单实例。使用 getter 也便于独立测试替换旧 API。 */
-export const defaultApprovalClient = managedClient(approvalConfig, () => http, () => approvalApi)
-
 /** 在 setup 中获取客户端并保留引用，事件和异步回调继续使用同一实例。 */
 export function useApprovalClient(): ApprovalClient {
-  return hasInjectionContext() ? inject(approvalClientKey, defaultApprovalClient) : defaultApprovalClient
+  const client = hasInjectionContext() ? inject(approvalClientKey, null) : null
+  if (!client) throw new Error('请先通过 app.use(createApprovalClient(options)) 或 app.use(ApprovalUI, options) 安装审批客户端')
+  return client
 }

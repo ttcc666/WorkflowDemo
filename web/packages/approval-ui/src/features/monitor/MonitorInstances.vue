@@ -66,7 +66,7 @@ async function terminate(row: InstanceListItem) {
     </div>
     <InstanceTable :items="list.items.value" :loading="list.loading.value" empty-text="没有符合条件的流程" @open="open">
       <template #actions="{ row }">
-        <el-button v-if="row.status === 'Running'" link type="danger" size="small" @click.stop="terminate(row)">终止</el-button>
+        <el-button v-if="(row.status === 'Running' || row.status === 'Returned')" link type="danger" size="small" @click.stop="terminate(row)">终止</el-button>
       </template>
     </InstanceTable>
     <el-pagination v-model:current-page="list.page.value" v-model:page-size="list.pageSize.value" :total="list.total.value"

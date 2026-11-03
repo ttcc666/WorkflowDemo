@@ -1,6 +1,5 @@
 using Approval.Core;
 using Approval.Core.Abstractions;
-using Approval.Core.Notifications;
 using Approval.AspNetCore;
 
 namespace Certificate.Api.Infrastructure;
@@ -10,7 +9,7 @@ namespace Certificate.Api.Infrastructure;
 /// 生产环境请替换为对接组织架构 / 认证系统的实现。
 /// </summary>
 public sealed class DemoIdentityProvider(IConfiguration configuration)
-    : IApprovalIdentityProvider, IApprovalContactProvider, IApprovalUserDirectory, IApprovalOrganizationProvider
+    : IApprovalIdentityProvider, IApprovalUserDirectory, IApprovalOrganizationProvider
 {
     // 配置系统会丢弃空数组，因此用对象列表表示用户，没有角色的用户也能保留
     private sealed class DemoUser
@@ -68,10 +67,6 @@ public sealed class DemoIdentityProvider(IConfiguration configuration)
         Task.FromResult<IReadOnlyList<string>>(All.SelectMany(u => u.Roles).Distinct().Order().ToList());
 
     private static ApprovalUser ToUser(DemoUser u) => new(u.Id, u.Name ?? u.Id, u.Roles);
-
-    /// <summary>演示：邮箱为 {用户}@example.com，企业微信 / 钉钉 UserId 与用户 ID 相同。</summary>
-    public Task<string?> GetContactAsync(string userId, string channel, CancellationToken ct) =>
-        Task.FromResult<string?>(channel == "Email" ? $"{userId}@example.com" : userId);
 
     // ───── IApprovalOrganizationProvider：部门负责人、上级（审批人类型 DeptLeader / Manager / ManagerChain） ─────
 

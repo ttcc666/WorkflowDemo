@@ -7,16 +7,14 @@ using System.Text.Json;
 
 var builder = WebApplication.CreateBuilder(args);
 var operation = builder.Configuration["Certificate:DatabaseOperation"];
-if (operation is "backup" or "upgrade")
+if (operation == "backup")
 {
     var connection = new SqliteConnectionStringBuilder(builder.Configuration.GetConnectionString("Default"));
     connection.DataSource = Path.GetFullPath(connection.DataSource, builder.Environment.ContentRootPath);
     var destination = builder.Configuration["Certificate:Destination"] ?? throw new InvalidOperationException("请明确指定 Certificate:Destination 新文件路径");
-    if (operation == "upgrade" && !builder.Configuration.GetValue<bool>("Certificate:ConfirmOffline"))
-        throw new InvalidOperationException("升级前请停止旧服务写入，并显式设置 Certificate:ConfirmOffline=true；升级只生成副本。");
     await using var context = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseSqlite(connection.ToString()).Options);
-    var database = new CertificateDatabase(context, TimeProvider.System);
-    var result = operation == "backup" ? await database.BackupAsync(destination) : await database.UpgradeCopyAsync(destination);
+    var database = new CertificateDatabase(context);
+    var result = await database.BackupAsync(destination);
     Console.WriteLine(JsonSerializer.Serialize(result, JsonSerializerOptions.Web));
     return;
 }

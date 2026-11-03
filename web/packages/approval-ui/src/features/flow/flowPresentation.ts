@@ -6,7 +6,6 @@ export const nodeTypeLabels: Record<NodeType, string> = {
   Approval: '审批',
   Cc: '抄送',
   Condition: '条件分支',
-  Action: '自动动作',
   Parallel: '并行分支',
   Join: '合并',
   End: '结束',
@@ -21,6 +20,8 @@ export const notifyEventLabels: Record<NotifyEvent, string> = {
   Rejected: '驳回',
   Transferred: '转交',
   Timeout: '超时提醒',
+  Returned: '退回修改',
+  Resubmitted: '重新提交',
   Completed: '流程结束',
 }
 
@@ -35,9 +36,8 @@ export function notifyEventsFor(type: NodeType | 'Flow'): NotifyEvent[] {
   switch (type) {
     case 'Approval':
     case 'Flow':
-      return ['Enter', 'Approved', 'Rejected', 'Transferred', 'Timeout', 'Completed']
+      return ['Enter', 'Approved', 'Rejected', 'Transferred', 'Timeout', 'Completed', 'Returned', 'Resubmitted']
     case 'Cc':
-    case 'Action':
       return ['Enter']
     case 'End':
       return ['Completed']
@@ -112,7 +112,6 @@ export function approverSummary(data: FlowNodeData) {
   const rules = data.approvers.map((r) => approverRuleText(r)).join('，')
   if (data.type === 'Approval') return `${modeLabels[data.mode]} · ${rules || '未设置审批人'}`
   if (data.type === 'Cc') return rules || '未设置抄送人'
-  if (data.type === 'Action') return data.actions.map((a) => a.name || a.type).join('，') || '未配置动作'
   if (data.type === 'Parallel') return '所有分支同时进行'
   if (data.type === 'Join') return '等待全部分支完成'
   return ''
@@ -124,6 +123,8 @@ export const defaultTemplates: Record<NotifyEvent, string> = {
   Rejected: '【已驳回】{标题}，{操作人} 在 {节点} 驳回：{意见}',
   Transferred: '【转交】{标题}，{操作人} 将 {节点} 转交给你',
   Timeout: '【催办】{标题} 在 {节点} 已超过处理时限（截止 {截止时间}），请尽快处理',
+  Returned: '退回修改',
+  Resubmitted: '重新提交',
   Completed: '【{结果}】{标题}',
 }
 

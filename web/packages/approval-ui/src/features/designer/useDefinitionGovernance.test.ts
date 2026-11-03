@@ -4,7 +4,7 @@ import { createCommandIntent } from '../../composables/useCommandIntent'
 import { ApiError } from '../../api/http'
 import type { DefinitionGovernance } from '../../contracts/api'
 
-const draft: DefinitionGovernance = { key: 'doc', name: 'Doc', draftJson: '{"nodes":{}}', revision: 1, lastVersion: 0,
+const draft: DefinitionGovernance = { key: 'doc', name: 'Doc', category: null, draftJson: '{"nodes":{}}', revision: 1, lastVersion: 0,
   isEnabled: false, activeDefinitionId: null, draftSourceDefinitionId: null, hasDraftChanges: true, updatedAt: null, updatedBy: null, capabilities: {} }
 function intent() {
   const entries = new Map<string, string>(); let sequence = 0

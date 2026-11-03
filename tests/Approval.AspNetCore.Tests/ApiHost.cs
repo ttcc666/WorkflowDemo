@@ -16,7 +16,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Approval.AspNetCore.Tests;
 
-public sealed class ApiDbContext(DbContextOptions<ApiDbContext> options) : ApprovalDbContext(options, new Approval.Core.Abstractions.FixedApprovalTenantContext("tests"))
+public sealed class ApiDbContext(DbContextOptions<ApiDbContext> options) : ApprovalDbContext(options)
 {
     protected override void OnModelCreating(ModelBuilder modelBuilder) => modelBuilder.ConfigureApproval(this);
 }
@@ -108,7 +108,6 @@ public sealed class ApiHost : IAsyncDisposable
         var approval = builder.Services
             .AddApprovalWorkflow<ApiDbContext>(o =>
             {
-                o.FixedTenantId = "tests";
                 o.EnableBackgroundServices = false;
                 workflow?.Invoke(o);
             })
@@ -162,7 +161,7 @@ public sealed class ApiHost : IAsyncDisposable
     public async Task<T> RunAsync<T>(Func<IServiceProvider, Task<T>> action)
     {
         await using var scope = _app.Services.CreateAsyncScope();
-        scope.ServiceProvider.GetRequiredService<Approval.Core.Tenancy.ApprovalExecutionContext>().InitializeTrusted(new("tests", "test-fixture"), []);
+        scope.ServiceProvider.GetRequiredService<Approval.Core.Hosting.ApprovalExecutionContext>().InitializeTrusted(new("test-fixture"), []);
         scope.ServiceProvider.GetRequiredService<ApprovalDbContextAccessor>().Authorization = Approval.Tests.Infrastructure.FlowFixtureAuthorization.Instance;
         return await action(scope.ServiceProvider);
     }

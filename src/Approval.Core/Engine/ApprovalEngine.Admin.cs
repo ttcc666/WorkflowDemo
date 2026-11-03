@@ -28,7 +28,7 @@ public sealed partial class ApprovalEngine
             .Include(i => i.Tasks)
             .FirstOrDefaultAsync(i => i.Id == instanceId, ct)
             ?? throw new ApprovalException("流程不存在") { Code = ApprovalErrorCode.NotFound };
-        if (instance.Status != InstanceStatus.Running) throw new ApprovalException("流程已结束，无法终止");
+        if (instance.Status is not (InstanceStatus.Running or InstanceStatus.Returned)) throw new ApprovalException("流程已结束，无法终止");
 
         var flow = await LoadFlowAsync(instance, ct);
         var node = OpenTasks(instance).Select(t => flow.Nodes.GetValueOrDefault(t.NodeId)).FirstOrDefault(n => n is not null);
@@ -51,6 +51,7 @@ public sealed partial class ApprovalEngine
     {
         await _authorization.RequireAsync(Approval.Core.Abstractions.ApprovalPermissions.TaskReassign, new() { TaskId = taskId }, operatorId, ct);
         toUserId = toUserId?.Trim() ?? "";
+        await EnsureActiveUserAsync(toUserId, ct);
         var (instance, task, flow) = await LoadTaskAsync(taskId, ct);
         if (await ReassignErrorAsync(instance, task, flow, toUserId, reason, ct) is { } error) throw new ApprovalException(error);
 
@@ -77,7 +78,7 @@ public sealed partial class ApprovalEngine
                 join i in scoped on t.InstanceId equals i.Id
                 where t.AssigneeKind == AssigneeKind.User && t.AssigneeValue == fromUserId
                       && (t.Status == ApprovalTaskStatus.Pending || t.Status == ApprovalTaskStatus.Waiting || t.Status == ApprovalTaskStatus.Suspended)
-                      && i.Status == InstanceStatus.Running
+                      && (i.Status == InstanceStatus.Running || i.Status == InstanceStatus.Returned)
                 orderby i.CreatedAt
                 select i.Id)
             .Distinct()
@@ -125,7 +126,7 @@ public sealed partial class ApprovalEngine
     private async Task<string?> ReassignErrorAsync(ApprovalInstance instance, ApprovalTask task, FlowDefinition flow,
         string toUserId, string? reason, CancellationToken ct)
     {
-        if (instance.Status != InstanceStatus.Running) return "流程已结束";
+        if (instance.Status is not (InstanceStatus.Running or InstanceStatus.Returned)) return "流程已结束";
         if (!IsOpen(task)) return "任务已处理";
         if (task.Kind == ApprovalTaskKind.Resubmit) return "退回发起人的申请不能改派";
         if (toUserId.Length == 0) return "请选择改派对象";
@@ -146,6 +147,8 @@ public sealed partial class ApprovalEngine
     private async Task ReassignCoreAsync(ApprovalInstance instance, FlowDefinition flow, ApprovalTask task, string operatorId, string toUserId,
         string? reason, CancellationToken ct)
     {
+        await EnsureActiveUserAsync(toUserId, ct);
+        _operationTaskId = task.Id;
         var from = Describe(new Assignee(task.AssigneeKind, task.AssigneeValue));
         var handed = HandOver(instance, task, toUserId, operatorId, reason);
         AddLog(instance, ApprovalAction.Reassign, operatorId,

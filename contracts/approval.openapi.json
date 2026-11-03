@@ -1,107 +1,6 @@
 {
   "components": {
     "schemas": {
-      "ActionMode": {
-        "enum": [
-          "Sync",
-          "Async"
-        ]
-      },
-      "ActionParameter": {
-        "properties": {
-          "defaultValue": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "help": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "kind": {
-            "$ref": "#/components/schemas/ActionParameterKind"
-          },
-          "label": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "options": {
-            "items": {
-              "type": "string"
-            },
-            "type": [
-              "null",
-              "array"
-            ]
-          },
-          "required": {
-            "type": "boolean"
-          },
-          "template": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/TemplateEncoding"
-              }
-            ]
-          }
-        },
-        "required": [
-          "name",
-          "label"
-        ],
-        "type": "object"
-      },
-      "ActionParameterKind": {
-        "default": "Text",
-        "enum": [
-          "Text",
-          "TextArea",
-          "Code",
-          "Number",
-          "Select",
-          "Boolean"
-        ]
-      },
-      "ActionStep": {
-        "properties": {
-          "continueOnError": {
-            "type": "boolean"
-          },
-          "mode": {
-            "$ref": "#/components/schemas/ActionMode"
-          },
-          "name": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "outputVariable": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "parameters": {
-            "additionalProperties": {
-              "type": "string"
-            },
-            "type": "object"
-          },
-          "type": {
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
       "AddSignMode": {
         "enum": [
           "Before",
@@ -151,7 +50,6 @@
           "AutoApprove",
           "Cc",
           "Complete",
-          "Action",
           "Remind",
           "TimeoutApprove",
           "TimeoutReject",
@@ -160,42 +58,9 @@
           "Resubmit",
           "Terminate",
           "Reassign",
-          "FormEdit"
+          "FormEdit",
+          "NodeEntered"
         ]
-      },
-      "ApprovalActionDescriptor": {
-        "properties": {
-          "description": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "displayName": {
-            "type": "string"
-          },
-          "parameters": {
-            "items": {
-              "$ref": "#/components/schemas/ActionParameter"
-            },
-            "type": "array"
-          },
-          "supportsAsync": {
-            "type": "boolean"
-          },
-          "supportsSync": {
-            "type": "boolean"
-          },
-          "type": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "type",
-          "displayName",
-          "parameters"
-        ],
-        "type": "object"
       },
       "ApprovalDefinitionAudit": {
         "properties": {
@@ -362,14 +227,6 @@
           "dataAvailable": {
             "type": "boolean"
           },
-          "expiredLeases": {
-            "format": "int32",
-            "pattern": "^-?(?:0|[1-9]\\d*)$",
-            "type": [
-              "integer",
-              "string"
-            ]
-          },
           "failedOutbox": {
             "format": "int32",
             "pattern": "^-?(?:0|[1-9]\\d*)$",
@@ -473,7 +330,6 @@
           "pendingOutbox",
           "failedOutbox",
           "oldestPendingAt",
-          "expiredLeases",
           "overdueTasks",
           "missingBusinessSlots",
           "staleBusinessSlots",
@@ -737,6 +593,13 @@
               "integer",
               "string"
             ]
+          },
+          "taskId": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
           }
         },
         "required": [
@@ -784,9 +647,6 @@
               "type": "string"
             },
             "type": "array"
-          },
-          "tenantId": {
-            "type": "string"
           },
           "userId": {
             "type": "string"
@@ -865,12 +725,6 @@
       },
       "ApprovalMetadata": {
         "properties": {
-          "actions": {
-            "items": {
-              "$ref": "#/components/schemas/ApprovalActionDescriptor"
-            },
-            "type": "array"
-          },
           "approverTypes": {
             "items": {
               "$ref": "#/components/schemas/ApproverTypeDescriptor"
@@ -905,7 +759,6 @@
         "required": [
           "approverTypes",
           "recipientTypes",
-          "actions",
           "channels",
           "templateVariables",
           "defaultTemplates"
@@ -1069,6 +922,14 @@
           "version"
         ],
         "type": "object"
+      },
+      "ApprovalSort": {
+        "enum": [
+          "Newest",
+          "Oldest",
+          "Title",
+          null
+        ]
       },
       "ApprovalStartedResponse": {
         "properties": {
@@ -1304,6 +1165,9 @@
         "properties": {
           "id": {
             "type": "string"
+          },
+          "isActive": {
+            "type": "boolean"
           },
           "name": {
             "type": "string"
@@ -1552,6 +1416,180 @@
         ],
         "type": "object"
       },
+      "CarbonCopyItem": {
+        "properties": {
+          "assigneeKind": {
+            "$ref": "#/components/schemas/AssigneeKind"
+          },
+          "assigneeValue": {
+            "type": "string"
+          },
+          "businessKey": {
+            "type": "string"
+          },
+          "businessType": {
+            "type": "string"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "definitionKey": {
+            "type": "string"
+          },
+          "definitionName": {
+            "type": "string"
+          },
+          "definitionVersion": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "initiatorId": {
+            "type": "string"
+          },
+          "instanceId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "nodeId": {
+            "type": "string"
+          },
+          "readAt": {
+            "format": "date-time",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "round": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/InstanceStatus"
+          },
+          "title": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "nodeId",
+          "assigneeValue",
+          "definitionKey",
+          "definitionName",
+          "businessType",
+          "businessKey",
+          "initiatorId"
+        ],
+        "type": "object"
+      },
+      "CarbonCopyRecipient": {
+        "properties": {
+          "isActive": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "isKnown": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "userId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "userId",
+          "name",
+          "isKnown",
+          "isActive"
+        ],
+        "type": "object"
+      },
+      "CarbonCopyRecipients": {
+        "properties": {
+          "assigneeKind": {
+            "$ref": "#/components/schemas/AssigneeKind"
+          },
+          "assigneeValue": {
+            "type": "string"
+          },
+          "carbonCopyId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "isCurrentRoleMembership": {
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CarbonCopyRecipient"
+            },
+            "type": "array"
+          },
+          "page": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "pageSize": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "queriedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "total": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "carbonCopyId",
+          "assigneeKind",
+          "assigneeValue",
+          "isCurrentRoleMembership",
+          "queriedAt",
+          "items",
+          "total",
+          "page",
+          "pageSize"
+        ],
+        "type": "object"
+      },
       "ChannelInfo": {
         "properties": {
           "displayName": {
@@ -1605,6 +1643,28 @@
           "priority",
           "expression",
           "next"
+        ],
+        "type": "object"
+      },
+      "CopyDefinitionRequest": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "sourceDefinitionId": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "targetKey": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "targetKey",
+          "name"
         ],
         "type": "object"
       },
@@ -1666,6 +1726,12 @@
               "type": "boolean"
             },
             "type": "object"
+          },
+          "category": {
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "draftJson": {
             "type": [
@@ -1752,6 +1818,12 @@
               "type": "boolean"
             },
             "type": "object"
+          },
+          "category": {
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "hasDraftChanges": {
             "type": "boolean"
@@ -1997,13 +2069,8 @@
         "type": "object"
       },
       "FlowNode": {
+        "additionalProperties": false,
         "properties": {
-          "actions": {
-            "items": {
-              "$ref": "#/components/schemas/ActionStep"
-            },
-            "type": "array"
-          },
           "allowAddSign": {
             "type": "boolean"
           },
@@ -2064,6 +2131,9 @@
                 "$ref": "#/components/schemas/NodePosition"
               }
             ]
+          },
+          "requireComment": {
+            "type": "boolean"
           },
           "requireQualifiedAssignee": {
             "type": "boolean"
@@ -2151,6 +2221,14 @@
             ]
           },
           "rejected": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "returned": {
             "format": "int32",
             "pattern": "^-?(?:0|[1-9]\\d*)$",
             "type": [
@@ -2472,7 +2550,9 @@
           "Approved",
           "Rejected",
           "Withdrawn",
-          "Terminated"
+          "Terminated",
+          "Returned",
+          null
         ]
       },
       "JsonElement": {},
@@ -2729,7 +2809,6 @@
           "Approval",
           "Cc",
           "Condition",
-          "Action",
           "Parallel",
           "Join",
           "End"
@@ -2777,13 +2856,15 @@
           "Rejected",
           "Transferred",
           "Timeout",
-          "Completed"
+          "Completed",
+          "Returned",
+          "Resubmitted"
         ]
       },
       "OutboxKind": {
         "enum": [
           "Notification",
-          "Action"
+          "Event"
         ]
       },
       "OutboxStatus": {
@@ -2880,6 +2961,47 @@
           "items": {
             "items": {
               "$ref": "#/components/schemas/ArchiveSummary"
+            },
+            "type": "array"
+          },
+          "page": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "pageSize": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "total": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "pageSize"
+        ],
+        "type": "object"
+      },
+      "PagedResultOfCarbonCopyItem": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CarbonCopyItem"
             },
             "type": "array"
           },
@@ -3428,123 +3550,6 @@
         ],
         "type": "object"
       },
-      "SynchronousActionFinding": {
-        "properties": {
-          "actionType": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "definitionId": {
-            "format": "uuid",
-            "type": "string"
-          },
-          "key": {
-            "type": "string"
-          },
-          "nodeId": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "reason": {
-            "type": "string"
-          },
-          "runningInstances": {
-            "format": "int32",
-            "pattern": "^-?(?:0|[1-9]\\d*)$",
-            "type": [
-              "integer",
-              "string"
-            ]
-          },
-          "stepName": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "version": {
-            "format": "int32",
-            "pattern": "^-?(?:0|[1-9]\\d*)$",
-            "type": [
-              "integer",
-              "string"
-            ]
-          }
-        },
-        "required": [
-          "definitionId",
-          "key",
-          "version",
-          "nodeId",
-          "stepName",
-          "actionType",
-          "reason",
-          "runningInstances"
-        ],
-        "type": "object"
-      },
-      "SynchronousActionScan": {
-        "properties": {
-          "definitionsScanned": {
-            "format": "int32",
-            "pattern": "^-?(?:0|[1-9]\\d*)$",
-            "type": [
-              "integer",
-              "string"
-            ]
-          },
-          "findings": {
-            "items": {
-              "$ref": "#/components/schemas/SynchronousActionFinding"
-            },
-            "type": "array"
-          },
-          "page": {
-            "format": "int32",
-            "pattern": "^-?(?:0|[1-9]\\d*)$",
-            "type": [
-              "integer",
-              "string"
-            ]
-          },
-          "pageSize": {
-            "format": "int32",
-            "pattern": "^-?(?:0|[1-9]\\d*)$",
-            "type": [
-              "integer",
-              "string"
-            ]
-          },
-          "totalDefinitions": {
-            "format": "int32",
-            "pattern": "^-?(?:0|[1-9]\\d*)$",
-            "type": [
-              "integer",
-              "string"
-            ]
-          }
-        },
-        "required": [
-          "definitionsScanned",
-          "totalDefinitions",
-          "page",
-          "pageSize",
-          "findings"
-        ],
-        "type": "object"
-      },
-      "TemplateEncoding": {
-        "enum": [
-          "Raw",
-          "Json",
-          "Url",
-          null
-        ]
-      },
       "TemplateVariableInfo": {
         "properties": {
           "alias": {
@@ -3776,6 +3781,34 @@
             "name": "InitiatorId",
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "BusinessType",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "BusinessKey",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ApproverId",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "Sort",
+            "schema": {
+              "$ref": "#/components/schemas/ApprovalSort"
             }
           }
         ],
@@ -4765,6 +4798,528 @@
         ]
       }
     },
+    "/api/approval/carbon-copies": {
+      "get": {
+        "parameters": [
+          {
+            "in": "query",
+            "name": "Page",
+            "schema": {
+              "format": "int32",
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "PageSize",
+            "schema": {
+              "format": "int32",
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "Keyword",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "Status",
+            "schema": {
+              "$ref": "#/components/schemas/InstanceStatus"
+            }
+          },
+          {
+            "in": "query",
+            "name": "DefinitionKey",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "From",
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "To",
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "InitiatorId",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "BusinessType",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "BusinessKey",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ApproverId",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "Sort",
+            "schema": {
+              "$ref": "#/components/schemas/ApprovalSort"
+            }
+          },
+          {
+            "in": "query",
+            "name": "unreadOnly",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PagedResultOfCarbonCopyItem"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "410": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Gone"
+          },
+          "503": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "tags": [
+          "Approval"
+        ]
+      }
+    },
+    "/api/approval/carbon-copies/{id}": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CarbonCopyItem"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "410": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Gone"
+          },
+          "503": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "tags": [
+          "Approval"
+        ]
+      }
+    },
+    "/api/approval/carbon-copies/{id}/read": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Stable key for one logical command; required when ApprovalOptions.RequireOperationId is enabled. Same content replays the committed result; changed content returns 409. Retain the key after unknown outcomes.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "410": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Gone"
+          },
+          "503": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "tags": [
+          "Approval"
+        ]
+      }
+    },
+    "/api/approval/carbon-copies/{id}/recipients": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "format": "int32",
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "schema": {
+              "format": "int32",
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CarbonCopyRecipients"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "410": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Gone"
+          },
+          "503": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "tags": [
+          "Approval"
+        ]
+      }
+    },
     "/api/approval/cc": {
       "get": {
         "parameters": [
@@ -4834,6 +5389,34 @@
             "name": "InitiatorId",
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "BusinessType",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "BusinessKey",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ApproverId",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "Sort",
+            "schema": {
+              "$ref": "#/components/schemas/ApprovalSort"
             }
           }
         ],
@@ -5109,7 +5692,7 @@
         ]
       }
     },
-    "/api/approval/definitions/governance": {
+    "/api/approval/definitions/categories": {
       "get": {
         "responses": {
           "200": {
@@ -5117,7 +5700,7 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "$ref": "#/components/schemas/DefinitionGovernanceSummary"
+                    "type": "string"
                   },
                   "type": "array"
                 }
@@ -5201,31 +5784,21 @@
         ]
       }
     },
-    "/api/approval/definitions/synchronous-actions": {
+    "/api/approval/definitions/governance": {
       "get": {
         "parameters": [
           {
             "in": "query",
-            "name": "page",
+            "name": "category",
             "schema": {
-              "format": "int32",
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
-              "type": [
-                "integer",
-                "string"
-              ]
+              "type": "string"
             }
           },
           {
             "in": "query",
-            "name": "pageSize",
+            "name": "uncategorized",
             "schema": {
-              "format": "int32",
-              "pattern": "^-?(?:0|[1-9]\\d*)$",
-              "type": [
-                "integer",
-                "string"
-              ]
+              "type": "boolean"
             }
           }
         ],
@@ -5234,7 +5807,10 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SynchronousActionScan"
+                  "items": {
+                    "$ref": "#/components/schemas/DefinitionGovernanceSummary"
+                  },
+                  "type": "array"
                 }
               }
             },
@@ -5674,6 +6250,126 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PagedResultOfApprovalDefinitionAudit"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "410": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Gone"
+          },
+          "503": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "tags": [
+          "Approval"
+        ]
+      }
+    },
+    "/api/approval/definitions/{key}/copy": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Stable key for one logical command; required when ApprovalOptions.RequireOperationId is enabled. Same content replays the committed result; changed content returns 409. Retain the key after unknown outcomes.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CopyDefinitionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DefinitionGovernance"
                 }
               }
             },
@@ -6819,6 +7515,34 @@
             "name": "InitiatorId",
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "BusinessType",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "BusinessKey",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ApproverId",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "Sort",
+            "schema": {
+              "$ref": "#/components/schemas/ApprovalSort"
             }
           }
         ],
@@ -8037,6 +8761,109 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ApprovalInstanceResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "410": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Gone"
+          },
+          "503": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "tags": [
+          "Approval"
+        ]
+      }
+    },
+    "/api/approval/instances/{id}/carbon-copies": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CarbonCopyItem"
+                  },
+                  "type": "array"
                 }
               }
             },
@@ -9955,6 +10782,34 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "BusinessType",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "BusinessKey",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ApproverId",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "Sort",
+            "schema": {
+              "$ref": "#/components/schemas/ApprovalSort"
+            }
           }
         ],
         "responses": {
@@ -10863,6 +11718,64 @@
             "name": "OverdueOnly",
             "schema": {
               "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "BusinessType",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "BusinessKey",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "InitiatorId",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ApproverId",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "From",
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "To",
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "Status",
+            "schema": {
+              "$ref": "#/components/schemas/InstanceStatus"
+            }
+          },
+          {
+            "in": "query",
+            "name": "Sort",
+            "schema": {
+              "$ref": "#/components/schemas/ApprovalSort"
             }
           }
         ],

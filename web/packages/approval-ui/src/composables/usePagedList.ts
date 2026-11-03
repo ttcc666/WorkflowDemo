@@ -11,10 +11,16 @@ export interface ListFilters {
   /** 发起日期区间（YYYY-MM-DD，含两端） */
   from: string
   to: string
+  businessType?: string
+  businessKey?: string
+  initiatorId?: string
+  approverId?: string
+  sort?: string
+  unreadOnly?: boolean
   overdueOnly: boolean
 }
 
-export const emptyFilters = (): ListFilters => ({ keyword: '', status: '', definitionKey: '', from: '', to: '', overdueOnly: false })
+export const emptyFilters = (): ListFilters => ({ keyword: '', status: '', definitionKey: '', from: '', to: '', overdueOnly: false, businessType: '', businessKey: '', initiatorId: '', approverId: '', sort: '', unreadOnly: false })
 
 const filterKeys = Object.keys(emptyFilters()) as (keyof ListFilters)[]
 
@@ -36,6 +42,12 @@ export function toListQuery(filters: ListFilters, page: number, pageSize: number
     from: filters.from ? localDayStart(filters.from) : undefined,
     to: filters.to ? localDayStart(filters.to, 1) : undefined,
     overdueOnly: filters.overdueOnly || undefined,
+    businessType: filters.businessType?.trim() || undefined,
+    businessKey: filters.businessKey?.trim() || undefined,
+    initiatorId: filters.initiatorId?.trim() || undefined,
+    approverId: filters.approverId?.trim() || undefined,
+    sort: filters.sort || undefined,
+    unreadOnly: filters.unreadOnly || undefined,
   }
 }
 
@@ -47,7 +59,7 @@ export function readListState(query: LocationQuery, prefix: string, defaultPageS
   }
   const filters = emptyFilters()
   for (const key of filterKeys) {
-    if (key === 'overdueOnly') filters.overdueOnly = text(key) === '1'
+    if (key === 'overdueOnly' || key === 'unreadOnly') filters[key] = text(key) === '1'
     else filters[key] = text(key)
   }
   const page = Math.max(1, Number.parseInt(text('page'), 10) || 1)
@@ -133,7 +145,7 @@ export function usePagedList<T>(
       }
       for (const name of filterKeys) {
         const value = applied.value[name]
-        patch[prefix + name] = name === 'overdueOnly' ? (value ? '1' : undefined) : (value as string) || undefined
+        patch[prefix + name] = (name === 'overdueOnly' || name === 'unreadOnly') ? (value ? '1' : undefined) : (value as string) || undefined
       }
       patchRouteQuery(router, patch)
     })

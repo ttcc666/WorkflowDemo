@@ -9,7 +9,6 @@ const items: { type: NodeType; desc: string }[] = [
   { type: 'Condition', desc: '按表单数据走不同分支' },
   { type: 'Parallel', desc: '多个分支同时进行' },
   { type: 'Join', desc: '等待并行分支全部完成' },
-  { type: 'Action', desc: '调用 HTTP、执行脚本或注册动作' },
   { type: 'End', desc: '流程结束' },
 ]
 

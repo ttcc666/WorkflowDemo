@@ -1,5 +1,5 @@
 using Approval.Core.Abstractions;
-using Approval.MultiTenant.Api;
+using Approval.ReferenceHost;
 using Approval.Tests.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -27,8 +27,8 @@ public sealed partial class DatabaseContractTests
         }
         finally
         {
-            await using var app = ReferenceHost.Build(["--environment", "Development"], b => ReferenceHostScenario.ConfigureBuilder(b, config));
-            await using var scope = await app.Services.GetRequiredService<IApprovalTenantScopeFactory>().CreateAsync("alpha");
+            await using var app = ReferenceApplication.Build(["--environment", "Development"], b => ReferenceHostScenario.ConfigureBuilder(b, config));
+            await using var scope = await app.Services.GetRequiredService<IApprovalScopeFactory>().CreateAsync();
             var reference = scope.ServiceProvider.GetRequiredService<ReferenceDbContext>();
             await reference.GetService<IMigrator>().MigrateAsync("0");
             await using var original = fixture.Create();
@@ -36,12 +36,12 @@ public sealed partial class DatabaseContractTests
         }
     }
     [Fact]
-    public Task ReferenceHost_ProviderMigrationsDualTenantWorkflowAndPermissionChanges() =>
+    public Task ReferenceHost_ProviderMigrationsSingleHostWorkflowAndPermissionChanges() =>
         RunReferenceHostAsync(async (host, config) =>
         {
             // Reapplying the host's own migration chain must be harmless.
             await using (var again = await ReferenceHostScenario.StartAsync(config)) { }
-            await host.DualTenantWorkflow();
+            await host.SingleHostWorkflow();
         });
     [Fact]
     public Task ReferenceHost_BackgroundScopesSkipDisabledAndIsolateTenantFailure() =>

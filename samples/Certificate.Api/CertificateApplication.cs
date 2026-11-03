@@ -50,7 +50,6 @@ public static class CertificateApplication
         {
             builder.Services.AddSingleton<DemoIdentityProvider>();
             builder.Services.AddSingleton<IApprovalIdentityProvider>(sp => sp.GetRequiredService<DemoIdentityProvider>());
-            builder.Services.AddSingleton<IApprovalContactProvider>(sp => sp.GetRequiredService<DemoIdentityProvider>());
             builder.Services.AddSingleton<IApprovalUserDirectory>(sp => sp.GetRequiredService<DemoIdentityProvider>());
             // 演示用请求头识别用户；接入真实认证后删除这一行，默认从 Claims 读取
             builder.Services.AddSingleton<IApprovalCurrentUser, DemoCurrentUser>();
@@ -64,20 +63,16 @@ public static class CertificateApplication
         var approval = builder.Services
             .AddApprovalWorkflow<AppDbContext>(o =>
             {
-                o.FixedTenantId = "certificate";
                 o.AllowInitiatorApprove = false;
                 o.AllowSameUserMultipleNodes = false;
                 o.DisplayTimeZone = TimeZoneInfo.FindSystemTimeZoneById(certificateOptions.BusinessTimeZone);
                 o.RequireBusinessHandler = true;
                 o.RequireOperationId = approvalConfig.GetValue("RequireOperationId", false);
                 o.CommitVerificationTimeout = approvalConfig.GetValue("CommitVerificationTimeout", o.CommitVerificationTimeout);
-                o.AllowSynchronousExternalActions = approvalConfig.GetValue("AllowSynchronousExternalActions", false);
                 o.EnableBackgroundServices = approvalConfig.GetValue("EnableBackgroundServices", true);
                 // 模板变量 {appBaseUrl}、{链接}
                 o.GlobalVariables["appBaseUrl"] = baseUrl;
                 o.InstanceUrlFormat = baseUrl + "/approvals/{0}";
-                // HTTP 动作只允许访问白名单主机
-                o.Http.AllowedHosts.AddRange(approvalConfig.GetSection("HttpAllowedHosts").Get<string[]>() ?? []);
                 approvalConfig.GetSection("Outbox").Bind(o.Outbox);
                 // 附件：本地目录（相对于内容根目录，不在 wwwroot 下）、大小限制
                 approvalConfig.GetSection("Files").Bind(o.Files);
@@ -88,24 +83,18 @@ public static class CertificateApplication
             .AddCertificateModule()
             // 组织架构：审批人可选“部门负责人”“上级”“逐级上级”（演示数据见 appsettings.json 的 Departments 与 DemoUsers）
             // 表单审批：设置了“可发起”的流程（如 Flows/leave.json、expense.json、purchase.json）可在发起中心直接填写表单发起
-            .AddFormApprovals()
-            // 演示：Webhook 发到本服务的模拟接收端（/api/demo/webhook），可在“投递记录”页模拟失败观察重试
-            .AddWebhookChannel(o =>
-            {
-                approvalConfig.GetSection("Webhook").Bind(o);
-                if (string.IsNullOrEmpty(o.Url)) o.Url = baseUrl + "/api/demo/webhook/notify";
-            });
+            .AddFormApprovals();
+
+        // 通知发送属于宿主；此适配器只演示当前服务的 Webhook，Core 不依赖任何发送渠道。
+        var webhook = new DemoWebhookOptions();
+        approvalConfig.GetSection("Webhook").Bind(webhook);
+        if (string.IsNullOrEmpty(webhook.Url)) webhook.Url = baseUrl + "/api/demo/webhook/notify";
+        builder.Services.AddSingleton(webhook);
+        builder.Services.AddHttpClient(DemoWebhookChannel.HttpClientName);
+        approval.AddChannel<DemoWebhookChannel>();
 
         if (certificateOptions.DemoMode) approval.AddOrganizationProvider<DemoIdentityProvider>();
         configureApproval?.Invoke(approval);
-
-        // 企业微信 / 钉钉 / 邮件：在配置（建议用 user-secrets 或环境变量，勿提交密钥）中填写后启用
-        if (approvalConfig["WeCom:WebhookUrl"] is { Length: > 0 })
-            approval.AddWeComRobotChannel(o => approvalConfig.GetSection("WeCom").Bind(o));
-        if (approvalConfig["DingTalk:WebhookUrl"] is { Length: > 0 })
-            approval.AddDingTalkRobotChannel(o => approvalConfig.GetSection("DingTalk").Bind(o));
-        if (approvalConfig["Email:Host"] is { Length: > 0 })
-            approval.AddEmailChannel(o => approvalConfig.GetSection("Email").Bind(o));
 
         if (approvalConfig.GetValue("EnableBackgroundServices", true))
             builder.Services.AddHostedService(sp => sp.GetRequiredService<CertificateMonitor>());
@@ -198,7 +187,7 @@ public static class CertificateApplication
     public static async Task<int> PublishFlowsAsync(WebApplication app, bool replaceExisting, CancellationToken ct = default)
     {
         await using var scope = app.Services.CreateAsyncScope();
-        scope.ServiceProvider.GetRequiredService<Approval.Core.Tenancy.ApprovalExecutionContext>().InitializeSystem("certificate", "certificate-bootstrap",
+        scope.ServiceProvider.GetRequiredService<Approval.Core.Hosting.ApprovalExecutionContext>().InitializeSystem("certificate-bootstrap",
             [ApprovalPermissions.DefinitionReadSensitive, ApprovalPermissions.DefinitionPublish]);
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var definitions = scope.ServiceProvider.GetRequiredService<ApprovalDefinitionService>();

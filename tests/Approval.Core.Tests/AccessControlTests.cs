@@ -147,7 +147,7 @@ public sealed class AccessControlTests : IAsyncLifetime
     }
 
     [Fact]
-    public void Public_view_removes_action_parameters_notifications_timeout_and_initiator_roles()
+    public void Public_view_removes_notifications_timeout_and_initiator_roles()
     {
         var flow = FlowDefinition.Parse("""
         {
@@ -156,12 +156,10 @@ public sealed class AccessControlTests : IAsyncLifetime
           "form": { "fields": [{ "key": "amount", "label": "金额", "type": "Money" }] },
           "notifications": [{ "events": ["Completed"], "recipients": [{ "type": "Initiator", "value": "" }], "channels": ["InApp"] }],
           "nodes": {
-            "start": { "name": "提交", "type": "Start", "next": "act" },
-            "act":   { "name": "推送", "type": "Action", "next": "review", "actions": [{ "type": "Http", "name": "推送档案", "mode": "Async",
-                       "parameters": { "url": "https://api.example.com", "headers": "Authorization: Bearer secret-token" } }] },
+            "start": { "name": "提交", "type": "Start", "next": "review" },
             "review": { "name": "审核", "type": "Approval", "approvers": [{ "type": "Role", "value": "Reviewer" }], "next": "end",
                         "timeout": { "minutes": 60 }, "position": { "x": 10, "y": 20 },
-                        "notifications": [{ "events": ["Enter"], "recipients": [{ "type": "Assignees", "value": "" }], "channels": ["Webhook"] }] },
+                        "notifications": [{ "events": ["Enter"], "recipients": [{ "type": "Assignees", "value": "" }], "channels": ["Webhook"], "content":"secret-token" }] },
             "end":   { "name": "结束", "type": "End" }
           }
         }
@@ -171,16 +169,14 @@ public sealed class AccessControlTests : IAsyncLifetime
         var view = FlowDefinition.Parse(json);
 
         Assert.DoesNotContain("secret-token", json);
-        Assert.Empty(view.Nodes["act"].Actions[0].Parameters);
-        Assert.Equal("推送档案", view.Nodes["act"].Actions[0].Name);
         Assert.Empty(view.Notifications);
         Assert.Empty(view.Nodes["review"].Notifications);
         Assert.Null(view.Nodes["review"].Timeout);
         Assert.Empty(view.Settings!.InitiatorRoles);
         Assert.Equal(new NodePosition(10, 20), view.Nodes["review"].Position);
         Assert.Equal("amount", Assert.Single(view.Form!.Fields).Key);
+        Assert.Single(flow.Nodes["review"].Notifications);
+        Assert.Contains("secret-token", JsonSerializer.Serialize(flow.Nodes["review"].Notifications));
         // 原定义不受影响
-        Assert.NotEmpty(flow.Nodes["act"].Actions[0].Parameters);
-        Assert.Contains("secret-token", JsonSerializer.Serialize(flow.Nodes["act"].Actions[0].Parameters));
     }
 }

@@ -4,14 +4,8 @@ public sealed class ApprovalOptions
 {
     public ApprovalLifecycleOptions Lifecycle { get; } = new();
     public ApprovalBackgroundOptions Background { get; } = new();
-    /// <summary>共享表多租户模式；必须由宿主解析可信租户及操作人，不能回落到固定租户。</summary>
-    public bool MultiTenant { get; set; }
-    /// <summary>单租户模式必须显式指定，升级旧库时还须显式回填同一归属。</summary>
-    public string? FixedTenantId { get; set; }
     /// <summary>严格模式要求提交标识；默认 false 是旧客户端过渡模式，不提供无键请求防重保障。</summary>
     public bool RequireOperationId { get; set; }
-    /// <summary>旧同步外部动作的显式过渡开关；宿主自行负责远程幂等/补偿，不获得远程回滚保证。</summary>
-    public bool AllowSynchronousExternalActions { get; set; }
     public TimeSpan CommitVerificationTimeout { get; set; } = TimeSpan.FromSeconds(10);
     public TimeSpan PermissionTimeout { get; set; } = TimeSpan.FromSeconds(5);
     public string AdminRole { get; set; } = "Admin";
@@ -31,7 +25,7 @@ public sealed class ApprovalOptions
     /// <summary>已有人审批通过后发起人是否仍可撤回（默认不可以）。</summary>
     public bool AllowWithdrawAfterApproval { get; set; }
 
-    /// <summary>模板全局变量，如 <c>appBaseUrl</c>，可在消息模板和动作参数中以 <c>{appBaseUrl}</c> 引用。</summary>
+    /// <summary>模板全局变量，如 <c>appBaseUrl</c>，可在消息模板中以 <c>{appBaseUrl}</c> 引用。</summary>
     public Dictionary<string, string> GlobalVariables { get; } = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>审批详情页地址格式，<c>{0}</c> 为实例 ID；设置后模板可使用 <c>{链接}</c>。</summary>
@@ -40,12 +34,8 @@ public sealed class ApprovalOptions
     /// <summary>消息中时间的显示时区（数据库统一存 UTC）。</summary>
     public TimeZoneInfo DisplayTimeZone { get; set; } = TimeZoneInfo.Local;
 
-    /// <summary>是否注册后台任务（Outbox 投递、超时扫描）。多实例部署时可只在部分实例启用。</summary>
+    /// <summary>是否注册宿主中的单个后台执行器（Outbox 投递、超时扫描）。</summary>
     public bool EnableBackgroundServices { get; set; } = true;
-
-    public ApprovalHttpActionOptions Http { get; } = new();
-
-    public ApprovalScriptOptions Script { get; } = new();
 
     public ApprovalOutboxOptions Outbox { get; } = new();
 
@@ -53,30 +43,8 @@ public sealed class ApprovalOptions
 
     /// <summary>超时扫描间隔。</summary>
     public TimeSpan TimeoutScanInterval { get; set; } = TimeSpan.FromMinutes(1);
-}
-
-/// <summary>HTTP 动作的访问控制：只能访问白名单中的主机，防止流程配置被用于探测内网（SSRF）。</summary>
-public sealed class ApprovalHttpActionOptions
-{
-    /// <summary>允许访问的主机名，支持 <c>*.example.com</c>；<c>*</c> 表示不限制（需显式配置）。为空时禁止所有 HTTP 动作。</summary>
-    public List<string> AllowedHosts { get; } = [];
-
-    public TimeSpan DefaultTimeout { get; set; } = TimeSpan.FromSeconds(10);
-
-    /// <summary>读取响应体的最大字节数。</summary>
-    public int MaxResponseBytes { get; set; } = 1024 * 1024;
-}
-
-/// <summary>脚本动作（Jint）沙箱限制。脚本不能访问 .NET 对象、文件或网络。</summary>
-public sealed class ApprovalScriptOptions
-{
-    public TimeSpan Timeout { get; set; } = TimeSpan.FromSeconds(2);
-
-    public long MemoryLimitBytes { get; set; } = 16 * 1024 * 1024;
-
-    public int MaxStatements { get; set; } = 100_000;
-
-    public int MaxRecursionDepth { get; set; } = 64;
+    /// <summary>旧定义的超时自动审批仅在宿主显式允许时执行；默认只提醒。</summary>
+    public bool EnableAutomaticTimeoutDecisions { get; set; }
 }
 
 /// <summary>表单附件：本地存储目录、大小与扩展名限制、未绑定文件的保留时间。</summary>
@@ -112,6 +80,4 @@ public sealed class ApprovalOutboxOptions
 
     public TimeSpan MaxRetryDelay { get; set; } = TimeSpan.FromHours(1);
 
-    /// <summary>投递租约：投递中进程崩溃，租约到期后其他实例会重新投递。</summary>
-    public TimeSpan LeaseDuration { get; set; } = TimeSpan.FromMinutes(5);
 }

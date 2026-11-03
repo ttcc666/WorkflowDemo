@@ -7,7 +7,7 @@ import { computeRunState, toFlowElements, NODE_HEIGHT, type FlowDefinition, type
 /** 只读流程图：按实例的任务与轨迹高亮已完成、进行中、被驳回的节点及走过的路径。 */
 const props = defineProps<{
   definitionJson: string
-  instance: ApprovalInstance
+  instance?: ApprovalInstance
 }>()
 
 // 只读展示只整体替换，不需要深层响应
@@ -19,12 +19,13 @@ watch(
   ([json, instance]) => {
     const definition = JSON.parse(json) as FlowDefinition
     const elements = toFlowElements(definition)
-    const { status, visitedEdges } = computeRunState(definition, instance)
+    const { status, visitedEdges } = instance ? computeRunState(definition, instance)
+      : { status: new Map(), visitedEdges: new Set<string>() }
 
     nodes.value = elements.nodes.map((n) => ({ ...n, data: { ...n.data!, status: status.get(n.id) } }))
     edges.value = elements.edges.map((e) => {
       const visited = visitedEdges.has(`${e.source}->${e.target}`)
-      return { ...e, animated: visited && instance.status === 'Running', style: visited ? { stroke: '#67c23a', strokeWidth: 2 } : undefined }
+      return { ...e, animated: visited && (instance?.status === 'Running' || instance?.status === 'Returned'), style: visited ? { stroke: '#67c23a', strokeWidth: 2 } : undefined }
     })
   },
   { immediate: true },

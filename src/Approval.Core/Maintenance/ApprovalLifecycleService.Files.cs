@@ -34,7 +34,8 @@ public sealed partial class ApprovalLifecycleService
         var systemJob = new ApprovalMaintenanceJob { ActorId = "approval-background", SystemRequested = true, PolicyHash = "", Target = MaintenanceTarget.UnboundFiles, Mode = MaintenanceMode.Purge };
         foreach (var id in ids)
         {
-            var lease = Guid.NewGuid();
+            using var run = gate.TryEnter(id);
+            if (run is null) continue;
             var deletion = await RunOwnedAsync(systemJob, async (w, token) =>
             {
                 var d = await w._db.Set<ApprovalFileDeletion>().SingleAsync(d => d.Id == id, token);
@@ -43,9 +44,9 @@ public sealed partial class ApprovalLifecycleService
                 if (file is null || !file.DeletionPending || file.InstanceId != null || file.DraftId != null || file.ArchiveId != null
                     || await w._db.Set<ApprovalRetentionHold>().AnyAsync(h => h.Target == MaintenanceTarget.UnboundFiles && h.ResourceId == d.FileId, token))
                 { d.Status = FileDeletionStatus.Cancelled; d.ConcurrencyStamp++; return null; }
-                d.Status = FileDeletionStatus.Processing; d.StartedAt ??= w.Now; d.LeaseId = lease; d.Attempts++;
-                d.NextAttemptAt = w.Now + w.Policy.LeaseDuration; d.ConcurrencyStamp++;
-                return new { d.StorageKey, d.FileId };
+                d.Status = FileDeletionStatus.Processing; d.StartedAt ??= w.Now; d.Attempts++;
+                d.ConcurrencyStamp++;
+                return new { d.StorageKey, d.FileId, Stamp = d.ConcurrencyStamp };
             }, ct);
             if (deletion is null) continue;
             try
@@ -54,10 +55,10 @@ public sealed partial class ApprovalLifecycleService
                 await RunOwnedAsync(systemJob, async (w, token) =>
                 {
                     var d = await w._db.Set<ApprovalFileDeletion>().SingleAsync(d => d.Id == id, token);
-                    if (d.LeaseId != lease || d.Status != FileDeletionStatus.Processing) throw new DbUpdateConcurrencyException("File deletion lease replaced");
+                    if (d.ConcurrencyStamp != deletion.Stamp || d.Status != FileDeletionStatus.Processing) throw new DbUpdateConcurrencyException("File deletion lease replaced");
                     var file = await w._db.Set<ApprovalFile>().SingleOrDefaultAsync(f => f.Id == d.FileId, token);
                     if (file is not null) w._db.Remove(file);
-                    d.Status = FileDeletionStatus.Completed; d.LeaseId = null; d.LastErrorCode = null; d.ConcurrencyStamp++;
+                    d.Status = FileDeletionStatus.Completed; d.LastErrorCode = null; d.ConcurrencyStamp++;
                     w.Audit("FileDeleted", MaintenanceTarget.UnboundFiles, d.FileId); return true;
                 }, ct);
                 count++;
@@ -67,7 +68,7 @@ public sealed partial class ApprovalLifecycleService
                 await RunOwnedAsync(systemJob, async (w, token) =>
                 {
                     var d = await w._db.Set<ApprovalFileDeletion>().SingleAsync(d => d.Id == id, token);
-                    if (d.LeaseId == lease) { d.Status = FileDeletionStatus.Pending; d.LeaseId = null; d.NextAttemptAt = w.Now + TimeSpan.FromMinutes(1); d.LastErrorCode = ex.GetType().Name; d.ConcurrencyStamp++; }
+                    if (d.ConcurrencyStamp == deletion.Stamp) { d.Status = FileDeletionStatus.Pending; d.NextAttemptAt = w.Now + TimeSpan.FromMinutes(1); d.LastErrorCode = ex.GetType().Name; d.ConcurrencyStamp++; }
                     return false;
                 }, ct);
             }

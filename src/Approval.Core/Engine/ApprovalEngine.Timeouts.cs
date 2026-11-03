@@ -33,12 +33,13 @@ public sealed partial class ApprovalEngine
         }
 
         var assignee = new Assignee(task.AssigneeKind, task.AssigneeValue);
+        var timeoutAction = _options.EnableAutomaticTimeoutDecisions ? policy.Action : TimeoutAction.Remind;
         task.RemindCount++;
         task.LastRemindedAt = Now;
         await RaiseAsync(NotifyEvent.Timeout, instance, flow, node, new EventInfo([assignee]) { DueAt = task.DueAt }, ct,
-            fallback: policy.Action == TimeoutAction.Remind ? NotificationDefaults.TimeoutRule : null);
+            fallback: timeoutAction == TimeoutAction.Remind ? NotificationDefaults.TimeoutRule : null);
 
-        switch (policy.Action)
+        switch (timeoutAction)
         {
             case TimeoutAction.AutoApprove:
                 await ApproveCoreAsync(instance, flow, task, SystemOperator, "超时自动同意", ApprovalAction.TimeoutApprove, ct);

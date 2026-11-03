@@ -16,6 +16,7 @@ const def = (row: unknown) => row as DefinitionGovernanceSummary
       <template #default="{ row }"><code>{{ row.key }}</code></template>
     </el-table-column>
     <el-table-column prop="name" label="流程名称" min-width="180" />
+    <el-table-column label="分类" width="150"><template #default="{ row }">{{ row.category || '未分类' }}</template></el-table-column>
     <el-table-column label="最新版本" width="100">
       <template #default="{ row }"><el-tag size="small" effect="plain">{{ row.lastVersion ? `v${row.lastVersion}` : '未发布' }}</el-tag></template>
     </el-table-column>

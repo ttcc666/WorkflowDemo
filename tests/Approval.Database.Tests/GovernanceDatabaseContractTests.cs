@@ -57,19 +57,17 @@ public sealed partial class DatabaseContractTests
             return await sp.GetRequiredService<IApprovalCommandExecutor>().ExecuteAsync(new("governance.approve", id.ToString(), "approve", new { task.Id }, ApprovalPermissions.TaskApprove, new() { TaskId = task.Id }),
                 async (fresh, ct) => { await fresh.GetRequiredService<ApprovalEngine>().ApproveAsync(task.Id, "bob", ct: ct); return true; });
         });
-        foreach (var tenant in new[] { "a", "b" })
-            await AtomicRun(host, "alice", sp => sp.GetRequiredService<IApprovalCommandExecutor>().ExecuteAsync(
-                new("governance.draft", "doc", "same-key", new { tenant }, ApprovalPermissions.DefinitionDesign, new() { DefinitionKey = "doc" }),
-                (fresh, ct) => fresh.GetRequiredService<ApprovalDefinitionService>().SaveDesignDraftAsync("doc", tenant, AtomicFlow, 0, ct: ct)), tenant);
+        await AtomicRun(host, "alice", sp => sp.GetRequiredService<IApprovalCommandExecutor>().ExecuteAsync(
+            new("governance.draft", "draft", "same-key", new { draft = true }, ApprovalPermissions.DefinitionDesign, new() { DefinitionKey = "draft" }),
+            (fresh, ct) => fresh.GetRequiredService<ApprovalDefinitionService>().SaveDesignDraftAsync("draft", "Draft", AtomicFlow, 0, ct: ct)));
         await AtomicRun(host, "alice", async sp =>
         {
             var db = sp.GetRequiredService<AtomicContractContext>();
             Assert.Equal(InstanceStatus.Approved, (await db.Set<ApprovalInstance>().SingleAsync(i => i.Id == id)).Status);
             Assert.Equal("doc", (await db.Set<ApprovalDefinition>().SingleAsync(d => d.Key == "doc")).Key);
-            Assert.Equal(1, await db.Set<ApprovalDefinitionAudit>().CountAsync()); return true;
+            Assert.Equal(2, await db.Set<ApprovalDefinitionAudit>().CountAsync()); return true;
         });
-        foreach (var tenant in new[] { "a", "b" })
-            await AtomicRun(host, "alice", async sp => { var state = await sp.GetRequiredService<ApprovalDefinitionService>().GetGovernanceAsync("doc"); Assert.Equal(tenant, state!.Name); Assert.True(state.IsEnabled); return true; }, tenant);
+        await AtomicRun(host, "alice", async sp => { var state = await sp.GetRequiredService<ApprovalDefinitionService>().GetGovernanceAsync("draft"); Assert.Equal("Draft", state!.Name); Assert.True(state.IsEnabled); return true; });
     }
 
     [Fact]
@@ -89,7 +87,7 @@ public sealed partial class DatabaseContractTests
         {
             var db = sp.GetRequiredService<AtomicContractContext>();
             Assert.False(await db.Set<ApprovalDefinition>().AnyAsync(d => d.Key == "new-flow"));
-            Assert.Empty(await db.Set<ApprovalDefinitionManagement>().ToListAsync()); Assert.Empty(await db.Set<ApprovalDefinitionAudit>().ToListAsync());
+            Assert.Equal("doc", Assert.Single(await db.Set<ApprovalDefinitionManagement>().ToListAsync()).Key); Assert.Empty(await db.Set<ApprovalDefinitionAudit>().ToListAsync());
             Assert.Empty(await db.Set<ApprovalOperation>().ToListAsync()); return true;
         });
     }

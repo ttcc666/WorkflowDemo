@@ -19,7 +19,7 @@ const currentNodes = computed(() =>
     </el-descriptions-item>
     <el-descriptions-item label="流程">{{ definitionName ?? instance.definitionKey }}</el-descriptions-item>
     <el-descriptions-item label="申请人">{{ instance.initiatorId }}</el-descriptions-item>
-    <el-descriptions-item label="当前节点">{{ instance.status === 'Running' ? currentNodes : '-' }}</el-descriptions-item>
+    <el-descriptions-item label="当前节点">{{ (instance.status === 'Running' || instance.status === 'Returned') ? currentNodes : '-' }}</el-descriptions-item>
     <el-descriptions-item label="流程版本">{{ instance.definitionKey }} v{{ instance.definitionVersion }}</el-descriptions-item>
     <el-descriptions-item label="发起时间">{{ formatDateTime(instance.createdAt) }}</el-descriptions-item>
     <el-descriptions-item label="完成时间">{{ formatDateTime(instance.completedAt) }}</el-descriptions-item>

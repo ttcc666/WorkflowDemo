@@ -1,6 +1,6 @@
 import type { App, Plugin } from 'vue'
-import { configureApprovalUI, type ApprovalUIOptions } from './config'
-import { defaultApprovalClient } from './client'
+import type { ApprovalUIOptions } from './config'
+import { createApprovalClient } from './client'
 // 流程图（Vue Flow）样式；Element Plus 样式由宿主引入
 import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
@@ -15,17 +15,16 @@ import './styles.css'
  */
 export const ApprovalUI: Plugin<[ApprovalUIOptions?]> = {
   install(app: App, options?: ApprovalUIOptions) {
-    configureApprovalUI(options)
-    defaultApprovalClient.install(app)
+    createApprovalClient(options).install(app)
   },
 }
 
-export { approvalConfig, approvalUserKey, configureApprovalUI, type ApprovalUIOptions } from './config'
+export type { ApprovalUIOptions } from './config'
 export { approvalRouteNames, createApprovalRoutes } from './routes'
 
-export { approvalApi, queryString } from './api/approval'
-export { ApiError, errorMessage, http } from './api/http'
-export type * from './api/types'
+export { createApprovalApi, queryString } from './api/approval'
+export { ApiError, errorMessage, createHttpClient } from './api/http'
+export type * from './contracts/api'
 export type * from './contracts/flow'
 
 export { useApprovalUser } from './composables/useApprovalUser'

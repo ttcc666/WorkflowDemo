@@ -1,5 +1,6 @@
 using Approval.Core.Definitions;
 using Approval.Core.Domain;
+using Microsoft.EntityFrameworkCore;
 using Approval.Core.Templates;
 
 namespace Approval.Core.Tests;
@@ -191,6 +192,54 @@ public sealed class NotificationTests : IAsyncLifetime
             Assert.Equal(0, await service.UnreadCountAsync("r1"));
             Assert.Equal(1, await service.MarkAllReadAsync("r2"));
         });
+    }
+
+    [Fact]
+    public async Task Published_definition_with_unavailable_host_channel_rolls_back_instead_of_dropping_notification()
+    {
+        // 模拟发布后宿主撤下渠道适配器；不能在发起时静默漏发通知。
+        await _host.RunAsync(async sp =>
+        {
+            var db = sp.GetRequiredService<TestDbContext>();
+            var definition = new ApprovalDefinition
+            {
+                Id = Guid.NewGuid(), Key = "host-notify", Name = "Host notification", Version = 1, IsPublished = true,
+                DefinitionJson = NotifyFlow.Replace("\"Test\"", "\"RemovedHostChannel\""), CreatedAt = _host.Clock.GetUtcNow().UtcDateTime
+            };
+            db.Add(definition);
+            db.Add(new ApprovalDefinitionManagement { Id = Guid.NewGuid(), Key = definition.Key, Name = definition.Name, ActiveDefinitionId = definition.Id, LastVersion = 1, UpdatedBy = "admin" });
+            await db.SaveChangesAsync();
+        });
+        var error = await Assert.ThrowsAsync<ApprovalException>(() => _host.StartAsync("host-notify", "one", "alice"));
+        Assert.Equal(ApprovalErrorCode.InvalidDefinition, error.Code);
+        Assert.Contains("RemovedHostChannel", error.Message);
+        Assert.Empty(await _host.MessagesAsync());
+        Assert.Empty(await _host.OutboxAsync());
+        Assert.Empty(await _host.RunAsync(sp => sp.GetRequiredService<TestDbContext>().Set<ApprovalInstance>().ToListAsync()));
+        Assert.Empty(await _host.RunAsync(sp => sp.GetRequiredService<TestDbContext>().Set<ApprovalTask>().ToListAsync()));
+        Assert.Empty(await _host.RunAsync(sp => sp.GetRequiredService<TestDbContext>().Set<ApprovalLog>().ToListAsync()));
+    }
+
+    [Fact]
+    public async Task Unknown_outbox_kind_fails_instead_of_being_acknowledged()
+    {
+        await _host.RunAsync(async sp =>
+        {
+            var db = sp.GetRequiredService<TestDbContext>();
+            db.Add(new ApprovalOutboxMessage
+            {
+                Id = Guid.NewGuid(), Kind = (OutboxKind)999, Target = "Unknown", PayloadJson = "{}",
+                Status = OutboxStatus.Pending, MaxAttempts = 1,
+                CreatedAt = _host.Clock.GetUtcNow().UtcDateTime, NextAttemptAt = _host.Clock.GetUtcNow().UtcDateTime
+            });
+            await db.SaveChangesAsync();
+        });
+        await _host.DispatchOutboxAsync();
+        var message = Assert.Single(await _host.OutboxAsync());
+        Assert.Equal(OutboxStatus.Failed, message.Status);
+        Assert.Equal(1, message.Attempts);
+        Assert.Contains("不支持的 Outbox 消息类型", message.LastError);
+        Assert.Empty(_host.Channel.Sent);
     }
 
     [Fact]

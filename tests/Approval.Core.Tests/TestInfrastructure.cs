@@ -1,6 +1,5 @@
 using System.Net;
 using Approval.Core.Abstractions;
-using Approval.Core.Actions;
 using Approval.Core.Background;
 using Approval.Core.Domain;
 using Approval.Core.Notifications;
@@ -11,7 +10,7 @@ using Microsoft.Extensions.Time.Testing;
 
 namespace Approval.Core.Tests;
 
-public sealed class TestDbContext(DbContextOptions<TestDbContext> options) : ApprovalDbContext(options, new Approval.Core.Abstractions.FixedApprovalTenantContext("tests"))
+public sealed class TestDbContext(DbContextOptions<TestDbContext> options) : ApprovalDbContext(options)
 {
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -183,6 +182,7 @@ public sealed class TestHost : IAsyncDisposable
         services.AddLogging();
         services.AddDbContext<TestDbContext>(o => o.UseSqlite(_connection));
         services.AddSingleton<IApprovalIdentityProvider>(Identity);
+        services.AddSingleton<IApprovalUserStatusProvider, FixtureUserStatus>();
         services.AddSingleton(Organization);
         services.AddSingleton<IApprovalBusinessHandler>(Handler);
         services.AddSingleton<IApprovalNotifier>(Notifier);
@@ -190,13 +190,9 @@ public sealed class TestHost : IAsyncDisposable
         services.AddSingleton<TimeProvider>(Clock);
         var builder = services.AddApprovalWorkflow<TestDbContext>(o =>
         {
-            o.FixedTenantId = "tests";
-            o.AllowSynchronousExternalActions = true; // Existing flow-algorithm fixtures explicitly cover legacy sync HTTP.
-            o.Http.AllowedHosts.Add("api.example.com");
             configure?.Invoke(o);
         });
         build?.Invoke(builder);
-        services.ConfigureHttpClientDefaults(b => b.ConfigurePrimaryHttpMessageHandler(() => Http));
 
         _provider = services.BuildServiceProvider();
         using var scope = _provider.CreateScope();
@@ -209,7 +205,7 @@ public sealed class TestHost : IAsyncDisposable
         var scope = _provider.CreateAsyncScope();
         if (!authorize)
         {
-            scope.ServiceProvider.GetRequiredService<Approval.Core.Tenancy.ApprovalExecutionContext>().InitializeTrusted(new("tests", "test-fixture"), []);
+            scope.ServiceProvider.GetRequiredService<Approval.Core.Hosting.ApprovalExecutionContext>().InitializeTrusted(new("test-fixture"), []);
             scope.ServiceProvider.GetRequiredService<Approval.Core.Persistence.ApprovalDbContextAccessor>().Authorization = Approval.Tests.Infrastructure.FlowFixtureAuthorization.Instance;
         }
         return scope;
@@ -218,7 +214,7 @@ public sealed class TestHost : IAsyncDisposable
     public async Task<T> RunAsAsync<T>(string actor, Func<IServiceProvider, Task<T>> action)
     {
         await using var scope = NewScope(authorize: true);
-        scope.ServiceProvider.GetRequiredService<Approval.Core.Tenancy.ApprovalExecutionContext>().InitializeTrusted(new("tests", actor), []);
+        scope.ServiceProvider.GetRequiredService<Approval.Core.Hosting.ApprovalExecutionContext>().InitializeTrusted(new(actor), []);
         return await action(scope.ServiceProvider);
     }
     public async Task<T> RunAsync<T>(Func<IServiceProvider, Task<T>> action)
@@ -274,4 +270,10 @@ public sealed class TestHost : IAsyncDisposable
         await _provider.DisposeAsync();
         await _connection.DisposeAsync();
     }
+}
+
+// 流程算法夹具接受测试中声明的任意用户；宿主状态拒绝由专门的状态适配器测试覆盖。
+internal sealed class FixtureUserStatus : IApprovalUserStatusProvider
+{
+    public Task<bool> IsActiveAsync(string userId, CancellationToken ct) => Task.FromResult(!string.IsNullOrWhiteSpace(userId));
 }

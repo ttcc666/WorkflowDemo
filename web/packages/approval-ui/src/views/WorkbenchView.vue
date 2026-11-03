@@ -8,6 +8,11 @@ import { approvalRouteNames } from '../routes'
 import ListFilterBar from '../features/workbench/ListFilterBar.vue'
 import TodoTable from '../features/workbench/TodoTable.vue'
 import InstanceTable from '../features/workbench/InstanceTable.vue'
+import CarbonCopyTable from '../features/workbench/CarbonCopyTable.vue'
+import type { CarbonCopyItem } from '../contracts/api'
+import { ElMessage } from 'element-plus'
+import { errorMessage } from '../api/http'
+import { useCommandIntent } from '../composables/useCommandIntent'
 
 const { api: approvalApi, userKey: approvalUserKey } = useApprovalClient()
 
@@ -27,7 +32,15 @@ const listOptions = (prefix: string) => ({ routePrefix: prefix, resetOn: [approv
 const todo = usePagedList((q, s) => approvalApi.todo(q, s), listOptions('todo_'))
 const done = usePagedList((q, s) => approvalApi.done(q, s), listOptions('done_'))
 const started = usePagedList((q, s) => approvalApi.started(q, s), listOptions('started_'))
-const cc = usePagedList((q, s) => approvalApi.cc(q, s), listOptions('cc_'))
+const cc = usePagedList((q, s) => approvalApi.carbonCopies(q, s), listOptions('cc_'))
+const ccIntent = useCommandIntent('carbon-copy-read')
+
+async function openCopy(item: CarbonCopyItem) {
+  try {
+    if (!item.readAt) await ccIntent.run(item.id, {}, (_, key) => approvalApi.readCarbonCopy(item.id, key))
+    open(item.instanceId)
+  } catch (error) { ElMessage.error(errorMessage(error)) }
+}
 
 const todoCount = useAsyncData(async (signal) => (await approvalApi.todoCount(signal)).count, {
   watch: [approvalUserKey],
@@ -82,7 +95,8 @@ const pageSizes = [10, 20, 50, 100]
       </el-tab-pane>
       <el-tab-pane label="抄送我的" name="cc">
         <ListFilterBar v-model="cc.filters" :flows="flows.data.value ?? []" status dates @search="cc.search" @reset="cc.reset" />
-        <InstanceTable :items="cc.items.value" :loading="cc.loading.value" empty-text="暂无抄送给我的审批" @open="open" />
+        <el-checkbox v-model="cc.filters.unreadOnly" @change="cc.search">只看未读</el-checkbox>
+        <CarbonCopyTable :items="cc.items.value" :loading="cc.loading.value" @open="openCopy" />
         <el-pagination v-model:current-page="cc.page.value" v-model:page-size="cc.pageSize.value" :total="cc.total.value"
           :page-sizes="pageSizes" layout="total, sizes, prev, pager, next" background size="small" class="workbench__pager" />
       </el-tab-pane>

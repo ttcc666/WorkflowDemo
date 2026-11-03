@@ -13,7 +13,7 @@ public sealed class DefinitionContractTests
 
     [Theory]
     [MemberData(nameof(CaseNames))]
-    public void Shared_definition_contract_accepts_legacy_and_current_versions_only(string name)
+    public void Shared_definition_contract_accepts_current_or_default_version_only(string name)
     {
         var item = Cases().Single(item => item.Name == name);
         if (!item.Valid)

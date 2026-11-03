@@ -9,7 +9,7 @@ type ResponseShape<T> = number extends T ? Exclude<T, string | undefined>
   : T extends readonly (infer Item)[] ? ResponseShape<Item>[]
   : T extends object ? { [Key in keyof T]-?: ResponseShape<Exclude<T[Key], undefined>> } : T
 
-export type InstanceStatus = ResponseShape<Schemas['InstanceStatus']>
+export type InstanceStatus = NonNullable<ResponseShape<Schemas['InstanceStatus']>>
 export type TaskStatus = ResponseShape<Schemas['ApprovalTaskStatus']>
 export type TaskKind = ResponseShape<Schemas['ApprovalTaskKind']>
 export type AddSignMode = ResponseShape<Schemas['AddSignMode']>
@@ -19,13 +19,12 @@ export type ApprovalAccessLevel = ResponseShape<Schemas['ApprovalAccessLevel']>
 export type ApprovalLog = ResponseShape<Schemas['ApprovalLogResponse']>
 export type ValidationResult = ResponseShape<Schemas['ApprovalValidationResponse']>
 export type TodoItem = ResponseShape<Schemas['TodoItem']>
-export type InstanceListItem = ResponseShape<Schemas['InstanceListItem']>
+export type InstanceListItem = Omit<ResponseShape<Schemas['InstanceListItem']>, 'status'> & { status: InstanceStatus }
 export type ReturnTarget = ResponseShape<Schemas['ReturnTarget']>
 export type FlowSummary = ResponseShape<Schemas['FlowSummary']>
 export type DefinitionGovernance = ResponseShape<Schemas['DefinitionGovernance']>
 export type DefinitionGovernanceSummary = ResponseShape<Schemas['DefinitionGovernanceSummary']>
 export type DefinitionAudit = ResponseShape<Schemas['ApprovalDefinitionAudit']>
-export type SynchronousActionScan = ResponseShape<Schemas['SynchronousActionScan']>
 export type ApprovalDiagnosticReport = ResponseShape<Schemas['ApprovalDiagnosticReport']>
 export type MaintenanceTarget = ResponseShape<Schemas['MaintenanceTarget']>
 export type MaintenanceMode = ResponseShape<Schemas['MaintenanceMode']>
@@ -40,9 +39,6 @@ export type NodeStatistics = ResponseShape<Schemas['NodeStatistics']>
 export type BacklogItem = ResponseShape<Schemas['BacklogItem']>
 export type ApprovalStatistics = ResponseShape<Schemas['ApprovalStatistics']>
 export type ApprovalDefinition = ResponseShape<Schemas['ApprovalDefinitionResponse']>
-export type ActionParameterKind = ResponseShape<Schemas['ActionParameterKind']>
-export type ActionParameterMeta = ResponseShape<Schemas['ActionParameter']>
-export type ActionMeta = ResponseShape<Schemas['ApprovalActionDescriptor']>
 export type ChannelMeta = ResponseShape<Schemas['ChannelInfo']>
 export type TemplateVariableMeta = ResponseShape<Schemas['TemplateVariableInfo']>
 export type ApproverValueKind = ResponseShape<Schemas['ApproverValueKind']>
@@ -55,14 +51,14 @@ export type ApprovalMe = ResponseShape<Schemas['ApprovalMeResponse']>
 export type StartableFlow = ResponseShape<Schemas['StartableFlow']>
 export type DraftSummary = ResponseShape<Schemas['DraftSummary']>
 export type DraftDetail = ResponseShape<Schemas['DraftDetail']>
-export type DirectoryUser = ResponseShape<Schemas['ApprovalUser']>
+export type DirectoryUser = Omit<ResponseShape<Schemas['ApprovalUser']>, 'isActive'> & { isActive?: boolean }
 
 /** 保留旧调用方使用的任务投影；完整传输结构在 http.generated.ts 中。 */
 export type ApprovalTask = Pick<ResponseShape<Schemas['ApprovalTaskResponse']>,
   'id' | 'instanceId' | 'nodeId' | 'nodeName' | 'assigneeKind' | 'assigneeValue' | 'kind' | 'parentTaskId' | 'round' | 'status' | 'order' | 'handledBy' | 'comment' | 'createdAt' | 'completedAt' | 'dueAt' | 'remindCount'> & {
     capabilities?: Record<string, boolean>
   }
-export type ApprovalInstance = Omit<ResponseShape<Schemas['ApprovalInstanceResponse']>, 'tasks' | 'logs'> & { tasks: ApprovalTask[]; logs: ApprovalLog[] }
+export type ApprovalInstance = Omit<ResponseShape<Schemas['ApprovalInstanceResponse']>, 'tasks' | 'logs' | 'status'> & { status: InstanceStatus; tasks: ApprovalTask[]; logs: ApprovalLog[] }
 export type MyTaskResult = Omit<ResponseShape<Schemas['ApprovalMyTaskResponse']>, 'task'> & { task: ApprovalTask | null }
 export type PagedResult<T> = Omit<ResponseShape<Schemas['PagedResultOfTodoItem']>, 'items'> & { items: T[] }
 export type StartForm = Omit<ResponseShape<Schemas['StartForm']>, 'settings' | 'form'> & { settings: FlowSettings; form: FormSchema }
@@ -75,6 +71,11 @@ export interface FormFieldChange {
 }
 
 export interface ListQuery {
+  businessType?: string
+  businessKey?: string
+  approverId?: string
+  sort?: string
+  unreadOnly?: boolean
   page?: number
   pageSize?: number
   keyword?: string
@@ -88,3 +89,7 @@ export interface ListQuery {
   /** 仅投递记录 */
   instanceId?: string
 }
+
+export type CarbonCopyItem = Omit<ResponseShape<Schemas['CarbonCopyItem']>, 'status'> & { status: InstanceStatus }
+
+export type CarbonCopyRecipients = ResponseShape<Schemas['CarbonCopyRecipients']>

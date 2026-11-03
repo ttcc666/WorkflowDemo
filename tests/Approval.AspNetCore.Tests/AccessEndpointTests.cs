@@ -12,10 +12,8 @@ public sealed class AccessEndpointTests
     {
       "startNodeId": "start",
       "nodes": {
-        "start":  { "name": "提交", "type": "Start", "next": "act" },
-        "act":    { "name": "预检", "type": "Action", "next": "review",
-                    "actions": [{ "type": "Script", "name": "预检脚本", "parameters": { "script": "var token = 'secret-token'; form.checked = true;" } }] },
-        "review": { "name": "审核", "type": "Approval", "mode": "Any",
+        "start":  { "name": "提交", "type": "Start", "next": "review" },
+        "review": { "name": "审核", "type": "Approval", "mode": "Any", "notifications":[{"events":["Enter"],"recipients":[{"type":"Assignees"}],"channels":["InApp"],"content":"secret-token"}],
                     "approvers": [{ "type": "Role", "value": "Reviewer" }], "next": "end" },
         "end":    { "name": "结束", "type": "End" }
       }
@@ -75,8 +73,7 @@ public sealed class AccessEndpointTests
         Assert.Equal("文档审批", definition.GetProperty("name").GetString());
         Assert.DoesNotContain("secret-token", json);
         var nodes = JsonDocument.Parse(json).RootElement.GetProperty("nodes");
-        Assert.Equal("预检脚本", nodes.GetProperty("act").GetProperty("actions")[0].GetProperty("name").GetString());
-        Assert.Equal(4, nodes.EnumerateObject().Count());
+        Assert.Equal(3, nodes.EnumerateObject().Count());
     }
 
     [Fact]

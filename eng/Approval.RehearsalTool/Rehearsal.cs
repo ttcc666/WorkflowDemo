@@ -6,7 +6,7 @@ using System.Text;
 using System.Text.Json;
 using Approval.Core;
 using Approval.Core.Domain;
-using Approval.MultiTenant.Api;
+using Approval.ReferenceHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -66,8 +66,8 @@ internal static class Rehearsal
     private static async Task Seed()
     {
         await using var host = await RehearsalHost.Start(Source, Files, true);
-        foreach (var tenant in new[] { "alpha", "beta" }) await host.Api(HttpMethod.Post, "/definitions/shared?name=Recovery", tenant + "-admin", "publish", raw: Flow);
-        var running = await Start(host, "running"); var beta = await Start(host, "running", "beta");
+        foreach (var tenant in new[] { "alpha" }) await host.Api(HttpMethod.Post, "/definitions/shared?name=Recovery", tenant + "-admin", "publish", raw: Flow);
+        var running = await Start(host, "running"); var second = await Start(host, "second-running");
         var expired = await Start(host, "expired"); await Complete(host, expired);
         var ended = await Start(host, "ended"); await Complete(host, ended);
         var bytes = Encoding.UTF8.GetBytes("附件恢复：审批材料😀\nversion=1\n");
@@ -86,8 +86,8 @@ internal static class Rehearsal
         var job = await host.Api(HttpMethod.Post, "/maintenance/jobs", "alpha-admin", "archive-job", new { target = "Instances", mode = "Archive", policyHash = preview.GetProperty("policyHash").GetString() }); var jobId = job.GetProperty("id").GetGuid();
         var partial = await host.Api(HttpMethod.Post, $"/maintenance/jobs/{jobId}/run", "alpha-admin", "archive-batch");
         Check(partial.GetProperty("processed").GetInt32() == 1 && partial.GetProperty("completedBatches").GetInt32() == 1, "PartialMaintenanceCommitted");
-        await System.IO.File.WriteAllTextAsync(File("seed-facts.json"), JsonSerializer.Serialize(new { running, beta, expired, ended, fileId, outboxId, jobId, fileHash = Convert.ToHexStringLower(SHA256.HashData(bytes)) }, RehearsalHost.Json));
-        await System.IO.File.WriteAllTextAsync(File("source-snapshot.json"), await Snapshot(host)); Check(running != beta, "IndependentTenantInstances");
+        await System.IO.File.WriteAllTextAsync(File("seed-facts.json"), JsonSerializer.Serialize(new { running, second, expired, ended, fileId, outboxId, jobId, fileHash = Convert.ToHexStringLower(SHA256.HashData(bytes)) }, RehearsalHost.Json));
+        await System.IO.File.WriteAllTextAsync(File("source-snapshot.json"), await Snapshot(host)); Check(running != second, "IndependentBusinessInstances");
         await using var versionScope = await host.Scope(); var versionDb = versionScope.ServiceProvider.GetRequiredService<ReferenceDbContext>();
         await versionDb.Database.OpenConnectionAsync();
         await System.IO.File.WriteAllTextAsync(File("database.json"), JsonSerializer.Serialize(new { provider = versionDb.Database.ProviderName, serverVersion = versionDb.Database.GetDbConnection().ServerVersion }, RehearsalHost.Json));
@@ -95,7 +95,7 @@ internal static class Rehearsal
     private static async Task<string> Snapshot(RehearsalHost host)
     {
         var snapshot = new SortedDictionary<string, object>(StringComparer.Ordinal);
-        foreach (var tenant in new[] { "alpha", "beta" })
+        foreach (var tenant in new[] { "alpha" })
         {
             await using var scope = await host.Scope(tenant); var db = scope.ServiceProvider.GetRequiredService<ReferenceDbContext>();
             snapshot[tenant + "/Migrations"] = (await db.Database.GetAppliedMigrationsAsync()).ToArray();
@@ -116,13 +116,13 @@ internal static class Rehearsal
     {
         await using var host = await RehearsalHost.Start(RehearsalHost.Required("RESTORE_CONNECTION"), RehearsalHost.Required("RESTORE_FILES"));
         var actual = await Snapshot(host); Check(await System.IO.File.ReadAllTextAsync(File("source-snapshot.json")) == actual, "NativeBackupRestoredEveryPersistentProperty"); await System.IO.File.WriteAllTextAsync(File("restored-snapshot.json"), actual);
-        var facts = JsonDocument.Parse(await System.IO.File.ReadAllTextAsync(File("seed-facts.json"))).RootElement; var running = facts.GetProperty("running").GetGuid(); var beta = facts.GetProperty("beta").GetGuid();
-        Check(await Start(host, "running") == running && await Start(host, "running", "beta") == beta, "RestoredOriginalKeysReturnOriginalIds");
+        var facts = JsonDocument.Parse(await System.IO.File.ReadAllTextAsync(File("seed-facts.json"))).RootElement; var running = facts.GetProperty("running").GetGuid(); var second = facts.GetProperty("second").GetGuid();
+        Check(await Start(host, "running") == running && await Start(host, "second-running") == second, "RestoredOriginalKeysReturnOriginalIds");
         using var expired = await host.Send(HttpMethod.Post, "/forms/shared/start", key: "expired", body: Body); Check(expired.StatusCode == HttpStatusCode.Gone, "RestoredTombstoneReturns410");
         var fileId = facts.GetProperty("fileId").GetGuid(); using var download = await host.Send(HttpMethod.Get, "/files/" + fileId);
         Check(download.StatusCode == HttpStatusCode.OK && Convert.ToHexStringLower(SHA256.HashData(await download.Content.ReadAsByteArrayAsync())) == facts.GetProperty("fileHash").GetString(), "RestoredAttachmentBytesAndHash");
-        using var foreignFile = await host.Send(HttpMethod.Get, "/files/" + fileId, "beta-admin"); Check(foreignFile.StatusCode == HttpStatusCode.NotFound, "RestoredForeignAttachmentRejected");
-        await Complete(host, running); await Complete(host, beta, "beta"); host.Services.GetRequiredService<ApprovalOptions>().Lifecycle.MaxBatchesPerRun = 3; var jobId = facts.GetProperty("jobId").GetGuid();
+        using var foreignFile = await host.Send(HttpMethod.Get, "/files/" + fileId, "outsider"); Check(foreignFile.StatusCode == HttpStatusCode.Forbidden, "RestoredUnknownUserRejected");
+        await Complete(host, running); await Complete(host, second); host.Services.GetRequiredService<ApprovalOptions>().Lifecycle.MaxBatchesPerRun = 3; var jobId = facts.GetProperty("jobId").GetGuid();
         JsonElement resumed = default;
         for (var batch = 0; batch < 3; batch++)
         {
@@ -135,7 +135,7 @@ internal static class Rehearsal
     }
     private static async Task Authentication()
     {
-        await using var host = await RehearsalHost.Start(Source, Files); var me = await host.Api(HttpMethod.Get, "/me"); Check(me.GetProperty("tenantId").GetString() == "alpha" && me.GetProperty("userId").GetString() == "alpha-alice", "RealOidcSubjectAndTenant");
+        await using var host = await RehearsalHost.Start(Source, Files); var me = await host.Api(HttpMethod.Get, "/me"); Check(me.GetProperty("userId").GetString() == "alpha-alice", "RealOidcSubject");
         using var anonymous = await host.Send(HttpMethod.Get, "/me", anonymous: true); Check(anonymous.StatusCode == HttpStatusCode.Unauthorized, "JwtAnonymousRejected");
         var token = await RehearsalHost.Token("alpha-alice"); using var forged = await host.Send(HttpMethod.Get, "/me", token: token[..^8] + "AAAAAAAA"); Check(forged.StatusCode == HttpStatusCode.Unauthorized, "JwtSignatureRejected");
         using var audience = await host.Send(HttpMethod.Get, "/me", token: await RehearsalHost.Token("alpha-alice", "other-api")); Check(audience.StatusCode == HttpStatusCode.Unauthorized, "JwtWrongAudienceRejected");
@@ -146,7 +146,7 @@ internal static class Rehearsal
         while (DateTimeOffset.UtcNow <= expiry) await Task.Delay(100);
         using var expired = await host.Send(HttpMethod.Get, "/me", token: shortToken); Check(expired.StatusCode == HttpStatusCode.Unauthorized, "JwtExpiredTokenRejected");
         using var spoof = new HttpRequestMessage(HttpMethod.Get, "/api/approval/me"); spoof.Headers.Authorization = new("Bearer", token); spoof.Headers.Add("X-Tenant-Id", "beta"); using var spoofed = await host.Client.SendAsync(spoof);
-        Check(spoofed.StatusCode == HttpStatusCode.OK && (await spoofed.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("tenantId").GetString() == "alpha", "JwtTenantHeaderCannotOverrideIssuerClaim");
+        Check(spoofed.StatusCode == HttpStatusCode.OK && (await spoofed.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("userId").GetString() == "alpha-alice", "UntrustedHeaderCannotChangeSubject");
     }
     private static async Task Network()
     {

@@ -35,6 +35,11 @@ test('packaged designer publishes a workflow and three approvals activate the ce
   await expect(name).toHaveValue(JSON.parse(before.definitionJson).nodes.dept.name)
   await name.fill('包验收初审')
   await page.getByPlaceholder('流程名称').fill('打包注册证验收')
+  await page.getByRole('button', { name: '草稿预览', exact: true }).click()
+  const draftPreview = page.getByRole('dialog', { name: '草稿预览', exact: true })
+  await expect(draftPreview).toBeVisible()
+  await expect(draftPreview.getByText('包验收初审', { exact: true })).toBeVisible()
+  await draftPreview.locator('.el-dialog__headerbtn').click()
   const saved = page.waitForResponse(response => new URL(response.url()).pathname === '/api/approval/definitions/certificate.create/draft' && response.request().method() === 'PUT')
   await page.getByRole('button', { name: '保存草稿', exact: true }).click()
   const draftResponse = await saved
@@ -130,4 +135,75 @@ test('packaged diagnostics expose anonymous readiness only and maintenance stays
   const data = await (await preview).json(); expect(data.enabled).toBe(false)
   await expect(page.getByRole('button', { name: '确认并执行一批', exact: true })).toBeDisabled()
   expect((await request.get(process.env.APPROVAL_SMOKE_API + '/api/approval/diagnostics')).status()).toBe(401)
+})
+
+test('packaged returned form can be edited and resubmitted and carbon copy read state stays separate', async ({ page, request }) => {
+  test.setTimeout(120000)
+  const api = process.env.APPROVAL_SMOKE_API!
+  const key = `package.return.${Date.now()}`
+  const flow = { startNodeId: 'start', settings: { startable: true, titleTemplate: '打包退回重提' },
+    form: { fields: [{ key: 'memo', label: '说明', type: 'Text', required: true }] },
+    nodes: { start: { type: 'Start', name: '申请', next: 'cc' },
+      cc: { type: 'Cc', name: '抄送人事', approvers: [{ type: 'Role', value: 'HR' }], next: 'review' },
+      review: { type: 'Approval', name: '审核', approvers: [{ type: 'User', value: 'dave' }], requireComment: true, next: 'end' },
+      end: { type: 'End', name: '结束' } } }
+  const published = await request.post(api + `/api/approval/definitions/${key}?name=打包退回重提`, { headers: { 'X-User-Id': 'admin', 'Idempotency-Key': key }, data: flow })
+  expect(published.ok(), await published.text()).toBe(true)
+  const started = await request.post(api + `/api/approval/forms/${key}/start`, { headers: { 'X-User-Id': 'alice', 'Idempotency-Key': `${key}-start` }, data: { formData: { memo: '修改前' } } })
+  expect(started.ok(), await started.text()).toBe(true)
+  const id = (await started.json()).instanceId
+  const task = (await json(request, `/api/approval/instances/${id}/my-task`, 'dave')).task
+  const returned = await request.post(api + `/api/approval/tasks/${task.id}/reject`, { headers: { 'X-User-Id': 'dave', 'Idempotency-Key': `${key}-return` }, data: { targetNodeId: 'start', comment: '补充说明' } })
+  expect(returned.status()).toBe(204)
+  await page.addInitScript(() => { if (!localStorage.getItem('approval-demo-user')) localStorage.setItem('approval-demo-user', 'alice') })
+  await page.goto(`/approvals/${id}`)
+  await expect(page.getByText('待申请人修改', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: '重新提交', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: '重新提交' })
+  await dialog.locator('.el-form-item').filter({ hasText: '说明' }).getByRole('textbox').fill('修改后补充内容')
+  const submitted = page.waitForResponse(r => new URL(r.url()).pathname.endsWith('/resubmit') && r.request().method() === 'POST')
+  await dialog.getByRole('button', { name: '确定', exact: true }).click()
+  expect((await submitted).ok()).toBe(true)
+  await expect(page.getByText('审批中', { exact: true })).toBeVisible()
+  const detail = await json(request, `/api/approval/instances/${id}`)
+  expect(JSON.parse(detail.formDataJson).memo).toBe('修改后补充内容')
+  expect(detail.logs.filter((l: { action: string }) => l.action === 'Resubmit')).toHaveLength(1)
+  const copies = await json(request, `/api/approval/carbon-copies?businessKey=${detail.businessKey}&unreadOnly=true`, 'hana')
+  expect(copies.total).toBe(2)
+  await page.evaluate(() => localStorage.setItem('approval-demo-user', 'hana'))
+  await page.goto('/workbench?tab=cc')
+  const row = page.getByRole('row').filter({ hasText: '打包退回重提' }).first()
+  await expect(row.getByText('未读', { exact: true })).toBeVisible()
+  await row.getByRole('button', { name: '查看人员', exact: true }).click()
+  const people = page.getByRole('dialog', { name: '抄送接收人员' })
+  await expect(people.getByText('以下为宿主当前角色成员，不是抄送发生时的历史人员快照。', { exact: true })).toBeVisible()
+  await expect(people.getByRole('cell', { name: 'Hana（人事）', exact: true })).toBeVisible()
+  expect((await json(request, `/api/approval/carbon-copies?businessKey=${detail.businessKey}&unreadOnly=true`, 'hana')).total).toBe(2)
+  await people.locator('.el-dialog__headerbtn').click()
+  await row.click()
+  await expect(page).toHaveURL(new RegExp(`/approvals/${id}$`))
+  const after = await json(request, `/api/approval/carbon-copies?businessKey=${detail.businessKey}&unreadOnly=true`, 'hana')
+  expect(after.total).toBe(1)
+})
+
+
+test('packaged definition categories are shown and filtered by server', async ({ page, request }) => {
+  const api = process.env.APPROVAL_SMOKE_API!, prefix = `package.category.${Date.now()}`
+  const category = `分类验收-${Date.now()}`
+  const flow = (value: string) => ({ settings: { category: value }, startNodeId: 's', nodes: { s: { type: 'Start', name: '申请', next: 'e' }, e: { type: 'End', name: '结束' } } })
+  for (const [suffix, value] of [['one', category], ['two', category + '-other']]) {
+    const response = await request.post(api + `/api/approval/definitions/${prefix}.${suffix}?name=${suffix}`, { headers: { 'X-User-Id': 'admin', 'Idempotency-Key': `${prefix}.${suffix}` }, data: flow(value!) })
+    expect(response.ok(), await response.text()).toBe(true)
+  }
+  await page.addInitScript(() => localStorage.setItem('approval-demo-user', 'admin'))
+  await page.goto('/definitions')
+  await expect(page.getByRole('row').filter({ hasText: `${prefix}.one` })).toBeVisible()
+  await page.locator('.category-filter .el-select').click()
+  const filtered = page.waitForResponse(r => { const url = new URL(r.url()); return url.pathname === '/api/approval/definitions/governance' && url.searchParams.get('category') === category })
+  await page.getByRole('option', { name: category, exact: true }).click()
+  const response = await filtered
+  expect((await response.json()).map((d: { key: string }) => d.key)).toEqual([`${prefix}.one`])
+  await expect(page.locator('.el-table__body-wrapper .el-table__row')).toHaveCount(1)
+  await expect(page.getByRole('cell', { name: category, exact: true })).toBeVisible()
+  await expect(page.getByRole('row').filter({ hasText: `${prefix}.two` })).toHaveCount(0)
 })

@@ -31,6 +31,21 @@ internal static class InstanceEndpoints
         group.MapGet("/cc", ([AsParameters] InstanceListRequest request, HttpContext http, ApprovalQueryService q, CancellationToken ct) =>
             q.GetCarbonCopiedAsync(http.GetApprovalUserId(), request.ToQuery(), request.ToPage(), ct));
 
+        group.MapGet("/carbon-copies", ([AsParameters] InstanceListRequest request, bool? unreadOnly, HttpContext http, ApprovalCarbonCopyService copies, CancellationToken ct) =>
+            copies.ListAsync(http.GetApprovalUserId(), unreadOnly ?? false, request.ToQuery(), request.ToPage(), ct));
+        group.MapGet("/carbon-copies/{id:guid}", (Guid id, HttpContext http, ApprovalCarbonCopyService copies, CancellationToken ct) =>
+            copies.GetAsync(http.GetApprovalUserId(), id, ct));
+        group.MapGet("/carbon-copies/{id:guid}/recipients", (Guid id, int? page, int? pageSize, HttpContext http, ApprovalCarbonCopyService copies, CancellationToken ct) =>
+            copies.GetRecipientsAsync(http.GetApprovalUserId(), id, new PageRequest(page, pageSize), ct,
+                http.RequestServices.GetService<IApprovalHttpUserDirectory>()));
+        group.MapPost("/carbon-copies/{id:guid}/read", async (Guid id, HttpContext http, ApprovalCarbonCopyService copies, CancellationToken ct) =>
+        {
+            await copies.MarkReadAsync(http.GetApprovalUserId(), id, ct);
+            return TypedResults.NoContent();
+        });
+        group.MapGet("/instances/{id:guid}/carbon-copies", (Guid id, HttpContext http, ApprovalCarbonCopyService copies, CancellationToken ct) =>
+            copies.HistoryAsync(http.GetApprovalUserId(), id, ct));
+
         // 详情、按业务查询、实例的流程定义：只对有关的人可见（IApprovalAccessPolicy），无权时与不存在一样返回 404
         group.MapGet("/instances/{id:guid}", async (Guid id, HttpContext http, ApprovalQueryService q, CancellationToken ct) =>
             await ResponseAsync(await q.GetInstanceForViewerAsync(id, await http.GetApprovalViewerAsync(ct), ct) ?? throw NotVisible(), http, ct));
@@ -39,7 +54,7 @@ internal static class InstanceEndpoints
                 CancellationToken ct) =>
             await ResponsesAsync(await q.GetByBusinessForViewerAsync(businessType, businessKey, await http.GetApprovalViewerAsync(ct), ct), http, ct));
 
-        // 实例绑定版本的流程定义公开视图（画流程图、展示表单），不含动作参数、通知与时限配置
+        // 实例绑定版本的流程定义公开视图（画流程图、展示表单），不含通知与时限配置
         group.MapGet("/instances/{id:guid}/definition", async (Guid id, HttpContext http, ApprovalQueryService q, CancellationToken ct) =>
             ApprovalDefinitionResponse.From(await q.GetPublicDefinitionAsync(id, await http.GetApprovalViewerAsync(ct), ct) ?? throw NotVisible()));
 

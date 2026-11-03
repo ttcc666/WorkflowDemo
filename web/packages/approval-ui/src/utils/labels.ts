@@ -11,6 +11,7 @@ export type TagType = 'primary' | 'success' | 'warning' | 'danger' | 'info'
 
 export const instanceStatusLabels: Record<InstanceStatus, { text: string; type: TagType }> = {
   Running: { text: '审批中', type: 'primary' },
+  Returned: { text: '待申请人修改', type: 'warning' },
   Approved: { text: '已通过', type: 'success' },
   Rejected: { text: '已驳回', type: 'danger' },
   Withdrawn: { text: '已撤回', type: 'info' },
@@ -37,6 +38,7 @@ export const taskKindLabels: Record<TaskKind, string> = {
 
 export const actionLabels: Record<ApprovalAction, string> = {
   Submit: '提交申请',
+  NodeEntered: '进入节点',
   Approve: '同意',
   Reject: '驳回',
   Withdraw: '撤回',
@@ -44,7 +46,6 @@ export const actionLabels: Record<ApprovalAction, string> = {
   AutoApprove: '自动通过',
   Cc: '抄送',
   Complete: '流程结束',
-  Action: '自动动作',
   Remind: '超时提醒',
   TimeoutApprove: '超时自动同意',
   TimeoutReject: '超时自动驳回',

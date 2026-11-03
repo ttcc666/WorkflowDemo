@@ -11,7 +11,7 @@ import { formatDateTime, outboxStatusLabels } from '../utils/labels'
 
 const { api: approvalApi, userKey: approvalUserKey, config: approvalConfig } = useApprovalClient()
 
-/** 投递记录：外部渠道通知与异步动作的投递状态、重试（分页，状态与页码同步到地址栏）。宿主可通过 outboxPanel 选项在下方追加面板。 */
+/** 投递记录：外部渠道通知与可靠事件的投递状态、重试（分页，状态与页码同步到地址栏）。宿主可通过 outboxPanel 选项在下方追加面板。 */
 const { can } = useApprovalUser()
 const intent = useCommandIntent('outbox-retry')
 const outboxPanel = approvalConfig().outboxPanel
@@ -31,7 +31,7 @@ onBeforeUnmount(() => window.clearInterval(timer))
 async function retry(message: OutboxMessage) {
   try {
     await intent.run(message.id, {}, (_, operationId) => approvalApi.retryOutbox(message.id, operationId))
-    ElMessage.success('已重新投递')
+    ElMessage.success('已安排重新投递')
     refresh()
   } catch (e) {
     ElMessage.error(errorMessage(e))
@@ -56,9 +56,9 @@ const msg = (r: unknown) => r as OutboxMessage
       </template>
       <el-table :data="outbox.items.value" row-key="id" empty-text="暂无记录" size="small">
         <el-table-column label="类型" width="90">
-          <template #default="{ row }">{{ msg(row).kind === 'Action' ? '异步动作' : '通知' }}</template>
+          <template #default="{ row }">{{ msg(row).kind === 'Event' ? '宿主事件' : '通知' }}</template>
         </el-table-column>
-        <el-table-column prop="target" label="渠道 / 动作" width="110" />
+        <el-table-column prop="target" label="渠道 / 事件" width="110" />
         <el-table-column prop="description" label="说明" min-width="220" show-overflow-tooltip />
         <el-table-column label="状态" width="90">
           <template #default="{ row }">

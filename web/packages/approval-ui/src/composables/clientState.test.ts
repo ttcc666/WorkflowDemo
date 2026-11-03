@@ -6,12 +6,12 @@ import { useDirectory } from './useDirectory'
 
 const clients: ApprovalClient[] = []
 
-it('权限使用服务端能力并在撤权和租户切换时立即清空', async () => {
-  const tenant = shallowRef('a')
+it('权限使用服务端能力并在撤权和会话切换时立即清空', async () => {
+  const session = shallowRef('a')
   let allowed = true
-  const client = createApprovalClient({ tenantId: () => tenant.value, userKey: () => 'admin',
+  const client = createApprovalClient({ userKey: () => session.value + ':admin',
     fetcher: async () => Response.json({ userId: 'admin', name: 'Admin', roles: ['Admin'], isAdmin: true,
-      capabilities: { 'approval.definition.publish': allowed && tenant.value === 'a' } }) })
+      capabilities: { 'approval.definition.publish': allowed && session.value === 'a' } }) })
   clients.push(client)
   const user = createApp({}).use(client).runWithContext(useApprovalUser)
   expect(user.can('approval.definition.publish')).toBe(false)
@@ -21,19 +21,19 @@ it('权限使用服务端能力并在撤权和租户切换时立即清空', asyn
   expect(user.can('approval.definition.publish')).toBe(false)
   allowed = true; await user.reload()
   expect(user.can('approval.definition.publish')).toBe(true)
-  tenant.value = 'b'
+  session.value = 'b'
   expect(user.can('approval.definition.publish')).toBe(false)
   await vi.waitFor(() => expect(user.me.value?.userId).toBe('admin'))
   expect(user.can('approval.definition.publish')).toBe(false)
 })
 
-it('isolates identical users when only the tenant changes and rejects late submission responses', async () => {
-  const tenant = shallowRef('a')
+it('isolates identical users when the trusted host session changes and rejects late submission responses', async () => {
+  const session = shallowRef('a')
   const fetcher = vi.fn(async (url: string, _init: RequestInit) => {
-    if (url.endsWith('/me')) return Response.json({ userId: 'shared', name: tenant.value, roles: [] })
-    return Response.json([{ id: 'shared', name: tenant.value, roles: [] }])
+    if (url.endsWith('/me')) return Response.json({ userId: 'shared', name: session.value, roles: [] })
+    return Response.json([{ id: 'shared', name: session.value, roles: [] }])
   })
-  const client = createApprovalClient({ tenantId: () => tenant.value, userKey: () => 'shared', fetcher })
+  const client = createApprovalClient({ userKey: () => session.value + ':shared', fetcher })
   clients.push(client)
   const app = createApp({}).use(client)
   const directory = app.runWithContext(useDirectory)
@@ -46,12 +46,12 @@ it('isolates identical users when only the tenant changes and rejects late submi
   const pending = expect(client.http.post('/submit', { amount: 1 })).rejects.toMatchObject({ name: 'AbortError' })
   const signal = fetcher.mock.calls.at(-1)![1].signal
   const oldKey = client.userKey.value
-  tenant.value = 'b'
+  session.value = 'b'
   expect(client.userKey.value).not.toBe(oldKey)
   expect(signal?.aborted).toBe(true)
   expect(directory.displayName('shared')).toBe('shared')
   expect((await directory.resolve(['shared']))[0]?.name).toBe('b')
-  complete(Response.json({ instanceId: 'old-tenant-instance' }))
+  complete(Response.json({ instanceId: 'old-session-instance' }))
   await pending
   await vi.waitFor(() => expect(user.me.value?.name).toBe('b'))
 })

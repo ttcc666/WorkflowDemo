@@ -23,6 +23,7 @@ const props = defineProps<{
   allowReturn: boolean
   allowAddSign: boolean
   allowTransfer: boolean
+  requireComment?: boolean
   busy: boolean
   /** 表单审批：重新提交时可修改的表单结构与当前数据 */
   resubmitForm?: FormSchema
@@ -82,7 +83,8 @@ const excludedUsers = computed(() => [props.currentUserId, props.initiatorId])
 const returnTargets = shallowRef<ReturnTarget[]>([])
 const loadingTargets = shallowRef(false)
 
-const commentRequired = computed(() => action.value === 'reject' || action.value === 'terminate')
+const commentRequired = computed(() => action.value === 'reject' || action.value === 'terminate'
+  || props.requireComment && (action.value === 'approve' || action.value === 'addSign' && form.signMode === 'After'))
 const commentLabel = computed(() => {
   if (action.value === 'terminate') return '终止原因'
   if (action.value === 'reject') return form.rejectMode === 'return' ? '退回原因' : '驳回原因'

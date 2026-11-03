@@ -1,4 +1,4 @@
-import { approvalConfig, approvalIdentityKey, type ResolvedApprovalUIOptions } from '../config'
+import { approvalIdentityKey, type ResolvedApprovalUIOptions } from '../config'
 
 /** 后端返回的业务错误（ProblemDetails），message 为可直接展示给用户的中文提示。 */
 export class ApiError extends Error {
@@ -27,7 +27,7 @@ interface RequestOptions {
 
 /** 创建独立的传输客户端；请求时读取 headers、fetcher 与错误处理。 */
 export function createHttpClient(
-  getConfig: () => Pick<ResolvedApprovalUIOptions, 'headers' | 'fetcher' | 'onUnauthorized' | 'tenantId' | 'userKey'> = approvalConfig,
+  getConfig: () => Pick<ResolvedApprovalUIOptions, 'headers' | 'fetcher' | 'onUnauthorized' | 'userKey'>,
 ) {
   const pending = new Set<AbortController>()
   async function request<T>(method: string, url: string, options: RequestOptions = {}): Promise<T> {
@@ -91,8 +91,6 @@ export function createHttpClient(
 }
 
 export type ApprovalHttpClient = ReturnType<typeof createHttpClient>
-/** 兼容单实例入口，始终读取 configureApprovalUI 的最新配置。 */
-export const http = createHttpClient(approvalConfig)
 
 export function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)

@@ -24,7 +24,7 @@ export function useApprovalDetail(instanceId: Ref<string>) {
   )
   const notFound = computed(() => instance.data.value === null)
 
-  // 实例加载成功后再取定义：公开视图不含动作参数、通知配置，所有能查看实例的人都可读取
+  // 实例加载成功后再取定义：公开视图不含通知配置，所有能查看实例的人都可读取
   const definitionId = computed(() => instance.data.value?.definitionId)
   const definition = useAsyncData(
     async (signal) => (definitionId.value ? approvalApi.instanceDefinition(instanceId.value, signal) : undefined),
@@ -52,7 +52,7 @@ export function useApprovalDetail(instanceId: Ref<string>) {
     }
     const isApproval = node?.type === 'Approval'
     return { allowReturn: isApproval && node?.allowReturn !== false, allowAddSign: isApproval && node?.allowAddSign !== false,
-      allowTransfer: isApproval && node?.allowTransfer !== false }
+      allowTransfer: isApproval && node?.allowTransfer !== false, requireComment: isApproval && node?.requireComment === true }
   })
 
   async function reload() {

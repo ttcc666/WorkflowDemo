@@ -13,7 +13,16 @@ public interface IApprovalIdentityProvider
     Task<IReadOnlyList<string>> GetRolesAsync(string userId, CancellationToken ct);
 }
 
-public sealed record ApprovalUser(string Id, string Name, IReadOnlyList<string> Roles);
+public sealed record ApprovalUser(string Id, string Name, IReadOnlyList<string> Roles)
+{
+    public bool IsActive { get; init; } = true;
+}
+
+/// <summary>可信用户状态由宿主返回；未注册时使用已注册的用户目录。</summary>
+public interface IApprovalUserStatusProvider
+{
+    Task<bool> IsActiveAsync(string userId, CancellationToken ct);
+}
 
 /// <summary>
 /// 用户目录（可选）：供前端用户选择器（转交、加签、表单人员字段）与设计器角色下拉使用。

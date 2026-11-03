@@ -20,7 +20,6 @@ public sealed class ApprovalLifecycleOptions
     public TimeSpan? ArchivedPayloadsAfter { get; set; }
     public int BatchSize { get; set; } = 50;
     public int MaxBatchesPerRun { get; set; } = 10;
-    public TimeSpan LeaseDuration { get; set; } = TimeSpan.FromMinutes(5);
     public TimeSpan PollInterval { get; set; } = TimeSpan.FromMinutes(1);
     public TimeSpan? Retention(MaintenanceTarget target, MaintenanceMode mode) => target switch
     {
@@ -38,7 +37,5 @@ public sealed class ApprovalLifecycleOptions
 }
 public sealed class ApprovalBackgroundOptions
 {
-    public int MaxTenantsPerSweep { get; set; } = 16;
-    public TimeSpan TenantBudget { get; set; } = TimeSpan.FromSeconds(30);
     public int AssignmentSampleSize { get; set; } = 50;
 }

@@ -20,7 +20,6 @@ public static class CertificateModuleExtensions
         services.AddScoped<CertificateDatabase>();
         services.AddScoped<CertificateDiagnostics>();
         services.AddSingleton<CertificateMonitor>();
-        return approval.AddBusinessHandler<CertificateApprovalHandler>()
-            .AddActionHandler<CertificateExpiryCheckAction>();
+        return approval.AddBusinessHandler<CertificateApprovalHandler>();
     }
 }

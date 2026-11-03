@@ -1,9 +1,7 @@
 import { afterEach, expect, it, vi } from 'vitest'
 import { createApp } from 'vue'
-import { approvalApi } from './api/approval'
-import { http } from './api/http'
-import { createApprovalClient, defaultApprovalClient, useApprovalClient, type ApprovalClient } from './client'
-import { configureApprovalUI, type ApprovalUIOptions } from './config'
+import { createApprovalClient, useApprovalClient, type ApprovalClient } from './client'
+import { type ApprovalUIOptions } from './config'
 
 const clients: ApprovalClient[] = []
 const client = (options: ApprovalUIOptions) => {
@@ -14,8 +12,6 @@ const client = (options: ApprovalUIOptions) => {
 
 afterEach(() => {
   clients.splice(0).forEach(value => value.dispose())
-  defaultApprovalClient.dispose()
-  configureApprovalUI()
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
   vi.useRealTimers()
@@ -42,19 +38,9 @@ it('keeps transport configuration dynamic headers and panels independent across 
   expect(right.config().businessPanels.Certificate).toBe(rightPanel)
 })
 
-it('preserves legacy global configuration without reconfiguring isolated clients', async () => {
-  const isolatedFetch = vi.fn(async () => Response.json({ userId: 'isolated' }))
-  const legacyFetch = vi.fn(async (_url: string) => Response.json({ userId: 'legacy' }))
-  const isolated = client({ apiBase: '/isolated', fetcher: isolatedFetch })
-  configureApprovalUI({ apiBase: '/legacy-one', fetcher: legacyFetch })
-  await approvalApi.me()
-  configureApprovalUI({ apiBase: '/legacy-two', fetcher: legacyFetch })
-  await approvalApi.me()
-  await http.get('/business')
-  await isolated.api.me()
-  expect(legacyFetch.mock.calls.map(call => call[0])).toEqual(['/legacy-one/me', '/legacy-two/me', '/business'])
-  expect(isolatedFetch).toHaveBeenCalledExactlyOnceWith('/isolated/me', expect.any(Object))
-  expect(useApprovalClient()).toBe(defaultApprovalClient)
+it('requires an installed client instead of falling back to global configuration', () => {
+  expect(() => useApprovalClient()).toThrow('安装审批客户端')
+  expect(() => createApp({}).runWithContext(() => useApprovalClient())).toThrow('安装审批客户端')
 })
 
 it('keeps authorization and validation errors on the owning client', async () => {
@@ -124,7 +110,6 @@ it('installs a separate client into each Vue app', async () => {
   const right = client({ fetcher: async () => Response.json({ userId: 'right' }) })
   const leftApp = createApp({}).use(left)
   const rightApp = createApp({}).use(right)
-  configureApprovalUI({ fetcher: async () => { throw new Error('legacy must not be used') } })
   expect(leftApp.runWithContext(useApprovalClient)).toBe(left)
   expect(rightApp.runWithContext(useApprovalClient)).toBe(right)
   expect((await leftApp.runWithContext(() => useApprovalClient().api.me())).userId).toBe('left')

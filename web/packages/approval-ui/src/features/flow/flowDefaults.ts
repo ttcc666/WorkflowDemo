@@ -14,21 +14,19 @@ export function newNodeId(type: NodeType, existing: Iterable<string>) {
 }
 
 export function createNodeData(type: NodeType): FlowNodeData {
-  const defaults: Record<NodeType, Pick<FlowNodeData, 'name' | 'approvers' | 'actions' | 'notifications'>> = {
-    Start: { name: '提交申请', approvers: [], actions: [], notifications: [] },
+  const defaults: Record<NodeType, Pick<FlowNodeData, 'name' | 'approvers' | 'notifications'>> = {
+    Start: { name: '提交申请', approvers: [], notifications: [] },
     // 新审批节点默认发站内信给审批人，可在属性面板修改
     Approval: {
       name: '审批',
       approvers: [{ type: 'Role', value: '' }],
-      actions: [],
       notifications: [defaultNotification('Enter')],
     },
-    Cc: { name: '抄送', approvers: [{ type: 'Initiator', value: '' }], actions: [], notifications: [] },
-    Condition: { name: '条件分支', approvers: [], actions: [], notifications: [] },
-    Action: { name: '自动动作', approvers: [], actions: [], notifications: [] },
-    Parallel: { name: '并行分支', approvers: [], actions: [], notifications: [] },
-    Join: { name: '合并', approvers: [], actions: [], notifications: [] },
-    End: { name: '结束', approvers: [], actions: [], notifications: [] },
+    Cc: { name: '抄送', approvers: [{ type: 'Initiator', value: '' }], notifications: [] },
+    Condition: { name: '条件分支', approvers: [], notifications: [] },
+    Parallel: { name: '并行分支', approvers: [], notifications: [] },
+    Join: { name: '合并', approvers: [], notifications: [] },
+    End: { name: '结束', approvers: [], notifications: [] },
   }
   return {
     type,

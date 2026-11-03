@@ -19,7 +19,7 @@ public static class ApprovalPermissions
     public static bool IsDesigner(string code) => code is DefinitionReadSensitive or DefinitionDesign or DefinitionValidate;
 }
 
-public sealed record ApprovalPermissionSubject(string TenantId, string ActorId, bool IsSystem);
+public sealed record ApprovalPermissionSubject(string ActorId, bool IsSystem);
 public sealed record ApprovalResource
 {
     public Guid? ArchiveId { get; init; }

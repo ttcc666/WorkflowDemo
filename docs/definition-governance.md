@@ -45,16 +45,16 @@ flowchart LR
 
 设计器支持保存后刷新恢复草稿、发布变更说明，以及在“版本与治理”中启停、选择历史版本和查看审计。按钮采用资源 capabilities，实际提交仍由 Core 复核。网络错误或待确认结果保留原键与原内容；同页重试不重复保存或递增发布版本。刷新后若当前令牌已经变化，先核对审计/版本中的原结果，再显式开始新操作，不能盲目生成新键重做。
 
-## 旧同步动作扫描
+## 流程分类
 
-扫描按发布版本分页，包含在途实例数量，仅返回定义 ID、流程键、版本、节点、动作类型与原因，不输出参数。`ExternalSideEffect` 表示声明了外部写副作用的同步动作；`SelfCommit` 表示扩展声明 `CommitsWorkUnit=true`；`UnregisteredSyncAction` 与 `InvalidDefinition` 需要人工复核。
+`settings.category` 在保存草稿、发布和选择版本时同步到数据库查询投影。列表有草稿时显示草稿分类，否则显示选用发布版本分类；空白归为未分类，trim 后最多100字符且拒绝控制字符。
 
-新发布拒绝自行提交工作单元的扩展。外部同步动作默认拒绝发布，遗留宿主可显式开启 `AllowSynchronousExternalActions` 并承担远程幂等与补偿边界。扫描不执行动作，不更改旧定义、不自动改为 Async，也不重新绑定在途实例。未声明的任意自定义代码无法仅凭 JSON 判断是否自行提交；宿主须核对其实现，运行时工作单元保护继续有效。
+`GET /definitions/governance?category=财务` 与 `?uncategorized=true` 在 SQL 筛选，两者不能同时指定。`GET /definitions/categories` 只返回当前用户有权读取流程的分类。发布不覆盖现有草稿；复制仅创建新标识的草稿。
 
-## 数据库升级
+## 当前初始化与协议
 
-本阶段为四个测试 Provider 和证照示例各追加 `DefinitionGovernance` 迁移，创建 `ApprovalDefinitionManagement`、`ApprovalDefinitionAudits` 及租户关联、唯一约束和并发列。原迁移 ID 保留。宿主应基于自己的 Provider 和模型生成迁移，并在备份、停止旧 writer/worker 后演练应用。
+项目尚未正式使用。九套上下文各只有一条 `InitialApproval`，直接创建当前模型（包括分类、治理、抄送阅读和事件表），没有历史回填或升级前置检查。发布和保存草稿通过服务创建治理记录；缺少治理记录的定义不会自动被视为已启用。
 
-旧流程在尚无管理记录时保持可发起，默认使用最新发布版本；首次治理写入创建管理记录。没有自动归属推断或审计补造。开放新写入后优先前向修复；删除治理表会丢失状态与审计，不能作为普通回退办法。MySQL DDL 的隐式提交限制仍适用。
+通用动作类型、DTO、扫描 API 和 UI 已删除。JSON 中未知节点类型、数字枚举或未定义节点属性会被拒绝；没有只读旧 Action 模式。宿主本地准备使用 `IApprovalLifecycleHandler`，结束业务用 `IApprovalBusinessHandler`，远程副作用用 `IApprovalEventHandler`。
 
-完整本机验收与限制见[阶段实施记录](../plans/2026-11-02-multitenant-production-hardening-progress.md)。诊断与生命周期清理属于下一阶段。
+业务中的不可变历史版本、轨迹和审计仍保留，这是正常审批功能，与旧环境兼容无关。

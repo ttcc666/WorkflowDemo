@@ -5,7 +5,7 @@ using Approval.Core.Domain;
 using Approval.Core.Engine;
 using Approval.Core.Files;
 using Approval.Core.Persistence;
-using Approval.Core.Tenancy;
+using Approval.Core.Hosting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -20,7 +20,7 @@ public sealed record ArchiveSummary(Guid Id, MaintenanceTarget Target, Guid Reso
     string? BusinessType, DateTime ArchivedAt, DateTime? PurgedAt, DateTime? PayloadExpiredAt, string SnapshotHash);
 
 public sealed partial class ApprovalLifecycleService(ApprovalDbContextAccessor accessor, IServiceScopeFactory scopes,
-    IApprovalTenantContext tenant, ApprovalOptions options, TimeProvider clock, IApprovalFileStore? store = null, IApprovalArchiveQueryScope? archiveScope = null)
+    ApprovalOptions options, TimeProvider clock, ApprovalMaintenanceGate gate, IApprovalFileStore? store = null, IApprovalArchiveQueryScope? archiveScope = null)
 {
     private readonly ApprovalDbContext _db = (ApprovalDbContext)accessor.Context;
     private readonly ApprovalUnitOfWork _unit = accessor.UnitOfWork;
@@ -31,7 +31,7 @@ public sealed partial class ApprovalLifecycleService(ApprovalDbContextAccessor a
     {
         using var timeout = new CancellationTokenSource(options.PermissionTimeout, clock);
         using var token = CancellationTokenSource.CreateLinkedTokenSource(ct, timeout.Token);
-        try { return await (archiveScope ?? throw new InvalidOperationException("未注册归档数据范围")).ApplyAsync(new(tenant.TenantId, accessor.ActorId, accessor.IsSystem), _db.Set<ApprovalArchiveRecord>().AsNoTracking(), token.Token).WaitAsync(token.Token); }
+        try { return await (archiveScope ?? throw new InvalidOperationException("未注册归档数据范围")).ApplyAsync(new(accessor.ActorId, accessor.IsSystem), _db.Set<ApprovalArchiveRecord>().AsNoTracking(), token.Token).WaitAsync(token.Token); }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
         catch (Exception ex) { throw new ApprovalException("归档数据范围暂不可用", ex) { Code = ApprovalErrorCode.AuthorizationUnavailable }; }
     }
@@ -111,13 +111,13 @@ public sealed partial class ApprovalLifecycleService(ApprovalDbContextAccessor a
         var holds = _db.Set<ApprovalRetentionHold>(); var archives = _db.Set<ApprovalArchiveRecord>();
         var visible = await Auth.ScopeAsync(_db.Set<ApprovalInstance>().AsNoTracking(), ct);
         var visibleIds = visible.Select(i => i.Id);
-        var running = _db.Set<ApprovalInstance>().Where(i => i.Status == InstanceStatus.Running).Select(i => i.Id);
+        var running = _db.Set<ApprovalInstance>().Where(i => (i.Status == InstanceStatus.Running || i.Status == InstanceStatus.Returned)).Select(i => i.Id);
         var heldInstances = holds.Where(h => h.Target == MaintenanceTarget.Instances).Select(h => h.ResourceId);
         var prior = archives.Where(a => a.Target == target);
         switch (target)
         {
             case MaintenanceTarget.Instances:
-                var instances = visible.Where(i => i.Status != InstanceStatus.Running && i.CompletedAt != null && i.CompletedAt < cutoff && !heldInstances.Contains(i.Id));
+                var instances = visible.Where(i => (i.Status != InstanceStatus.Running && i.Status != InstanceStatus.Returned) && i.CompletedAt != null && i.CompletedAt < cutoff && !heldInstances.Contains(i.Id));
                 if (mode == MaintenanceMode.Archive) instances = instances.Where(i => !prior.Any(a => a.ResourceId == i.Id));
                 else instances = instances.Where(i => prior.Any(a => a.ResourceId == i.Id && a.PurgedAt == null)
                     && !_db.Set<ApprovalBusinessSlot>().Any(s => s.InstanceId == i.Id)
@@ -135,7 +135,7 @@ public sealed partial class ApprovalLifecycleService(ApprovalDbContextAccessor a
             case MaintenanceTarget.SucceededOutbox:
             case MaintenanceTarget.FailedOutbox:
                 var status = target == MaintenanceTarget.SucceededOutbox ? OutboxStatus.Succeeded : OutboxStatus.Failed;
-                var outbox = _db.Set<ApprovalOutboxMessage>().Where(o => o.Status == status && o.CompletedAt < cutoff && o.LeaseId == null
+                var outbox = _db.Set<ApprovalOutboxMessage>().Where(o => o.Status == status && o.CompletedAt < cutoff
                     && !holds.Any(h => h.Target == target && h.ResourceId == o.Id)
                     && (o.InstanceId == null || visibleIds.Contains(o.InstanceId.Value) && !running.Contains(o.InstanceId.Value) && !heldInstances.Contains(o.InstanceId.Value)));
                 if (mode == MaintenanceMode.Archive) outbox = outbox.Where(o => !prior.Any(a => a.ResourceId == o.Id));

@@ -98,6 +98,7 @@ const compact = (value: number) => value.toLocaleString('zh-CN')
             </template>
           </el-table-column>
           <el-table-column prop="running" label="审批中" width="72" align="right" />
+          <el-table-column prop="returned" label="待修改" width="72" align="right" />
           <el-table-column prop="approved" label="已通过" width="72" align="right" />
           <el-table-column prop="rejected" label="已驳回" width="72" align="right" />
           <el-table-column prop="withdrawn" label="已撤回" width="72" align="right" />

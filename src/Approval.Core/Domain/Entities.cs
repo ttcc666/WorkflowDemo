@@ -1,6 +1,6 @@
 namespace Approval.Core.Domain;
 
-public enum InstanceStatus { Running, Approved, Rejected, Withdrawn, Terminated }
+public enum InstanceStatus { Running, Approved, Rejected, Withdrawn, Terminated, Returned }
 
 public enum ApprovalTaskStatus
 {
@@ -48,8 +48,6 @@ public enum ApprovalAction
     AutoApprove,
     Cc,
     Complete,
-    /// <summary>动作节点执行了一个步骤。</summary>
-    Action,
     /// <summary>超时提醒 / 催办。</summary>
     Remind,
     TimeoutApprove,
@@ -64,29 +62,26 @@ public enum ApprovalAction
     /// <summary>管理员把待办改派给其他人（含离职交接的批量改派）。</summary>
     Reassign,
     /// <summary>审批人在节点修改了可编辑的表单字段。</summary>
-    FormEdit
+    FormEdit,
+    NodeEntered
 }
 
 /// <summary>流程定义的一个版本。发布新版本不影响已发起的实例。所有时间字段均为 UTC。</summary>
-public class ApprovalDefinition : IApprovalTenantEntity
+public class ApprovalDefinition : IApprovalEntity
 {
-    [System.Text.Json.Serialization.JsonIgnore]
-    public string TenantId { get; set; } = string.Empty;
-
     public Guid Id { get; set; }
     public required string Key { get; set; }
     public int Version { get; set; }
     public required string Name { get; set; }
     public required string DefinitionJson { get; set; }
+    /// <summary>发布时从 settings.category 固化的查询投影，不修改发布 JSON。</summary>
+    public string? Category { get; set; }
     public bool IsPublished { get; set; }
     public DateTime CreatedAt { get; set; }
 }
 
-public class ApprovalInstance : IApprovalTenantEntity
+public class ApprovalInstance : IApprovalEntity
 {
-    [System.Text.Json.Serialization.JsonIgnore]
-    public string TenantId { get; set; } = string.Empty;
-
     public Guid Id { get; set; }
     public Guid DefinitionId { get; set; }
     public required string DefinitionKey { get; set; }
@@ -126,11 +121,8 @@ public class ApprovalInstance : IApprovalTenantEntity
     public List<ApprovalLog> Logs { get; set; } = [];
 }
 
-public class ApprovalTask : IApprovalTenantEntity
+public class ApprovalTask : IApprovalEntity
 {
-    [System.Text.Json.Serialization.JsonIgnore]
-    public string TenantId { get; set; } = string.Empty;
-
     public Guid Id { get; set; }
     public Guid InstanceId { get; set; }
     public required string NodeId { get; set; }
@@ -171,11 +163,8 @@ public class ApprovalTask : IApprovalTenantEntity
 }
 
 /// <summary>抄送记录：抄送节点的每个接收人一条，用于“抄送我的”列表与查看权限判断。角色抄送在查看时按角色成员判断。</summary>
-public class ApprovalCarbonCopy : IApprovalTenantEntity
+public class ApprovalCarbonCopy : IApprovalEntity
 {
-    [System.Text.Json.Serialization.JsonIgnore]
-    public string TenantId { get; set; } = string.Empty;
-
     public Guid Id { get; set; }
     public Guid InstanceId { get; set; }
     public required string NodeId { get; set; }
@@ -191,11 +180,8 @@ public class ApprovalCarbonCopy : IApprovalTenantEntity
 }
 
 /// <summary>表单审批的草稿：不校验必填，只做结构规范化；提交时删除。</summary>
-public class ApprovalDraft : IApprovalTenantEntity
+public class ApprovalDraft : IApprovalEntity
 {
-    [System.Text.Json.Serialization.JsonIgnore]
-    public string TenantId { get; set; } = string.Empty;
-
     public Guid Id { get; set; }
     public required string UserId { get; set; }
     public required string DefinitionKey { get; set; }
@@ -206,13 +192,11 @@ public class ApprovalDraft : IApprovalTenantEntity
 }
 
 /// <summary>审批轨迹，只追加不修改。</summary>
-public class ApprovalLog : IApprovalTenantEntity
+public class ApprovalLog : IApprovalEntity
 {
-    [System.Text.Json.Serialization.JsonIgnore]
-    public string TenantId { get; set; } = string.Empty;
-
     public Guid Id { get; set; }
     public Guid InstanceId { get; set; }
+    public Guid? TaskId { get; set; }
 
     /// <summary>实例内的顺序号；同一次操作写入的多条轨迹时间可能相同，排序以此为准。</summary>
     public int Sequence { get; set; }

@@ -11,7 +11,7 @@ public class CertificateEntity
 {
     public Guid Id { get; set; }
     public required string CertNo { get; set; }
-    // 旧库升级期间可以为空；就绪检查会阻止未完成回填的数据库承接业务。
+    // 由宿主服务规范化后保存；就绪检查验证持久化的一致性。
     public string? NormalizedCertNo { get; set; }
     public string? RegisteredBy { get; set; }
     public required string Name { get; set; }

@@ -47,6 +47,13 @@ const statusOptions = computed(() => (props.status ? Object.entries(instanceStat
     <el-date-picker v-if="dates" v-model="range" type="daterange" value-format="YYYY-MM-DD" start-placeholder="发起日期"
       end-placeholder="结束日期" class="list-filters__dates" @change="emit('search')" />
     <el-checkbox v-if="overdue" v-model="filters.overdueOnly" @change="emit('search')">只看已超时</el-checkbox>
+    <el-input v-model="filters.businessKey" placeholder="业务编号" clearable class="list-filters__select" @keyup.enter="emit('search')" />
+    <el-input v-model="filters.businessType" placeholder="业务类型" clearable class="list-filters__select" @keyup.enter="emit('search')" />
+    <el-input v-model="filters.initiatorId" placeholder="发起人 ID" clearable class="list-filters__select" @keyup.enter="emit('search')" />
+    <el-input v-model="filters.approverId" placeholder="审批人 ID" clearable class="list-filters__select" @keyup.enter="emit('search')" />
+    <el-select v-model="filters.sort" placeholder="默认排序" clearable class="list-filters__select" @change="emit('search')">
+      <el-option label="最新在前" value="Newest" /><el-option label="最早在前" value="Oldest" /><el-option label="标题" value="Title" />
+    </el-select>
     <el-button type="primary" @click="emit('search')">查询</el-button>
     <el-button @click="emit('reset')">重置</el-button>
   </div>

@@ -165,51 +165,8 @@
     },
     "nodes": {
       "additionalProperties": {
+        "additionalProperties": false,
         "properties": {
-          "actions": {
-            "items": {
-              "properties": {
-                "continueOnError": {
-                  "type": "boolean"
-                },
-                "mode": {
-                  "enum": [
-                    "Sync",
-                    "Async"
-                  ]
-                },
-                "name": {
-                  "type": [
-                    "string",
-                    "null"
-                  ]
-                },
-                "outputVariable": {
-                  "type": [
-                    "string",
-                    "null"
-                  ]
-                },
-                "parameters": {
-                  "additionalProperties": {
-                    "type": [
-                      "string",
-                      "null"
-                    ]
-                  },
-                  "type": "object"
-                },
-                "type": {
-                  "type": "string"
-                }
-              },
-              "type": [
-                "object",
-                "null"
-              ]
-            },
-            "type": "array"
-          },
           "allowAddSign": {
             "type": "boolean"
           },
@@ -323,6 +280,9 @@
               "null"
             ]
           },
+          "requireComment": {
+            "type": "boolean"
+          },
           "requireQualifiedAssignee": {
             "type": "boolean"
           },
@@ -369,7 +329,6 @@
               "Approval",
               "Cc",
               "Condition",
-              "Action",
               "Parallel",
               "Join",
               "End"
@@ -409,7 +368,9 @@
                 "Rejected",
                 "Transferred",
                 "Timeout",
-                "Completed"
+                "Completed",
+                "Returned",
+                "Resubmitted"
               ]
             },
             "type": "array"

@@ -1,5 +1,4 @@
 using System.Text.Json;
-using Approval.Core.Actions;
 using Approval.Core.Abstractions;
 using Microsoft.Extensions.DependencyInjection;
 using Approval.Core.Conditions;
@@ -17,6 +16,12 @@ namespace Approval.Core.Engine;
 public sealed class ApprovalOutboxSignal
 {
     private readonly SemaphoreSlim _signal = new(0, 1);
+    private int _dispatching;
+
+    // 同一宿主只有一个投递批次；手动触发也必须经过此入口。
+    internal bool IsDispatching => Volatile.Read(ref _dispatching) != 0;
+    internal bool TryBeginDispatch() => Interlocked.CompareExchange(ref _dispatching, 1, 0) == 0;
+    internal void EndDispatch() => Volatile.Write(ref _dispatching, 0);
 
     public void Notify()
     {
@@ -37,9 +42,9 @@ public sealed class ApprovalOutboxSignal
 public sealed record OutboxQuery(OutboxStatus? Status = null, Guid? InstanceId = null);
 
 /// <summary>
-/// Outbox 投递：抢占到期消息 → 调用渠道 / 动作 → 成功标记完成，失败按指数退避安排下次重试，超过次数标记失败。
-/// 抢占时把 NextAttemptAt 推后一个租约时长并递增并发令牌：多实例只有一个能抢到；投递中崩溃则租约到期后重试。
-/// 异步动作可通过注入的 DbContext 修改数据：成功时与投递结果在同一事务提交；失败时撤销（含动作自行 SaveChanges 的部分），
+/// 单实例 Outbox：串行投递到期消息，成功后确认，失败按指数退避重试。没有领取事务或租约。
+/// 进程退出或取消时消息仍为 Pending，重启后可立即重试；外部接收方按消息 ID 幂等处理。
+/// 可靠事件处理器可通过注入的 DbContext 修改数据：成功时与投递结果在同一事务提交；失败时撤销（含处理器自行 SaveChanges 的部分），
 /// 只保存失败记录，避免重试时留下做了一半的数据。
 /// </summary>
 public sealed class ApprovalOutboxService
@@ -47,31 +52,32 @@ public sealed class ApprovalOutboxService
     private readonly Approval.Core.Authorization.IApprovalAuthorization _authorization;
     private readonly DbContext _db;
     private readonly ApprovalUnitOfWork _unit;
-    private readonly IApprovalTenantScopeFactory? _scopes;
-    private readonly string _tenantId;
+    private readonly IApprovalScopeFactory? _scopes;
     private readonly IReadOnlyDictionary<string, IApprovalChannel> _channels;
-    private readonly IReadOnlyDictionary<string, IApprovalActionHandler> _actions;
     private readonly ApprovalOptions _options;
     private readonly TimeProvider _clock;
     private readonly ILogger<ApprovalOutboxService> _logger;
+    private readonly ApprovalOutboxSignal _signal;
+    internal IApprovalEventHandler? EventHandler { get; set; }
 
     public ApprovalOutboxService(ApprovalDbContextAccessor accessor, IEnumerable<IApprovalChannel> channels,
-        IEnumerable<IApprovalActionHandler> actions, ApprovalOptions options, TimeProvider clock, ILogger<ApprovalOutboxService> logger, IApprovalTenantScopeFactory? scopes = null)
-        : this(accessor, new ApprovalExtensionCatalog(() => [], () => [], () => actions, () => channels), options, clock, logger, scopes)
+        ApprovalOptions options, TimeProvider clock, ILogger<ApprovalOutboxService> logger, IApprovalScopeFactory? scopes = null)
+        : this(accessor, new ApprovalExtensionCatalog(() => [], () => [], () => channels), options, clock, logger, scopes)
     {
     }
 
     internal ApprovalOutboxService(ApprovalDbContextAccessor accessor, ApprovalExtensionCatalog extensions,
-        ApprovalOptions options, TimeProvider clock, ILogger<ApprovalOutboxService> logger, IApprovalTenantScopeFactory? scopes = null)
+        ApprovalOptions options, TimeProvider clock, ILogger<ApprovalOutboxService> logger, IApprovalScopeFactory? scopes = null,
+        ApprovalOutboxSignal? signal = null)
     {
         _db = accessor.Context;
-        _unit = accessor.UnitOfWork; _scopes = scopes; _tenantId = ((ApprovalDbContext)_db).TenantId;
+        _unit = accessor.UnitOfWork; _scopes = scopes;
         _authorization = accessor.Authorization;
         _channels = extensions.Channels;
-        _actions = extensions.Actions;
         _options = options;
         _clock = clock;
         _logger = logger;
+        _signal = signal ?? new ApprovalOutboxSignal();
     }
 
     private DateTime Now => _clock.GetUtcNow().UtcDateTime;
@@ -82,82 +88,73 @@ public sealed class ApprovalOutboxService
         await _authorization.RequireAsync(Approval.Core.Abstractions.ApprovalPermissions.OutboxDispatch, new(), null, ct);
         if (_unit.IsActive || _db.Database.CurrentTransaction is not null || _db.ChangeTracker.HasChanges())
             throw new InvalidOperationException("后台投递必须使用独立、干净的作用域，不能加入宿主工作单元");
-        var now = Now;
-        var ids = await _db.Set<ApprovalOutboxMessage>().AsNoTracking()
-            .Where(m => m.Status == OutboxStatus.Pending && m.NextAttemptAt <= now)
-            .OrderBy(m => m.NextAttemptAt)
-            .Select(m => m.Id)
-            .Take(Math.Max(1, _options.Outbox.BatchSize))
-            .ToListAsync(ct);
-
-        foreach (var id in ids)
+        if (!_signal.TryBeginDispatch()) return 0;
+        try
         {
-            await ProcessOneAsync(id, ct);
+            var now = Now;
+            var messages = await _db.Set<ApprovalOutboxMessage>().AsNoTracking()
+                .Where(m => m.Status == OutboxStatus.Pending && m.NextAttemptAt <= now)
+                .OrderBy(m => m.NextAttemptAt).ThenBy(m => m.Id)
+                .Select(m => new Delivery(m.Id, m.ConcurrencyStamp))
+                .Take(Math.Max(1, _options.Outbox.BatchSize))
+                .ToListAsync(ct);
+
+            foreach (var message in messages)
+                await ProcessOneAsync(message, ct);
+            return messages.Count;
         }
-        return ids.Count;
+        finally { _signal.EndDispatch(); }
     }
 
-    private sealed record Lease(Guid Token, long Stamp);
+    private sealed record Delivery(Guid Id, long Stamp);
     private async Task<T> RunWorkerAsync<T>(Func<ApprovalOutboxService, CancellationToken, Task<T>> operation, CancellationToken ct, bool deferredRead = false)
     {
-        var scopes = _scopes ?? throw new InvalidOperationException("后台投递需要注册 IApprovalTenantScopeFactory");
-        await using var strategyScope = await scopes.CreateAsync(_tenantId, ct);
+        var scopes = _scopes ?? throw new InvalidOperationException("后台投递需要注册 IApprovalScopeFactory");
+        await using var strategyScope = await scopes.CreateAsync(ct);
         var strategyDb = strategyScope.ServiceProvider.GetRequiredService<ApprovalDbContextAccessor>().Context;
         return await strategyDb.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
         {
-            await using var scope = await scopes.CreateAsync(_tenantId, ct);
+            await using var scope = await scopes.CreateAsync(ct);
             var worker = scope.ServiceProvider.GetRequiredService<ApprovalOutboxService>();
             ((ApprovalDbContext)worker._db).TransactionState.DeferredRead = deferredRead;
             return await worker._unit.ExecuteAsync(token => operation(worker, token), ct);
         });
     }
-    private async Task ProcessOneAsync(Guid id, CancellationToken ct)
+    private async Task ProcessOneAsync(Delivery delivery, CancellationToken ct)
     {
-        Lease? lease;
-        try { lease = await RunWorkerAsync((worker, token) => worker.ClaimAsync(id, token), ct); }
-        catch (DbUpdateConcurrencyException) { return; }
-        if (lease is null) return;
-        try { await RunWorkerAsync((worker, token) => worker.DeliverOwnedAsync(id, lease, token), ct, deferredRead: true); }
-        catch (DbUpdateConcurrencyException) { _logger.LogWarning("Outbox 消息 {Id} 的租约已被替换，旧投递结果已回滚", id); }
+        ct.ThrowIfCancellationRequested();
+        try { await RunWorkerAsync((worker, token) => worker.DeliverPendingAsync(delivery, token), ct, deferredRead: true); }
+        catch (DbUpdateConcurrencyException) { _logger.LogWarning("Outbox 消息 {Id} 已被更新，投递结果未覆盖新状态", delivery.Id); }
         catch (Exception ex) when (!ct.IsCancellationRequested)
         {
-            // Delivery transaction has been rolled back/disposed, including an async action's own SaveChanges.
-            try { await RunWorkerAsync((worker, token) => worker.FailOwnedAsync(id, lease, ex, token), ct); }
-            catch (DbUpdateConcurrencyException) { /* A newer lease or administrator owns the result. */ }
+            // 投递事务已回滚，包含旧宿主动作自行 SaveChanges 的写入；失败记录使用新事务。
+            try { await RunWorkerAsync((worker, token) => worker.FailPendingAsync(delivery, ex, token), ct); }
+            catch (DbUpdateConcurrencyException) { _logger.LogInformation("Outbox 消息 {Id} 已被更新，未覆盖其失败状态", delivery.Id); }
         }
     }
-    private async Task<Lease?> ClaimAsync(Guid id, CancellationToken ct)
+    private Task<ApprovalOutboxMessage?> PendingAsync(Delivery delivery, CancellationToken ct) =>
+        _db.Set<ApprovalOutboxMessage>().SingleOrDefaultAsync(m => m.Id == delivery.Id && m.Status == OutboxStatus.Pending && m.ConcurrencyStamp == delivery.Stamp, ct);
+    private async Task<bool> DeliverPendingAsync(Delivery delivery, CancellationToken ct)
     {
-        var message = await _db.Set<ApprovalOutboxMessage>().SingleOrDefaultAsync(m => m.Id == id, ct);
-        if (message is null || message.Status != OutboxStatus.Pending || message.NextAttemptAt > Now) return null;
-        message.Attempts++; message.NextAttemptAt = Now + _options.Outbox.LeaseDuration;
-        message.LeaseId = Guid.NewGuid(); message.ConcurrencyStamp++;
-        await _db.SaveChangesAsync(ct);
-        return new Lease(message.LeaseId.Value, message.ConcurrencyStamp);
-    }
-    private Task<ApprovalOutboxMessage?> OwnedAsync(Guid id, Lease lease, CancellationToken ct) =>
-        _db.Set<ApprovalOutboxMessage>().SingleOrDefaultAsync(m => m.Id == id && m.Status == OutboxStatus.Pending && m.LeaseId == lease.Token && m.ConcurrencyStamp == lease.Stamp, ct);
-    private async Task<bool> DeliverOwnedAsync(Guid id, Lease lease, CancellationToken ct)
-    {
-        var message = await OwnedAsync(id, lease, ct);
-        if (message is null || message.NextAttemptAt <= Now) return false;
-        using var execution = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        execution.CancelAfter(_options.Outbox.LeaseDuration);
+        var message = await PendingAsync(delivery, ct);
+        if (message is null || message.NextAttemptAt > Now) return false;
         using (var extension = _unit.Extension(allowSave: true))
-            await DeliverAsync(message, execution.Token).WaitAsync(execution.Token);
-        // A timeout/expired lease cannot acknowledge writes even if a handler ignored cancellation.
-        execution.Token.ThrowIfCancellationRequested();
-        if (message.NextAttemptAt <= Now) throw new DbUpdateConcurrencyException("Outbox lease expired");
+            await DeliverAsync(message, ct);
+        // 等待处理器真正退出才释放进程内执行权，防止忽略取消的处理器与下一批重叠。
+        ct.ThrowIfCancellationRequested();
+        message.Attempts++;
         message.Status = OutboxStatus.Succeeded; message.CompletedAt = Now; message.LastError = null;
-        message.LeaseId = null; message.ConcurrencyStamp++;
+        message.ConcurrencyStamp++;
         await _db.SaveChangesAsync(ct);
+        _logger.LogInformation("Outbox 消息 {Id} 第 {Attempts} 次投递成功", message.Id, message.Attempts);
         return true;
     }
-    private async Task<bool> FailOwnedAsync(Guid id, Lease lease, Exception error, CancellationToken ct)
+    private async Task<bool> FailPendingAsync(Delivery delivery, Exception error, CancellationToken ct)
     {
-        var message = await OwnedAsync(id, lease, ct);
+        var message = await PendingAsync(delivery, ct);
         if (message is null) return false;
-        RecordFailure(message, error); message.LeaseId = null; message.ConcurrencyStamp++;
+        message.Attempts++;
+        RecordFailure(message, error); message.ConcurrencyStamp++;
         await _db.SaveChangesAsync(ct);
         return true;
     }
@@ -191,6 +188,12 @@ public sealed class ApprovalOutboxService
     {
         switch (message.Kind)
         {
+            case OutboxKind.Event:
+                var approvalEvent = JsonSerializer.Deserialize<ApprovalEvent>(message.PayloadJson, OutboxJson.Options)
+                    ?? throw new InvalidOperationException("审批事件正文无效");
+                await (EventHandler ?? throw new InvalidOperationException("宿主未注册 IApprovalEventHandler"))
+                    .HandleAsync(approvalEvent, ct);
+                break;
             case OutboxKind.Notification:
             {
                 var channel = _channels.GetValueOrDefault(message.Target)
@@ -200,27 +203,8 @@ public sealed class ApprovalOutboxService
                 break;
             }
 
-            case OutboxKind.Action:
-            {
-                // 与同步引擎和设计器一致：同名动作由后注册的实现覆盖。
-                var handler = _actions.GetValueOrDefault(message.Target)
-                              ?? throw new InvalidOperationException($"动作类型 '{message.Target}' 未注册");
-                var payload = JsonSerializer.Deserialize<AsyncActionPayload>(message.PayloadJson, OutboxJson.Options)!;
-                var instance = await _db.Set<ApprovalInstance>().AsNoTracking().FirstOrDefaultAsync(i => i.Id == message.InstanceId, ct)
-                               ?? throw new InvalidOperationException($"审批实例 {message.InstanceId} 不存在");
-
-                await handler.ExecuteAsync(new ApprovalActionContext
-                {
-                    Instance = instance,
-                    NodeId = payload.NodeId,
-                    StepName = payload.StepName,
-                    Parameters = new Dictionary<string, string>(payload.Parameters, StringComparer.OrdinalIgnoreCase),
-                    FormData = FormData.Parse(instance.FormDataJson),
-                    IsAsync = true,
-                    IdempotencyKey = message.Id
-                }, ct);
-                break;
-            }
+            default:
+                throw new InvalidOperationException($"不支持的 Outbox 消息类型 '{message.Kind}'");
         }
     }
 
@@ -236,7 +220,7 @@ public sealed class ApprovalOutboxService
         return await q.OrderByDescending(m => m.CreatedAt).ThenByDescending(m => m.Id).ToPagedAsync(page ?? new PageRequest(), ct);
     }
 
-    /// <summary>手动重试：重新进入待投递状态并立即执行，重新计算重试次数。</summary>
+    /// <summary>手动重试：重新进入待投递状态，重置次数，事务提交后唤醒后台执行器。</summary>
     public Task RetryAsync(Guid id, CancellationToken ct = default) => _unit.ExecuteCommandAsync(token => RetryCoreAsync(id, token), ct);
 
     private async Task RetryCoreAsync(Guid id, CancellationToken ct)
@@ -245,9 +229,10 @@ public sealed class ApprovalOutboxService
         var message = await _db.Set<ApprovalOutboxMessage>().FirstOrDefaultAsync(m => m.Id == id, ct)
                       ?? throw new ApprovalException("消息不存在") { Code = ApprovalErrorCode.NotFound };
         if (message.Status == OutboxStatus.Succeeded) throw new ApprovalException("消息已投递成功");
+        if (_signal.IsDispatching)
+            throw new ApprovalException("后台正在投递，请稍后重试") { Code = ApprovalErrorCode.Conflict };
 
         message.Status = OutboxStatus.Pending;
-        message.LeaseId = null;
         message.Attempts = 0;
         message.NextAttemptAt = Now;
         message.CompletedAt = null;
@@ -260,6 +245,7 @@ public sealed class ApprovalOutboxService
         {
             throw new ApprovalException("消息正在投递，请稍后重试", ex) { Code = ApprovalErrorCode.Conflict };
         }
+        _unit.AfterCommit(() => { _signal.Notify(); return Task.CompletedTask; });
     }
 
     private static string Truncate(string text, int length) => text.Length <= length ? text : text[..(length - 1)] + "…";

@@ -5,13 +5,13 @@ import type { NodeRunStatus } from './flowElements'
 /** 根据实例的任务与轨迹，推算每个节点的状态以及走过的连线。 */
 export function computeRunState(definition: FlowDefinition, instance: ApprovalInstance) {
   const status = new Map<string, NodeRunStatus>()
-  const running = instance.status === 'Running'
+  const running = (instance.status === 'Running' || instance.status === 'Returned')
 
   for (const node of Object.values(definition.nodes)) {
     const tasks = latestRound(instance.tasks.filter((t) => t.nodeId === node.id))
     const logged = instance.logs.some((l) => l.nodeId === node.id)
 
-    if (node.type === 'Start') status.set(node.id, 'done')
+    if (node.type === 'Start') status.set(node.id, running && tasks.some(t => t.status === 'Pending' && t.kind === 'Resubmit') ? 'active' : 'done')
     else if (tasks.some((t) => t.status === 'Rejected')) status.set(node.id, 'rejected')
     else if (running && tasks.some((t) => t.status === 'Pending' || t.status === 'Waiting' || t.status === 'Suspended'))
       status.set(node.id, 'active')

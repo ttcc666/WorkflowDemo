@@ -1,5 +1,4 @@
 using Approval.Core.Abstractions;
-using Approval.Core.Actions;
 using Approval.Core.Notifications;
 
 namespace Approval.Core.Engine.Extensions;
@@ -9,7 +8,6 @@ internal sealed class ApprovalExtensionCatalog
 {
     private readonly Lazy<Dictionary<string, IApproverResolver>> _resolvers;
     private readonly Lazy<Dictionary<string, IApprovalBusinessHandler>> _businessHandlers;
-    private readonly Lazy<Dictionary<string, IApprovalActionHandler>> _actions;
     private readonly Lazy<Dictionary<string, IApprovalChannel>> _channels;
     private readonly Lazy<Dictionary<string, ApproverTypeDescriptor>> _approverDescriptors;
     private readonly Lazy<IReadOnlyList<ChannelInfo>> _channelDescriptors;
@@ -18,12 +16,10 @@ internal sealed class ApprovalExtensionCatalog
     public ApprovalExtensionCatalog(
         Func<IEnumerable<IApproverResolver>> resolvers,
         Func<IEnumerable<IApprovalBusinessHandler>> businessHandlers,
-        Func<IEnumerable<IApprovalActionHandler>> actions,
         Func<IEnumerable<IApprovalChannel>> channels)
     {
         _resolvers = new(() => LastByKey(resolvers(), r => r.Type));
         _businessHandlers = new(() => LastByKey(businessHandlers(), h => h.BusinessType));
-        _actions = new(() => LastByKey(actions(), a => a.Descriptor.Type));
         _channels = new(() => LastByKey(channels(), c => c.Name));
         _approverDescriptors = new(() => Resolvers.ToDictionary(
             pair => pair.Key, pair => pair.Value.Descriptor with { Type = pair.Key }, StringComparer.OrdinalIgnoreCase));
@@ -37,7 +33,6 @@ internal sealed class ApprovalExtensionCatalog
 
     public IReadOnlyDictionary<string, IApproverResolver> Resolvers => _resolvers.Value;
     public IReadOnlyDictionary<string, IApprovalBusinessHandler> BusinessHandlers => _businessHandlers.Value;
-    public IReadOnlyDictionary<string, IApprovalActionHandler> Actions => _actions.Value;
     public IReadOnlyDictionary<string, IApprovalChannel> Channels => _channels.Value;
     public IReadOnlyDictionary<string, ApproverTypeDescriptor> ApproverDescriptors => _approverDescriptors.Value;
     public IReadOnlyList<ChannelInfo> ChannelDescriptors => _channelDescriptors.Value;

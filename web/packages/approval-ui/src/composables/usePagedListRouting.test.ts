@@ -1,6 +1,7 @@
 import { afterEach, expect, it, vi } from 'vitest'
 import { createApp, effectScope, type EffectScope } from 'vue'
 import { createMemoryHistory, createRouter, type Router } from 'vue-router'
+import { createApprovalClient } from '../client'
 import { usePagedList } from './usePagedList'
 
 const scopes: EffectScope[] = []
@@ -13,7 +14,7 @@ async function router(keep: string) {
 }
 
 function list(router: Router, prefix: string) {
-  const app = createApp({}).use(router)
+  const app = createApp({}).use(createApprovalClient()).use(router)
   const scope = effectScope()
   scopes.push(scope)
   return scope.run(() => app.runWithContext(() => usePagedList(async () => ({ items: [], total: 0, page: 1, pageSize: 20 }), { routePrefix: prefix })))!

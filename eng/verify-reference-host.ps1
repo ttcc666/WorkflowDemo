@@ -4,8 +4,8 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot 'commands.ps1')
-$sample = if ($SamplePath) { (Resolve-Path -LiteralPath $SamplePath).Path } else { Join-Path $repositoryRoot 'samples/Approval.MultiTenant.Api' }
-if (-not $SkipBuild) { Invoke-CheckedCommand 'dotnet' @('build', (Join-Path $sample 'Approval.MultiTenant.Api.csproj'), '--configuration', 'Release') }
+$sample = if ($SamplePath) { (Resolve-Path -LiteralPath $SamplePath).Path } else { Join-Path $repositoryRoot 'samples/Approval.ReferenceHost' }
+if (-not $SkipBuild) { Invoke-CheckedCommand 'dotnet' @('build', (Join-Path $sample 'Approval.ReferenceHost.csproj'), '--configuration', 'Release') }
 $runId = [Guid]::NewGuid().ToString('N')
 $report = Join-Path $repositoryRoot ('output/reference-host/' + $runId)
 New-Item -ItemType Directory -Path $report | Out-Null
@@ -23,17 +23,16 @@ try {
     Set-ReferenceEnvironment 'Approval__FileRoot' (Join-Path $report 'files')
     Set-ReferenceEnvironment 'Approval__EnableBackgroundServices' 'false'
     $index = 0
-    foreach ($tenant in @('alpha', 'beta')) {
+    foreach ($tenant in @('alpha')) {
         foreach ($user in @('admin', 'alice', 'bob', 'carol')) {
             $token = [Guid]::NewGuid().ToString('N') + [Guid]::NewGuid().ToString('N')
-            Set-ReferenceEnvironment ('Authentication__DemoIdentities__{0}__TenantId' -f $index) $tenant
             Set-ReferenceEnvironment ('Authentication__DemoIdentities__{0}__UserId' -f $index) $user
             Set-ReferenceEnvironment ('Authentication__DemoIdentities__{0}__Token' -f $index) $token
             Set-ReferenceEnvironment ('APPROVAL_DEMO_{0}_{1}' -f $tenant, $user).ToUpperInvariant() $token
             $index++
         }
     }
-    $dll = Join-Path $sample 'bin/Release/net10.0/Approval.MultiTenant.Api.dll'
+    $dll = Join-Path $sample 'bin/Release/net10.0/Approval.ReferenceHost.dll'
     Invoke-CheckedCommand 'dotnet' @($dll, '--migrate') $sample
     $listener = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, 0)
     $listener.Start()
@@ -55,7 +54,7 @@ try {
     if (-not $ready) { throw 'Reference host readiness timed out.' }
     Invoke-CheckedCommand 'pwsh' @('-NoProfile', '-File', (Join-Path $sample 'smoke-test.ps1'), '-Base', $url, '-ReportPath', (Join-Path $report 'smoke.json')) $sample
     $evidence = Get-Content -LiteralPath (Join-Path $report 'smoke.json') -Raw | ConvertFrom-Json
-    if (-not $evidence.passed -or $evidence.checks -lt 30) { throw 'Missing reference acceptance evidence.' }
+    if (-not $evidence.passed -or $evidence.checks -lt 25) { throw 'Missing reference acceptance evidence.' }
     Write-Host ('Reference host verified: ' + $report)
 }
 finally {

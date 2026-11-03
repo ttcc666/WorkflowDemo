@@ -16,7 +16,7 @@ if (run.status !== 0) process.exit(run.status ?? 1)
 
 const files = ['approval.openapi.json', 'flow.schema.json', 'form.schema.json', 'Approval.Core.api.txt', 'Approval.AspNetCore.api.txt']
 const sampleDirectory = 'samples/Approval.Certificate/contracts'
-const sampleFiles = ['certificate.openapi.json', 'Approval.Certificate.api.txt', 'Certificate.Api.forwards.txt']
+const sampleFiles = ['certificate.openapi.json', 'Approval.Certificate.api.txt']
 const doc = JSON.parse(await readFile(join(generated, files[0]), 'utf8'))
 const sampleDoc = JSON.parse(await readFile(join(generated, sampleDirectory, sampleFiles[0]), 'utf8'))
 if (Object.keys(doc.paths).some(path => !path.startsWith('/api/approval/'))

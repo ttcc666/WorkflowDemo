@@ -24,7 +24,6 @@ const actionTypes: Partial<Record<ApprovalLog['action'], TimelineType>> = {
   Reject: 'danger',
   Withdraw: 'info',
   Transfer: 'warning',
-  Action: 'primary',
   Remind: 'warning',
   TimeoutApprove: 'success',
   TimeoutReject: 'danger',

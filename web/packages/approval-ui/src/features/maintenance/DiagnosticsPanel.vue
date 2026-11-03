@@ -14,7 +14,6 @@ const labels: Record<string, string> = { unavailable_assignee: '没有合格处�
         <el-descriptions-item label="运行中实例">{{ report.runningInstances }}</el-descriptions-item>
         <el-descriptions-item label="待投递 / 失败">{{ report.pendingOutbox }} / {{ report.failedOutbox }}</el-descriptions-item>
         <el-descriptions-item label="最早积压">{{ report.oldestPendingAt ? formatDateTime(report.oldestPendingAt) : '-' }}</el-descriptions-item>
-        <el-descriptions-item label="过期租约">{{ report.expiredLeases }}</el-descriptions-item>
         <el-descriptions-item label="超期任务">{{ report.overdueTasks }}</el-descriptions-item>
         <el-descriptions-item label="占用缺失 / 不一致">{{ report.missingBusinessSlots }} / {{ report.staleBusinessSlots }}</el-descriptions-item>
         <el-descriptions-item label="待删除附件">{{ report.pendingFileDeletions }}</el-descriptions-item>

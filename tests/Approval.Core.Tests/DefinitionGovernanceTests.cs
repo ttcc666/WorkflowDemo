@@ -112,28 +112,6 @@ public sealed class DefinitionGovernanceTests
     private static string FlowDefinitionJson(string json) => Approval.Core.Definitions.FlowDefinition.Parse(json).ToJson();
 
     [Fact]
-    public async Task ReadonlyLegacyScan_ReportsSyncExternalAndRunningVersions_WithoutCredentialsOrWrites()
-    {
-        await using var host = new TestHost(); host.Identity.Add("admin", "Admin");
-        var json = """
-            {"startNodeId":"start","nodes":{"start":{"type":"Start","name":"Start","next":"send"},
-            "send":{"type":"Action","name":"Send","actions":[{"type":"Http","mode":"Sync","parameters":{"url":"https://api.example.com/update","headers":"{\"Authorization\":\"Bearer private-secret\"}"}}],"next":"review"},
-            "review":{"type":"Approval","name":"Review","approvers":[{"type":"User","value":"bob"}],"next":"end"},"end":{"type":"End","name":"End"}}}
-            """;
-        await host.PublishAsync("legacy", json); var instance = await host.StartAsync("legacy", "one", "alice");
-        var result = await host.RunAsAsync("admin", sp => sp.GetRequiredService<ApprovalDefinitionService>().ScanSynchronousActionsAsync());
-        var finding = Assert.Single(result.Findings); Assert.Equal(instance.DefinitionId, finding.DefinitionId);
-        Assert.Equal("ExternalSideEffect", finding.Reason); Assert.Equal(1, finding.RunningInstances); Assert.Equal("send", finding.NodeId);
-        Assert.DoesNotContain("private-secret", System.Text.Json.JsonSerializer.Serialize(result));
-        await host.RunAsync(async sp =>
-        {
-            var db = sp.GetRequiredService<TestDbContext>(); Assert.Equal(1, await db.Set<ApprovalDefinitionAudit>().CountAsync());
-            Assert.Contains("private-secret", (await db.Set<ApprovalDefinition>().SingleAsync()).DefinitionJson);
-            Assert.Equal(instance.DefinitionId, (await db.Set<ApprovalInstance>().SingleAsync()).DefinitionId);
-        });
-    }
-
-    [Fact]
     public async Task DisablePermission_DoesNotExposeStoredDesignDraftOrGrantSensitiveRead()
     {
         await using var host = new TestHost(build: b => b.Services.AddSingleton<IApprovalPermissionProvider, DisableOnly>());
@@ -174,26 +152,5 @@ public sealed class DefinitionGovernanceTests
         var published = await host.RunAsAsync("admin", sp => sp.GetRequiredService<ApprovalDefinitionService>().PublishDesignDraftAsync(key, saved.Revision, new string('n', 1000)));
         Assert.Equal(1, published.Version);
         await host.RunAsync(async sp => { var db = sp.GetRequiredService<TestDbContext>(); Assert.Single(await db.Set<ApprovalDefinitionManagement>().ToListAsync()); Assert.Equal(2, await db.Set<ApprovalDefinitionAudit>().CountAsync()); });
-    }
-    [Fact]
-    public async Task DeclaredSelfCommit_IsVisibleInLegacyScanAndRejectedForNewPublication()
-    {
-        await using var host = new TestHost(build: b => b.AddActionHandler<SelfCommit>()); host.Identity.Add("admin", "Admin");
-        var json = """
-            {"startNodeId":"start","nodes":{"start":{"type":"Start","name":"Start","next":"action"},
-            "action":{"type":"Action","name":"Legacy","actions":[{"type":"SelfCommit","mode":"Sync"}],"next":"end"},"end":{"type":"End","name":"End"}}}
-            """;
-        await host.RunAsync(async sp => { var db = sp.GetRequiredService<TestDbContext>(); db.Add(new ApprovalDefinition { Id = Guid.NewGuid(), Key = "legacy", Name = "Legacy", Version = 1, DefinitionJson = json, IsPublished = true }); await db.SaveChangesAsync(); });
-        var report = await host.RunAsAsync("admin", sp => sp.GetRequiredService<ApprovalDefinitionService>().ScanSynchronousActionsAsync());
-        Assert.Equal("SelfCommit", Assert.Single(report.Findings).Reason);
-        var denied = await Assert.ThrowsAsync<ApprovalException>(() => host.RunAsAsync("admin", sp => sp.GetRequiredService<ApprovalDefinitionService>().PublishAsync("new", "New", json)));
-        Assert.Equal(ApprovalErrorCode.InvalidDefinition, denied.Code);
-        await host.RunAsync(async sp => { var db = sp.GetRequiredService<TestDbContext>(); Assert.Single(await db.Set<ApprovalDefinition>().ToListAsync()); Assert.Empty(await db.Set<ApprovalDefinitionAudit>().ToListAsync()); });
-    }
-    private sealed class SelfCommit : Approval.Core.Actions.IApprovalActionHandler
-    {
-        public bool CommitsWorkUnit => true;
-        public Approval.Core.Actions.ApprovalActionDescriptor Descriptor => new("SelfCommit", "Self commit", []);
-        public Task<Approval.Core.Actions.ApprovalActionResult> ExecuteAsync(Approval.Core.Actions.ApprovalActionContext context, CancellationToken ct) => throw new InvalidOperationException("must never execute during scan");
     }
 }

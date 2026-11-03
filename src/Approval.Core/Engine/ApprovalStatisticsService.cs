@@ -18,7 +18,10 @@ public sealed record FlowStatistics(
     int Withdrawn,
     int Terminated,
     double? AverageMinutes,
-    double? P90Minutes);
+    double? P90Minutes)
+{
+    public int Returned { get; init; }
+}
 
 /// <summary>节点处理时长：已同意 / 驳回的人工处理任务（不含系统自动处理），Overdue 为超过时限才处理的任务数。</summary>
 public sealed record NodeStatistics(string DefinitionKey, string DefinitionName, string NodeId, string NodeName, int Handled,
@@ -131,7 +134,7 @@ public sealed class ApprovalStatisticsService(ApprovalDbContextAccessor accessor
         return new FlowStatistics(key, name, rows.Count, Count(InstanceStatus.Running), Count(InstanceStatus.Approved),
             Count(InstanceStatus.Rejected), Count(InstanceStatus.Withdrawn), Count(InstanceStatus.Terminated),
             durations.Count == 0 ? null : Round(durations.Average()),
-            durations.Count == 0 ? null : Round(durations[(int)Math.Ceiling(durations.Count * 0.9) - 1]));
+            durations.Count == 0 ? null : Round(durations[(int)Math.Ceiling(durations.Count * 0.9) - 1])) { Returned = Count(InstanceStatus.Returned) };
     }
 
     /// <summary>当前待处理任务按处理人汇总，取数量最多的前 10 个。</summary>

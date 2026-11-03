@@ -70,23 +70,21 @@ try {
     $rsa.ExportPkcs8PrivateKeyPem() | Set-Content -LiteralPath (Join-Path $scratchRoot 'server.key') -Encoding ascii
     Copy-Item -LiteralPath (Join-Path $scratchRoot 'server.pem') -Destination (Join-Path $reportRoot 'identity-certificate.pem')
     $certificate.Dispose(); $rsa.Dispose()
-    $config = Get-Content -LiteralPath (Join-Path $repositoryRoot 'samples/Approval.MultiTenant.Api/appsettings.json') -Raw | ConvertFrom-Json
+    $config = Get-Content -LiteralPath (Join-Path $repositoryRoot 'samples/Approval.ReferenceHost/appsettings.json') -Raw | ConvertFrom-Json
     $config.PSObject.Properties.Remove('ConnectionStrings')
     $config.PSObject.Properties.Remove('Authentication')
     $users = @()
-    foreach ($tenant in $config.Directory.Tenants) {
-        foreach ($user in $tenant.Users) {
-            $user.Id = $tenant.Id + '-' + $user.Id
-            $users += @{ id = $user.Id; username = $user.Id; enabled = $true; email = $user.Id + '@example.invalid'; emailVerified = $true; firstName = 'Rehearsal'; lastName = 'User'; attributes = @{ tenant_id = @($tenant.Id) }; credentials = @(@{ type = 'password'; value = $password; temporary = $false }) }
-        }
+    foreach ($user in $config.Directory.Users) {
+        $user.Id = 'alpha-' + $user.Id
+        $users += @{ id = $user.Id; username = $user.Id; enabled = $true; email = $user.Id + '@example.invalid'; emailVerified = $true; firstName = 'Rehearsal'; lastName = 'User'; credentials = @(@{ type = 'password'; value = $password; temporary = $false }) }
     }
-    $users += @{ id = 'outsider'; username = 'outsider'; enabled = $true; email = 'outsider@example.invalid'; emailVerified = $true; firstName = 'Rehearsal'; lastName = 'Outsider'; attributes = @{ tenant_id = @('alpha') }; credentials = @(@{ type = 'password'; value = $password; temporary = $false }) }
+    $users += @{ id = 'outsider'; username = 'outsider'; enabled = $true; email = 'outsider@example.invalid'; emailVerified = $true; firstName = 'Rehearsal'; lastName = 'Outsider'; credentials = @(@{ type = 'password'; value = $password; temporary = $false }) }
     $configPath = Join-Path $reportRoot 'host-config.json'
     $config | ConvertTo-Json -Depth 30 | Set-Content -LiteralPath $configPath -Encoding utf8
-    $tenantMapper = @{ name = 'tenant'; protocol = 'openid-connect'; protocolMapper = 'oidc-usermodel-attribute-mapper'; config = @{ 'user.attribute' = 'tenant_id'; 'claim.name' = 'tenant_id'; 'jsonType.label' = 'String'; 'access.token.claim' = 'true'; 'id.token.claim' = 'true'; 'multivalued' = 'false' } }
+
     $clients = foreach ($client in @('approval-api', 'other-api', 'short-lived')) {
         $audience = if ($client -eq 'other-api') { 'other-api' } else { 'approval-api' }
-        @{ clientId = $client; enabled = $true; publicClient = $true; directAccessGrantsEnabled = $true; standardFlowEnabled = $false; defaultClientScopes = @('basic'); optionalClientScopes = @(); attributes = @{ 'access.token.lifespan' = $(if ($client -eq 'short-lived') { '2' } else { '3600' }) }; protocolMappers = @($tenantMapper, @{ name = 'audience'; protocol = 'openid-connect'; protocolMapper = 'oidc-audience-mapper'; config = @{ 'included.custom.audience' = $audience; 'access.token.claim' = 'true'; 'id.token.claim' = 'false' } }) }
+        @{ clientId = $client; enabled = $true; publicClient = $true; directAccessGrantsEnabled = $true; standardFlowEnabled = $false; defaultClientScopes = @('basic'); optionalClientScopes = @(); attributes = @{ 'access.token.lifespan' = $(if ($client -eq 'short-lived') { '2' } else { '3600' }) }; protocolMappers = @(@{ name = 'audience'; protocol = 'openid-connect'; protocolMapper = 'oidc-audience-mapper'; config = @{ 'included.custom.audience' = $audience; 'access.token.claim' = 'true'; 'id.token.claim' = 'false' } }) }
     }
     $realmConfig = @{ realm = $realm; enabled = $true; sslRequired = 'all'; accessTokenLifespan = 3600; clients = @($clients); users = $users }
     $realmConfig | ConvertTo-Json -Depth 30 | Set-Content -LiteralPath (Join-Path $scratchRoot ($realm + '-realm.json')) -Encoding utf8

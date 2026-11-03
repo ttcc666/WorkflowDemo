@@ -137,7 +137,7 @@ public sealed class CertificateHost : IAsyncDisposable
 
     public async Task<int> ProcessDueAsync()
     {
-        await using var scope = await _app.Services.GetRequiredService<Approval.Core.Abstractions.IApprovalTenantScopeFactory>().CreateAsync("certificate");
+        await using var scope = await _app.Services.GetRequiredService<Approval.Core.Abstractions.IApprovalScopeFactory>().CreateAsync();
         return await scope.ServiceProvider.GetRequiredService<Approval.Core.Engine.ApprovalOutboxService>().ProcessDueAsync();
     }
 

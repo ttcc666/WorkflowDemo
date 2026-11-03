@@ -53,6 +53,27 @@ public sealed class ParallelReturnAddSignTests : IAsyncLifetime
     // ───────────────────────── 并行 ─────────────────────────
 
     [Fact]
+    public async Task Repeated_branch_completion_cannot_release_join_and_rejection_cancels_siblings()
+    {
+        await _host.PublishAsync("par", ParallelFlow);
+        var instance = await _host.StartAsync("par", "repeat", "alice");
+        await _host.ApproveMyTaskAsync("u_n0");
+        var branch = await TaskOf("u_b");
+        await _host.ApproveAsync(branch, "u_b");
+        await Assert.ThrowsAsync<ApprovalException>(() => _host.ApproveAsync(branch, "u_b"));
+        Assert.Empty(await _host.TodoAsync("u_fin"));
+        var state = ExecutionState.Load(await Instance(instance.Id));
+        Assert.Equal(1, state.Joins["j"].Arrived); Assert.Single(state.Joins["j"].ArrivedBranches);
+        Assert.NotEqual(Guid.Empty, state.Joins["j"].ActivationId);
+        var other = await TaskOf("u_a1");
+        await Run(e => e.RejectAsync(other, "u_a1", "分支不通过"));
+        var ended = await Instance(instance.Id);
+        Assert.Equal(InstanceStatus.Rejected, ended.Status); Assert.Null(ended.StateJson);
+        Assert.DoesNotContain(ended.Tasks, t => t.Status is ApprovalTaskStatus.Pending or ApprovalTaskStatus.Waiting or ApprovalTaskStatus.Suspended);
+        Assert.Empty(await _host.TodoAsync("u_fin"));
+    }
+
+    [Fact]
     public async Task Parallel_branches_run_together_and_join_waits_for_all()
     {
         await _host.PublishAsync("par", ParallelFlow);

@@ -18,7 +18,6 @@
           "AutoApprove",
           "Cc",
           "Complete",
-          "Action",
           "Remind",
           "TimeoutApprove",
           "TimeoutReject",
@@ -27,7 +26,8 @@
           "Resubmit",
           "Terminate",
           "Reassign",
-          "FormEdit"
+          "FormEdit",
+          "NodeEntered"
         ]
       },
       "ApprovalInstanceResponse": {
@@ -200,6 +200,13 @@
             "pattern": "^-?(?:0|[1-9]\\d*)$",
             "type": [
               "integer",
+              "string"
+            ]
+          },
+          "taskId": {
+            "format": "uuid",
+            "type": [
+              "null",
               "string"
             ]
           }
@@ -669,7 +676,8 @@
           "Approved",
           "Rejected",
           "Withdrawn",
-          "Terminated"
+          "Terminated",
+          "Returned"
         ]
       },
       "PagedResultOfCertificateRequestView": {

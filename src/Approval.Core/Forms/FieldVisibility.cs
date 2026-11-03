@@ -75,6 +75,7 @@ internal static class FieldVisibility
             else if (visible.Count > 0)
                 result.Add(new ApprovalLog
                 {
+                    TaskId = log.TaskId,
                     Id = log.Id,
                     InstanceId = log.InstanceId,
                     Sequence = log.Sequence,

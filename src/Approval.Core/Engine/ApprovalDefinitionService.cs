@@ -1,5 +1,4 @@
 using Approval.Core.Abstractions;
-using Approval.Core.Actions;
 using Approval.Core.Definitions;
 using Approval.Core.Domain;
 using Approval.Core.Engine.Extensions;
@@ -14,7 +13,6 @@ namespace Approval.Core.Engine;
 public sealed record ApprovalMetadata(
     IReadOnlyList<ApproverTypeDescriptor> ApproverTypes,
     IReadOnlyList<ApproverTypeDescriptor> RecipientTypes,
-    IReadOnlyList<ApprovalActionDescriptor> Actions,
     IReadOnlyList<ChannelInfo> Channels,
     IReadOnlyList<TemplateVariableInfo> TemplateVariables,
     IReadOnlyDictionary<NotifyEvent, string> DefaultTemplates);
@@ -33,12 +31,11 @@ public sealed partial class ApprovalDefinitionService
     private readonly TimeProvider _clock;
     private readonly ApprovalDbContextAccessor _accessor;
     private readonly IReadOnlyDictionary<string, ApproverTypeDescriptor> _approverTypes;
-    private readonly IReadOnlyDictionary<string, IApprovalActionHandler> _actions;
     private readonly IReadOnlyList<ChannelInfo> _channels;
 
     public ApprovalDefinitionService(ApprovalDbContextAccessor accessor, IEnumerable<IApproverResolver> resolvers,
-        IEnumerable<IApprovalActionHandler> actions, IEnumerable<IApprovalChannel> channels, TimeProvider clock, ApprovalOptions? options = null)
-        : this(accessor, new ApprovalExtensionCatalog(() => resolvers, () => [], () => actions, () => channels), clock, options)
+        IEnumerable<IApprovalChannel> channels, TimeProvider clock, ApprovalOptions? options = null)
+        : this(accessor, new ApprovalExtensionCatalog(() => resolvers, () => [], () => channels), clock, options)
     {
     }
 
@@ -51,7 +48,6 @@ public sealed partial class ApprovalDefinitionService
         _authorization = accessor.Authorization;
         _clock = clock;
         _approverTypes = extensions.ApproverDescriptors;
-        _actions = extensions.Actions;
         _channels = extensions.ChannelDescriptors;
     }
 
@@ -65,7 +61,6 @@ public sealed partial class ApprovalDefinitionService
     public ApprovalMetadata Metadata => new(
         ApproverTypes,
         [.. NotificationDefaults.NotificationRecipientDescriptors, .. ApproverTypes],
-        _actions.Values.Select(a => a.Descriptor).ToList(),
         _channels,
         TemplateVariables.Catalog,
         NotificationDefaults.Contents);
@@ -86,14 +81,8 @@ public sealed partial class ApprovalDefinitionService
         {
             ApproverTypes = _approverTypes.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase),
             ApproverDescriptors = _approverTypes,
-            Channels = _channels.Select(c => c.Name).ToHashSet(StringComparer.OrdinalIgnoreCase),
-            Actions = _actions
+            Channels = _channels.Select(c => c.Name).ToHashSet(StringComparer.OrdinalIgnoreCase)
         }).ToList();
-        if (flow.Nodes.Values.SelectMany(n => n.Actions).Any(s => _actions.TryGetValue(s.Type, out var h) && h.CommitsWorkUnit))
-            errors.Add("动作不能自行提交工作单元，请迁移到由框架提交的本地写入或 Outbox");
-        if (!_options.AllowSynchronousExternalActions && flow.Nodes.Values.SelectMany(n => n.Actions)
-            .Any(step => step.Mode == ActionMode.Sync && _actions.TryGetValue(step.Type, out var handler) && handler.HasExternalSideEffects))
-            errors.Add("同步外部副作用不能随数据库事务回滚，请将动作改为 Async/Outbox；旧宿主需要显式声明过渡和补偿边界");
         return errors;
     }
 

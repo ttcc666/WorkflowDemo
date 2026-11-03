@@ -46,7 +46,7 @@ public sealed partial class ApprovalEngine
             DueAt = info.DueAt,
             ReturnTo = info.ReturnTo,
             Assignees = info.Assignees.Select(Describe).ToList()
-        }, _tenantSettings);
+        }, _displaySettings);
 
         // 多条规则命中同一人同一渠道同一内容时只发一次
         var sent = new HashSet<(string Channel, string User, string Content)>();
@@ -75,8 +75,9 @@ public sealed partial class ApprovalEngine
                 }
                 else
                 {
-                    // 发布时已校验渠道；运行时渠道被移除则跳过，不影响审批
-                    _logger.LogWarning("通知渠道 '{Channel}' 未注册，已跳过（流程 {Flow}，节点 {Node}）", channel, instance.DefinitionKey, node?.Id);
+                    // 发布后宿主也可能撤下适配器；不能静默丢失流程承诺的通知。
+                    throw new ApprovalException($"通知适配器 '{channel}' 未注册，请先配置宿主适配器后重试")
+                        { Code = ApprovalErrorCode.InvalidDefinition };
                 }
             }
         }
@@ -111,7 +112,7 @@ public sealed partial class ApprovalEngine
     }
 
     private string Render(string template, IReadOnlyDictionary<string, object?> variables) =>
-        TemplateRenderer.Render(template, variables, TemplateEncoding.Raw, _tenantSettings.DisplayTimeZone);
+        TemplateRenderer.Render(template, variables, TemplateEncoding.Raw, _displaySettings.DisplayTimeZone);
 
     private void AddMessage(ApprovalInstance instance, FlowNode? node, NotifyEvent evt, string userId, string title, string content) =>
         _db.Set<ApprovalMessage>().Add(new ApprovalMessage
@@ -158,6 +159,3 @@ internal static class OutboxJson
         Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
     };
 }
-
-/// <summary>异步动作在 Outbox 中的数据：参数在入队时已完成模板替换。</summary>
-internal sealed record AsyncActionPayload(string NodeId, string StepName, Dictionary<string, string> Parameters);

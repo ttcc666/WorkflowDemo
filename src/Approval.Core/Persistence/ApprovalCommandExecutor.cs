@@ -2,13 +2,13 @@ using System.Text.Json;
 using Approval.Core.Abstractions;
 using Approval.Core.Authorization;
 using Approval.Core.Domain;
-using Approval.Core.Tenancy;
+using Approval.Core.Hosting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Approval.Core.Persistence;
 
-internal sealed class ApprovalCommandExecutor<TContext>(IServiceScopeFactory scopes, IApprovalTenantContext tenant,
+internal sealed class ApprovalCommandExecutor<TContext>(IServiceScopeFactory scopes,
     IApprovalActorContext actor, ApprovalOptions options, TimeProvider clock) : IApprovalCommandExecutor where TContext : ApprovalDbContext
 {
     private static readonly JsonSerializerOptions Json = JsonSerializerOptions.Web;
@@ -20,14 +20,14 @@ internal sealed class ApprovalCommandExecutor<TContext>(IServiceScopeFactory sco
         if (key is null && options.RequireOperationId && !command.AllowUnkeyed) throw new ApprovalException("缺少稳定提交标识 Idempotency-Key") { Code = ApprovalErrorCode.OperationIdRequired };
         if (key is not null && (string.IsNullOrWhiteSpace(key) || key.Length > 200 || key.Any(char.IsControl)))
             throw new ApprovalException("提交标识必须为 1–200 个非控制字符") { Code = ApprovalErrorCode.OperationIdRequired };
-        var identity = new ApprovalExecutionIdentity(tenant.TenantId, actor.ActorId, actor.IsSystem);
-        using var observation = Approval.Core.Diagnostics.ApprovalInstrumentation.Command(identity.TenantId, command.Kind, key);
+        var identity = new ApprovalExecutionIdentity(actor.ActorId, actor.IsSystem);
+        using var observation = Approval.Core.Diagnostics.ApprovalInstrumentation.Command(command.Kind, key);
         var attempts = 0;
         if (identity.ActorId!.Length > 256) throw new InvalidOperationException("操作人标识超过 256 字符");
         var grants = actor is IApprovalSystemActorContext system ? system.AllowedPermissions.ToArray() : [];
         var hash = ApprovalCommandHash.Payload(command.Payload);
         var lookup = key is null ? null : ApprovalCommandHash.Of(identity.ActorId, command.Kind, command.Scope, key);
-        var seed = ApprovalCommandHash.Of(identity.TenantId, lookup ?? Guid.NewGuid().ToString("N"));
+        var seed = ApprovalCommandHash.Of(lookup ?? Guid.NewGuid().ToString("N"));
         var definitions = new Dictionary<string, Guid>(StringComparer.Ordinal);
 
         AsyncServiceScope CreateScope()
@@ -40,8 +40,6 @@ internal sealed class ApprovalCommandExecutor<TContext>(IServiceScopeFactory sco
         {
             if (lookup is null) return null;
             await using var scope = CreateScope();
-            if (options.MultiTenant && !(await scope.ServiceProvider.GetRequiredService<IApprovalTenantCatalog>().GetTenantsAsync(token)).Any(t => t.Enabled && t.TenantId == identity.TenantId))
-                throw new ApprovalException("租户已停用") { Code = ApprovalErrorCode.Forbidden };
             return await scope.ServiceProvider.GetRequiredService<TContext>().Set<ApprovalOperation>().AsNoTracking().SingleOrDefaultAsync(o => o.LookupHash == lookup, token);
         }
         async Task<T> ReplayAsync(ApprovalOperation previous, CancellationToken token)
@@ -74,8 +72,7 @@ internal sealed class ApprovalCommandExecutor<TContext>(IServiceScopeFactory sco
                 ct.ThrowIfCancellationRequested();
                 if (await FindAsync(ct) is { } previous) return await ReplayAsync(previous, ct);
                 await using var scope = CreateScope(); var sp = scope.ServiceProvider;
-                if (options.MultiTenant && !(await sp.GetRequiredService<IApprovalTenantCatalog>().GetTenantsAsync(ct)).Any(t => t.Enabled && t.TenantId == identity.TenantId))
-                    throw new ApprovalException("租户已停用") { Code = ApprovalErrorCode.Forbidden };
+
                 await sp.GetRequiredService<ApprovalAuthorizationService>().RequireAsync(command.Permission, command.Resource, identity.ActorId, ct);
                 var authorizedResource = await sp.GetRequiredService<ApprovalAuthorizationService>().Inner.ResolveResourceAsync(command.Resource ?? new(), ct);
                 var db = sp.GetRequiredService<TContext>(); var unit = (ApprovalUnitOfWork)sp.GetRequiredService<IApprovalUnitOfWork>();

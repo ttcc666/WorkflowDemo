@@ -173,6 +173,46 @@ public sealed class EngineRuleTests : IAsyncLifetime
         Assert.Equal(DateTimeKind.Utc, Assert.Single(reloaded.Tasks).CreatedAt.Kind);
     }
 
+    [Theory]
+    [InlineData("approve", "withdraw", InstanceStatus.Approved)]
+    [InlineData("withdraw", "approve", InstanceStatus.Withdrawn)]
+    [InlineData("timeout", "approve", InstanceStatus.Running)]
+    [InlineData("approve", "timeout", InstanceStatus.Approved)]
+    public async Task Stale_withdraw_approval_and_timeout_commands_conflict_without_overwriting_winner(
+        string winner, string stale, InstanceStatus expected)
+    {
+        var flow = FlowDefinition.Parse(Flows.SingleNode("Any", "User", "r1"));
+        flow.Nodes.Values.Single(n => n.Type == NodeType.Approval).Timeout = new TimeoutPolicy { Minutes = 1 };
+        await _host.PublishAsync("race", flow.ToJson());
+        var instance = await _host.StartAsync("race", "race-business", "alice");
+        var taskId = Assert.Single(instance.Tasks).Id;
+        _host.Clock.Advance(TimeSpan.FromMinutes(1));
+        await using var oldScope = _host.NewScope();
+        await oldScope.ServiceProvider.GetRequiredService<TestDbContext>().Set<ApprovalInstance>()
+            .Include(i => i.Tasks).SingleAsync(i => i.Id == instance.Id);
+
+        static async Task Apply(ApprovalEngine engine, string operation, Guid instanceId, Guid task)
+        {
+            if (operation == "withdraw") await engine.WithdrawAsync(instanceId, "alice", "撤回");
+            else if (operation == "timeout") Assert.True(await engine.HandleTimeoutAsync(task));
+            else await engine.ApproveAsync(task, "r1", "同意");
+        }
+        await _host.RunAsync(sp => Apply(sp.GetRequiredService<ApprovalEngine>(), winner, instance.Id, taskId));
+        var conflict = await Assert.ThrowsAsync<ApprovalException>(() => Apply(
+            oldScope.ServiceProvider.GetRequiredService<ApprovalEngine>(), stale, instance.Id, taskId));
+        Assert.Equal(ApprovalErrorCode.Conflict, conflict.Code);
+        var saved = await _host.GetInstanceAsync(instance.Id);
+        Assert.Equal(expected, saved.Status);
+        Assert.Equal(winner == "timeout" ? 1 : 0, Assert.Single(saved.Tasks).RemindCount);
+        Assert.Equal(winner == "approve" ? 1 : 0, saved.Logs.Count(l => l.Action == ApprovalAction.Approve));
+        Assert.Equal(winner == "withdraw" ? 1 : 0, saved.Logs.Count(l => l.Action == ApprovalAction.Withdraw));
+        if (winner == "timeout")
+        {
+            await _host.ApproveAsync(taskId, "r1");
+            Assert.Equal(InstanceStatus.Approved, (await _host.GetInstanceAsync(instance.Id)).Status);
+        }
+    }
+
     [Fact]
     public async Task Find_handleable_task_respects_roles_and_sequence()
     {

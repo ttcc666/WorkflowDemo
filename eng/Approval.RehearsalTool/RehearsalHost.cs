@@ -5,7 +5,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 using Approval.Core;
 using Approval.Core.Abstractions;
-using Approval.MultiTenant.Api;
+using Approval.ReferenceHost;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -48,7 +48,7 @@ internal sealed class RehearsalHost : IAsyncDisposable
         if (name is null || !System.Text.RegularExpressions.Regex.IsMatch(name, "^approval_test_[a-f0-9]+(_restore)?$")) throw new InvalidOperationException("Only owned approval_test databases are allowed.");
         var endpoint = Convert.ToString(database[database.ContainsKey("Host") ? "Host" : "Server"])!.Split(',')[0];
         if (endpoint is not ("127.0.0.1" or "localhost")) throw new InvalidOperationException("Database rehearsal endpoints must be loopback.");
-        var app = ReferenceHost.Build(["--environment", "Production"], builder =>
+        var app = ReferenceApplication.Build(["--environment", "Production"], builder =>
         {
             builder.WebHost.UseTestServer(); builder.Logging.ClearProviders();
             builder.Configuration.Sources.Clear(); builder.Configuration.AddJsonFile(Required("CONFIG"));
@@ -109,6 +109,6 @@ internal sealed class RehearsalHost : IAsyncDisposable
         using var response = await Send(method, path, user, key, body, raw); Rehearsal.Check(response.StatusCode == expected, "HttpStatus", path + ": " + (int)response.StatusCode);
         return expected == HttpStatusCode.NoContent ? default : await response.Content.ReadFromJsonAsync<JsonElement>();
     }
-    public async Task<Approval.Core.Tenancy.ApprovalTenantScope> Scope(string tenant = "alpha") => await Services.GetRequiredService<IApprovalTenantScopeFactory>().CreateAsync(tenant);
+    public async Task<Approval.Core.Hosting.ApprovalScope> Scope(string tenant = "alpha") => await Services.GetRequiredService<IApprovalScopeFactory>().CreateAsync();
     public async ValueTask DisposeAsync() { Client.Dispose(); await _app.DisposeAsync(); }
 }

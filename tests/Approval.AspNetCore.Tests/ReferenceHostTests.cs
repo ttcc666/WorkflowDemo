@@ -1,6 +1,6 @@
 using System.Net;
 using Approval.Core.Abstractions;
-using Approval.MultiTenant.Api;
+using Approval.ReferenceHost;
 using Approval.Tests.Infrastructure;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Data.Sqlite;
@@ -22,10 +22,10 @@ public sealed class ReferenceHostTests : IAsyncLifetime
         return Task.CompletedTask;
     }
     [Fact]
-    public async Task ReferenceHost_DualTenantApprovalRevocationAndOriginalVersionReplay()
+    public async Task ReferenceHost_SingleHostApprovalRevocationAndOriginalVersionReplay()
     {
         await using var host = await ReferenceHostScenario.StartAsync(Config);
-        await host.DualTenantWorkflow();
+        await host.SingleHostWorkflow();
     }
     [Fact]
     public async Task ReferenceHost_TwentyIdenticalHttpRequestsAcrossTwoHostsCommitOnce()
@@ -54,7 +54,7 @@ public sealed class ReferenceHostTests : IAsyncLifetime
         request.Headers.Add("X-Tenant-Id", "beta");
         using var response = await host.Client.SendAsync(request);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Equal("alpha", (await System.Net.Http.Json.HttpContentJsonExtensions.ReadFromJsonAsync<System.Text.Json.JsonElement>(response.Content)).GetProperty("tenantId").GetString());
+        Assert.Equal("alice", (await System.Net.Http.Json.HttpContentJsonExtensions.ReadFromJsonAsync<System.Text.Json.JsonElement>(response.Content)).GetProperty("userId").GetString());
         using var nonAdmin = await host.Send(HttpMethod.Put, "/demo/grants/bob/approval.task.approve", body: new { allowed = false });
         Assert.Equal(HttpStatusCode.Forbidden, nonAdmin.StatusCode);
         using var foreignUser = await host.Send(HttpMethod.Put, "/demo/grants/unknown/approval.task.approve", user: "admin", body: new { allowed = false });
@@ -68,21 +68,21 @@ public sealed class ReferenceHostTests : IAsyncLifetime
     [Fact]
     public void ReferenceHost_ProductionRejectsDemoAndInvalidJwtConfiguration()
     {
-        Assert.Throws<InvalidOperationException>(() => ReferenceHost.Build(["--environment", "Production"], b => ReferenceHostScenario.ConfigureBuilder(b, Config)));
+        Assert.Throws<InvalidOperationException>(() => ReferenceApplication.Build(["--environment", "Production"], b => ReferenceHostScenario.ConfigureBuilder(b, Config)));
         var config = Config; config["Authentication:Mode"] = "Jwt"; config["Authentication:Authority"] = "http://issuer.invalid"; config["Authentication:Audience"] = "approval";
-        Assert.Throws<InvalidOperationException>(() => ReferenceHost.Build(["--environment", "Production"], b => ReferenceHostScenario.ConfigureBuilder(b, config)));
+        Assert.Throws<InvalidOperationException>(() => ReferenceApplication.Build(["--environment", "Production"], b => ReferenceHostScenario.ConfigureBuilder(b, config)));
         config["Authentication:Mode"] = "Invalid";
-        Assert.Throws<InvalidOperationException>(() => ReferenceHost.Build(["--environment", "Production"], b => ReferenceHostScenario.ConfigureBuilder(b, config)));
+        Assert.Throws<InvalidOperationException>(() => ReferenceApplication.Build(["--environment", "Production"], b => ReferenceHostScenario.ConfigureBuilder(b, config)));
     }
     [Fact]
     public async Task ReferenceHost_SystemPermissionsAreRestrictedAndTenantScoped()
     {
         var config = new ConfigurationBuilder().AddJsonFile(Path.Combine(AppContext.BaseDirectory, "ReferenceHostConfiguration.json")).AddInMemoryCollection(Config).Build();
         var provider = new DirectoryPermissionProvider(new ReferenceDirectory(config));
-        Assert.True(await provider.AuthorizeAsync(new(new("alpha", "approval-background", true), ApprovalPermissions.OutboxDispatch, new()), default));
-        Assert.False(await provider.AuthorizeAsync(new(new("alpha", "approval-background", true), ApprovalPermissions.DefinitionPublish, new()), default));
-        Assert.False(await provider.AuthorizeAsync(new(new("unknown", "approval-background", true), ApprovalPermissions.OutboxDispatch, new()), default));
-        Assert.False(await provider.AuthorizeAsync(new(new("alpha", "admin", false), ApprovalPermissions.OutboxDispatch, new()), default));
+        Assert.True(await provider.AuthorizeAsync(new(new("approval-background", true), ApprovalPermissions.OutboxDispatch, new()), default));
+        Assert.False(await provider.AuthorizeAsync(new(new("approval-background", true), ApprovalPermissions.DefinitionPublish, new()), default));
+        Assert.False(await provider.AuthorizeAsync(new(new("unknown-worker", true), ApprovalPermissions.OutboxDispatch, new()), default));
+        Assert.False(await provider.AuthorizeAsync(new(new("admin", false), ApprovalPermissions.OutboxDispatch, new()), default));
     }
     [Fact]
     public void ReferenceHost_DirectoryRejectsAmbiguousDisabledAndNonmemberClaims()
@@ -93,14 +93,11 @@ public sealed class ReferenceHostTests : IAsyncLifetime
         var directory = new ReferenceDirectory(config);
         var http = new DefaultHttpContext();
         var resolver = new DirectoryContextResolver(new HttpContextAccessor { HttpContext = http }, directory);
-        foreach (var (tenants, user, code) in new[] {
-            (new[] { "alpha", "beta" }, "alice", ApprovalErrorCode.Unauthorized),
-            (Array.Empty<string>(), "alice", ApprovalErrorCode.Unauthorized),
-            (new[] { "beta" }, "alice", ApprovalErrorCode.Forbidden),
-            (new[] { "alpha" }, "unknown", ApprovalErrorCode.Forbidden) })
+        foreach (var users in new[] { new[] { "alice", "bob" }, Array.Empty<string>(), new[] { "unknown" } })
         {
-            http.User = new ClaimsPrincipal(new ClaimsIdentity(tenants.Select(t => new Claim("tenant_id", t)).Append(new Claim("sub", user)), "verified"));
-            Assert.Equal(code, Assert.Throws<ApprovalException>(() => resolver.Resolve()).Code);
+            http.User = new ClaimsPrincipal(new ClaimsIdentity(users.Select(u => new Claim("sub", u)), "verified"));
+            var expected = users.Length == 1 ? ApprovalErrorCode.Forbidden : ApprovalErrorCode.Unauthorized;
+            Assert.Equal(expected, Assert.Throws<ApprovalException>(() => resolver.Resolve()).Code);
         }
     }
     [Fact]

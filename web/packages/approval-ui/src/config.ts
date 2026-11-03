@@ -1,4 +1,4 @@
-import { computed, shallowRef, type Component } from 'vue'
+import type { Component } from 'vue'
 
 /** @approval/ui 的配置，由 `app.use(ApprovalUI, options)` 传入。 */
 export interface ApprovalUIOptions {
@@ -15,8 +15,6 @@ export interface ApprovalUIOptions {
    * 真实认证下用户切换通常伴随页面刷新，可不配置；演示环境切换用户时需要。
    */
   userKey?: () => string | undefined
-  /** 当前企业标识（响应式 getter）；切换企业时隔离缓存并取消旧请求。认证及成员资格由宿主服务端验证。 */
-  tenantId?: () => string | undefined
   /**
    * 业务详情面板：审批详情页按 BusinessType 显示对应组件（props：`businessKey`）。
    * 内置 `Form`（表单审批）；未注册的业务显示原始表单数据。
@@ -31,8 +29,6 @@ export interface ResolvedApprovalUIOptions extends ApprovalUIOptions {
   businessPanels: Record<string, Component>
 }
 
-const current = shallowRef<ResolvedApprovalUIOptions>({ apiBase: '/api/approval', businessPanels: {} })
-
 /** 为一个客户端解析配置；业务面板映射按实例复制。 */
 export function resolveApprovalUIOptions(options: ApprovalUIOptions = {}): ResolvedApprovalUIOptions {
   return {
@@ -42,17 +38,7 @@ export function resolveApprovalUIOptions(options: ApprovalUIOptions = {}): Resol
   }
 }
 
-/** 兼容单实例配置。隔离客户端使用 createApprovalClient(options)。 */
-export function configureApprovalUI(options: ApprovalUIOptions = {}) {
-  current.value = resolveApprovalUIOptions(options)
-}
-
-export function approvalConfig(): ResolvedApprovalUIOptions {
-  return current.value
-}
-
 /** 当前用户标识的响应式来源，供各页面在切换用户时刷新数据。 */
-export function approvalIdentityKey(options: Pick<ApprovalUIOptions, 'tenantId' | 'userKey'>) {
-  return options.tenantId ? JSON.stringify([options.tenantId() ?? '', options.userKey?.() ?? '']) : options.userKey?.() ?? ''
+export function approvalIdentityKey(options: Pick<ApprovalUIOptions, 'userKey'>) {
+  return options.userKey?.() ?? ''
 }
-export const approvalUserKey = computed(() => approvalIdentityKey(current.value))

@@ -5,7 +5,7 @@ namespace Approval.Core.Templates;
 
 public sealed record TemplateVariableInfo(string Name, string Alias, string Description);
 
-/// <summary>消息模板与动作参数可用的变量。中文名与英文名等价，如 <c>{标题}</c> 与 <c>{title}</c>。</summary>
+/// <summary>消息模板可用的变量。中文名与英文名等价，如 <c>{标题}</c> 与 <c>{title}</c>。</summary>
 public static class TemplateVariables
 {
     public static IReadOnlyList<TemplateVariableInfo> Catalog { get; } =
@@ -41,7 +41,7 @@ public static class TemplateVariables
     }
 
     public static Dictionary<string, object?> Build(ApprovalInstance instance, IReadOnlyDictionary<string, object?> form,
-        FlowNode? node, ApprovalOptions options, EventValues? values = null, Approval.Core.Abstractions.ApprovalTenantSettings? settings = null)
+        FlowNode? node, ApprovalOptions options, EventValues? values = null, Approval.Core.Abstractions.ApprovalDisplaySettings? settings = null)
     {
         var result = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
         foreach (var (key, value) in options.GlobalVariables) result[key] = value;

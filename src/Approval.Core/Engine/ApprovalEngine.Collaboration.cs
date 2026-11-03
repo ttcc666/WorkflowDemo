@@ -83,6 +83,7 @@ public sealed partial class ApprovalEngine
         FlowNode target, CancellationToken ct)
     {
         var node = flow.GetNode(task.NodeId);
+        if (target.Type == NodeType.Start) instance.Status = InstanceStatus.Returned;
         CompleteTask(task, ApprovalTaskStatus.Rejected, userId, comment);
         AddLog(instance, node, ApprovalAction.Return, userId, $"退回到「{(target.Type == NodeType.Start ? "发起人" : target.Name)}」：{comment}");
 
@@ -105,7 +106,8 @@ public sealed partial class ApprovalEngine
 
         instance.Round++;
         var toInitiator = target.Type == NodeType.Start;
-        await RaiseAsync(NotifyEvent.Rejected, instance, flow, node,
+        if (toInitiator) instance.Status = InstanceStatus.Returned;
+        await RaiseAsync(NotifyEvent.Returned, instance, flow, node,
             new EventInfo(toInitiator ? [new Assignee(AssigneeKind.User, instance.InitiatorId)] : [])
             {
                 OperatorId = userId,
@@ -152,11 +154,14 @@ public sealed partial class ApprovalEngine
     private async Task ResubmitCoreAsync(ApprovalInstance instance, FlowDefinition flow, ApprovalTask task, string userId, string? comment,
         object? formData, CancellationToken ct)
     {
+        instance.Status = InstanceStatus.Running;
         if (formData is not null) instance.FormDataJson = FormData.Serialize(formData);
         CompleteTask(task, ApprovalTaskStatus.Approved, userId, comment);
         var start = flow.GetNode(flow.StartNodeId);
         AddLog(instance, start, ApprovalAction.Resubmit, userId, comment);
         StateOf(instance).Joins.Clear();
+        await RaiseAsync(NotifyEvent.Resubmitted, instance, flow, start,
+            new EventInfo([new Assignee(AssigneeKind.User, instance.InitiatorId)]) { OperatorId = userId, Comment = comment }, ct);
         await MoveToAsync(instance, flow, start.Next!, ct);
     }
 
@@ -174,12 +179,16 @@ public sealed partial class ApprovalEngine
         var signers = userIds.Where(u => !string.IsNullOrWhiteSpace(u)).Select(u => u.Trim()).Distinct().ToList();
         if (signers.Count == 0) throw new ApprovalException("请选择加签人");
         if (signers.Contains(userId)) throw new ApprovalException("不能给自己加签");
+        foreach (var signer in signers) await EnsureActiveUserAsync(signer, ct);
+        if (!Enum.IsDefined(mode)) throw new ApprovalException("无效的加签方式");
 
         var (instance, task, flow) = await LoadTaskAsync(taskId, ct);
         await EnsureCanHandleAsync(instance, task, userId, ct);
         var node = flow.GetNode(task.NodeId);
         if (task.Kind == ApprovalTaskKind.Resubmit || node.Type != NodeType.Approval) throw new ApprovalException("该任务不支持加签");
         if (!node.AllowAddSign) throw new ApprovalException("该节点不允许加签");
+        if (mode == AddSignMode.After && node.RequireComment && string.IsNullOrWhiteSpace(comment))
+            throw new ApprovalException("该节点必须填写审批意见");
         if (node.RequireQualifiedAssignee)
         {
             var qualified = await _assignees.GetEligibleApproversAsync(instance, node, ct);
@@ -259,6 +268,7 @@ public sealed partial class ApprovalEngine
             return;
 
         parent.Status = ApprovalTaskStatus.Pending;
+        WriteEvent(instance, "TaskCreated", parent.NodeId, parent.NodeName, parent.Id, SystemOperator, null);
         parent.DueAt = parent.NextRemindAt = DueAtFor(node);
         var assignee = new Assignee(parent.AssigneeKind, parent.AssigneeValue);
         Notify(NotificationKind.TaskCreated, instance, [assignee]);

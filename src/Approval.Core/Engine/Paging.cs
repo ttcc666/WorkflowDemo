@@ -10,8 +10,8 @@ public sealed record PageRequest
 
     public PageRequest(int? page = null, int? pageSize = null)
     {
-        Page = Math.Max(1, page ?? 1);
         PageSize = Math.Clamp(pageSize ?? DefaultPageSize, 1, MaxPageSize);
+        Page = Math.Clamp(page ?? 1, 1, int.MaxValue / PageSize);
     }
 
     public int Page { get; }

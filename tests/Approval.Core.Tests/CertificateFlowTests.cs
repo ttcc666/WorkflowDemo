@@ -48,7 +48,7 @@ public sealed class CertificateFlowTests : IAsyncLifetime
 
         Assert.Equal(
             [ApprovalAction.Submit, ApprovalAction.Approve, ApprovalAction.Approve, ApprovalAction.Approve, ApprovalAction.Cc, ApprovalAction.Complete],
-            done.Logs.Select(l => l.Action));
+            done.Logs.Where(l => l.Action != ApprovalAction.NodeEntered).Select(l => l.Action));
     }
 
     [Fact]

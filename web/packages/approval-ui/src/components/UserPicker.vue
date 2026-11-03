@@ -72,13 +72,12 @@ function onVisible(visible: boolean) {
     :placeholder="placeholder"
     :disabled="disabled"
     :size="size"
-    :allow-create="!directory.available.value"
-    :default-first-option="!directory.available.value"
+    :no-data-text="directory.available.value ? '未找到宿主用户' : '宿主尚未接入用户目录'"
     clearable
     class="user-picker"
     @visible-change="onVisible"
   >
-    <el-option v-for="u in visibleOptions" :key="u.id" :label="u.name" :value="u.id">
+    <el-option v-for="u in visibleOptions" :key="u.id" :label="u.name" :value="u.id" :disabled="u.isActive === false">
       <span>{{ u.name }}</span>
       <span class="user-picker__meta">{{ u.name !== u.id ? u.id : '' }} {{ u.roles.join('、') }}</span>
     </el-option>

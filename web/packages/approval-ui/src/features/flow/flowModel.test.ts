@@ -252,19 +252,17 @@ describe('insert node on edge', () => {
   })
 })
 
-describe('notifications, timeout and actions round-trip', () => {
+describe('notifications and timeout round-trip', () => {
   it('keeps node config and flow-level rules', () => {
     const flow = structuredClone(certificateFlow)
     flow.nodes.dept.timeout = { minutes: 60, action: 'Remind', repeatMinutes: 30, maxReminders: 2 }
     flow.nodes.dept.notifications = [{ events: ['Enter'], recipients: [{ type: 'Assignees', value: '' }], channels: ['InApp'], content: '{标题}' }]
-    flow.nodes.act = { id: 'act', name: '动作', type: 'Action', next: 'end', actions: [{ type: 'Script', mode: 'Sync', parameters: { script: 'x' } }] }
     flow.notifications = [{ events: ['Completed'], recipients: [{ type: 'Initiator', value: '' }], channels: ['InApp'] }]
 
     const { nodes, edges } = toFlowElements(flow)
     const back = toDefinition(nodes, edges, flow.notifications)
     expect(back.nodes.dept.timeout).toEqual(flow.nodes.dept.timeout)
     expect(back.nodes.dept.notifications).toEqual(flow.nodes.dept.notifications)
-    expect(back.nodes.act.actions).toEqual(flow.nodes.act.actions)
     expect(back.notifications).toEqual(flow.notifications)
     expect(back.nodes.cond.notifications).toBeUndefined()
   })

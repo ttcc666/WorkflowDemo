@@ -27,7 +27,7 @@ Invoke-CheckedCommand 'pnpm' @('pack', '--out', $tarball) (Join-Path $webRoot 'p
 $consumerRoot = Join-Path $repositoryRoot ('output/engineering/consumer-' + [Guid]::NewGuid().ToString('N'))
 $apiRoot = Join-Path $consumerRoot 'api'
 $sampleRoot = Join-Path $consumerRoot 'samples/Approval.Certificate'
-$referenceRoot = Join-Path $consumerRoot 'samples/Approval.MultiTenant.Api'
+$referenceRoot = Join-Path $consumerRoot 'samples/Approval.ReferenceHost'
 $uiRoot = Join-Path $consumerRoot 'web'
 $feed = Join-Path $consumerRoot 'feed'
 New-Item -ItemType 'Directory' -Path $apiRoot,$uiRoot,$feed -Force | Out-Null
@@ -48,7 +48,7 @@ function Copy-HostSources {
 }
 Copy-HostSources (Join-Path $repositoryRoot 'samples/Certificate.Api') $apiRoot
 Copy-HostSources (Join-Path $repositoryRoot 'samples/Approval.Certificate') $sampleRoot
-Copy-HostSources (Join-Path $repositoryRoot 'samples/Approval.MultiTenant.Api') $referenceRoot
+Copy-HostSources (Join-Path $repositoryRoot 'samples/Approval.ReferenceHost') $referenceRoot
 Copy-HostSources (Join-Path $webRoot 'apps/demo') $uiRoot
 Copy-Item -LiteralPath (Join-Path $repositoryRoot 'global.json') -Destination $consumerRoot
 '<Project />' | Set-Content -LiteralPath (Join-Path $consumerRoot 'Directory.Build.props')
@@ -107,7 +107,7 @@ foreach ($name in $frameworkPackages) {
     if ($deps.libraries.($name + '/' + $version).sha512 -cne $expectedHash) { throw ('Consumer restored stale package bytes: ' + $name) }
 }
 if ($deps.libraries.('Approval.Certificate/' + $version).type -ne 'project') { throw 'The business sample must be built from the copied sample project.' }
-$referenceProjectPath = Join-Path $referenceRoot 'Approval.MultiTenant.Api.csproj'
+$referenceProjectPath = Join-Path $referenceRoot 'Approval.ReferenceHost.csproj'
 $referenceProject = [xml](Get-Content -LiteralPath $referenceProjectPath -Raw)
 foreach ($property in ([ordered]@{ TargetFramework = 'net10.0'; ImplicitUsings = 'enable'; Nullable = 'enable' }).GetEnumerator()) {
     $element = $referenceProject.CreateElement($property.Key)
@@ -128,8 +128,8 @@ foreach ($reference in $referenceProject.SelectNodes('/Project/ItemGroup/Project
     $reference.ParentNode.ReplaceChild($packageReference, $reference) | Out-Null
 }
 $referenceProject.Save($referenceProjectPath)
-Invoke-CheckedCommand 'dotnet' @('build', 'Approval.MultiTenant.Api.csproj', '--configuration', 'Release', ('-p:RestorePackagesPath=' + (Join-Path $consumerRoot 'nuget-packages'))) $referenceRoot
-$referenceDeps = Get-Content -LiteralPath (Join-Path $referenceRoot 'bin/Release/net10.0/Approval.MultiTenant.Api.deps.json') -Raw | ConvertFrom-Json
+Invoke-CheckedCommand 'dotnet' @('build', 'Approval.ReferenceHost.csproj', '--configuration', 'Release', ('-p:RestorePackagesPath=' + (Join-Path $consumerRoot 'nuget-packages'))) $referenceRoot
+$referenceDeps = Get-Content -LiteralPath (Join-Path $referenceRoot 'bin/Release/net10.0/Approval.ReferenceHost.deps.json') -Raw | ConvertFrom-Json
 foreach ($name in $frameworkPackages) {
     $dependency = $referenceDeps.libraries.($name + '/' + $version)
     $expectedHash = 'sha512-' + [Convert]::ToBase64String([Security.Cryptography.SHA512]::HashData([IO.File]::ReadAllBytes((Join-Path $feed ($name + '.' + $version + '.nupkg')))))

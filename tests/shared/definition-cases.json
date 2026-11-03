@@ -1,6 +1,6 @@
 [
   {
-    "name": "legacy-without-version",
+    "name": "default-version",
     "json": "{\"startNodeId\":\"start\",\"nodes\":{\"start\":{\"name\":\"提交\",\"type\":\"Start\",\"next\":\"end\",\"position\":{\"x\":0,\"y\":0}},\"end\":{\"name\":\"完成\",\"type\":\"End\",\"position\":{\"x\":0,\"y\":160}}},\"form\":{\"fields\":[{\"key\":\"title\",\"label\":\"标题\",\"type\":\"Text\",\"required\":true},{\"key\":\"amount\",\"label\":\"金额\",\"type\":\"Money\",\"precision\":2}]}}",
     "valid": true
   },

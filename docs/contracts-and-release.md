@@ -1,3 +1,5 @@
+> 当前项目尚未正式使用：不提供旧环境升级或旧程序集/客户端兼容，契约以当前生成基线为准。
+
 # 契约与发布验收
 
 ## 契约来源
@@ -5,9 +7,9 @@
 - `eng/Approval.ContractTool` 映射真实审批/注册证路由，按组在临时回环端口分别导出 OpenAPI，不初始化业务数据库。
 - `contracts/approval.openapi.json` 只描述通用审批 HTTP 接口；`flow.schema.json`、`form.schema.json` 描述嵌入 JSON 的结构。业务规则仍由服务端校验器执行。
 - `contracts/*.api.txt` 只记录两个框架程序集的公开类型、成员、可空性、默认参数和常量。
-- `samples/Approval.Certificate/contracts/` 单独保存注册证示例的 OpenAPI、公开 API 和旧程序集类型转发基线，仍由 `contracts:check` 校验。
+- `samples/Approval.Certificate/contracts/` 单独保存注册证示例的 OpenAPI 和公开 API 基线，由 `contracts:check` 校验。
 - `web/packages/approval-ui/src/contracts/http.generated.ts` 仅由框架 OpenAPI 生成；`api.ts` 保留原前端名称和投影，并区分服务端可接受的数字字符串与实际写出的数字。注册证类型留在示例前端。
-- HTTP 响应 DTO 位于 `Approval.AspNetCore/Contracts`，固定 JSON 样例验证其字段、字符串枚举、UTC 日期和空值与 v1 协议相同。C# 查询服务的既有返回类型保持兼容。
+- HTTP 响应 DTO 位于 `Approval.AspNetCore/Contracts`，固定 JSON 样例验证其字段、字符串枚举、UTC 日期和空值。C# 查询服务与 HTTP DTO 分别记录当前契约。
 
 ```powershell
 Set-Location -LiteralPath 'D:\Study\CSharp\Workflow'
@@ -18,9 +20,9 @@ pnpm --dir 'web' contracts:update
 
 ## 流程协议版本
 
-`schemaVersion` 与流程发布版本、EF 迁移版本相互独立。省略该字段的旧定义按 v1 读取，新保存定义写出 `schemaVersion: 1`。只接受 JSON 整数值（1 与 1.0 等价），未知版本、字符串和 null 均拒绝；前后端复用 `tests/shared/definition-cases.json`。
+`schemaVersion` 与流程发布版本、EF 迁移版本相互独立。该字段省略时默认 v1，新保存定义写出 `schemaVersion: 1`。只接受 JSON 整数值（1 与 1.0 等价），未知版本、字符串和 null 均拒绝；前后端复用 `tests/shared/definition-cases.json`。
 
-读取旧定义不会改写数据库中的历史 JSON、DefinitionId 或发布版本；正常编辑后由用户显式发布新版本。将来引入 v2 时，需要独立增加读取升级器、迁移用例和再发布策略，不能通过修改当前版本常量静默升级历史实例。
+发布后的 JSON、DefinitionId 和版本不可改写；正常编辑生成新版本，实例仍绑定发起时版本。当前只支持 v1，未知协议明确拒绝，不提供旧环境读取升级器。
 
 ## 独立包验收
 

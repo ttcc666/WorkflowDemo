@@ -3,35 +3,35 @@ import { computed, shallowRef, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { approvalRouteNames } from '../routes'
 import { useApprovalClient } from '../client'
-import type { DefinitionGovernanceSummary, SynchronousActionScan } from '../contracts/api'
-import { ElMessage } from 'element-plus'
-import { errorMessage } from '../api/http'
+import type { DefinitionGovernanceSummary } from '../contracts/api'
 import { useApprovalUser } from '../composables/useApprovalUser'
 import { useAsyncData } from '../composables/useAsyncData'
 import DefinitionTable from '../features/definitions/DefinitionTable.vue'
 import DefinitionVersionsDrawer from '../features/definitions/DefinitionVersionsDrawer.vue'
 import NewDefinitionDialog from '../features/definitions/NewDefinitionDialog.vue'
+import DefinitionCategoryFilter from '../features/definitions/DefinitionCategoryFilter.vue'
 
 const { api: approvalApi, userKey } = useApprovalClient()
 
 const router = useRouter()
-// 完整流程定义含动作参数、通知配置，仅管理员（及后端配置的 DefinitionReaders 角色）可查看
+// 完整流程定义含通知配置，仅管理员（及后端配置的 DefinitionReaders 角色）可查看
 const { me, canViewDefinitions, can } = useApprovalUser()
+const categorySelection = shallowRef('')
 const { data: definitions, loading, reload } = useAsyncData(
-  async (signal): Promise<DefinitionGovernanceSummary[]> => (canViewDefinitions.value ? approvalApi.governanceDefinitions(signal) : []),
-  { initial: [], watch: [canViewDefinitions] },
+  async (signal): Promise<DefinitionGovernanceSummary[]> => (canViewDefinitions.value ? approvalApi.governanceDefinitions(signal,
+    categorySelection.value.startsWith('category:') ? categorySelection.value.slice(9) : undefined, categorySelection.value === 'uncategorized') : []),
+  { initial: [], resetOnReload: true, watch: [canViewDefinitions, categorySelection, userKey] },
 )
+const categories = useAsyncData(signal => canViewDefinitions.value ? approvalApi.definitionCategories(signal) : Promise.resolve([]), {
+  initial: [], watch: [canViewDefinitions, userKey],
+})
+async function refresh() { await Promise.all([reload(), categories.reload()]) }
 
 const existingKeys = computed(() => (definitions.value ?? []).map((d) => d.key))
 const newVisible = shallowRef(false)
 const versionsOf = shallowRef<DefinitionGovernanceSummary | null>(null)
-const scan = shallowRef<SynchronousActionScan | null>(null)
-async function scanActions(page = 1) {
-  try { scan.value = await approvalApi.scanSynchronousActions(page) }
-  catch (error) { ElMessage.error(errorMessage(error)) }
-}
 const versionsVisible = shallowRef(false)
-watch(userKey, () => { newVisible.value = false; versionsOf.value = null; versionsVisible.value = false; scan.value = null }, { flush: 'sync' })
+watch(userKey, () => { categorySelection.value = ''; definitions.value = []; categories.data.value = []; newVisible.value = false; versionsOf.value = null; versionsVisible.value = false }, { flush: 'sync' })
 
 function design(key: string, query: Record<string, string> = {}) {
   void router.push({ name: approvalRouteNames.designer, params: { key }, query })
@@ -50,28 +50,19 @@ function showVersions(definition: DefinitionGovernanceSummary) {
       <div class="card-header">
         <span>流程定义</span>
         <div>
-          <el-button text type="primary" @click="reload">刷新</el-button>
-          <el-button v-if="can('approval.diagnostics.read')" @click="scanActions()">扫描旧同步动作</el-button>
+          <el-button text type="primary" @click="refresh">刷新</el-button>
           <el-button v-if="can('approval.definition.design')" type="primary" @click="newVisible = true">新建流程</el-button>
         </div>
       </div>
     </template>
+    <DefinitionCategoryFilter v-model="categorySelection" :categories="categories.data.value ?? []" />
     <DefinitionTable :definitions="definitions ?? []" :loading="loading" :can-design="can('approval.definition.design')" @design="design" @versions="showVersions" />
-    <section v-if="scan">
-      <p>本页扫描 {{ scan.definitionsScanned }} 个发布版本，共 {{ scan.totalDefinitions }} 个；扫描只读，不改变旧流程。</p>
-      <el-table :data="scan.findings" size="small">
-        <el-table-column prop="key" label="流程" /><el-table-column prop="version" label="版本" />
-        <el-table-column prop="nodeId" label="节点" /><el-table-column prop="actionType" label="动作" />
-        <el-table-column prop="reason" label="需处置原因" /><el-table-column prop="runningInstances" label="在途数量" />
-      </el-table>
-      <el-pagination :current-page="scan.page" :page-size="scan.pageSize" :total="scan.totalDefinitions" layout="prev, pager, next" @current-change="scanActions" />
-    </section>
   </el-card>
 
   <NewDefinitionDialog v-model:visible="newVisible" :existing-keys="existingKeys" @create="(key, name) => design(key, { name })" />
   <DefinitionVersionsDrawer v-if="versionsOf && versionsVisible" v-model:visible="versionsVisible" :flow-key="versionsOf.key"
     :can-design="can('approval.definition.design')"
-    @changed="reload"
+    @changed="refresh"
     @edit-from="(id) => design(versionsOf!.key, { from: id })" />
 </template>
 

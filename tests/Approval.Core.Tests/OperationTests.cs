@@ -128,29 +128,6 @@ public sealed class OperationTests
     }
 
     [Fact]
-    public async Task ExternalSyncAction_IsRejectedByValidationAndPublish_UnlessExplicitlyOptedIn()
-    {
-        const string external = """
-            {"startNodeId":"start","nodes":{"start":{"type":"Start","name":"Start","next":"act"},
-            "act":{"type":"Action","name":"Http","actions":[{"type":"Http","mode":"Sync","parameters":{"url":"https://api.example.com"}}],"next":"end"},
-            "end":{"type":"End","name":"End"}}}
-            """;
-        await using var host = new TestHost(o => o.AllowSynchronousExternalActions = false);
-        await host.RunAsync(async sp =>
-        {
-            var service = sp.GetRequiredService<ApprovalDefinitionService>();
-            var errors = await service.ValidateAsync(Approval.Core.Definitions.FlowDefinition.Parse(external));
-            Assert.Contains(errors, e => e.Contains("同步外部副作用"));
-            Assert.DoesNotContain(await service.ValidateAsync(Approval.Core.Definitions.FlowDefinition.Parse(external.Replace("Sync", "Async"))), e => e.Contains("同步外部副作用"));
-        });
-        var error = await Assert.ThrowsAsync<ApprovalException>(() => host.PublishAsync("external", external));
-        Assert.Equal(ApprovalErrorCode.InvalidDefinition, error.Code);
-        await using var legacy = new TestHost(o => o.AllowSynchronousExternalActions = true);
-        await legacy.PublishAsync("external", external);
-        await host.RunAsync(async sp => Assert.Equal(0, await sp.GetRequiredService<TestDbContext>().Set<ApprovalDefinition>().CountAsync()));
-    }
-
-    [Fact]
     public async Task CancellationBeforeCommitRollsBack_AndAfterCommitCannotUndoSuccess()
     {
         await using var host = new TestHost(); await host.PublishAsync("doc", Flow);
@@ -179,18 +156,4 @@ public sealed class OperationTests
         Assert.Single(host.Notifier.Notifications);
     }
 
-    [Fact]
-    public async Task ExistingSlotBackfill_IsExplicitIdempotentAndDoesNotModifyInstance()
-    {
-        await using var host = new TestHost(); await host.PublishAsync("doc", Flow); var instance = await host.StartAsync("doc", "one", "alice");
-        await host.RunAsync(sp => sp.GetRequiredService<TestDbContext>().Set<ApprovalBusinessSlot>().ExecuteDeleteAsync());
-        await host.RunAsync(async sp =>
-        {
-            var db = sp.GetRequiredService<TestDbContext>();
-            var preview = await Approval.Core.Persistence.ApprovalBusinessSlotBackfill.RunAsync(db); Assert.True(preview.Ready); Assert.Equal(1, preview.Missing); Assert.Equal(0, preview.Changed);
-            Assert.Equal(1, (await Approval.Core.Persistence.ApprovalBusinessSlotBackfill.RunAsync(db, apply: true)).Changed);
-            Assert.Equal(0, (await Approval.Core.Persistence.ApprovalBusinessSlotBackfill.RunAsync(db, apply: true)).Changed);
-        });
-        Assert.Equal(InstanceStatus.Running, (await host.GetInstanceAsync(instance.Id)).Status);
-    }
 }

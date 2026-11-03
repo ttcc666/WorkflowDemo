@@ -11,6 +11,7 @@ internal sealed class ApprovalTransactionState
     public bool DeferredRead;
     public bool Serializable;
     public bool RequireOperationId, SystemActor;
+    public bool AllowLogDeletion;
     public int ExtensionDepth;
     public int ExtensionCommitDepth;
     public Guid? InstanceId, DefinitionId;
@@ -86,8 +87,8 @@ internal sealed class ApprovalUnitOfWork(ApprovalDbContext db) : IApprovalUnitOf
         if (State.OperationSeed is null) State.Definitions.Clear();
         State.InstanceId = null; State.DefinitionId = null; State.IdCounters.Clear();
         State.Callbacks.Clear();
-        ApprovalTransactionLease ownedTransaction;
-        try { ownedTransaction = await ApprovalTransactionLease.BeginAsync(db, State.DeferredRead, ct); }
+        ApprovalTransaction ownedTransaction;
+        try { ownedTransaction = await ApprovalTransaction.BeginAsync(db, State.DeferredRead, ct); }
         catch { State.Active = false; State.Failed = true; throw; }
         await using var lifetime = ownedTransaction;
         var transaction = ownedTransaction.Transaction;
@@ -110,7 +111,7 @@ internal sealed class ApprovalUnitOfWork(ApprovalDbContext db) : IApprovalUnitOf
         await ownedTransaction.DisposeAsync();
         // Commit has completed. Cancellation of the original caller cannot roll it back.
         var callbacks = State.Callbacks.ToArray(); State.Callbacks.Clear();
-        foreach (var callback in callbacks) { try { await callback(); } catch { /* Legacy callbacks are best effort. Reliable delivery uses Outbox. */ } }
+        foreach (var callback in callbacks) { try { await callback(); } catch { /* In-process post-commit callbacks are best effort. Reliable delivery uses Outbox. */ } }
         return result;
     }
     private sealed class OnDispose(Action action) : IDisposable { public void Dispose() => action(); }

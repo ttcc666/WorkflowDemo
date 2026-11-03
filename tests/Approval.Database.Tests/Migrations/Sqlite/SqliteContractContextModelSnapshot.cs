@@ -74,21 +74,15 @@ namespace Approval.Database.Tests.Migrations.Sqlite
                         .HasMaxLength(30)
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("TenantId")
-                        .IsConcurrencyToken()
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("TEXT");
-
                     b.Property<string>("UserId")
                         .HasMaxLength(256)
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("TenantId", "ArchivedAt");
+                    b.HasIndex("ArchivedAt");
 
-                    b.HasIndex("TenantId", "Target", "ResourceId", "SourceVersion")
+                    b.HasIndex("Target", "ResourceId", "SourceVersion")
                         .IsUnique();
 
                     b.ToTable("ApprovalArchives", (string)null);
@@ -118,18 +112,12 @@ namespace Approval.Database.Tests.Migrations.Sqlite
                         .HasMaxLength(64)
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("TenantId")
-                        .IsConcurrencyToken()
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("TEXT");
-
                     b.HasKey("Id");
 
-                    b.HasIndex("TenantId", "InstanceId")
+                    b.HasIndex("InstanceId")
                         .IsUnique();
 
-                    b.HasIndex("TenantId", "LookupHash")
+                    b.HasIndex("LookupHash")
                         .IsUnique();
 
                     b.ToTable("ApprovalBusinessSlots", (string)null);
@@ -165,25 +153,48 @@ namespace Approval.Database.Tests.Migrations.Sqlite
                     b.Property<int>("Round")
                         .HasColumnType("INTEGER");
 
-                    b.Property<string>("TenantId")
-                        .IsConcurrencyToken()
+                    b.HasKey("Id");
+
+                    b.HasIndex("InstanceId");
+
+                    b.HasIndex("AssigneeKind", "AssigneeValue");
+
+                    b.ToTable("ApprovalCarbonCopies", (string)null);
+                });
+
+            modelBuilder.Entity("Approval.Core.Domain.ApprovalCarbonCopyRead", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("CarbonCopyId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("ReadAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UserId")
                         .IsRequired()
-                        .HasMaxLength(64)
+                        .HasMaxLength(100)
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("TenantId", "InstanceId");
+                    b.HasIndex("CarbonCopyId", "UserId")
+                        .IsUnique();
 
-                    b.HasIndex("TenantId", "AssigneeKind", "AssigneeValue");
-
-                    b.ToTable("ApprovalCarbonCopies", (string)null);
+                    b.ToTable("ApprovalCarbonCopyReads", (string)null);
                 });
 
             modelBuilder.Entity("Approval.Core.Domain.ApprovalDefinition", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Category")
+                        .HasMaxLength(100)
                         .HasColumnType("TEXT");
 
                     b.Property<DateTime>("CreatedAt")
@@ -206,18 +217,14 @@ namespace Approval.Database.Tests.Migrations.Sqlite
                         .HasMaxLength(200)
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("TenantId")
-                        .IsConcurrencyToken()
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("TEXT");
-
                     b.Property<int>("Version")
                         .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("TenantId", "Key", "Version")
+                    b.HasIndex("Category");
+
+                    b.HasIndex("Key", "Version")
                         .IsUnique();
 
                     b.ToTable("ApprovalDefinitions", (string)null);
@@ -264,22 +271,16 @@ namespace Approval.Database.Tests.Migrations.Sqlite
                     b.Property<Guid?>("SourceDefinitionId")
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("TenantId")
-                        .IsConcurrencyToken()
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("TEXT");
-
                     b.Property<int?>("Version")
                         .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("TenantId", "DefinitionId");
+                    b.HasIndex("DefinitionId");
 
-                    b.HasIndex("TenantId", "SourceDefinitionId");
+                    b.HasIndex("SourceDefinitionId");
 
-                    b.HasIndex("TenantId", "Key", "Revision")
+                    b.HasIndex("Key", "Revision")
                         .IsUnique();
 
                     b.ToTable("ApprovalDefinitionAudits", (string)null);
@@ -292,6 +293,10 @@ namespace Approval.Database.Tests.Migrations.Sqlite
                         .HasColumnType("TEXT");
 
                     b.Property<Guid?>("ActiveDefinitionId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Category")
+                        .HasMaxLength(100)
                         .HasColumnType("TEXT");
 
                     b.Property<string>("DraftJson")
@@ -326,12 +331,6 @@ namespace Approval.Database.Tests.Migrations.Sqlite
                         .IsConcurrencyToken()
                         .HasColumnType("INTEGER");
 
-                    b.Property<string>("TenantId")
-                        .IsConcurrencyToken()
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("TEXT");
-
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("TEXT");
 
@@ -342,11 +341,13 @@ namespace Approval.Database.Tests.Migrations.Sqlite
 
                     b.HasKey("Id");
 
-                    b.HasIndex("TenantId", "ActiveDefinitionId");
+                    b.HasIndex("ActiveDefinitionId");
 
-                    b.HasIndex("TenantId", "DraftSourceDefinitionId");
+                    b.HasIndex("Category");
 
-                    b.HasIndex("TenantId", "Key")
+                    b.HasIndex("DraftSourceDefinitionId");
+
+                    b.HasIndex("Key")
                         .IsUnique();
 
                     b.ToTable("ApprovalDefinitionManagement", (string)null);
@@ -374,12 +375,6 @@ namespace Approval.Database.Tests.Migrations.Sqlite
                         .IsRequired()
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("TenantId")
-                        .IsConcurrencyToken()
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("TEXT");
-
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("TEXT");
 
@@ -390,7 +385,7 @@ namespace Approval.Database.Tests.Migrations.Sqlite
 
                     b.HasKey("Id");
 
-                    b.HasIndex("TenantId", "UserId", "UpdatedAt");
+                    b.HasIndex("UserId", "UpdatedAt");
 
                     b.ToTable("ApprovalDrafts", (string)null);
                 });
@@ -440,12 +435,6 @@ namespace Approval.Database.Tests.Migrations.Sqlite
                         .HasMaxLength(200)
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("TenantId")
-                        .IsConcurrencyToken()
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("TEXT");
-
                     b.Property<DateTime>("UploadedAt")
                         .HasColumnType("TEXT");
 
@@ -456,13 +445,13 @@ namespace Approval.Database.Tests.Migrations.Sqlite
 
                     b.HasKey("Id");
 
-                    b.HasIndex("TenantId", "ArchiveId");
+                    b.HasIndex("ArchiveId");
 
-                    b.HasIndex("TenantId", "DraftId");
+                    b.HasIndex("DraftId");
 
-                    b.HasIndex("TenantId", "InstanceId");
+                    b.HasIndex("InstanceId");
 
-                    b.HasIndex("TenantId", "UploadedAt");
+                    b.HasIndex("UploadedAt");
 
                     b.ToTable("ApprovalFiles", (string)null);
                 });
@@ -487,9 +476,6 @@ namespace Approval.Database.Tests.Migrations.Sqlite
                         .HasMaxLength(64)
                         .HasColumnType("TEXT");
 
-                    b.Property<Guid?>("LeaseId")
-                        .HasColumnType("TEXT");
-
                     b.Property<DateTime>("NextAttemptAt")
                         .HasColumnType("TEXT");
 
@@ -506,18 +492,12 @@ namespace Approval.Database.Tests.Migrations.Sqlite
                         .HasMaxLength(200)
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("TenantId")
-                        .IsConcurrencyToken()
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("TEXT");
-
                     b.HasKey("Id");
 
-                    b.HasIndex("TenantId", "FileId")
+                    b.HasIndex("FileId")
                         .IsUnique();
 
-                    b.HasIndex("TenantId", "Status", "NextAttemptAt");
+                    b.HasIndex("Status", "NextAttemptAt");
 
                     b.ToTable("ApprovalFileDeletions", (string)null);
                 });
@@ -586,27 +566,21 @@ namespace Approval.Database.Tests.Migrations.Sqlite
                         .HasMaxLength(20)
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("TenantId")
-                        .IsConcurrencyToken()
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("TEXT");
-
                     b.Property<string>("Title")
                         .HasMaxLength(500)
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("TenantId", "DefinitionId");
+                    b.HasIndex("DefinitionId");
 
-                    b.HasIndex("TenantId", "BusinessType", "BusinessKey");
+                    b.HasIndex("BusinessType", "BusinessKey");
 
-                    b.HasIndex("TenantId", "InitiatorId", "CreatedAt");
+                    b.HasIndex("InitiatorId", "CreatedAt");
 
-                    b.HasIndex("TenantId", "InitiatorId", "Status");
+                    b.HasIndex("InitiatorId", "Status");
 
-                    b.HasIndex("TenantId", "Status", "CreatedAt");
+                    b.HasIndex("Status", "CreatedAt");
 
                     b.ToTable("ApprovalInstances", (string)null);
                 });
@@ -650,18 +624,15 @@ namespace Approval.Database.Tests.Migrations.Sqlite
                     b.Property<int>("Sequence")
                         .HasColumnType("INTEGER");
 
-                    b.Property<string>("TenantId")
-                        .IsConcurrencyToken()
-                        .IsRequired()
-                        .HasMaxLength(64)
+                    b.Property<Guid?>("TaskId")
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("TenantId", "InstanceId", "Sequence")
+                    b.HasIndex("InstanceId", "Sequence")
                         .IsUnique();
 
-                    b.HasIndex("TenantId", "OperatorId", "Action");
+                    b.HasIndex("OperatorId", "Action");
 
                     b.ToTable("ApprovalLogs", (string)null);
                 });
@@ -706,15 +677,9 @@ namespace Approval.Database.Tests.Migrations.Sqlite
                         .HasMaxLength(30)
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("TenantId")
-                        .IsConcurrencyToken()
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("TEXT");
-
                     b.HasKey("Id");
 
-                    b.HasIndex("TenantId", "JobId", "Batch")
+                    b.HasIndex("JobId", "Batch")
                         .IsUnique();
 
                     b.ToTable("ApprovalMaintenanceAudits", (string)null);
@@ -748,12 +713,6 @@ namespace Approval.Database.Tests.Migrations.Sqlite
                         .HasMaxLength(64)
                         .HasColumnType("TEXT");
 
-                    b.Property<Guid?>("LeaseId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime?>("LeaseUntil")
-                        .HasColumnType("TEXT");
-
                     b.Property<string>("Mode")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -780,15 +739,9 @@ namespace Approval.Database.Tests.Migrations.Sqlite
                         .HasMaxLength(30)
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("TenantId")
-                        .IsConcurrencyToken()
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("TEXT");
-
                     b.HasKey("Id");
 
-                    b.HasIndex("TenantId", "Status", "CreatedAt");
+                    b.HasIndex("Status", "CreatedAt");
 
                     b.ToTable("ApprovalMaintenanceJobs", (string)null);
                 });
@@ -825,12 +778,6 @@ namespace Approval.Database.Tests.Migrations.Sqlite
                     b.Property<DateTime?>("ReadAt")
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("TenantId")
-                        .IsConcurrencyToken()
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("TEXT");
-
                     b.Property<string>("Title")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -843,9 +790,9 @@ namespace Approval.Database.Tests.Migrations.Sqlite
 
                     b.HasKey("Id");
 
-                    b.HasIndex("TenantId", "InstanceId");
+                    b.HasIndex("InstanceId");
 
-                    b.HasIndex("TenantId", "UserId", "IsRead", "CreatedAt");
+                    b.HasIndex("UserId", "IsRead", "CreatedAt");
 
                     b.ToTable("ApprovalMessages", (string)null);
                 });
@@ -909,15 +856,9 @@ namespace Approval.Database.Tests.Migrations.Sqlite
                         .HasMaxLength(2000)
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("TenantId")
-                        .IsConcurrencyToken()
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("TEXT");
-
                     b.HasKey("Id");
 
-                    b.HasIndex("TenantId", "LookupHash")
+                    b.HasIndex("LookupHash")
                         .IsUnique();
 
                     b.ToTable("ApprovalOperations", (string)null);
@@ -958,9 +899,6 @@ namespace Approval.Database.Tests.Migrations.Sqlite
                         .HasMaxLength(2000)
                         .HasColumnType("TEXT");
 
-                    b.Property<Guid?>("LeaseId")
-                        .HasColumnType("TEXT");
-
                     b.Property<int>("MaxAttempts")
                         .HasColumnType("INTEGER");
 
@@ -985,17 +923,11 @@ namespace Approval.Database.Tests.Migrations.Sqlite
                         .HasMaxLength(100)
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("TenantId")
-                        .IsConcurrencyToken()
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("TEXT");
-
                     b.HasKey("Id");
 
-                    b.HasIndex("TenantId", "InstanceId");
+                    b.HasIndex("InstanceId");
 
-                    b.HasIndex("TenantId", "Status", "NextAttemptAt");
+                    b.HasIndex("Status", "NextAttemptAt");
 
                     b.ToTable("ApprovalOutbox", (string)null);
                 });
@@ -1027,15 +959,9 @@ namespace Approval.Database.Tests.Migrations.Sqlite
                         .HasMaxLength(30)
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("TenantId")
-                        .IsConcurrencyToken()
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("TEXT");
-
                     b.HasKey("Id");
 
-                    b.HasIndex("TenantId", "Target", "ResourceId")
+                    b.HasIndex("Target", "ResourceId")
                         .IsUnique();
 
                     b.ToTable("ApprovalRetentionHolds", (string)null);
@@ -1114,21 +1040,15 @@ namespace Approval.Database.Tests.Migrations.Sqlite
                         .HasMaxLength(20)
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("TenantId")
-                        .IsConcurrencyToken()
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("TEXT");
-
                     b.HasKey("Id");
 
-                    b.HasIndex("TenantId", "HandledBy");
+                    b.HasIndex("HandledBy");
 
-                    b.HasIndex("TenantId", "InstanceId");
+                    b.HasIndex("InstanceId");
 
-                    b.HasIndex("TenantId", "Status", "NextRemindAt");
+                    b.HasIndex("Status", "NextRemindAt");
 
-                    b.HasIndex("TenantId", "AssigneeKind", "AssigneeValue", "Status");
+                    b.HasIndex("AssigneeKind", "AssigneeValue", "Status");
 
                     b.ToTable("ApprovalTasks", (string)null);
                 });
@@ -1137,8 +1057,7 @@ namespace Approval.Database.Tests.Migrations.Sqlite
                 {
                     b.HasOne("Approval.Core.Domain.ApprovalInstance", null)
                         .WithMany()
-                        .HasForeignKey("TenantId", "InstanceId")
-                        .HasPrincipalKey("TenantId", "Id")
+                        .HasForeignKey("InstanceId")
                         .OnDelete(DeleteBehavior.NoAction)
                         .IsRequired();
                 });
@@ -1147,8 +1066,16 @@ namespace Approval.Database.Tests.Migrations.Sqlite
                 {
                     b.HasOne("Approval.Core.Domain.ApprovalInstance", null)
                         .WithMany()
-                        .HasForeignKey("TenantId", "InstanceId")
-                        .HasPrincipalKey("TenantId", "Id")
+                        .HasForeignKey("InstanceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Approval.Core.Domain.ApprovalCarbonCopyRead", b =>
+                {
+                    b.HasOne("Approval.Core.Domain.ApprovalCarbonCopy", null)
+                        .WithMany()
+                        .HasForeignKey("CarbonCopyId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
@@ -1157,14 +1084,12 @@ namespace Approval.Database.Tests.Migrations.Sqlite
                 {
                     b.HasOne("Approval.Core.Domain.ApprovalDefinition", null)
                         .WithMany()
-                        .HasForeignKey("TenantId", "DefinitionId")
-                        .HasPrincipalKey("TenantId", "Id")
+                        .HasForeignKey("DefinitionId")
                         .OnDelete(DeleteBehavior.NoAction);
 
                     b.HasOne("Approval.Core.Domain.ApprovalDefinition", null)
                         .WithMany()
-                        .HasForeignKey("TenantId", "SourceDefinitionId")
-                        .HasPrincipalKey("TenantId", "Id")
+                        .HasForeignKey("SourceDefinitionId")
                         .OnDelete(DeleteBehavior.NoAction);
                 });
 
@@ -1172,14 +1097,12 @@ namespace Approval.Database.Tests.Migrations.Sqlite
                 {
                     b.HasOne("Approval.Core.Domain.ApprovalDefinition", null)
                         .WithMany()
-                        .HasForeignKey("TenantId", "ActiveDefinitionId")
-                        .HasPrincipalKey("TenantId", "Id")
+                        .HasForeignKey("ActiveDefinitionId")
                         .OnDelete(DeleteBehavior.NoAction);
 
                     b.HasOne("Approval.Core.Domain.ApprovalDefinition", null)
                         .WithMany()
-                        .HasForeignKey("TenantId", "DraftSourceDefinitionId")
-                        .HasPrincipalKey("TenantId", "Id")
+                        .HasForeignKey("DraftSourceDefinitionId")
                         .OnDelete(DeleteBehavior.NoAction);
                 });
 
@@ -1187,20 +1110,17 @@ namespace Approval.Database.Tests.Migrations.Sqlite
                 {
                     b.HasOne("Approval.Core.Domain.ApprovalArchiveRecord", null)
                         .WithMany()
-                        .HasForeignKey("TenantId", "ArchiveId")
-                        .HasPrincipalKey("TenantId", "Id")
+                        .HasForeignKey("ArchiveId")
                         .OnDelete(DeleteBehavior.NoAction);
 
                     b.HasOne("Approval.Core.Domain.ApprovalDraft", null)
                         .WithMany()
-                        .HasForeignKey("TenantId", "DraftId")
-                        .HasPrincipalKey("TenantId", "Id")
+                        .HasForeignKey("DraftId")
                         .OnDelete(DeleteBehavior.NoAction);
 
                     b.HasOne("Approval.Core.Domain.ApprovalInstance", null)
                         .WithMany()
-                        .HasForeignKey("TenantId", "InstanceId")
-                        .HasPrincipalKey("TenantId", "Id")
+                        .HasForeignKey("InstanceId")
                         .OnDelete(DeleteBehavior.NoAction);
                 });
 
@@ -1208,8 +1128,7 @@ namespace Approval.Database.Tests.Migrations.Sqlite
                 {
                     b.HasOne("Approval.Core.Domain.ApprovalDefinition", null)
                         .WithMany()
-                        .HasForeignKey("TenantId", "DefinitionId")
-                        .HasPrincipalKey("TenantId", "Id")
+                        .HasForeignKey("DefinitionId")
                         .OnDelete(DeleteBehavior.NoAction)
                         .IsRequired();
                 });
@@ -1218,8 +1137,7 @@ namespace Approval.Database.Tests.Migrations.Sqlite
                 {
                     b.HasOne("Approval.Core.Domain.ApprovalInstance", null)
                         .WithMany("Logs")
-                        .HasForeignKey("TenantId", "InstanceId")
-                        .HasPrincipalKey("TenantId", "Id")
+                        .HasForeignKey("InstanceId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
@@ -1228,8 +1146,7 @@ namespace Approval.Database.Tests.Migrations.Sqlite
                 {
                     b.HasOne("Approval.Core.Domain.ApprovalInstance", null)
                         .WithMany()
-                        .HasForeignKey("TenantId", "InstanceId")
-                        .HasPrincipalKey("TenantId", "Id")
+                        .HasForeignKey("InstanceId")
                         .OnDelete(DeleteBehavior.NoAction);
                 });
 
@@ -1237,8 +1154,7 @@ namespace Approval.Database.Tests.Migrations.Sqlite
                 {
                     b.HasOne("Approval.Core.Domain.ApprovalInstance", null)
                         .WithMany()
-                        .HasForeignKey("TenantId", "InstanceId")
-                        .HasPrincipalKey("TenantId", "Id")
+                        .HasForeignKey("InstanceId")
                         .OnDelete(DeleteBehavior.NoAction);
                 });
 
@@ -1246,8 +1162,7 @@ namespace Approval.Database.Tests.Migrations.Sqlite
                 {
                     b.HasOne("Approval.Core.Domain.ApprovalInstance", null)
                         .WithMany("Tasks")
-                        .HasForeignKey("TenantId", "InstanceId")
-                        .HasPrincipalKey("TenantId", "Id")
+                        .HasForeignKey("InstanceId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
