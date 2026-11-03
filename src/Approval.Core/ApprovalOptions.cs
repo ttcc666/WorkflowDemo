@@ -3,7 +3,7 @@ namespace Approval.Core;
 public sealed class ApprovalOptions
 {
     public ApprovalBackgroundOptions Background { get; } = new();
-    /// <summary>严格模式要求提交标识；默认 false 是旧客户端过渡模式，不提供无键请求防重保障。</summary>
+    /// <summary>严格模式要求提交标识；默认 false 允许无键调用，不提供请求级防重保障。生产部署建议开启。</summary>
     public bool RequireOperationId { get; set; }
     public TimeSpan CommitVerificationTimeout { get; set; } = TimeSpan.FromSeconds(10);
     public TimeSpan PermissionTimeout { get; set; } = TimeSpan.FromSeconds(5);

@@ -1,5 +1,7 @@
 # 第三轮审批边界改造报告
 
+本文记录第三轮提交的实际结果。RC 阶段根据项目未发布、无生产历史数据的事实，删除了旧维护字段与迁移残留，直接修正 Scope 命名；本文关于保留 ArchiveId／DeletionPending、旧参数名称和旧迁移的说明不代表当前要求。当前状态与验证见 [RC 报告](rc-report.md)。
+
 日期：2026-11-03。基线：`cdb25539da587cea33f2fd50324e9c5f3f2e77a1`。目标分支：`codex/engineering-extensibility`。本地完整验证已成功，结果如下；最终 Commit SHA 与匹配 HEAD 的 CI 链接由交付回复给出。
 
 ## 改造结果与兼容性

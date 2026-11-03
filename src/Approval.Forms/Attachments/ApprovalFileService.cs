@@ -93,8 +93,7 @@ public sealed class ApprovalFileService(
     public async Task<(ApprovalFile File, Stream Content)?> OpenAsync(Guid fileId, ApprovalViewer viewer, CancellationToken ct = default)
     {
         var file = await _db.Set<ApprovalFile>().AsNoTracking().FirstOrDefaultAsync(f => f.Id == fileId, ct);
-        if (file is null || file.DeletionPending) return null;
-        if (file.ArchiveId is not null) return null; // Legacy archives are host-owned.
+        if (file is null) return null;
         await _authorization.RequireAsync(Approval.Core.Abstractions.ApprovalPermissions.FileRead, new() { FileId = fileId }, viewer.UserId, ct);
         viewer = await _authorization.ViewerAsync(viewer, file.InstanceId, ct);
         if (!await CanDownloadAsync(file, viewer, ct)) return null;
@@ -160,7 +159,7 @@ public sealed class ApprovalFileService(
     }
 
     private static bool Usable(ApprovalFile file, string userId, Guid? instanceId, Guid? draftId) =>
-        !file.DeletionPending && file.ArchiveId is null && (
+        (
         (instanceId is not null && file.InstanceId == instanceId)
         || (file.UploadedBy == userId && file.InstanceId is null && (file.DraftId is null || file.DraftId == draftId)));
 

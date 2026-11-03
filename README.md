@@ -1,6 +1,6 @@
 # Approval Workflow
 
-一个轻量、可嵌入 ASP.NET Core 业务系统的通用审批引擎，基于 .NET 10 / EF Core。当前版本 **0.3.0**。
+一个轻量、可嵌入 ASP.NET Core 业务系统的通用审批引擎，基于 .NET 10 / EF Core。当前开发版本 **0.3.0**，尚未正式发布。
 
 支持流程定义与不可变版本、或签/会签/依次审批、条件与并行汇聚、转交/加签、退回与重新提交、撤回/终止、抄送及已读、审计、查询、事务幂等和 Outbox。用户、组织、认证、授权、业务数据、通知渠道和实际文件存储由宿主提供。
 
@@ -74,5 +74,6 @@ Forms 保留动态字段、公式、明细、字段权限、规范化、草稿�
 - [数据库验证](docs/database-validation.md)、[包和契约](docs/contracts-and-release.md)
 - [本轮实际交付报告](docs/round2-report.md)
 - [第三轮写边界与宿主集成报告](docs/round3-report.md)
+- [RC 最终验收报告](docs/rc-report.md)
 
 在仓库根目录执行 `pwsh -NoProfile -File ./eng/verify.ps1`。三个服务数据库由 `eng/verify-databases.ps1` 在独立测试容器中验证；SQLite 纳入默认后端测试。发布验证会打包四个 NuGet 包及 npm 包，复制独立消费者，禁止消费者引用框架源码，验证包摘要并实际构建/运行。

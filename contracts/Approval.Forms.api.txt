@@ -12,12 +12,10 @@ Approval.Forms.ApprovalFormsServiceCollectionExtensions
   Method Microsoft.Extensions.DependencyInjection.IServiceCollection AddApprovalForms(Microsoft.Extensions.DependencyInjection.IServiceCollection, System.Action`1[Approval.Forms.Runtime.ApprovalFormOptions]) [return=NotNull/NotNull; args=NotNull/NotNull,Nullable/Nullable<NotNull/NotNull> default=null]
 Approval.Forms.Attachments.ApprovalFile
   Constructor Void .ctor() [args=]
-  Property Boolean DeletionPending [NotNull/NotNull]
   Property Int64 ConcurrencyStamp [NotNull/NotNull]
   Property Int64 Size [NotNull/NotNull]
   Property System.DateTime UploadedAt [NotNull/NotNull]
   Property System.Guid Id [NotNull/NotNull]
-  Property System.Nullable`1[System.Guid] ArchiveId [Nullable/Nullable]
   Property System.Nullable`1[System.Guid] DraftId [Nullable/Nullable]
   Property System.Nullable`1[System.Guid] InstanceId [Nullable/Nullable]
   Property System.String ContentType [NotNull/NotNull]

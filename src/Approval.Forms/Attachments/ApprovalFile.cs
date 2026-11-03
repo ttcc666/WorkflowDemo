@@ -25,7 +25,5 @@ public class ApprovalFile : Approval.Core.Abstractions.IApprovalTrackedRevision
     public DateTime UploadedAt { get; set; }
     public Guid? InstanceId { get; set; }
     public Guid? DraftId { get; set; }
-    public Guid? ArchiveId { get; set; }
-    public bool DeletionPending { get; set; }
     public long ConcurrencyStamp { get; set; }
 }

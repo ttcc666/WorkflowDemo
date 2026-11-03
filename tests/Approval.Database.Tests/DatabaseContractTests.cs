@@ -12,7 +12,7 @@ public sealed class DatabaseFixture : IAsyncLifetime
     public static string SqlitePath { get; } = Path.Combine(Path.GetTempPath(), $"approval-contract-{Guid.NewGuid():N}.db");
     internal DbContext CreateStorage() => new DatabaseStorageContext(Provider);
 
-    public ContractDbContext Create(string tenant = "database-tests") => Provider switch
+    public ContractDbContext Create() => Provider switch
     {
         "MySql" => new MySqlContractContext(),
         "SqlServer" => new SqlServerContractContext(),
@@ -75,7 +75,7 @@ public sealed partial class DatabaseContractTests(DatabaseFixture fixture) : ICl
     private async Task ClearDataAsync()
     {
         await using var db = fixture.Create(); await db.Database.OpenConnectionAsync();
-        foreach (var table in new[] { "CarbonCopyReads", "MaintenanceAudits", "MaintenanceJobs", "RetentionHolds", "FileDeletions", "DefinitionAudits", "DefinitionManagement", "Operations", "BusinessSlots", "Files", "Archives", "Logs", "Tasks", "Messages", "Outbox", "CarbonCopies", "Instances", "Drafts", "Definitions" })
+        foreach (var table in new[] { "CarbonCopyReads", "DefinitionAudits", "DefinitionManagement", "Operations", "BusinessSlots", "Files", "Logs", "Tasks", "Messages", "Outbox", "CarbonCopies", "Instances", "Drafts", "Definitions" })
         {
             await using var command = db.Database.GetDbConnection().CreateCommand();
             var name = "Approval" + table;
@@ -109,7 +109,7 @@ public sealed partial class DatabaseContractTests(DatabaseFixture fixture) : ICl
         await ClearDataAsync();
         await using var db = fixture.Create();
         var migrations = (await db.Database.GetAppliedMigrationsAsync()).ToArray();
-        Assert.Collection(migrations, first => Assert.EndsWith("_InitialApproval", first), boundary => Assert.EndsWith("_EmbeddedEngineBoundary", boundary));
+        Assert.EndsWith("_InitialApproval", Assert.Single(migrations));
         Assert.False(db.Database.HasPendingModelChanges());
         var migrator = db.GetService<IMigrator>();
         await migrator.MigrateAsync(Migration.InitialDatabase);

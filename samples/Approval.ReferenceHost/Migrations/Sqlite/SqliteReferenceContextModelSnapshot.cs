@@ -695,9 +695,6 @@ namespace Approval.ReferenceHost.Migrations.Sqlite
                         .ValueGeneratedOnAdd()
                         .HasColumnType("TEXT");
 
-                    b.Property<Guid?>("ArchiveId")
-                        .HasColumnType("TEXT");
-
                     b.Property<long>("ConcurrencyStamp")
                         .IsConcurrencyToken()
                         .HasColumnType("INTEGER");
@@ -706,9 +703,6 @@ namespace Approval.ReferenceHost.Migrations.Sqlite
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("TEXT");
-
-                    b.Property<bool>("DeletionPending")
-                        .HasColumnType("INTEGER");
 
                     b.Property<Guid?>("DraftId")
                         .HasColumnType("TEXT");

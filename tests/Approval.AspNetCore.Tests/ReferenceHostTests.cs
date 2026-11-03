@@ -36,7 +36,7 @@ public sealed class ReferenceHostTests : IAsyncLifetime
         await first.TwentyRequestsAcross(second);
     }
     [Fact]
-    public async Task ReferenceHost_BackgroundFailureCannotCrossOrBlockAnotherTenant()
+    public async Task ReferenceHost_BackgroundScopeRecoversAfterFailedBatch()
     {
         await using var host = await ReferenceHostScenario.StartAsync(Config);
         await host.BackgroundIsolation();
@@ -75,7 +75,7 @@ public sealed class ReferenceHostTests : IAsyncLifetime
         Assert.Throws<InvalidOperationException>(() => ReferenceApplication.Build(["--environment", "Production"], b => ReferenceHostScenario.ConfigureBuilder(b, config)));
     }
     [Fact]
-    public async Task ReferenceHost_SystemPermissionsAreRestrictedAndTenantScoped()
+    public async Task ReferenceHost_SystemPermissionsRequireKnownWorkerAndAllowedCapability()
     {
         var config = new ConfigurationBuilder().AddJsonFile(Path.Combine(AppContext.BaseDirectory, "ReferenceHostConfiguration.json")).AddInMemoryCollection(Config).Build();
         var provider = new DirectoryPermissionProvider(new ReferenceDirectory(config));
@@ -85,10 +85,9 @@ public sealed class ReferenceHostTests : IAsyncLifetime
         Assert.False(await provider.AuthorizeAsync(new(new("admin", false), ApprovalPermissions.OutboxDispatch, new()), default));
     }
     [Fact]
-    public void ReferenceHost_DirectoryRejectsAmbiguousDisabledAndNonmemberClaims()
+    public void ReferenceHost_DirectoryRejectsAmbiguousMissingAndNonmemberClaims()
     {
         var settings = Config;
-        settings["Directory:Tenants:1:Enabled"] = "false";
         var config = new ConfigurationBuilder().AddJsonFile(Path.Combine(AppContext.BaseDirectory, "ReferenceHostConfiguration.json")).AddInMemoryCollection(settings).Build();
         var directory = new ReferenceDirectory(config);
         var http = new DefaultHttpContext();

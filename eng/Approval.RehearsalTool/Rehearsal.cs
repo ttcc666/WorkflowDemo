@@ -52,22 +52,22 @@ internal static class Rehearsal
             Environment.ExitCode = 1;
         }
     }
-    private static async Task<Guid> Start(RehearsalHost host, string key, string tenant = "alpha") =>
-        (await host.Api(HttpMethod.Post, "/forms/shared/start", tenant + "-alice", key, Body)).GetProperty("instanceId").GetGuid();
-    private static async Task Complete(RehearsalHost host, Guid id, string tenant = "alpha")
+    private static async Task<Guid> Start(RehearsalHost host, string key, string credentialGroup = "alpha") =>
+        (await host.Api(HttpMethod.Post, "/forms/shared/start", credentialGroup + "-alice", key, Body)).GetProperty("instanceId").GetGuid();
+    private static async Task Complete(RehearsalHost host, Guid id, string credentialGroup = "alpha")
     {
         foreach (var reviewer in new[] { "bob", "carol" })
         {
-            var current = await host.Api(HttpMethod.Get, $"/instances/{id}/my-task", tenant + "-" + reviewer);
+            var current = await host.Api(HttpMethod.Get, $"/instances/{id}/my-task", credentialGroup + "-" + reviewer);
             var task = current.GetProperty("task").GetProperty("id").GetGuid();
-            await host.Api(HttpMethod.Post, $"/tasks/{task}/approve", tenant + "-" + reviewer, "approve-" + task, new { comment = "restore-verified" }, expected: HttpStatusCode.NoContent);
+            await host.Api(HttpMethod.Post, $"/tasks/{task}/approve", credentialGroup + "-" + reviewer, "approve-" + task, new { comment = "restore-verified" }, expected: HttpStatusCode.NoContent);
         }
-        Check((await host.Api(HttpMethod.Get, $"/instances/{id}", tenant + "-alice")).GetProperty("status").GetString() == "Approved", "OriginalInstanceCompleted");
+        Check((await host.Api(HttpMethod.Get, $"/instances/{id}", credentialGroup + "-alice")).GetProperty("status").GetString() == "Approved", "OriginalInstanceCompleted");
     }
     private static async Task Seed()
     {
         await using var host = await RehearsalHost.Start(Source, Files, true);
-        foreach (var tenant in new[] { "alpha" }) await host.Api(HttpMethod.Post, "/definitions/shared?name=Recovery", tenant + "-admin", "publish", raw: Flow);
+        foreach (var credentialGroup in new[] { "alpha" }) await host.Api(HttpMethod.Post, "/definitions/shared?name=Recovery", credentialGroup + "-admin", "publish", raw: Flow);
         var running = await Start(host, "running"); var second = await Start(host, "second-running");
         var expired = await Start(host, "expired"); await Complete(host, expired);
         var ended = await Start(host, "ended"); await Complete(host, ended);
@@ -92,10 +92,10 @@ internal static class Rehearsal
     private static async Task<string> Snapshot(RehearsalHost host)
     {
         var snapshot = new SortedDictionary<string, object>(StringComparer.Ordinal);
-        foreach (var tenant in new[] { "alpha" })
+        foreach (var credentialGroup in new[] { "alpha" })
         {
-            await using var scope = await host.Scope(tenant); var db = scope.ServiceProvider.GetRequiredService<ReferenceDbContext>();
-            snapshot[tenant + "/Migrations"] = (await db.Database.GetAppliedMigrationsAsync()).ToArray();
+            await using var scope = await host.Scope(); var db = scope.ServiceProvider.GetRequiredService<ReferenceDbContext>();
+            snapshot[credentialGroup + "/Migrations"] = (await db.Database.GetAppliedMigrationsAsync()).ToArray();
             foreach (var entity in db.Model.GetEntityTypes().OrderBy(e => e.Name, StringComparer.Ordinal))
             {
                 var query = (IEnumerable)typeof(DbContext).GetMethod(nameof(DbContext.Set), Type.EmptyTypes)!.MakeGenericMethod(entity.ClrType).Invoke(db, null)!; var rows = new List<string>();
@@ -104,7 +104,7 @@ internal static class Rehearsal
                     var properties = new SortedDictionary<string, object?>(StringComparer.Ordinal); foreach (var p in db.Entry(row).Properties) properties[p.Metadata.Name] = p.CurrentValue;
                     rows.Add(JsonSerializer.Serialize(properties));
                 }
-                rows.Sort(StringComparer.Ordinal); snapshot[tenant + "/" + entity.Name] = rows;
+                rows.Sort(StringComparer.Ordinal); snapshot[credentialGroup + "/" + entity.Name] = rows;
             }
         }
         return JsonSerializer.Serialize(snapshot, RehearsalHost.Json);

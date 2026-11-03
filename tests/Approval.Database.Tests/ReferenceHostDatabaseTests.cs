@@ -44,7 +44,7 @@ public sealed partial class DatabaseContractTests
             await host.SingleHostWorkflow();
         });
     [Fact]
-    public Task ReferenceHost_BackgroundScopesSkipDisabledAndIsolateTenantFailure() =>
+    public Task ReferenceHost_BackgroundScopeRecoversAfterFailedBatch() =>
         RunReferenceHostAsync((host, _) => host.BackgroundIsolation());
     [Fact]
     public Task ReferenceHost_TwentyHttpRequestsAcrossTwoHostsHaveOneProviderResult() =>

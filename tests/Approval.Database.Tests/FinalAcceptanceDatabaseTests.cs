@@ -68,7 +68,7 @@ public sealed partial class DatabaseContractTests
         });
     }
     [Fact]
-    public async Task FinalAcceptance_BulkReassignmentReportsPerInstancePermissionAndKeepsOtherTenant()
+    public async Task FinalAcceptance_BulkReassignmentReportsPerInstancePermissionAndKeepsDeniedInstances()
     {
         var faults = new AtomicFaults(); await using var host = await AtomicHostAsync(faults);
         var allowed = await AtomicStart(host, faults, "first", "first");
@@ -90,7 +90,7 @@ public sealed partial class DatabaseContractTests
         {
             var task = await sp.GetRequiredService<AtomicContractContext>().Set<ApprovalTask>().SingleAsync(t => t.InstanceId == foreign);
             Assert.Equal("bob", task.AssigneeValue); return true;
-        }, tenant: "a");
+        });
         await Assert.ThrowsAsync<InvalidOperationException>(() => AtomicRun(host, "admin", sp => sp.GetRequiredService<IApprovalUnitOfWork>().ExecuteAsync(ct =>
             sp.GetRequiredService<ApprovalEngine>().ReassignUserAsync("bob", "charlie", "admin", "handover", ct))));
     }

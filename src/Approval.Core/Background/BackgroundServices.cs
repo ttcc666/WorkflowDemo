@@ -29,13 +29,13 @@ public sealed class ApprovalOutboxDispatcher(ApprovalBackgroundRunner sweeper)
 
 /// <summary>定时扫描超过时限的待办，逐条交给 <see cref="ApprovalEngine.HandleTimeoutAsync"/> 处理（每条一个作用域，互不影响）。</summary>
 public sealed class ApprovalTimeoutScanner(
-    IApprovalScopeFactory tenants,
+    IApprovalScopeFactory scopes,
     TimeProvider clock,
     ILogger<ApprovalTimeoutScanner> logger,
     ApprovalBackgroundRunner sweeper)
 {
-    public ApprovalTimeoutScanner(IApprovalScopeFactory tenants, ApprovalOptions options, TimeProvider clock,
-        ILogger<ApprovalTimeoutScanner> logger, ApprovalBackgroundRunner sweeper) : this(tenants, clock, logger, sweeper) { }
+    public ApprovalTimeoutScanner(IApprovalScopeFactory scopes, ApprovalOptions options, TimeProvider clock,
+        ILogger<ApprovalTimeoutScanner> logger, ApprovalBackgroundRunner sweeper) : this(scopes, clock, logger, sweeper) { }
     private const int BatchSize = 100;
 
     /// <summary>扫描一次，返回处理的待办数（测试与手动触发时可直接调用）。</summary>
@@ -47,7 +47,7 @@ public sealed class ApprovalTimeoutScanner(
     private async Task<int> ScanHostAsync(CancellationToken ct)
     {
         List<Guid> taskIds;
-        await using (var scope = await tenants.CreateAsync(ct))
+        await using (var scope = await scopes.CreateAsync(ct))
         {
             var db = scope.ServiceProvider.GetRequiredService<ApprovalDbContextAccessor>().Context;
             var now = clock.GetUtcNow().UtcDateTime;
@@ -67,7 +67,7 @@ public sealed class ApprovalTimeoutScanner(
         {
             try
             {
-                await using var scope = await tenants.CreateAsync(ct);
+                await using var scope = await scopes.CreateAsync(ct);
                 if (await scope.ServiceProvider.GetRequiredService<ApprovalEngine>().HandleTimeoutAsync(taskId, ct)) handled++;
             }
             catch (ApprovalException ex) when (ex.Code == ApprovalErrorCode.Conflict)

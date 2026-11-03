@@ -41,7 +41,7 @@ public sealed partial class DatabaseContractTests
     }
 
     [Fact]
-    public async Task Governance_DisabledFlowKeepsOriginalInstanceAndTenantDraftsIndependent()
+    public async Task Governance_DisabledFlowKeepsOriginalInstanceAndOtherDefinitionDraftIndependent()
     {
         var faults = new AtomicFaults(); await using var host = await AtomicHostAsync(faults);
         var id = await AtomicStart(host, faults, "original");

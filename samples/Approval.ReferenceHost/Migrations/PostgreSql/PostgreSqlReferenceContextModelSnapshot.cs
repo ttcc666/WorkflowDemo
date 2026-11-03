@@ -700,9 +700,6 @@ namespace Approval.ReferenceHost.Migrations.PostgreSql
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<Guid?>("ArchiveId")
-                        .HasColumnType("uuid");
-
                     b.Property<long>("ConcurrencyStamp")
                         .IsConcurrencyToken()
                         .HasColumnType("bigint");
@@ -711,9 +708,6 @@ namespace Approval.ReferenceHost.Migrations.PostgreSql
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
-
-                    b.Property<bool>("DeletionPending")
-                        .HasColumnType("boolean");
 
                     b.Property<Guid?>("DraftId")
                         .HasColumnType("uuid");

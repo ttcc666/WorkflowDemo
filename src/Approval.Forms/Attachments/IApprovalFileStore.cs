@@ -53,7 +53,7 @@ public sealed class LocalApprovalFileStore(ApprovalFormOptions options, TimeProv
     /// <summary>存储键来自数据库，仍校验解析后的路径位于根目录内，防止路径穿越。</summary>
     private string PathOf(string key)
     {
-        if (!System.Text.RegularExpressions.Regex.IsMatch(key, "^(?:tenants/[0-9a-f]{64}/)?[0-9]{4}/[0-9]{2}/[0-9a-f]{32}$", System.Text.RegularExpressions.RegexOptions.CultureInvariant))
+        if (!System.Text.RegularExpressions.Regex.IsMatch(key, "^[0-9]{4}/[0-9]{2}/[0-9a-f]{32}$", System.Text.RegularExpressions.RegexOptions.CultureInvariant))
             throw new ApprovalException("无效的存储键");
         var path = Path.GetFullPath(Path.Combine(_root, key));
         if (!path.StartsWith(_root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))

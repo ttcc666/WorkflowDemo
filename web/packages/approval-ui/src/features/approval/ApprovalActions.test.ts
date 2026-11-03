@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest'
-import { createSSRApp, defineComponent, h } from 'vue'
+import { describe, expect, it, vi } from 'vitest'
+import { createSSRApp, h } from 'vue'
 import { renderToString } from 'vue/server-renderer'
+import ElementPlus, { ID_INJECTION_KEY, ZINDEX_INJECTION_KEY } from 'element-plus'
 import { createApprovalClient } from '../../client'
 import ApprovalActions from './ApprovalActions.vue'
 import type { ApprovalTask } from '../../contracts/api'
@@ -15,10 +16,15 @@ async function actions(capabilities: Record<string, boolean>, allowReturn = true
   const app = createSSRApp({ render: () => h(ApprovalActions, {
     myTask: task, capabilities, canWithdraw: false, canTerminate: false, currentUserId: 'bob', initiatorId: 'alice',
     allowReturn, allowAddSign: true, allowTransfer: true, busy: false,
-  }) }).use(client)
-  const slot = defineComponent({ setup: (_, { slots }) => () => h('span', slots.default?.()) })
-  app.component('el-button', slot).component('el-tag', slot).component('el-dialog', defineComponent({ setup: () => () => null }))
-  try { return await renderToString(app) } finally { client.dispose() }
+  }) }).use(client).use(ElementPlus)
+  app.provide(ID_INJECTION_KEY, { prefix: 1024, current: 0 })
+  app.provide(ZINDEX_INJECTION_KEY, { current: 0 })
+  const warnings = vi.spyOn(console, 'warn')
+  try {
+    const html = await renderToString(app)
+    expect(warnings).not.toHaveBeenCalled()
+    return html
+  } finally { warnings.mockRestore(); client.dispose() }
 }
 describe('审批操作的权限能力', () => {
   it('只显示单独允许的动作，未提供能力时拒绝显示', async () => {

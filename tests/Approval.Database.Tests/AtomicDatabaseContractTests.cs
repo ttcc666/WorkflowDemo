@@ -32,7 +32,6 @@ public sealed class AtomicContractContext(DbContextOptions<AtomicContractContext
 }
 internal sealed class AtomicResolver : IApprovalContextResolver
 {
-    public string Tenant { get; set; } = "database-tests";
     public string User { get; set; } = "alice";
     public ApprovalExecutionIdentity Resolve() => new(User);
 }
@@ -173,12 +172,12 @@ public sealed partial class DatabaseContractTests
         }
         return provider;
     }
-    private static async Task<T> AtomicRun<T>(ServiceProvider host, string actor, Func<IServiceProvider, Task<T>> action, string tenant = "database-tests")
+    private static async Task<T> AtomicRun<T>(ServiceProvider host, string actor, Func<IServiceProvider, Task<T>> action)
     {
         await using var scope = host.CreateAsyncScope(); var resolver = (AtomicResolver)scope.ServiceProvider.GetRequiredService<IApprovalContextResolver>();
-        resolver.User = actor; resolver.Tenant = tenant; return await action(scope.ServiceProvider);
+        resolver.User = actor; return await action(scope.ServiceProvider);
     }
-    private static Task<Guid> AtomicStart(ServiceProvider host, AtomicFaults faults, string key, string business = "one", int amount = 1, string tenant = "database-tests") =>
+    private static Task<Guid> AtomicStart(ServiceProvider host, AtomicFaults faults, string key, string business = "one", int amount = 1) =>
         AtomicRun(host, "alice", sp => sp.GetRequiredService<IApprovalCommandExecutor>().ExecuteAsync(
             new("atomic.start", business, key, new { amount }, ApprovalPermissions.InstanceStart, new() { DefinitionKey = "doc", BusinessType = AtomicBusiness.Type, BusinessKey = business }),
             async (fresh, ct) =>
@@ -188,7 +187,7 @@ public sealed partial class DatabaseContractTests
                 var instance = await fresh.GetRequiredService<ApprovalEngine>().StartAsync(new("doc", AtomicBusiness.Type, business, "alice"), ct);
                 faults.OutboxIds.Add(await db.Set<ApprovalOutboxMessage>().Where(m => m.Description == "Submit").Where(m => m.InstanceId == instance.Id).Select(m => m.Id).SingleAsync(ct));
                 return instance.Id;
-            }), tenant);
+            }));
 
     [Fact]
     public async Task AtomicCommands_TwentyConcurrentIdenticalRequestsAcrossTwoHosts_HaveOneCommittedResult()
@@ -224,7 +223,7 @@ public sealed partial class DatabaseContractTests
         var faults = new AtomicFaults(); await using var host = await AtomicHostAsync(faults);
         var a = await AtomicStart(host, faults, "same"); Assert.Equal(a, await AtomicStart(host, faults, "same"));
         ((AtomicPermissions)host.GetRequiredService<IApprovalPermissionProvider>()).Rule = r => r.Permission != ApprovalPermissions.InstanceRead;
-        var error = await Assert.ThrowsAsync<ApprovalException>(() => AtomicStart(host, faults, "same", tenant: "a")); Assert.Equal(ApprovalErrorCode.Forbidden, error.Code);
+        var error = await Assert.ThrowsAsync<ApprovalException>(() => AtomicStart(host, faults, "same")); Assert.Equal(ApprovalErrorCode.Forbidden, error.Code);
         Assert.Equal(1, faults.BusinessCalls);
     }
 

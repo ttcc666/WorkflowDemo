@@ -23,12 +23,12 @@ try {
     Set-ReferenceEnvironment 'Approval__FileRoot' (Join-Path $report 'files')
     Set-ReferenceEnvironment 'Approval__EnableBackgroundServices' 'false'
     $index = 0
-    foreach ($tenant in @('alpha')) {
+    foreach ($credentialGroup in @('alpha')) {
         foreach ($user in @('admin', 'alice', 'bob', 'carol')) {
             $token = [Guid]::NewGuid().ToString('N') + [Guid]::NewGuid().ToString('N')
             Set-ReferenceEnvironment ('Authentication__DemoIdentities__{0}__UserId' -f $index) $user
             Set-ReferenceEnvironment ('Authentication__DemoIdentities__{0}__Token' -f $index) $token
-            Set-ReferenceEnvironment ('APPROVAL_DEMO_{0}_{1}' -f $tenant, $user).ToUpperInvariant() $token
+            Set-ReferenceEnvironment ('APPROVAL_DEMO_{0}_{1}' -f $credentialGroup, $user).ToUpperInvariant() $token
             $index++
         }
     }

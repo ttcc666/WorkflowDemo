@@ -32,7 +32,7 @@ public sealed class InMemoryFileStore : IApprovalFileStore
     }
 }
 
-/// <summary>表单附件：上传限制、提交时校验与绑定、下载权限（含隐藏字段）、草稿、清理。</summary>
+/// <summary>表单附件：上传限制、提交时校验与绑定、下载权限（含隐藏字段）、草稿及存储适配器。</summary>
 public sealed class FileTests : IAsyncLifetime
 {
     /// <summary>审核（dave，可修改发票）→ 抄送（carol，隐藏发票）→ 结束。</summary>

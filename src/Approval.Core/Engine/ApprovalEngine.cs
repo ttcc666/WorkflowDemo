@@ -656,7 +656,7 @@ public sealed partial class ApprovalEngine
         return await _assignees.GetEligibleApproversAsync(actual, actualNode, ct);
     }
 
-    /// <summary>发起前人员预检：校验可信发起人和发起权限，使用当前租户的已发布定义，不创建实例。</summary>
+    /// <summary>发起前人员预检：校验可信发起人和发起权限，使用当前宿主的已发布定义，不创建实例。</summary>
     public async Task<IReadOnlyList<string>> GetStartEligibleApproversAsync(StartApprovalRequest request, string nodeId, CancellationToken ct = default)
     {
         await _authorization.RequireAsync(ApprovalPermissions.InstanceStart, new() { DefinitionKey = request.DefinitionKey,

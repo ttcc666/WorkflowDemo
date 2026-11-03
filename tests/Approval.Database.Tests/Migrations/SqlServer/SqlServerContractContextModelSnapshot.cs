@@ -700,9 +700,6 @@ namespace Approval.Database.Tests.Migrations.SqlServer
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<Guid?>("ArchiveId")
-                        .HasColumnType("uniqueidentifier");
-
                     b.Property<long>("ConcurrencyStamp")
                         .IsConcurrencyToken()
                         .HasColumnType("bigint");
@@ -711,9 +708,6 @@ namespace Approval.Database.Tests.Migrations.SqlServer
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
-
-                    b.Property<bool>("DeletionPending")
-                        .HasColumnType("bit");
 
                     b.Property<Guid?>("DraftId")
                         .HasColumnType("uniqueidentifier");

@@ -38,11 +38,11 @@ internal sealed class ReferenceHostScenario : IAsyncDisposable
             ["Approval:FileRoot"] = Path.Combine(Path.GetTempPath(), "approval-reference-files-" + Guid.NewGuid().ToString("N"))
         };
         var index = 0;
-        foreach (var tenant in new[] { "alpha" })
+        foreach (var credentialGroup in new[] { "alpha" })
         foreach (var user in new[] { "admin", "alice", "bob", "carol" })
         {
             config[$"Authentication:DemoIdentities:{index}:UserId"] = user;
-            config[$"Authentication:DemoIdentities:{index}:Token"] = $"reference-test-{tenant}-{user}-" + new string('x', 32);
+            config[$"Authentication:DemoIdentities:{index}:Token"] = $"reference-test-{credentialGroup}-{user}-" + new string('x', 32);
             index++;
         }
         return config;
@@ -67,37 +67,37 @@ internal sealed class ReferenceHostScenario : IAsyncDisposable
         }
         catch { await app.DisposeAsync(); throw; }
     }
-    public async Task<HttpResponseMessage> Send(HttpMethod method, string path, string tenant = "alpha", string user = "alice",
+    public async Task<HttpResponseMessage> Send(HttpMethod method, string path, string credentialGroup = "alpha", string user = "alice",
         string? key = null, object? body = null, string? raw = null)
     {
         using var request = new HttpRequestMessage(method, path);
-        request.Headers.Authorization = new("Bearer", $"reference-test-{tenant}-{user}-" + new string('x', 32));
+        request.Headers.Authorization = new("Bearer", $"reference-test-{credentialGroup}-{user}-" + new string('x', 32));
         if (key is not null) request.Headers.Add("Idempotency-Key", key);
         if (raw is not null) request.Content = new StringContent(raw, System.Text.Encoding.UTF8, "application/json");
         else if (body is not null) request.Content = JsonContent.Create(body);
         return await Client.SendAsync(request);
     }
-    public async Task<JsonElement> Get(string path, string tenant = "alpha", string user = "alice")
+    public async Task<JsonElement> Get(string path, string credentialGroup = "alpha", string user = "alice")
     {
-        using var response = await Send(HttpMethod.Get, path, tenant, user);
+        using var response = await Send(HttpMethod.Get, path, credentialGroup, user);
         Assert.True(response.StatusCode == HttpStatusCode.OK, $"GET {path}: {(int)response.StatusCode} {await response.Content.ReadAsStringAsync()}");
         return await response.Content.ReadFromJsonAsync<JsonElement>();
     }
-    public async Task Publish(string tenant, string key = "shared", string flow = Flow, string operation = "publish-v1")
+    public async Task Publish(string credentialGroup, string key = "shared", string flow = Flow, string operation = "publish-v1")
     {
-        using var response = await Send(HttpMethod.Post, $"/api/approval/definitions/{key}?name=Reference", tenant, "admin", operation, raw: flow);
+        using var response = await Send(HttpMethod.Post, $"/api/approval/definitions/{key}?name=Reference", credentialGroup, "admin", operation, raw: flow);
         Assert.True(response.StatusCode == HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
     }
-    public async Task<Guid> Start(string tenant, string operation = "same-start-key")
+    public async Task<Guid> Start(string credentialGroup, string operation = "same-start-key")
     {
-        using var response = await Send(HttpMethod.Post, "/api/approval/forms/shared/start", tenant, key: operation,
+        using var response = await Send(HttpMethod.Post, "/api/approval/forms/shared/start", credentialGroup, key: operation,
             body: new { formData = new { amount = 12 }, comment = "same-content" });
         Assert.True(response.StatusCode == HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
         return (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("instanceId").GetGuid();
     }
-    private async Task Grant(string tenant, string user, string permission, bool allowed)
+    private async Task Grant(string credentialGroup, string user, string permission, bool allowed)
     {
-        using var response = await Send(HttpMethod.Put, $"/demo/grants/{user}/{permission}", tenant, "admin", body: new { allowed });
+        using var response = await Send(HttpMethod.Put, $"/demo/grants/{user}/{permission}", credentialGroup, "admin", body: new { allowed });
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
     }
     public async Task SingleHostWorkflow()

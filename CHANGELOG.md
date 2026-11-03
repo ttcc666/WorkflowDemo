@@ -1,6 +1,16 @@
 # Changelog
 
+## Unreleased — 2026-11-03（RC 最终收尾）
+
+- 项目未发布且无生产历史数据：删除附件 ArchiveId／DeletionPending、旧维护访问分支及 Tenant 存储键兼容路径；真实附件授权规则保持。
+- 九套示例／测试迁移重建为当前模型的 InitialApproval，删除空边界迁移和旧维护表；物理 schema 与附件元数据往返纳入服务数据库必需测试。
+- TimeoutScanner 使用 scopes 命名；清理测试／演练中误导性的 Tenant 参数与测试名。
+- 完善生产 OperationId、HTTP／SDK／非 HTTP 与批量恢复文档；RequireOperationId 默认值不变。
+- ApprovalActions 测试使用真实 Element Plus 插件及 SSR 注入，保留权限断言并验证零 warning。当前验收见 docs/rc-report.md。
+
 ## Unreleased — 2026-11-03（第三轮审批写边界与宿主可靠性）
+
+以下记录第三轮当时状态；旧维护字段与未发布迁移保留策略已由 RC 收尾替代。
 
 - 审批运行、治理、消息、Operation/Outbox 与 Forms 采用内部实体/属性写授权；普通共享 DbContext 跟踪写入、批量操作和可识别原生 DML 拒绝，宿主业务保存与原有事务保持。
 - 隔离宿主回调、输入/结果序列化和依赖读取；保存后的命令校验、显式 AcceptAllChanges 和池化 Context 租期状态继续验证。

@@ -15,33 +15,6 @@ namespace Approval.Database.Tests.Migrations.MySql
                 .Annotation("MySQL:Charset", "utf8mb4");
 
             migrationBuilder.CreateTable(
-                name: "ApprovalArchives",
-                columns: table => new
-                {
-                    Id = table.Column<Guid>(type: "char(36)", nullable: false),
-                    Target = table.Column<string>(type: "varchar(30)", maxLength: 30, nullable: false),
-                    ResourceId = table.Column<Guid>(type: "char(36)", nullable: false),
-                    SourceVersion = table.Column<long>(type: "bigint", nullable: false),
-                    InstanceId = table.Column<Guid>(type: "char(36)", nullable: true),
-                    DefinitionId = table.Column<Guid>(type: "char(36)", nullable: true),
-                    DefinitionKey = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: true),
-                    BusinessType = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: true),
-                    BusinessKey = table.Column<string>(type: "varchar(200)", maxLength: 200, nullable: true),
-                    UserId = table.Column<string>(type: "varchar(256)", maxLength: 256, nullable: true),
-                    ArchivedAt = table.Column<DateTime>(type: "datetime(6)", nullable: false),
-                    PurgedAt = table.Column<DateTime>(type: "datetime(6)", nullable: true),
-                    PayloadExpiredAt = table.Column<DateTime>(type: "datetime(6)", nullable: true),
-                    SnapshotJson = table.Column<string>(type: "longtext", nullable: false),
-                    SnapshotHash = table.Column<string>(type: "varchar(64)", maxLength: 64, nullable: false),
-                    ConcurrencyStamp = table.Column<long>(type: "bigint", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_ApprovalArchives", x => x.Id);
-                })
-                .Annotation("MySQL:Charset", "utf8mb4");
-
-            migrationBuilder.CreateTable(
                 name: "ApprovalDefinitions",
                 columns: table => new
                 {
@@ -79,71 +52,6 @@ namespace Approval.Database.Tests.Migrations.MySql
                 .Annotation("MySQL:Charset", "utf8mb4");
 
             migrationBuilder.CreateTable(
-                name: "ApprovalFileDeletions",
-                columns: table => new
-                {
-                    Id = table.Column<Guid>(type: "char(36)", nullable: false),
-                    FileId = table.Column<Guid>(type: "char(36)", nullable: false),
-                    StorageKey = table.Column<string>(type: "varchar(200)", maxLength: 200, nullable: false),
-                    Status = table.Column<string>(type: "varchar(20)", maxLength: 20, nullable: false),
-                    Attempts = table.Column<int>(type: "int", nullable: false),
-                    StartedAt = table.Column<DateTime>(type: "datetime(6)", nullable: true),
-                    NextAttemptAt = table.Column<DateTime>(type: "datetime(6)", nullable: false),
-                    LastErrorCode = table.Column<string>(type: "varchar(64)", maxLength: 64, nullable: true),
-                    ConcurrencyStamp = table.Column<long>(type: "bigint", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_ApprovalFileDeletions", x => x.Id);
-                })
-                .Annotation("MySQL:Charset", "utf8mb4");
-
-            migrationBuilder.CreateTable(
-                name: "ApprovalMaintenanceAudits",
-                columns: table => new
-                {
-                    Id = table.Column<Guid>(type: "char(36)", nullable: false),
-                    JobId = table.Column<Guid>(type: "char(36)", nullable: true),
-                    Batch = table.Column<int>(type: "int", nullable: true),
-                    ResourceId = table.Column<Guid>(type: "char(36)", nullable: true),
-                    Target = table.Column<string>(type: "varchar(30)", maxLength: 30, nullable: false),
-                    Action = table.Column<string>(type: "varchar(30)", maxLength: 30, nullable: false),
-                    ActorId = table.Column<string>(type: "varchar(256)", maxLength: 256, nullable: false),
-                    Reason = table.Column<string>(type: "varchar(1000)", maxLength: 1000, nullable: true),
-                    Count = table.Column<int>(type: "int", nullable: false),
-                    CreatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_ApprovalMaintenanceAudits", x => x.Id);
-                })
-                .Annotation("MySQL:Charset", "utf8mb4");
-
-            migrationBuilder.CreateTable(
-                name: "ApprovalMaintenanceJobs",
-                columns: table => new
-                {
-                    Id = table.Column<Guid>(type: "char(36)", nullable: false),
-                    Target = table.Column<string>(type: "varchar(30)", maxLength: 30, nullable: false),
-                    Mode = table.Column<string>(type: "varchar(20)", maxLength: 20, nullable: false),
-                    ActorId = table.Column<string>(type: "varchar(256)", maxLength: 256, nullable: false),
-                    SystemRequested = table.Column<bool>(type: "tinyint(1)", nullable: false),
-                    PolicyHash = table.Column<string>(type: "varchar(64)", maxLength: 64, nullable: false),
-                    Cutoff = table.Column<DateTime>(type: "datetime(6)", nullable: false),
-                    CreatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: false),
-                    Status = table.Column<string>(type: "varchar(20)", maxLength: 20, nullable: false),
-                    CompletedBatches = table.Column<int>(type: "int", nullable: false),
-                    Processed = table.Column<int>(type: "int", nullable: false),
-                    LastErrorCode = table.Column<string>(type: "varchar(64)", maxLength: 64, nullable: true),
-                    ConcurrencyStamp = table.Column<long>(type: "bigint", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_ApprovalMaintenanceJobs", x => x.Id);
-                })
-                .Annotation("MySQL:Charset", "utf8mb4");
-
-            migrationBuilder.CreateTable(
                 name: "ApprovalOperations",
                 columns: table => new
                 {
@@ -165,23 +73,6 @@ namespace Approval.Database.Tests.Migrations.MySql
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_ApprovalOperations", x => x.Id);
-                })
-                .Annotation("MySQL:Charset", "utf8mb4");
-
-            migrationBuilder.CreateTable(
-                name: "ApprovalRetentionHolds",
-                columns: table => new
-                {
-                    Id = table.Column<Guid>(type: "char(36)", nullable: false),
-                    Target = table.Column<string>(type: "varchar(30)", maxLength: 30, nullable: false),
-                    ResourceId = table.Column<Guid>(type: "char(36)", nullable: false),
-                    Reason = table.Column<string>(type: "varchar(1000)", maxLength: 1000, nullable: false),
-                    ActorId = table.Column<string>(type: "varchar(256)", maxLength: 256, nullable: false),
-                    CreatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_ApprovalRetentionHolds", x => x.Id);
                 })
                 .Annotation("MySQL:Charset", "utf8mb4");
 
@@ -344,18 +235,11 @@ namespace Approval.Database.Tests.Migrations.MySql
                     UploadedAt = table.Column<DateTime>(type: "datetime(6)", nullable: false),
                     InstanceId = table.Column<Guid>(type: "char(36)", nullable: true),
                     DraftId = table.Column<Guid>(type: "char(36)", nullable: true),
-                    ArchiveId = table.Column<Guid>(type: "char(36)", nullable: true),
-                    DeletionPending = table.Column<bool>(type: "tinyint(1)", nullable: false),
                     ConcurrencyStamp = table.Column<long>(type: "bigint", nullable: false)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_ApprovalFiles", x => x.Id);
-                    table.ForeignKey(
-                        name: "FK_ApprovalFiles_ApprovalArchives_ArchiveId",
-                        column: x => x.ArchiveId,
-                        principalTable: "ApprovalArchives",
-                        principalColumn: "Id");
                     table.ForeignKey(
                         name: "FK_ApprovalFiles_ApprovalDrafts_DraftId",
                         column: x => x.DraftId,
@@ -512,17 +396,6 @@ namespace Approval.Database.Tests.Migrations.MySql
                 .Annotation("MySQL:Charset", "utf8mb4");
 
             migrationBuilder.CreateIndex(
-                name: "IX_ApprovalArchives_ArchivedAt",
-                table: "ApprovalArchives",
-                column: "ArchivedAt");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_ApprovalArchives_Target_ResourceId_SourceVersion",
-                table: "ApprovalArchives",
-                columns: new[] { "Target", "ResourceId", "SourceVersion" },
-                unique: true);
-
-            migrationBuilder.CreateIndex(
                 name: "IX_ApprovalBusinessSlots_InstanceId",
                 table: "ApprovalBusinessSlots",
                 column: "InstanceId",
@@ -604,22 +477,6 @@ namespace Approval.Database.Tests.Migrations.MySql
                 columns: new[] { "UserId", "UpdatedAt" });
 
             migrationBuilder.CreateIndex(
-                name: "IX_ApprovalFileDeletions_FileId",
-                table: "ApprovalFileDeletions",
-                column: "FileId",
-                unique: true);
-
-            migrationBuilder.CreateIndex(
-                name: "IX_ApprovalFileDeletions_Status_NextAttemptAt",
-                table: "ApprovalFileDeletions",
-                columns: new[] { "Status", "NextAttemptAt" });
-
-            migrationBuilder.CreateIndex(
-                name: "IX_ApprovalFiles_ArchiveId",
-                table: "ApprovalFiles",
-                column: "ArchiveId");
-
-            migrationBuilder.CreateIndex(
                 name: "IX_ApprovalFiles_DraftId",
                 table: "ApprovalFiles",
                 column: "DraftId");
@@ -671,17 +528,6 @@ namespace Approval.Database.Tests.Migrations.MySql
                 columns: new[] { "OperatorId", "Action" });
 
             migrationBuilder.CreateIndex(
-                name: "IX_ApprovalMaintenanceAudits_JobId_Batch",
-                table: "ApprovalMaintenanceAudits",
-                columns: new[] { "JobId", "Batch" },
-                unique: true);
-
-            migrationBuilder.CreateIndex(
-                name: "IX_ApprovalMaintenanceJobs_Status_CreatedAt",
-                table: "ApprovalMaintenanceJobs",
-                columns: new[] { "Status", "CreatedAt" });
-
-            migrationBuilder.CreateIndex(
                 name: "IX_ApprovalMessages_InstanceId",
                 table: "ApprovalMessages",
                 column: "InstanceId");
@@ -706,12 +552,6 @@ namespace Approval.Database.Tests.Migrations.MySql
                 name: "IX_ApprovalOutbox_Status_NextAttemptAt",
                 table: "ApprovalOutbox",
                 columns: new[] { "Status", "NextAttemptAt" });
-
-            migrationBuilder.CreateIndex(
-                name: "IX_ApprovalRetentionHolds_Target_ResourceId",
-                table: "ApprovalRetentionHolds",
-                columns: new[] { "Target", "ResourceId" },
-                unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "IX_ApprovalTasks_AssigneeKind_AssigneeValue_Status",
@@ -750,19 +590,10 @@ namespace Approval.Database.Tests.Migrations.MySql
                 name: "ApprovalDefinitionManagement");
 
             migrationBuilder.DropTable(
-                name: "ApprovalFileDeletions");
-
-            migrationBuilder.DropTable(
                 name: "ApprovalFiles");
 
             migrationBuilder.DropTable(
                 name: "ApprovalLogs");
-
-            migrationBuilder.DropTable(
-                name: "ApprovalMaintenanceAudits");
-
-            migrationBuilder.DropTable(
-                name: "ApprovalMaintenanceJobs");
 
             migrationBuilder.DropTable(
                 name: "ApprovalMessages");
@@ -774,16 +605,10 @@ namespace Approval.Database.Tests.Migrations.MySql
                 name: "ApprovalOutbox");
 
             migrationBuilder.DropTable(
-                name: "ApprovalRetentionHolds");
-
-            migrationBuilder.DropTable(
                 name: "ApprovalTasks");
 
             migrationBuilder.DropTable(
                 name: "ApprovalCarbonCopies");
-
-            migrationBuilder.DropTable(
-                name: "ApprovalArchives");
 
             migrationBuilder.DropTable(
                 name: "ApprovalDrafts");

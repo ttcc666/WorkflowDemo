@@ -107,6 +107,6 @@ internal sealed class RehearsalHost : IAsyncDisposable
         using var response = await Send(method, path, user, key, body, raw); Rehearsal.Check(response.StatusCode == expected, "HttpStatus", path + ": " + (int)response.StatusCode);
         return expected == HttpStatusCode.NoContent ? default : await response.Content.ReadFromJsonAsync<JsonElement>();
     }
-    public async Task<Approval.Core.Hosting.ApprovalScope> Scope(string tenant = "alpha") => await Services.GetRequiredService<IApprovalScopeFactory>().CreateAsync();
+    public async Task<Approval.Core.Hosting.ApprovalScope> Scope() => await Services.GetRequiredService<IApprovalScopeFactory>().CreateAsync();
     public async ValueTask DisposeAsync() { Client.Dispose(); await _app.DisposeAsync(); }
 }

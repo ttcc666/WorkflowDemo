@@ -697,9 +697,6 @@ namespace Approval.Database.Tests.Migrations.MySql
                         .ValueGeneratedOnAdd()
                         .HasColumnType("char(36)");
 
-                    b.Property<Guid?>("ArchiveId")
-                        .HasColumnType("char(36)");
-
                     b.Property<long>("ConcurrencyStamp")
                         .IsConcurrencyToken()
                         .HasColumnType("bigint");
@@ -708,9 +705,6 @@ namespace Approval.Database.Tests.Migrations.MySql
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("varchar(100)");
-
-                    b.Property<bool>("DeletionPending")
-                        .HasColumnType("tinyint(1)");
 
                     b.Property<Guid?>("DraftId")
                         .HasColumnType("char(36)");

@@ -109,7 +109,7 @@ try {
         [int]$counters.failed -ne 0 -or [int]$counters.notExecuted -ne 0 -or
         @($results | Where-Object outcome -ne 'Passed').Count -gt 0) { throw 'Tests were absent, skipped or unsuccessful.' }
     foreach ($required in @('Migrations_RollBackAndReapply_WithoutModelDrift',
-        'EmbeddedBoundaryMigration_PreservesLegacyArchiveAndAttachmentData',
+        'InitialMigration_CreatesCurrentSchemaAndRoundTripsAttachmentMetadata',
         'FinalAcceptance_SynchronousActionFailureRollsBackHostApprovalOperationAndOutbox',
         'ApprovalWriteProtection_RejectsHostTrackedBulkAndSqlButPreservesEngine')) {
         if (-not @($results | Where-Object { $_.testName.EndsWith('.' + $required, [StringComparison]::Ordinal) }).Count) {
