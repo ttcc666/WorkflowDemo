@@ -212,6 +212,12 @@ public sealed class FileTests : IAsyncLifetime
     [Fact]
     public async Task 清理只删除过期且未绑定的文件()
     {
+        await _host.RunAsync(sp =>
+        {
+            var options = sp.GetRequiredService<ApprovalOptions>();
+            options.Lifecycle.Enabled = true; options.Lifecycle.AllowDeletion = true; options.Lifecycle.UnboundFilesAfter = options.Files.UnboundRetention;
+            return Task.FromResult(true);
+        });
         var stale = await UploadAsync("alice", "stale.pdf");
         var bound = await UploadAsync("alice", "bound.pdf");
         await StartAsync("alice", bound);
@@ -235,14 +241,14 @@ public sealed class FileTests : IAsyncLifetime
         {
             var options = new ApprovalOptions();
             options.Files.RootPath = root;
-            var store = new LocalApprovalFileStore(options, _host.Clock);
+            var store = new LocalApprovalFileStore(options, _host.Clock, new Approval.Core.Abstractions.FixedApprovalTenantContext("tests"));
 
             var key = await store.SaveAsync(new MemoryStream([1, 2, 3]), default);
             await using (var read = await store.OpenReadAsync(key, default))
                 Assert.Equal(3, read.Length);
             await store.DeleteAsync(key, default);
 
-            Assert.StartsWith("2026/01/", key);
+            Assert.StartsWith("tenants/59830ebc3a4184110566bf1a290d08473dfdcbd492ce498b14cd1a5e2fa2e441/2026/01/", key);
             Assert.False(File.Exists(Path.Combine(root, key)));
             await Assert.ThrowsAsync<ApprovalException>(() => store.OpenReadAsync("../../secret", default));
         }

@@ -7,11 +7,21 @@
 
 审批的定义、流转、待办、轨迹、通知由框架统一处理。
 
+宿主整段事务、客户端稳定键、提交结果待确认及升级占用回填，见[事务与通用幂等](docs/transactions-and-idempotency.md)。
+
+流程设计草稿、并发发布、启停、历史版本选择与旧同步动作扫描，见[流程治理接入](docs/definition-governance.md)。
+
+匿名就绪、租户诊断、归档预览、批次恢复、永久防重和附件删除，见[诊断与生命周期](docs/diagnostics-and-lifecycle.md)；维护与删除默认关闭。
+
 已有 Admin.Core 宿主可使用[注册证审批集成](docs/admin-core-integration.md)，复用登录、组织、菜单、权限和令牌刷新。
 
 新前端接入可使用[独立客户端与协议类型入口](docs/client-instances.md)，将请求、用户与目录缓存绑定到对应 Vue 应用；原单实例入口继续兼容。
 
 接口与流程格式、兼容基线、独立包与浏览器验收见[契约和发布流程](docs/contracts-and-release.md)。
+
+共享库双租户、JWT/第三方权限接入与四 Provider 迁移见[业务无关参考宿主](samples/Approval.MultiTenant.Api/README.md)；最终支持范围和最低验收矩阵见[生产能力验收](docs/production-acceptance.md)。
+
+真实 HTTPS 认证中心、三库原生备份还原及 TCP/COMMIT 确认丢失演练见[真实服务演练](docs/live-service-rehearsals.md)，通过独立 `eng/verify-rehearsals.ps1` 入口显式执行。
 
 ```
 src/Approval.Core                 框架本体（EF Core Relational + DynamicExpresso + Jint），不依赖 ASP.NET
@@ -21,6 +31,7 @@ tests/Approval.AspNetCore.Tests   接口集成测试（TestServer）
 tests/Certificate.Api.Tests      真实注册证宿主、并发、迁移、快照与恢复测试
 samples/Approval.Certificate      注册证业务示例类库：单据、回调、接口、DbContext、迁移与默认流程，不发布 NuGet 包
 samples/Certificate.Api           示例宿主：证书审核（业务审批）+ 请假 / 报销（表单审批）
+samples/Approval.MultiTenant.Api  多租户参考宿主：共享表、第三方权限、严格提交键、四 Provider 独立迁移
 web/packages/approval-ui          前端组件库 @approval/ui：工作台、审批详情、流程设计器、表单设计器、发起中心
 web/apps/demo                     示例前端：接入 @approval/ui + 证书管理页面 + 演示用户切换
 ```
@@ -91,19 +102,29 @@ flowchart LR
 **1. 在宿主 DbContext 中加入审批表**
 
 ```csharp
-protected override void OnModelCreating(ModelBuilder modelBuilder)
+using Approval.Core.Abstractions;
+using Approval.Core.Persistence;
+using Microsoft.EntityFrameworkCore;
+
+public sealed class AppDbContext(DbContextOptions<AppDbContext> options, IApprovalTenantContext tenant)
+    : ApprovalDbContext(options, tenant)
 {
-    modelBuilder.ConfigureApproval();   // 审批表与业务表共用 DbContext → 同一事务
-    // ... 业务实体配置
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        modelBuilder.ConfigureApproval(this); // 审批与业务仍共用 DbContext / 事务
+        // ... 业务实体配置
+    }
 }
 ```
 
 **2. 注册框架、身份提供者与业务回调**
 
+共享表多租户和旧库升级见 [租户接入指南](docs/multitenancy.md)。单租户也须显式配置固定企业。独立权限码、第三方权限/policy、资源能力及离线系统任务见[权限接入指南](docs/permissions.md)。
+
 ```csharp
 builder.Services.AddScoped<IApprovalIdentityProvider, MyIdentityProvider>();  // 对接你的用户/角色体系
 builder.Services
-    .AddApprovalWorkflow<AppDbContext>(o => o.AllowInitiatorApprove = false)
+    .AddApprovalWorkflow<AppDbContext>(o => { o.FixedTenantId = "my-company"; o.AllowInitiatorApprove = false; })
     .AddBusinessHandler<ContractApprovalHandler>()        // 每个 BusinessType 一个
     .AddApproverResolver<DeptLeaderResolver>()            // 可选：自定义审批人规则
     .AddNotifier<WeComNotifier>();                        // 可选：站内信 / 企业微信 / 邮件
@@ -112,14 +133,14 @@ builder.Services
 **3. 业务提交时发起审批，结束时在回调中生效**
 
 ```csharp
-// 提交：业务数据与审批实例在同一次 SaveChanges 中提交
+// 单次审批方法默认拥有事务；整段宿主业务应放入 IApprovalCommandExecutor 委托
 await engine.StartAsync(new StartApprovalRequest("contract.sign", "Contract", contract.Id.ToString(), userId)
 {
     Title = $"合同 {contract.No}",
     FormData = new { amount = contract.Amount }       // 条件分支可用：amount > 100000
 });
 
-// 回调：在引擎 SaveChanges 之前执行，抛异常则审批操作整体回滚
+// 回调：在审批事务内执行，抛异常则整体回滚；只修改跟踪实体，不自行保存/提交
 public sealed class ContractApprovalHandler(AppDbContext db) : IApprovalBusinessHandler
 {
     public string BusinessType => "Contract";
@@ -139,7 +160,7 @@ builder.Services.AddScoped<IApprovalIdentityProvider, MyIdentityProvider>();    
 builder.Services.AddScoped<IApprovalUserDirectory, MyUserDirectory>();           // 用户搜索 / 角色列表（可选，前端用户选择器使用）
 builder.Services.AddApprovalAspNetCore(o => o.AdminPolicy = "ApprovalAdmin");   // 当前用户默认取 Claims（NameIdentifier / sub）
 builder.Services
-    .AddApprovalWorkflow<AppDbContext>()
+    .AddApprovalWorkflow<AppDbContext>(o => o.FixedTenantId = "my-company")
     .AddFormApprovals()                                  // 可选：启用表单审批（发起中心）
     .AddBusinessHandler<ContractApprovalHandler>();      // 可选：业务审批
 
@@ -188,11 +209,11 @@ public sealed class AuditorPolicy(ApprovalDbContextAccessor db, IApprovalIdentit
     public override async Task<ApprovalAccess> GetAccessAsync(ApprovalViewer viewer, ApprovalInstance instance, CancellationToken ct) =>
         await Identity.IsInRoleAsync(viewer.UserId, "Auditor", ct) ? ApprovalAccess.Full : await base.GetAccessAsync(viewer, instance, ct);
 }
-builder.Services.AddApprovalWorkflow<AppDbContext>().AddAccessPolicy<AuditorPolicy>();
+builder.Services.AddApprovalWorkflow<AppDbContext>(o => o.FixedTenantId = "my-company").AddAccessPolicy<AuditorPolicy>();
 ```
 
 - 完整流程定义（含 HTTP 动作参数、通知配置）**仅管理员**（及 `ApprovalAspNetCoreOptions.DefinitionReaders` 中的角色）可读；查看实例的人通过 `instances/{id}/definition` 取公开视图（去掉动作参数、通知、时限与发起角色）。
-- `ApprovalQueryService.GetInstanceAsync` / `GetByBusinessAsync` **不做权限判断**，供宿主后台使用；接口请用 `GetInstanceForViewerAsync` / `GetByBusinessForViewerAsync`。业务单据自身接口的权限由宿主负责。
+- `ApprovalQueryService.GetInstanceAsync` / `GetByBusinessAsync` 需要 `InstanceReadSensitive` 权限，供宿主后台使用；接口请用 `GetInstanceForViewerAsync` / `GetByBusinessForViewerAsync`。业务单据自身接口的权限由宿主负责。
 - 审批详情的 `canWithdraw` 表示当前查看者能否撤回，统一考虑流程状态、发起人身份、`AllowWithdrawAfterApproval` 与退回发起人的情况；前端据此显示按钮，提交撤回时服务端再次校验。
 
 **分页**：`todo`、`done`、`started`、`cc`、`admin/instances`、`outbox` 返回 `{ items, total, page, pageSize }`；参数 `page`（从 1 开始）、`pageSize`（默认 20，最大 100）、`keyword`（标题 / 申请人）、`status`、`definitionKey`、`from` / `to`（发起时间，ISO 8601），待办另有 `overdueOnly`。
@@ -271,6 +292,7 @@ flowchart LR
 ```csharp
 builder.Services.AddApprovalWorkflow<AppDbContext>(o =>
     {
+        o.FixedTenantId = "my-company";
         o.Http.AllowedHosts.Add("*.mycompany.com");            // HTTP 动作白名单
         o.InstanceUrlFormat = "https://oa.mycompany.com/approvals/{0}";
     })

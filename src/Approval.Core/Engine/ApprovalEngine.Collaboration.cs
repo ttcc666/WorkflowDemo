@@ -27,6 +27,7 @@ public sealed partial class ApprovalEngine
     /// <summary>当前用户处理该任务时可以退回到的节点：发起人，以及本实例已审批通过、位于当前节点上游的审批节点。</summary>
     public async Task<IReadOnlyList<ReturnTarget>> GetReturnTargetsAsync(Guid taskId, string userId, CancellationToken ct = default)
     {
+        await _authorization.RequireAsync(Approval.Core.Abstractions.ApprovalPermissions.TaskReturn, new() { TaskId = taskId }, userId, ct);
         var (instance, task, flow) = await LoadTaskAsync(taskId, ct);
         await EnsureCanHandleAsync(instance, task, userId, ct);
         return ReturnTargetsOf(instance, flow, task)
@@ -38,8 +39,12 @@ public sealed partial class ApprovalEngine
     /// 驳回并退回到指定节点（流程继续）：目标为审批节点时重新生成该节点的待办；目标为开始节点时退回发起人，由发起人重新提交或撤回。
     /// 退出所在的并行块时，块内其他分支的待办一并取消；在同一分支内退回不影响其他分支。
     /// </summary>
-    public async Task ReturnAsync(Guid taskId, string userId, string comment, string targetNodeId, CancellationToken ct = default)
+    public Task ReturnAsync(Guid taskId, string userId, string comment, string targetNodeId, CancellationToken ct = default) =>
+        _unit.ExecuteCommandAsync(token => ReturnAsyncCore(taskId, userId, comment, targetNodeId, token), ct);
+
+    private async Task ReturnAsyncCore(Guid taskId, string userId, string comment, string targetNodeId, CancellationToken ct = default)
     {
+        await _authorization.RequireAsync(Approval.Core.Abstractions.ApprovalPermissions.TaskReturn, new() { TaskId = taskId }, userId, ct);
         if (string.IsNullOrWhiteSpace(comment)) throw new ApprovalException("退回必须填写意见");
 
         var (instance, task, flow) = await LoadTaskAsync(taskId, ct);
@@ -116,7 +121,7 @@ public sealed partial class ApprovalEngine
 
         AddTask(instance, new ApprovalTask
         {
-            Id = Guid.NewGuid(),
+            Id = _unit.NewId("ApprovalEngine.Collaboration"),
             InstanceId = instance.Id,
             NodeId = target.Id,
             NodeName = target.Name,
@@ -131,8 +136,12 @@ public sealed partial class ApprovalEngine
     }
 
     /// <summary>退回发起人后重新提交；formData 不为空时替换表单数据（业务单据修改后传入最新数据）。</summary>
-    public async Task ResubmitAsync(Guid taskId, string userId, string? comment = null, object? formData = null, CancellationToken ct = default)
+    public Task ResubmitAsync(Guid taskId, string userId, string? comment = null, object? formData = null, CancellationToken ct = default) =>
+        _unit.ExecuteCommandAsync(token => ResubmitAsyncCore(taskId, userId, comment, formData, token), ct);
+
+    private async Task ResubmitAsyncCore(Guid taskId, string userId, string? comment = null, object? formData = null, CancellationToken ct = default)
     {
+        await _authorization.RequireAsync(Approval.Core.Abstractions.ApprovalPermissions.TaskResubmit, new() { TaskId = taskId }, userId, ct);
         var (instance, task, flow) = await LoadTaskAsync(taskId, ct);
         if (task.Kind != ApprovalTaskKind.Resubmit) throw new ApprovalException("该任务不是待重新提交的申请");
         await EnsureCanHandleAsync(instance, task, userId, ct);
@@ -154,9 +163,14 @@ public sealed partial class ApprovalEngine
     // ───────────────────────── 加签 ─────────────────────────
 
     /// <summary>加签：邀请其他人参与当前节点的审批，加签人必须同意节点才能通过。</summary>
-    public async Task AddSignAsync(Guid taskId, string userId, IReadOnlyList<string> userIds, AddSignMode mode, string? comment = null,
+    public Task AddSignAsync(Guid taskId, string userId, IReadOnlyList<string> userIds, AddSignMode mode, string? comment = null,
+        CancellationToken ct = default) =>
+        _unit.ExecuteCommandAsync(token => AddSignAsyncCore(taskId, userId, userIds, mode, comment, token), ct);
+
+    private async Task AddSignAsyncCore(Guid taskId, string userId, IReadOnlyList<string> userIds, AddSignMode mode, string? comment = null,
         CancellationToken ct = default)
     {
+        await _authorization.RequireAsync(Approval.Core.Abstractions.ApprovalPermissions.TaskAddSign, new() { TaskId = taskId }, userId, ct);
         var signers = userIds.Where(u => !string.IsNullOrWhiteSpace(u)).Select(u => u.Trim()).Distinct().ToList();
         if (signers.Count == 0) throw new ApprovalException("请选择加签人");
         if (signers.Contains(userId)) throw new ApprovalException("不能给自己加签");
@@ -168,7 +182,7 @@ public sealed partial class ApprovalEngine
         if (!node.AllowAddSign) throw new ApprovalException("该节点不允许加签");
         if (node.RequireQualifiedAssignee)
         {
-            var qualified = await GetEligibleApproversAsync(instance, node, ct);
+            var qualified = await _assignees.GetEligibleApproversAsync(instance, node, ct);
             if (signers.Any(id => !qualified.Contains(id)))
                 throw new ApprovalException("加签人不具备本节点审批资格") { Code = ApprovalErrorCode.Forbidden };
         }
@@ -204,7 +218,7 @@ public sealed partial class ApprovalEngine
         {
             AddTask(instance, new ApprovalTask
             {
-                Id = Guid.NewGuid(),
+                Id = _unit.NewId("ApprovalEngine.Collaboration"),
                 InstanceId = instance.Id,
                 NodeId = node.Id,
                 NodeName = node.Name,

@@ -67,6 +67,7 @@ export function useApprovalDetail(instanceId: Ref<string>) {
     definition: definition.data,
     myTask,
     editableFields,
+    taskCapabilities: computed(() => handling.data.value?.capabilities ?? {}),
     canWithdraw,
     nodeOptions,
     reload,

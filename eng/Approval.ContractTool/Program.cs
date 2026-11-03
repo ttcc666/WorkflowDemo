@@ -15,6 +15,7 @@ using Certificate.Api.Certificates;
 using Certificate.Api.Endpoints;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -36,7 +37,7 @@ builder.Services.AddOpenApi("approval");
 builder.Services.AddOpenApi("certificate");
 builder.Services.AddDbContext<AppDbContext>(options => options.UseSqlite("Data Source=:memory:"));
 builder.Services.AddScoped<IApprovalIdentityProvider, ContractIdentity>();
-builder.Services.AddApprovalWorkflow<AppDbContext>(options => options.EnableBackgroundServices = false)
+builder.Services.AddApprovalWorkflow<AppDbContext>(options => { options.FixedTenantId = "certificate"; options.EnableBackgroundServices = false; })
     .AddFormApprovals().AddCertificateModule();
 builder.Services.AddApprovalAspNetCore();
 await using var app = builder.Build();
@@ -57,6 +58,17 @@ try
         document["servers"] = new JsonArray(new JsonObject { ["url"] = "/" });
         document["info"]!["title"] = title;
         document["info"]!["version"] = typeof(ApprovalOptions).Assembly.GetName().Version!.ToString(3);
+        foreach (var endpoint in ((IEndpointRouteBuilder)app).DataSources.SelectMany(s => s.Endpoints).OfType<RouteEndpoint>())
+        {
+            var permissions = endpoint.Metadata.GetMetadata<ApprovalPermissionMetadata>();
+            if (permissions is null || permissions.ResourceKind == "maintenance-run" || permissions.Permissions.Any(p => p is ApprovalPermissions.DefinitionValidate or ApprovalPermissions.FileUpload or ApprovalPermissions.TaskReassignBulk)) continue;
+            var path = System.Text.RegularExpressions.Regex.Replace(endpoint.RoutePattern.RawText!, @"\{([^}:]+):[^}]+\}", "{$1}");
+            foreach (var method in endpoint.Metadata.GetMetadata<HttpMethodMetadata>()!.HttpMethods.Where(m => m is "POST" or "PUT" or "DELETE"))
+                if (document["paths"]?[path]?[method.ToLowerInvariant()] is JsonObject operation) AddCommandHeader(operation, false);
+        }
+        if (name == "certificate")
+            foreach (var (path, method) in new[] { ("/api/certificates", "post"), ("/api/certificates/{id}", "put"), ("/api/certificates/{id}/revoke", "post") })
+                if (document["paths"]?[path]?[method] is JsonObject operation) AddCommandHeader(operation, true);
         await WriteJsonAsync(file, document);
     }
 }
@@ -130,6 +142,19 @@ static JsonNode? Normalize(JsonNode? node) => node switch
     JsonArray array => new JsonArray(array.Select(Normalize).ToArray()),
     _ => node?.DeepClone()
 };
+
+static void AddCommandHeader(JsonObject operation, bool required)
+{
+    var parameters = operation["parameters"] as JsonArray ?? new JsonArray();
+    if (operation["parameters"] is null) operation["parameters"] = parameters;
+    parameters.Add(new JsonObject
+    {
+        ["name"] = "Idempotency-Key", ["in"] = "header", ["required"] = required,
+        ["description"] = required ? "Stable non-empty UUID for one logical submission; retain it and the original body after network errors or CommitOutcomeUnknown."
+            : "Stable key for one logical command; required when ApprovalOptions.RequireOperationId is enabled. Same content replays the committed result; changed content returns 409. Retain the key after unknown outcomes.",
+        ["schema"] = new JsonObject { ["type"] = "string", ["minLength"] = 1, ["maxLength"] = 200 }
+    });
+}
 
 sealed class ContractIdentity : IApprovalIdentityProvider
 {

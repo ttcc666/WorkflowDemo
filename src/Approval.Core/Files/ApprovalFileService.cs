@@ -19,10 +19,10 @@ public sealed class ApprovalFileService(
     IApprovalFileStore store,
     ApprovalQueryService query,
     ApprovalOptions options,
-    TimeProvider clock)
+    TimeProvider clock,
+    Approval.Core.Maintenance.ApprovalLifecycleService? lifecycle = null)
 {
     private const int MaxFileNameLength = 200;
-    private const int CleanupBatchSize = 100;
 
     private static readonly Dictionary<string, string> ContentTypes = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -42,11 +42,13 @@ public sealed class ApprovalFileService(
         ["zip"] = "application/zip"
     };
 
+    private readonly Approval.Core.Authorization.IApprovalAuthorization _authorization = accessor.Authorization;
     private readonly DbContext _db = accessor.Context;
 
     /// <summary>保存上传的文件（未绑定，只有上传者可用）。超过大小、扩展名不允许时抛出 <see cref="ApprovalException"/>。</summary>
     public async Task<ApprovalFile> UploadAsync(string userId, string fileName, Stream content, CancellationToken ct = default)
     {
+        await _authorization.RequireAsync(Approval.Core.Abstractions.ApprovalPermissions.FileUpload, new(), userId, ct);
         var name = SanitizeFileName(fileName);
         var extension = Path.GetExtension(name).TrimStart('.');
         if (extension.Length == 0 || !options.Files.AllowedExtensions.Contains(extension, StringComparer.OrdinalIgnoreCase))
@@ -88,7 +90,16 @@ public sealed class ApprovalFileService(
     public async Task<(ApprovalFile File, Stream Content)?> OpenAsync(Guid fileId, ApprovalViewer viewer, CancellationToken ct = default)
     {
         var file = await _db.Set<ApprovalFile>().AsNoTracking().FirstOrDefaultAsync(f => f.Id == fileId, ct);
-        if (file is null || !await CanDownloadAsync(file, viewer, ct)) return null;
+        if (file is null || file.DeletionPending) return null;
+        if (file.ArchiveId is { } archiveId)
+        {
+            await _authorization.RequireAsync(ApprovalPermissions.ArchiveRead, new() { ArchiveId = archiveId }, viewer.UserId, ct);
+            await _authorization.RequireAsync(ApprovalPermissions.ArchiveReadSensitive, new() { ArchiveId = archiveId }, viewer.UserId, ct);
+            return (file, await store.OpenReadAsync(file.StorageKey, ct));
+        }
+        await _authorization.RequireAsync(Approval.Core.Abstractions.ApprovalPermissions.FileRead, new() { FileId = fileId }, viewer.UserId, ct);
+        viewer = await _authorization.ViewerAsync(viewer, file.InstanceId, ct);
+        if (!await CanDownloadAsync(file, viewer, ct)) return null;
         return (file, await store.OpenReadAsync(file.StorageKey, ct));
     }
 
@@ -151,8 +162,9 @@ public sealed class ApprovalFileService(
     }
 
     private static bool Usable(ApprovalFile file, string userId, Guid? instanceId, Guid? draftId) =>
+        !file.DeletionPending && file.ArchiveId is null && (
         (instanceId is not null && file.InstanceId == instanceId)
-        || (file.UploadedBy == userId && file.InstanceId is null && (file.DraftId is null || file.DraftId == draftId));
+        || (file.UploadedBy == userId && file.InstanceId is null && (file.DraftId is null || file.DraftId == draftId)));
 
     private static bool Accepts(FormField field, string fileName) =>
         field.Accept.Count == 0 || field.Accept.Contains(Path.GetExtension(fileName).TrimStart('.'), StringComparer.OrdinalIgnoreCase);
@@ -176,23 +188,9 @@ public sealed class ApprovalFileService(
         }
     }
 
-    /// <summary>删除超过保留时间仍未绑定的文件（内容与记录），返回删除数量；由超时扫描后台任务每轮调用。</summary>
-    public async Task<int> CleanupAsync(CancellationToken ct = default)
-    {
-        var before = clock.GetUtcNow().UtcDateTime - options.Files.UnboundRetention;
-        var files = await _db.Set<ApprovalFile>()
-            .Where(f => f.InstanceId == null && f.DraftId == null && f.UploadedAt < before)
-            .OrderBy(f => f.UploadedAt)
-            .Take(CleanupBatchSize)
-            .ToListAsync(ct);
-        foreach (var file in files)
-        {
-            await store.DeleteAsync(file.StorageKey, ct);
-            _db.Set<ApprovalFile>().Remove(file);
-        }
-        await _db.SaveChangesAsync(ct);
-        return files.Count;
-    }
+    /// <summary>显式启用维护/删除及未绑定附件保留期后，提交删除任务并投递一批；默认返回 0。</summary>
+    public Task<int> CleanupAsync(CancellationToken ct = default) =>
+        (lifecycle ?? throw new InvalidOperationException("请注册生命周期服务")).CleanupUnboundFilesAsync(ct);
 
     /// <summary>只保留文件名部分，去掉控制字符与路径字符，限制长度（保留扩展名）。</summary>
     internal static string SanitizeFileName(string fileName)

@@ -19,6 +19,10 @@ if ($Scope -in @('All', 'Backend')) {
     Invoke-CheckedCommand 'dotnet' @('build', 'Workflow.slnx', '--no-restore', '--configuration', 'Release')
     Invoke-CheckedCommand 'dotnet' @('test', 'Workflow.slnx', '--no-build', '--no-restore', '--configuration', 'Release', '--verbosity', 'minimal')
     Invoke-CheckedCommand 'dotnet' @('ef', 'migrations', 'has-pending-model-changes', '--project', 'samples/Approval.Certificate', '--startup-project', 'samples/Certificate.Api', '--configuration', 'Release', '--no-build')
+    foreach ($provider in @('Sqlite', 'MySql', 'SqlServer', 'PostgreSql')) {
+        Invoke-CheckedCommand 'dotnet' @('ef', 'migrations', 'has-pending-model-changes', '--project', 'samples/Approval.MultiTenant.Api', '--context', ($provider + 'ReferenceContext'), '--configuration', 'Release', '--no-build')
+    }
+    Invoke-CheckedCommand 'pwsh' @('-NoProfile', '-File', (Join-Path $PSScriptRoot 'verify-reference-host.ps1'), '-SkipBuild') $repositoryRoot
 
     $parseTokens = $null
     $parseErrors = $null

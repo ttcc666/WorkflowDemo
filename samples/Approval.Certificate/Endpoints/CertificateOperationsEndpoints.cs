@@ -25,7 +25,7 @@ public static class CertificateOperationsEndpoints
         app.MapGet("/api/approval/admin/certificates/diagnostics", async (HttpContext http, CertificateDiagnostics diagnostics,
             CancellationToken ct) =>
         {
-            await http.EnsureApprovalAdminAsync("仅管理员可以查看注册证运行诊断", ct);
+            http.GetApprovalUserId();
             return Results.Ok(await diagnostics.GetAsync(ct));
         });
     }

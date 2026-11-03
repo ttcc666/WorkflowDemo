@@ -2,16 +2,20 @@
 import { computed, onBeforeUnmount, ref, shallowRef, useTemplateRef, watch } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { useCommandIntent } from '../composables/useCommandIntent'
 import { useApprovalClient } from '../client'
 import { ApiError, errorMessage } from '../api/http'
 import type { DraftDetail, StartForm } from '../contracts/api'
+import { useApprovalUser } from '../composables/useApprovalUser'
 import { useAsyncData } from '../composables/useAsyncData'
 import DynamicForm from '../features/forms/DynamicForm.vue'
 import { initialValues, parseFormValues, type FormValues } from '../features/forms/formModel'
 import { approvalRouteNames } from '../routes'
 import { formatDateTime } from '../utils/labels'
 
-const { api: approvalApi } = useApprovalClient()
+const { api: approvalApi, userKey } = useApprovalClient()
+const { can } = useApprovalUser()
+const intent = useCommandIntent('start-form')
 
 /**
  * 发起页：按流程的表单结构填写并提交；服务端字段错误回显到对应表单项。
@@ -24,7 +28,7 @@ const router = useRouter()
 const key = computed(() => route.params.key as string)
 const draftParam = computed(() => (typeof route.query.draft === 'string' ? route.query.draft : null))
 
-const start = useAsyncData((signal) => approvalApi.startForm(key.value, signal), { watch: [key], notifyError: false })
+const start = useAsyncData((signal) => approvalApi.startForm(key.value, signal), { watch: [key, userKey], notifyError: false, resetOnReload: true })
 // 当前编辑的草稿 ID（保存新草稿后写回地址栏）；要打开的草稿只在地址栏指向其他草稿时变化，保存后不会重新加载
 const draftId = shallowRef<string | null>(draftParam.value)
 const openedDraft = shallowRef<string | null>(draftParam.value)
@@ -34,7 +38,8 @@ watch(draftParam, (value) => {
   openedDraft.value = value
 })
 const draft = useAsyncData(async (signal): Promise<DraftDetail | null> => (openedDraft.value ? approvalApi.draft(openedDraft.value, signal) : null), {
-  watch: [openedDraft],
+  watch: [openedDraft, userKey],
+  resetOnReload: true,
   notifyError: false,
 })
 
@@ -50,6 +55,18 @@ const formRef = useTemplateRef<InstanceType<typeof DynamicForm>>('form')
 // 是否有未保存的修改：与上次加载 / 保存时的快照比较
 const snapshot = () => JSON.stringify([data.value, comment.value.trim()])
 const savedSnapshot = shallowRef('')
+watch(userKey, () => {
+  draftId.value = null
+  openedDraft.value = null
+  data.value = {}
+  comment.value = ''
+  serverErrors.value = undefined
+  submitting.value = false
+  saving.value = false
+  savedAt.value = null
+  savedSnapshot.value = snapshot()
+  if (route.query.draft) void router.replace({ query: { ...route.query, draft: undefined } })
+}, { flush: 'sync' })
 const dirty = computed(() => !!start.data.value && snapshot() !== savedSnapshot.value)
 
 function load(form: StartForm | undefined, value: DraftDetail | null | undefined) {
@@ -68,11 +85,12 @@ watch([start.data, draft.data], ([form, value]) => {
 
 async function saveDraft(silent = false) {
   const definition = start.data.value
-  if (!definition || saving.value || submitting.value) return false
+  if (!can('approval.draft.write') || !definition || saving.value || submitting.value) return false
   saving.value = true
   const current = snapshot()
   try {
-    const result = await approvalApi.saveDraft(definition.key, draftId.value, data.value, comment.value.trim())
+    const result = await intent.run(`draft:${definition.key}`, { draftId: draftId.value, formData: data.value, comment: comment.value.trim() },
+      (body, operationId) => approvalApi.saveDraft(definition.key, body.draftId, body.formData, body.comment, operationId))
     savedSnapshot.value = current
     savedAt.value = result.updatedAt
     if (draftId.value !== result.draftId) {
@@ -90,19 +108,22 @@ async function saveDraft(silent = false) {
 }
 
 const timer = window.setInterval(() => {
-  if (dirty.value) void saveDraft(true)
+  if (dirty.value && !intent.pending.value) void saveDraft(true)
 }, AUTO_SAVE_MS)
 onBeforeUnmount(() => window.clearInterval(timer))
 
 async function submit() {
+  const identity = userKey.value
   const definition = start.data.value
-  if (!definition) return
+  if (!definition || !can('approval.instance.start')) return
   serverErrors.value = undefined
   if (!(await formRef.value?.validate())) return ElMessage.warning('请检查标红的字段')
+  if (identity !== userKey.value) return
 
   submitting.value = true
   try {
-    const { instanceId } = await approvalApi.submitForm(definition.key, data.value, comment.value.trim(), draftId.value)
+    const { instanceId } = await intent.run(`start:${definition.key}`, { draftId: draftId.value, formData: data.value, comment: comment.value.trim() },
+      (body, operationId) => approvalApi.submitForm(definition.key, body.formData, body.comment, body.draftId, operationId))
     savedSnapshot.value = snapshot()
     ElMessage.success('已提交')
     await router.replace({ name: approvalRouteNames.detail, params: { id: instanceId } })
@@ -112,6 +133,13 @@ async function submit() {
   } finally {
     submitting.value = false
   }
+}
+
+async function newIntent() {
+  try {
+    await ElMessageBox.confirm('请先在“我发起的”中确认上次提交的结果。继续后将开始一次新的申请。', '开始新的申请', { type: 'warning' })
+    intent.reset(`start:${key.value}`); intent.reset(`draft:${key.value}`)
+  } catch { /* Keep the original key when cancelled. */ }
 }
 
 // ───── 离开提醒：有未保存的修改时可先保存草稿 ─────
@@ -171,8 +199,9 @@ const loadError = computed(() => start.error.value ?? draft.error.value)
           <template v-else-if="dirty">有修改未保存，每 30 秒自动保存草稿</template>
         </span>
         <el-button @click="backToCenter">取消</el-button>
-        <el-button :loading="saving" :disabled="submitting" @click="saveDraft()">保存草稿</el-button>
-        <el-button type="primary" :loading="submitting" @click="submit">提交申请</el-button>
+        <el-button v-if="intent.pending.value" @click="newIntent">确认旧结果后开始新申请</el-button>
+        <el-button v-if="can('approval.draft.write')" :loading="saving" :disabled="submitting" @click="saveDraft()">保存草稿</el-button>
+        <el-button v-if="can('approval.instance.start')" type="primary" :loading="submitting" @click="submit">提交申请</el-button>
       </div>
     </el-card>
   </div>

@@ -18,7 +18,7 @@ using Microsoft.EntityFrameworkCore;
 
 builder.Services.AddDbContext<AppDbContext>(o =>
     o.UseSqlite(builder.Configuration.GetConnectionString("Approval")));
-builder.Services.AddApprovalWorkflow<AppDbContext>()
+builder.Services.AddApprovalWorkflow<AppDbContext>(o => o.FixedTenantId = "certificate")
     .AddCertificateModule()
     .AddAccessPolicy<CertificateAccessPolicy>();
 builder.Services.AddApprovalAspNetCore();
@@ -39,3 +39,10 @@ app.MapGroup("").RequireAuthorization().MapCertificateEndpoints();
 - 本版本保持具体 `AppDbContext` 的注入方式。`ConfigureCertificates()` 提供独立模型配置；其他 DbContext 的业务服务适配应另行明确，不能只调用模型配置就替换现有注入。
 
 为保持现有示例集成的兼容性，程序集名称仍为 `Approval.Certificate`，原有类型继续使用 `Certificate.Api.*` 命名空间。示例与 Admin 的旧程序集入口包含类型转发。示例的 HTTP、公开 API 和类型转发基线位于本目录的 `contracts/`，不混入框架契约。
+
+阶段 2 权限接入见[框架权限指南](../../docs/permissions.md)：发起预检按发起权限执行；后台监控仅获得诊断权限，诊断接口与投递重试分别授权。启动发布和离线投递需要明确系统身份，不再隐式放行。
+# 阶段 3 升级补充
+
+新增 `20261102014813_AtomicOperations` 迁移。升级前停止写入及 worker，备份后应用迁移，并对固定租户 `certificate` 预览/回填进行中业务占用。不能仅升级 schema 就恢复旧 writer。完整步骤、维护命令与回退边界见 [事务与通用幂等](../../docs/transactions-and-idempotency.md)。
+
+证照创建/变更/注销现在把业务准备、编号占用、编辑锁、审批和 Outbox 放入同一个命令委托。沿用原非空 UUID `Idempotency-Key`；同键同内容返回原结果，内容变化 409，网络失败或 `CommitOutcomeUnknown` / 503 必须保留原键重试。可以配置 `Approval:RequireOperationId=true` 强制其他框架写入口提供键；默认保留过渡模式。物理文件与外部通知不具备数据库跨介质原子提交保证。

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useApprovalUser, useAsyncData } from '@approval/ui'
+import { computed } from 'vue'
 import { approval } from '@/approval'
 
 const { userKey: approvalUserKey, http } = approval
@@ -14,15 +15,16 @@ interface Diagnostics {
   database: { ready: boolean; problems: string[] }
 }
 
-const { isAdmin } = useApprovalUser()
-const { data, loading, error, reload } = useAsyncData((signal) => isAdmin.value
+const { can } = useApprovalUser()
+const canDiagnose = computed(() => can('approval.diagnostics.read'))
+const { data, loading, error, reload } = useAsyncData((signal) => canDiagnose.value
   ? http.get<Diagnostics>('/api/approval/admin/certificates/diagnostics', signal) : Promise.resolve(undefined), {
-  watch: [isAdmin, approvalUserKey], notifyError: false, resetOnReload: true,
+  watch: [canDiagnose, approvalUserKey], notifyError: false, resetOnReload: true,
 })
 </script>
 
 <template>
-  <el-card v-if="isAdmin" shadow="never" class="diagnostics">
+  <el-card v-if="canDiagnose" shadow="never" class="diagnostics">
     <template #header><div class="header"><span>试点运行检查</span><el-button text @click="reload">刷新</el-button></div></template>
     <el-alert v-if="error" :title="error" type="error" :closable="false" />
     <div v-loading="loading">

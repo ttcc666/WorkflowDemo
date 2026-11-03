@@ -11,11 +11,6 @@ internal static class AdminEndpoints
     public static void Map(RouteGroupBuilder group)
     {
         var admin = group.MapGroup("/admin");
-        admin.AddEndpointFilter(async (context, next) =>
-        {
-            await context.HttpContext.EnsureApprovalAdminAsync("仅管理员可使用管理功能", context.HttpContext.RequestAborted);
-            return await next(context);
-        });
 
         // 全部流程：分页 + 状态、流程、发起人、关键字、发起时间筛选
         admin.MapGet("/instances", ([AsParameters] InstanceListRequest request, ApprovalQueryService q, CancellationToken ct) =>

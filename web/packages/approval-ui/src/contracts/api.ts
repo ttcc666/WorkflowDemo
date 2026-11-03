@@ -22,6 +22,17 @@ export type TodoItem = ResponseShape<Schemas['TodoItem']>
 export type InstanceListItem = ResponseShape<Schemas['InstanceListItem']>
 export type ReturnTarget = ResponseShape<Schemas['ReturnTarget']>
 export type FlowSummary = ResponseShape<Schemas['FlowSummary']>
+export type DefinitionGovernance = ResponseShape<Schemas['DefinitionGovernance']>
+export type DefinitionGovernanceSummary = ResponseShape<Schemas['DefinitionGovernanceSummary']>
+export type DefinitionAudit = ResponseShape<Schemas['ApprovalDefinitionAudit']>
+export type SynchronousActionScan = ResponseShape<Schemas['SynchronousActionScan']>
+export type ApprovalDiagnosticReport = ResponseShape<Schemas['ApprovalDiagnosticReport']>
+export type MaintenanceTarget = ResponseShape<Schemas['MaintenanceTarget']>
+export type MaintenanceMode = ResponseShape<Schemas['MaintenanceMode']>
+export type MaintenancePreview = ResponseShape<Schemas['MaintenancePreview']>
+export type MaintenanceJobInfo = ResponseShape<Schemas['MaintenanceJobInfo']>
+export type MaintenanceBatchInfo = ResponseShape<Schemas['MaintenanceBatchInfo']>
+export type ArchiveSummary = ResponseShape<Schemas['ArchiveSummary']>
 export type ReassignSkip = ResponseShape<Schemas['ReassignSkip']>
 export type ReassignResult = ResponseShape<Schemas['ReassignResult']>
 export type FlowStatistics = ResponseShape<Schemas['FlowStatistics']>
@@ -48,7 +59,9 @@ export type DirectoryUser = ResponseShape<Schemas['ApprovalUser']>
 
 /** 保留旧调用方使用的任务投影；完整传输结构在 http.generated.ts 中。 */
 export type ApprovalTask = Pick<ResponseShape<Schemas['ApprovalTaskResponse']>,
-  'id' | 'instanceId' | 'nodeId' | 'nodeName' | 'assigneeKind' | 'assigneeValue' | 'kind' | 'parentTaskId' | 'round' | 'status' | 'order' | 'handledBy' | 'comment' | 'createdAt' | 'completedAt' | 'dueAt' | 'remindCount'>
+  'id' | 'instanceId' | 'nodeId' | 'nodeName' | 'assigneeKind' | 'assigneeValue' | 'kind' | 'parentTaskId' | 'round' | 'status' | 'order' | 'handledBy' | 'comment' | 'createdAt' | 'completedAt' | 'dueAt' | 'remindCount'> & {
+    capabilities?: Record<string, boolean>
+  }
 export type ApprovalInstance = Omit<ResponseShape<Schemas['ApprovalInstanceResponse']>, 'tasks' | 'logs'> & { tasks: ApprovalTask[]; logs: ApprovalLog[] }
 export type MyTaskResult = Omit<ResponseShape<Schemas['ApprovalMyTaskResponse']>, 'task'> & { task: ApprovalTask | null }
 export type PagedResult<T> = Omit<ResponseShape<Schemas['PagedResultOfTodoItem']>, 'items'> & { items: T[] }

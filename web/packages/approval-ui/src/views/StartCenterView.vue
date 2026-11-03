@@ -2,9 +2,11 @@
 import { computed, shallowRef } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { useCommandIntent } from '../composables/useCommandIntent'
 import { useApprovalClient } from '../client'
 import { errorMessage } from '../api/http'
 import type { DraftSummary, StartableFlow } from '../contracts/api'
+import { useApprovalUser } from '../composables/useApprovalUser'
 import { useAsyncData } from '../composables/useAsyncData'
 import { approvalRouteNames } from '../routes'
 import { formatDateTime } from '../utils/labels'
@@ -13,9 +15,11 @@ const { api: approvalApi, userKey: approvalUserKey } = useApprovalClient()
 
 /** 发起中心：我的草稿 + 按分类列出当前用户可发起的流程（设置了“在发起中心显示”）。 */
 const router = useRouter()
+const intent = useCommandIntent('draft-delete')
+const { can, capabilities } = useApprovalUser()
 const keyword = shallowRef('')
-const flows = useAsyncData((signal) => approvalApi.startableForms(signal), { watch: [approvalUserKey], initial: [] })
-const drafts = useAsyncData((signal) => approvalApi.drafts(signal), { watch: [approvalUserKey], initial: [], notifyError: false })
+const flows = useAsyncData((signal) => can('approval.instance.start') ? approvalApi.startableForms(signal) : Promise.resolve([]), { watch: [approvalUserKey, capabilities], initial: [] })
+const drafts = useAsyncData((signal) => can('approval.draft.read') ? approvalApi.drafts(signal) : Promise.resolve([]), { watch: [approvalUserKey, capabilities], initial: [], notifyError: false })
 
 const groups = computed(() => {
   const text = keyword.value.trim().toLowerCase()
@@ -41,7 +45,7 @@ async function removeDraft(draft: DraftSummary) {
     return
   }
   try {
-    await approvalApi.deleteDraft(draft.id)
+    await intent.run(draft.id, {}, (_, operationId) => approvalApi.deleteDraft(draft.id, operationId))
     ElMessage.success('已删除')
   } catch (e) {
     ElMessage.error(errorMessage(e))
@@ -64,7 +68,7 @@ async function removeDraft(draft: DraftSummary) {
       <el-table-column label="" width="140" align="right">
         <template #default="{ row }">
           <el-button link type="primary" size="small" @click.stop="openDraft(row as DraftSummary)">继续编辑</el-button>
-          <el-button link type="danger" size="small" @click.stop="removeDraft(row as DraftSummary)">删除</el-button>
+          <el-button v-if="can('approval.draft.delete')" link type="danger" size="small" @click.stop="removeDraft(row as DraftSummary)">删除</el-button>
         </template>
       </el-table-column>
     </el-table>

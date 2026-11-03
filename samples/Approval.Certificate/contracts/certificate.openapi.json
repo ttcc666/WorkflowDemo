@@ -44,6 +44,12 @@
           "canWithdraw": {
             "type": "boolean"
           },
+          "capabilities": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "type": "object"
+          },
           "completedAt": {
             "format": "date-time",
             "type": [
@@ -228,6 +234,12 @@
           },
           "assigneeValue": {
             "type": "string"
+          },
+          "capabilities": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "type": "object"
           },
           "comment": {
             "type": [
@@ -1000,6 +1012,19 @@
         ]
       },
       "post": {
+        "parameters": [
+          {
+            "description": "Stable non-empty UUID for one logical submission; retain it and the original body after network errors or CommitOutcomeUnknown.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -1164,6 +1189,17 @@
             "required": true,
             "schema": {
               "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Stable non-empty UUID for one logical submission; retain it and the original body after network errors or CommitOutcomeUnknown.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 1,
               "type": "string"
             }
           }
@@ -1358,6 +1394,17 @@
             "required": true,
             "schema": {
               "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Stable non-empty UUID for one logical submission; retain it and the original body after network errors or CommitOutcomeUnknown.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 1,
               "type": "string"
             }
           }

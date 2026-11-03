@@ -2,6 +2,9 @@ namespace Approval.AspNetCore;
 
 public sealed class ApprovalAspNetCoreOptions
 {
+    /// <summary>已认证身份中的当前企业 Claim；多个企业须先由宿主验证并选择唯一当前企业。</summary>
+    public string TenantClaimType { get; set; } = "tenant_id";
+    public Dictionary<string, string> PermissionPolicies { get; } = new(StringComparer.Ordinal);
     /// <summary>
     /// 管理操作（发布流程、投递记录）所需的授权策略名。设置后优先使用 ASP.NET Core 授权，
     /// 宿主需自行 <c>AddAuthorization(o =&gt; o.AddPolicy(...))</c>。

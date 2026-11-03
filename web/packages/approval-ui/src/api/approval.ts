@@ -3,6 +3,17 @@ import { http, type ApprovalHttpClient } from './http'
 import type {
   AddSignMode,
   ApprovalDefinition,
+  DefinitionGovernance,
+  DefinitionGovernanceSummary,
+  DefinitionAudit,
+  SynchronousActionScan,
+  ApprovalDiagnosticReport,
+  MaintenanceTarget,
+  MaintenanceMode,
+  MaintenancePreview,
+  MaintenanceJobInfo,
+  MaintenanceBatchInfo,
+  ArchiveSummary,
   ApprovalInstance,
   ApprovalMe,
   ApprovalMessage,
@@ -43,8 +54,21 @@ export function createApprovalApi(
   getConfig: () => Pick<ResolvedApprovalUIOptions, 'apiBase'> = approvalConfig,
 ) {
   const api = (path: string) => getConfig().apiBase + path
+  const commandHeaders = (key?: string) => key ? { 'Idempotency-Key': key } : undefined
   return {
     me: (signal?: AbortSignal) => http.get<ApprovalMe>(api('/me'), signal),
+    diagnostics: (signal?: AbortSignal) => http.get<ApprovalDiagnosticReport>(api('/diagnostics'), signal),
+    maintenancePreview: (target: MaintenanceTarget, mode: MaintenanceMode, signal?: AbortSignal) =>
+      http.get<MaintenancePreview>(api(`/maintenance/preview?target=${enc(target)}&mode=${enc(mode)}`), signal),
+    maintenanceJobs: (signal?: AbortSignal) => http.get<MaintenanceJobInfo[]>(api('/maintenance/jobs'), signal),
+    maintenanceBatches: (id: string, page = 1) => http.get<PagedResult<MaintenanceBatchInfo>>(api(`/maintenance/jobs/${id}/batches?page=${page}`)),
+    createMaintenanceJob: (body: { target: MaintenanceTarget; mode: MaintenanceMode; policyHash: string }, key: string) =>
+      http.post<MaintenanceJobInfo>(api('/maintenance/jobs'), body, commandHeaders(key)),
+    runMaintenanceJob: (id: string) => http.post<MaintenanceJobInfo>(api(`/maintenance/jobs/${id}/run`), {}),
+    setRetentionHold: (body: { target: MaintenanceTarget; resourceId: string; held: boolean; reason: string }, key: string) =>
+      http.post<boolean>(api('/maintenance/holds'), body, commandHeaders(key)),
+    archives: (page = 1, signal?: AbortSignal) => http.get<PagedResult<ArchiveSummary>>(api(`/archives?page=${page}`), signal),
+    exportArchive: (id: string, signal?: AbortSignal) => http.get<unknown>(api(`/archives/${id}/export`), signal),
     users: (keyword: string, take = 50, signal?: AbortSignal) =>
       http.get<DirectoryUser[]>(api(`/directory/users?keyword=${enc(keyword)}&take=${take}`), signal),
     usersByIds: (ids: string[], signal?: AbortSignal) =>
@@ -54,15 +78,15 @@ export function createApprovalApi(
     startableForms: (signal?: AbortSignal) => http.get<StartableFlow[]>(api('/forms/startable'), signal),
     startForm: (key: string, signal?: AbortSignal) => http.get<StartForm>(api(`/forms/${enc(key)}`), signal),
     /** 发起表单审批；校验失败抛出 ApiError（errors 为字段错误）；带 draftId 时提交成功后删除草稿 */
-    submitForm: (key: string, formData: FormValues, comment: string, draftId?: string | null) =>
-      http.post<{ instanceId: string }>(api(`/forms/${enc(key)}/start`), { formData, comment, draftId: draftId ?? null }),
+    submitForm: (key: string, formData: FormValues, comment: string, draftId?: string | null, operationId?: string) =>
+      http.post<{ instanceId: string }>(api(`/forms/${enc(key)}/start`), { formData, comment, draftId: draftId ?? null }, commandHeaders(operationId)),
 
     drafts: (signal?: AbortSignal) => http.get<DraftSummary[]>(api('/forms/drafts'), signal),
     draft: (id: string, signal?: AbortSignal) => http.get<DraftDetail>(api(`/forms/drafts/${id}`), signal),
     /** 保存草稿（不校验必填）；draftId 为空时新建 */
-    saveDraft: (key: string, draftId: string | null, formData: FormValues, comment: string) =>
-      http.put<{ draftId: string; updatedAt: string }>(api(`/forms/${enc(key)}/draft`), { draftId, formData, comment }),
-    deleteDraft: (id: string) => http.delete(api(`/forms/drafts/${id}`)),
+    saveDraft: (key: string, draftId: string | null, formData: FormValues, comment: string, operationId?: string) =>
+      http.put<{ draftId: string; updatedAt: string }>(api(`/forms/${enc(key)}/draft`), { draftId, formData, comment }, commandHeaders(operationId)),
+    deleteDraft: (id: string, operationId?: string) => http.delete(api(`/forms/drafts/${id}`), commandHeaders(operationId)),
 
     todo: (query: ListQuery = {}, signal?: AbortSignal) => http.get<PagedResult<TodoItem>>(api(`/todo${queryString(query)}`), signal),
     todoCount: (signal?: AbortSignal) => http.get<{ count: number }>(api('/todo/count'), signal),
@@ -82,19 +106,19 @@ export function createApprovalApi(
     myTask: (instanceId: string, signal?: AbortSignal) => http.get<MyTaskResult>(api(`/instances/${instanceId}/my-task`), signal),
 
     /** formData 仅表单审批可传：只含任务所在节点的可编辑字段，同意时一并修改 */
-    approve: (taskId: string, comment: string, formData?: FormValues) =>
-      http.post(api(`/tasks/${taskId}/approve`), { comment, formData: formData ?? null }),
+    approve: (taskId: string, comment: string, formData?: FormValues, operationId?: string) =>
+      http.post(api(`/tasks/${taskId}/approve`), { comment, formData: formData ?? null }, commandHeaders(operationId)),
     /** targetNodeId 为空时驳回并结束流程，否则退回到该节点 */
-    reject: (taskId: string, comment: string, targetNodeId?: string) =>
-      http.post(api(`/tasks/${taskId}/reject`), { comment, targetNodeId: targetNodeId ?? null }),
+    reject: (taskId: string, comment: string, targetNodeId?: string, operationId?: string) =>
+      http.post(api(`/tasks/${taskId}/reject`), { comment, targetNodeId: targetNodeId ?? null }, commandHeaders(operationId)),
     returnTargets: (taskId: string, signal?: AbortSignal) => http.get<ReturnTarget[]>(api(`/tasks/${taskId}/return-targets`), signal),
-    addSign: (taskId: string, userIds: string[], mode: AddSignMode, comment: string) =>
-      http.post(api(`/tasks/${taskId}/add-sign`), { userIds, mode, comment }),
+    addSign: (taskId: string, userIds: string[], mode: AddSignMode, comment: string, operationId?: string) =>
+      http.post(api(`/tasks/${taskId}/add-sign`), { userIds, mode, comment }, commandHeaders(operationId)),
     /** formData 仅表单审批可传（修改后的表单） */
-    resubmit: (taskId: string, comment: string, formData?: Record<string, unknown>) =>
-      http.post(api(`/tasks/${taskId}/resubmit`), { comment, formData: formData ?? null }),
-    transfer: (taskId: string, toUserId: string, comment: string) => http.post(api(`/tasks/${taskId}/transfer`), { toUserId, comment }),
-    withdraw: (instanceId: string, comment: string) => http.post(api(`/instances/${instanceId}/withdraw`), { comment }),
+    resubmit: (taskId: string, comment: string, formData?: Record<string, unknown>, operationId?: string) =>
+      http.post(api(`/tasks/${taskId}/resubmit`), { comment, formData: formData ?? null }, commandHeaders(operationId)),
+    transfer: (taskId: string, toUserId: string, comment: string, operationId?: string) => http.post(api(`/tasks/${taskId}/transfer`), { toUserId, comment }, commandHeaders(operationId)),
+    withdraw: (instanceId: string, comment: string, operationId?: string) => http.post(api(`/instances/${instanceId}/withdraw`), { comment }, commandHeaders(operationId)),
 
     /** 上传附件（未绑定，提交表单后绑定到申请）：文件名放在请求头，请求体为文件内容 */
     uploadFile: (file: File) =>
@@ -111,29 +135,41 @@ export function createApprovalApi(
 
     meta: () => http.get<ApprovalMeta>(api('/meta')),
     definitions: (signal?: AbortSignal) => http.get<ApprovalDefinition[]>(api('/definitions'), signal),
+    governanceDefinitions: (signal?: AbortSignal) => http.get<DefinitionGovernanceSummary[]>(api('/definitions/governance'), signal),
+    definitionGovernance: (key: string, signal?: AbortSignal) => http.get<DefinitionGovernance>(api(`/definitions/${enc(key)}/governance`), signal),
+    saveDesignDraft: (key: string, body: { name: string; definitionJson: string; expectedRevision: number; sourceDefinitionId: string | null }, operationId: string) =>
+      http.put<DefinitionGovernance>(api(`/definitions/${enc(key)}/draft`), body, commandHeaders(operationId)),
+    publishDesignDraft: (key: string, body: { expectedRevision: number; changeNote: string }, operationId: string) =>
+      http.post<{ id: string; key: string; version: number }>(api(`/definitions/${enc(key)}/publish-draft`), body, commandHeaders(operationId)),
+    setDefinitionEnabled: (key: string, body: { enabled: boolean; expectedRevision: number; changeNote: string }, operationId: string) =>
+      http.post<DefinitionGovernance>(api(`/definitions/${enc(key)}/enabled`), body, commandHeaders(operationId)),
+    selectDefinitionVersion: (key: string, body: { definitionId: string; expectedRevision: number; changeNote: string }, operationId: string) =>
+      http.post<DefinitionGovernance>(api(`/definitions/${enc(key)}/select-version`), body, commandHeaders(operationId)),
+    definitionAudit: (key: string, page = 1, signal?: AbortSignal) => http.get<PagedResult<DefinitionAudit>>(api(`/definitions/${enc(key)}/audit?page=${page}`), signal),
+    scanSynchronousActions: (page = 1, signal?: AbortSignal) => http.get<SynchronousActionScan>(api(`/definitions/synchronous-actions?page=${page}`), signal),
     latestDefinition: (key: string) => http.get<ApprovalDefinition>(api(`/definitions/${enc(key)}`)),
     definitionById: (id: string, signal?: AbortSignal) => http.get<ApprovalDefinition>(api(`/definitions/by-id/${id}`), signal),
     versions: (key: string, signal?: AbortSignal) => http.get<ApprovalDefinition[]>(api(`/definitions/${enc(key)}/versions`), signal),
     validate: (flowJson: string) => http.postJson<ValidationResult>(api('/definitions/validate'), flowJson),
-    publish: (key: string, name: string, flowJson: string) =>
-      http.postJson<{ id: string; key: string; version: number }>(api(`/definitions/${enc(key)}?name=${enc(name)}`), flowJson),
+    publish: (key: string, name: string, flowJson: string, operationId?: string) =>
+      http.postJson<{ id: string; key: string; version: number }>(api(`/definitions/${enc(key)}?name=${enc(name)}`), flowJson, commandHeaders(operationId)),
 
     messages: (unreadOnly = false, signal?: AbortSignal) =>
       http.get<ApprovalMessage[]>(api(`/messages?unreadOnly=${unreadOnly}&take=30`), signal),
     unreadCount: (signal?: AbortSignal) => http.get<{ count: number }>(api('/messages/unread-count'), signal),
-    markRead: (id: string) => http.post(api(`/messages/${id}/read`), {}),
-    markAllRead: () => http.post(api('/messages/read-all'), {}),
+    markRead: (id: string, operationId?: string) => http.post(api(`/messages/${id}/read`), {}, commandHeaders(operationId)),
+    markAllRead: (operationId?: string) => http.post(api('/messages/read-all'), {}, commandHeaders(operationId)),
 
     outbox: (query: ListQuery = {}, signal?: AbortSignal) =>
       http.get<PagedResult<OutboxMessage>>(api(`/outbox${queryString(query)}`), signal),
-    retryOutbox: (id: string) => http.post(api(`/outbox/${id}/retry`), {}),
+    retryOutbox: (id: string, operationId?: string) => http.post(api(`/outbox/${id}/retry`), {}, commandHeaders(operationId)),
 
     // ───── 管理（仅管理员）─────
     adminInstances: (query: ListQuery = {}, signal?: AbortSignal) =>
       http.get<PagedResult<InstanceListItem>>(api(`/admin/instances${queryString(query)}`), signal),
-    terminate: (instanceId: string, reason: string) => http.post(api(`/admin/instances/${instanceId}/terminate`), { reason }),
-    reassign: (taskId: string, toUserId: string, reason: string) =>
-      http.post(api(`/admin/tasks/${taskId}/reassign`), { toUserId, reason }),
+    terminate: (instanceId: string, reason: string, operationId?: string) => http.post(api(`/admin/instances/${instanceId}/terminate`), { reason }, commandHeaders(operationId)),
+    reassign: (taskId: string, toUserId: string, reason: string, operationId?: string) =>
+      http.post(api(`/admin/tasks/${taskId}/reassign`), { toUserId, reason }, commandHeaders(operationId)),
     /** 某人的未完成待办（离职交接预览） */
     userTasks: (userId: string, query: ListQuery = {}, signal?: AbortSignal) =>
       http.get<PagedResult<TodoItem>>(api(`/admin/users/${enc(userId)}/tasks${queryString(query)}`), signal),

@@ -46,7 +46,7 @@ public sealed partial class ApprovalEngine
             DueAt = info.DueAt,
             ReturnTo = info.ReturnTo,
             Assignees = info.Assignees.Select(Describe).ToList()
-        });
+        }, _tenantSettings);
 
         // 多条规则命中同一人同一渠道同一内容时只发一次
         var sent = new HashSet<(string Channel, string User, string Content)>();
@@ -111,12 +111,12 @@ public sealed partial class ApprovalEngine
     }
 
     private string Render(string template, IReadOnlyDictionary<string, object?> variables) =>
-        TemplateRenderer.Render(template, variables, TemplateEncoding.Raw, _options.DisplayTimeZone);
+        TemplateRenderer.Render(template, variables, TemplateEncoding.Raw, _tenantSettings.DisplayTimeZone);
 
     private void AddMessage(ApprovalInstance instance, FlowNode? node, NotifyEvent evt, string userId, string title, string content) =>
         _db.Set<ApprovalMessage>().Add(new ApprovalMessage
         {
-            Id = Guid.NewGuid(),
+            Id = _unit.NewId("ApprovalEngine.Notifications"),
             UserId = userId,
             Title = title,
             Content = content,
@@ -130,7 +130,7 @@ public sealed partial class ApprovalEngine
     private void AddOutbox(OutboxKind kind, string target, ApprovalInstance instance, FlowNode? node, string? description,
         Func<Guid, object> payload)
     {
-        var id = Guid.NewGuid();
+        var id = _unit.NewId("ApprovalEngine.Notifications");
         _db.Set<ApprovalOutboxMessage>().Add(new ApprovalOutboxMessage
         {
             Id = id,

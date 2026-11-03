@@ -11,6 +11,8 @@ public sealed class CertificateMonitor(IServiceScopeFactory scopes, TimeProvider
     public async Task<CertificateDiagnosticsResult> ScanOnceAsync(CancellationToken ct = default)
     {
         await using var scope = scopes.CreateAsyncScope();
+        scope.ServiceProvider.GetRequiredService<Approval.Core.Tenancy.ApprovalExecutionContext>().InitializeSystem("certificate", "certificate-monitor",
+            [Approval.Core.Abstractions.ApprovalPermissions.DiagnosticsRead]);
         var status = await scope.ServiceProvider.GetRequiredService<CertificateDiagnostics>().GetAsync(ct);
         var signature = $"{status.FailedDeliveries}:{status.OverdueTasks}:{string.Join(',', status.UnstaffedTasks.Select(t => t.TaskId).Order())}:{string.Join(',', status.Database.Problems)}";
         if (signature != _last && (status.FailedDeliveries > 0 || status.OverdueTasks > 0 || status.UnstaffedTasks.Count > 0 || !status.Database.Ready))

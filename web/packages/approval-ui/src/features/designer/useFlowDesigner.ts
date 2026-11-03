@@ -264,13 +264,14 @@ export function useFlowDesigner() {
   }
 
   /** 前端补充检查（后端不校验的展示类问题）+ 后端结构校验。 */
-  async function validate() {
+  async function validate(remote = true) {
     const definition = buildDefinition()
     const local = [
       ...nodes.value.filter((n) => !n.data?.name.trim()).map((n) => `节点 '${n.id}' 未填写名称`),
       ...checkSchema(form.value),
     ]
-    const { errors: server, warnings: serverWarnings } = await approvalApi.validate(JSON.stringify(definition))
+    const { errors: server, warnings: serverWarnings } = remote
+      ? await approvalApi.validate(JSON.stringify(definition)) : { errors: [], warnings: [] }
     errors.value = [...local, ...server]
     warnings.value = serverWarnings ?? []
     return { definition, ok: errors.value.length === 0 }
@@ -307,6 +308,7 @@ export function useFlowDesigner() {
     removeEdge,
     autoLayout,
     validate,
+    buildDefinition,
     markChanged,
     markSaved,
     undo,

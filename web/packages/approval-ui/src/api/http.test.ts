@@ -5,7 +5,7 @@ import { http } from './http'
 afterEach(() => configureApprovalUI())
 
 it('uses the host fetcher and preserves submission identity and request cancellation', async () => {
-  const fetcher = vi.fn(async () => new Response('{"id":"r1"}', { status: 202 }))
+  const fetcher = vi.fn(async (_url: string, _init: RequestInit) => new Response('{"id":"r1"}', { status: 202 }))
   configureApprovalUI({ fetcher, headers: () => ({ Authorization: 'Bearer current' }) })
   expect(await http.post('/api/certificates', { name: '证书' }, { 'Idempotency-Key': 'key' })).toEqual({ id: 'r1' })
   expect(fetcher).toHaveBeenCalledWith('/api/certificates', expect.objectContaining({
@@ -14,7 +14,10 @@ it('uses the host fetcher and preserves submission identity and request cancella
   }))
   const controller = new AbortController()
   await http.get('/api/approval/me', controller.signal)
-  expect(fetcher).toHaveBeenLastCalledWith('/api/approval/me', expect.objectContaining({ signal: controller.signal }))
+  const forwarded = fetcher.mock.calls.at(-1)![1].signal
+  expect(forwarded?.aborted).toBe(false)
+  controller.abort()
+  expect(forwarded?.aborted).toBe(true)
 })
 
 it('keeps host ProblemDetails and invokes the unauthorized callback', async () => {

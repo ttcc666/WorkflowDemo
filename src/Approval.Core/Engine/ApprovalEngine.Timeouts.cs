@@ -12,8 +12,12 @@ public sealed partial class ApprovalEngine
     /// 处理一条到期待办（<see cref="ApprovalTask.NextRemindAt"/> 已到）。返回是否做了处理；
     /// 任务已被处理或尚未到期时返回 false。与用户操作并发时由实例并发令牌保证只有一方成功。
     /// </summary>
-    public async Task<bool> HandleTimeoutAsync(Guid taskId, CancellationToken ct = default)
+    public Task<bool> HandleTimeoutAsync(Guid taskId, CancellationToken ct = default) =>
+        _unit.ExecuteCommandAsync(token => HandleTimeoutAsyncCore(taskId, token), ct);
+
+    private async Task<bool> HandleTimeoutAsyncCore(Guid taskId, CancellationToken ct = default)
     {
+        await _authorization.RequireAsync(Approval.Core.Abstractions.ApprovalPermissions.TaskTimeout, new() { TaskId = taskId }, null, ct);
         var (instance, task, flow) = await LoadTaskAsync(taskId, ct);
         if (instance.Status != InstanceStatus.Running || task.Status != ApprovalTaskStatus.Pending
             || task.NextRemindAt is not { } due || due > Now)

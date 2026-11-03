@@ -48,25 +48,15 @@ public static class ApprovalHttpContextExtensions
 
     /// <summary>当前查看者（用户 + 是否管理员），用于带权限的查询，如 <c>ApprovalQueryService.GetInstanceForViewerAsync</c>。</summary>
     public static async Task<ApprovalViewer> GetApprovalViewerAsync(this HttpContext http, CancellationToken ct = default) =>
-        new(http.GetApprovalUserId(), await http.IsApprovalAdminAsync(ct));
+        new(http.GetApprovalUserId(), await http.RequestServices.GetRequiredService<Approval.Core.Authorization.ApprovalAuthorizationService>().CanAsync(ApprovalPermissions.InstanceReadAll, ct: ct));
 
     /// <summary>能否读取完整流程定义：管理员，或属于 <see cref="ApprovalAspNetCoreOptions.DefinitionReaders"/> 中的角色。</summary>
-    public static async Task<bool> CanReadApprovalDefinitionsAsync(this HttpContext http, CancellationToken ct = default)
-    {
-        if (await http.IsApprovalAdminAsync(ct)) return true;
-
-        var services = http.RequestServices;
-        var identity = services.GetRequiredService<IApprovalIdentityProvider>();
-        foreach (var role in services.GetRequiredService<ApprovalAspNetCoreOptions>().DefinitionReaders)
-        {
-            if (await identity.IsInRoleAsync(http.GetApprovalUserId(), role, ct)) return true;
-        }
-        return false;
-    }
+    public static Task<bool> CanReadApprovalDefinitionsAsync(this HttpContext http, CancellationToken ct = default) =>
+        http.RequestServices.GetRequiredService<Approval.Core.Authorization.ApprovalAuthorizationService>().CanAsync(ApprovalPermissions.DefinitionReadSensitive, ct: ct);
 
     internal static async Task<string> ReadBodyAsStringAsync(this HttpContext http, CancellationToken ct)
     {
-        using var reader = new StreamReader(http.Request.Body);
+        using var reader = new StreamReader(http.Request.Body, System.Text.Encoding.UTF8, leaveOpen: true);
         return await reader.ReadToEndAsync(ct);
     }
 }

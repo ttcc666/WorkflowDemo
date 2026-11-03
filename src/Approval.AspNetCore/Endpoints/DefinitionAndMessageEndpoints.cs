@@ -1,6 +1,8 @@
 using Approval.AspNetCore.Contracts;
 using Approval.Core;
 using Approval.Core.Abstractions;
+using Approval.Core.Authorization;
+using Microsoft.Extensions.DependencyInjection;
 using Approval.Core.Definitions;
 using Approval.Core.Domain;
 using Approval.Core.Engine;
@@ -13,8 +15,30 @@ namespace Approval.AspNetCore.Endpoints;
 /// <summary>流程定义：设计器元数据、列表、版本、校验、发布。完整定义含动作参数与通知配置，仅管理员（及 DefinitionReaders）可读。</summary>
 internal static class DefinitionEndpoints
 {
+    public sealed record DesignDraftRequest(string Name, string DefinitionJson, long ExpectedRevision, Guid? SourceDefinitionId = null);
+    public sealed record PublishDesignDraftRequest(long ExpectedRevision, string? ChangeNote = null);
+    public sealed record EnableDefinitionRequest(bool Enabled, long ExpectedRevision, string? ChangeNote = null);
+    public sealed record SelectDefinitionVersionRequest(Guid DefinitionId, long ExpectedRevision, string? ChangeNote = null);
     public static void Map(RouteGroupBuilder group)
     {
+        group.MapGet("/definitions/governance", (ApprovalDefinitionService d, CancellationToken ct) => d.ListGovernanceAsync(ct));
+        group.MapGet("/definitions/{key}/governance", async (string key, ApprovalDefinitionService d, CancellationToken ct) =>
+            await d.GetGovernanceAsync(key, ct) is { } value ? Results.Ok(value) : Results.NotFound()).Produces<DefinitionGovernance>().Produces(404);
+        group.MapGet("/definitions/{key}/audit", (string key, int? page, int? pageSize, ApprovalDefinitionService d, CancellationToken ct) =>
+            d.ListAuditAsync(key, new PageRequest(page ?? 1, pageSize ?? 20), ct));
+        group.MapGet("/definitions/synchronous-actions", (int? page, int? pageSize, ApprovalDefinitionService d, CancellationToken ct) =>
+            d.ScanSynchronousActionsAsync(new PageRequest(page ?? 1, pageSize ?? 20), ct));
+        group.MapPut("/definitions/{key}/draft", (string key, DesignDraftRequest request, ApprovalDefinitionService d, CancellationToken ct) =>
+            d.SaveDesignDraftAsync(key, request.Name, request.DefinitionJson, request.ExpectedRevision, request.SourceDefinitionId, ct));
+        group.MapPost("/definitions/{key}/publish-draft", async (string key, PublishDesignDraftRequest request, ApprovalDefinitionService d, CancellationToken ct) =>
+        {
+            var result = await d.PublishDesignDraftAsync(key, request.ExpectedRevision, request.ChangeNote, ct);
+            return new ApprovalPublishedResponse(result.Id, result.Key, result.Version);
+        });
+        group.MapPost("/definitions/{key}/enabled", (string key, EnableDefinitionRequest request, ApprovalDefinitionService d, CancellationToken ct) =>
+            d.SetEnabledAsync(key, request.Enabled, request.ExpectedRevision, request.ChangeNote, ct));
+        group.MapPost("/definitions/{key}/select-version", (string key, SelectDefinitionVersionRequest request, ApprovalDefinitionService d, CancellationToken ct) =>
+            d.SelectVersionAsync(key, request.DefinitionId, request.ExpectedRevision, request.ChangeNote, ct));
         // 设计器元数据：审批人类型、通知接收人类型、动作（含参数描述）、渠道、模板变量（不含敏感配置，所有登录用户可读）
         group.MapGet("/meta", (ApprovalDefinitionService d) => d.Metadata);
 
@@ -23,25 +47,21 @@ internal static class DefinitionEndpoints
 
         group.MapGet("/definitions", async (HttpContext http, ApprovalDefinitionService d, CancellationToken ct) =>
         {
-            await EnsureReaderAsync(http, ct);
             return (await d.ListLatestAsync(ct)).Select(ApprovalDefinitionResponse.From).ToArray();
         });
 
         group.MapGet("/definitions/by-id/{id:guid}", async (Guid id, HttpContext http, ApprovalDefinitionService d, CancellationToken ct) =>
         {
-            await EnsureReaderAsync(http, ct);
             return await d.GetByIdAsync(id, ct) is { } definition ? Results.Ok(ApprovalDefinitionResponse.From(definition)) : Results.NotFound();
         }).Produces<ApprovalDefinitionResponse>().Produces(StatusCodes.Status404NotFound);
 
         group.MapGet("/definitions/{key}", async (string key, HttpContext http, ApprovalDefinitionService d, CancellationToken ct) =>
         {
-            await EnsureReaderAsync(http, ct);
             return await d.GetLatestAsync(key, ct) is { } definition ? Results.Ok(ApprovalDefinitionResponse.From(definition)) : Results.NotFound();
         }).Produces<ApprovalDefinitionResponse>().Produces(StatusCodes.Status404NotFound);
 
         group.MapGet("/definitions/{key}/versions", async (string key, HttpContext http, ApprovalDefinitionService d, CancellationToken ct) =>
         {
-            await EnsureReaderAsync(http, ct);
             return (await d.ListVersionsAsync(key, ct)).Select(ApprovalDefinitionResponse.From).ToArray();
         });
 
@@ -51,9 +71,9 @@ internal static class DefinitionEndpoints
             try
             {
                 var flow = FlowDefinition.Parse(await http.ReadBodyAsStringAsync(ct));
-                return TypedResults.Ok(new ApprovalValidationResponse(d.Validate(flow), d.Warnings(flow)));
+                return TypedResults.Ok(new ApprovalValidationResponse(await d.ValidateAsync(flow, ct), d.Warnings(flow)));
             }
-            catch (ApprovalException ex)
+            catch (ApprovalException ex) when (ex.Code is ApprovalErrorCode.InvalidDefinition or ApprovalErrorCode.InvalidOperation)
             {
                 return TypedResults.Ok(new ApprovalValidationResponse([ex.Message], []));
             }
@@ -62,17 +82,11 @@ internal static class DefinitionEndpoints
         // 发布新版本：请求体为流程定义 JSON；仅管理员
         group.MapPost("/definitions/{key}", async (string key, string? name, HttpContext http, ApprovalDefinitionService d, CancellationToken ct) =>
         {
-            await http.EnsureApprovalAdminAsync("仅管理员可发布流程", ct);
             var definition = await d.PublishAsync(key, string.IsNullOrWhiteSpace(name) ? key : name, await http.ReadBodyAsStringAsync(ct), ct);
             return TypedResults.Ok(new ApprovalPublishedResponse(definition.Id, definition.Key, definition.Version));
         }).Accepts<FlowDefinition>("application/json");
     }
 
-    private static async Task EnsureReaderAsync(HttpContext http, CancellationToken ct)
-    {
-        if (!await http.CanReadApprovalDefinitionsAsync(ct))
-            throw new ApprovalException("仅管理员可查看流程定义") { Code = ApprovalErrorCode.Forbidden };
-    }
 }
 
 /// <summary>站内信与投递记录。</summary>
@@ -101,7 +115,6 @@ internal static class MessageEndpoints
         group.MapGet("/outbox", async (OutboxStatus? status, Guid? instanceId, int? page, int? pageSize, HttpContext http,
             ApprovalOutboxService o, CancellationToken ct) =>
         {
-            await http.EnsureApprovalAdminAsync("仅管理员可查看投递记录", ct);
             var pageResult = await o.ListAsync(new OutboxQuery(status, instanceId), new PageRequest(page, pageSize), ct);
             return new PagedResult<ApprovalOutboxMessageResponse>(pageResult.Items.Select(ApprovalOutboxMessageResponse.From).ToArray(), pageResult.Total, pageResult.Page, pageResult.PageSize);
         });
@@ -109,7 +122,6 @@ internal static class MessageEndpoints
         group.MapPost("/outbox/{id:guid}/retry", async (Guid id, HttpContext http, ApprovalOutboxService o, ApprovalOutboxSignal signal,
             CancellationToken ct) =>
         {
-            await http.EnsureApprovalAdminAsync("仅管理员可重试投递", ct);
             await o.RetryAsync(id, ct);
             signal.Notify();
             return TypedResults.NoContent();
@@ -138,7 +150,9 @@ internal static class DirectoryEndpoints
             var user = directory is null ? null : (await directory.GetUsersAsync([userId], ct)).FirstOrDefault();
             return new ApprovalMeResponse(userId, user?.Name ?? userId,
                 await identity.GetRolesAsync(userId, ct), await http.IsApprovalAdminAsync(ct),
-                await http.CanReadApprovalDefinitionsAsync(ct), formBusinessType is not null, formBusinessType);
+                await http.CanReadApprovalDefinitionsAsync(ct), formBusinessType is not null, formBusinessType)
+                { TenantId = http.RequestServices.GetRequiredService<IApprovalTenantContext>().TenantId,
+                  Capabilities = await http.RequestServices.GetRequiredService<ApprovalAuthorizationService>().CapabilitiesAsync(ct: ct) };
         });
 
         // ids=a,b 时按 ID 批量获取（回显已选用户），否则按关键字搜索

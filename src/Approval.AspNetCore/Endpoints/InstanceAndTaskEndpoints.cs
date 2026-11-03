@@ -2,6 +2,7 @@ using Approval.AspNetCore.Contracts;
 using System.Text.Json;
 using Approval.Core;
 using Approval.Core.Engine;
+using Approval.Core.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -32,11 +33,11 @@ internal static class InstanceEndpoints
 
         // 详情、按业务查询、实例的流程定义：只对有关的人可见（IApprovalAccessPolicy），无权时与不存在一样返回 404
         group.MapGet("/instances/{id:guid}", async (Guid id, HttpContext http, ApprovalQueryService q, CancellationToken ct) =>
-            ApprovalInstanceResponse.From(await q.GetInstanceForViewerAsync(id, await http.GetApprovalViewerAsync(ct), ct) ?? throw NotVisible()));
+            await ResponseAsync(await q.GetInstanceForViewerAsync(id, await http.GetApprovalViewerAsync(ct), ct) ?? throw NotVisible(), http, ct));
 
         group.MapGet("/instances", async (string businessType, string businessKey, HttpContext http, ApprovalQueryService q,
                 CancellationToken ct) =>
-            (await q.GetByBusinessForViewerAsync(businessType, businessKey, await http.GetApprovalViewerAsync(ct), ct)).Select(ApprovalInstanceResponse.From).ToArray());
+            await ResponsesAsync(await q.GetByBusinessForViewerAsync(businessType, businessKey, await http.GetApprovalViewerAsync(ct), ct), http, ct));
 
         // 实例绑定版本的流程定义公开视图（画流程图、展示表单），不含动作参数、通知与时限配置
         group.MapGet("/instances/{id:guid}/definition", async (Guid id, HttpContext http, ApprovalQueryService q, CancellationToken ct) =>
@@ -47,7 +48,8 @@ internal static class InstanceEndpoints
         {
             var task = await e.FindHandleableTaskAsync(id, http.GetApprovalUserId(), ct);
             var forms = task is null ? null : http.RequestServices.GetService<ApprovalFormService>();
-            return new ApprovalMyTaskResponse(task is null ? null : ApprovalTaskResponse.From(task), forms is null ? [] : await forms.GetEditableFieldsAsync(task!, ct));
+            return new ApprovalMyTaskResponse(task is null ? null : ApprovalTaskResponse.From(task), forms is null ? [] : await forms.GetEditableFieldsAsync(task!, ct))
+            { Capabilities = task is null ? new Dictionary<string, bool>() : await http.RequestServices.GetRequiredService<ApprovalAuthorizationService>().CapabilitiesAsync(new() { TaskId = task.Id }, ct) };
         });
 
         group.MapPost("/instances/{id:guid}/withdraw", async (Guid id, CommentRequest body, HttpContext http, ApprovalEngine e, CancellationToken ct) =>
@@ -57,6 +59,22 @@ internal static class InstanceEndpoints
         });
     }
 
+    private static async Task<ApprovalInstanceResponse[]> ResponsesAsync(IReadOnlyList<InstanceDetail> details, HttpContext http, CancellationToken ct)
+    {
+        var results = new List<ApprovalInstanceResponse>();
+        foreach (var detail in details) results.Add(await ResponseAsync(detail, http, ct));
+        return results.ToArray();
+    }
+    private static async Task<ApprovalInstanceResponse> ResponseAsync(InstanceDetail detail, HttpContext http, CancellationToken ct)
+    {
+        var authorization = http.RequestServices.GetRequiredService<ApprovalAuthorizationService>();
+        var tasks = new List<ApprovalTaskResponse>();
+        foreach (var task in detail.Tasks)
+            tasks.Add(ApprovalTaskResponse.From(task) with { Capabilities = new Dictionary<string, bool>
+            { [Approval.Core.Abstractions.ApprovalPermissions.TaskReassign] = await authorization.CanAsync(Approval.Core.Abstractions.ApprovalPermissions.TaskReassign, new() { TaskId = task.Id }, ct) } });
+        return ApprovalInstanceResponse.From(detail) with { Tasks = tasks,
+            Capabilities = await authorization.CapabilitiesAsync(new() { InstanceId = detail.Id }, ct) };
+    }
     private static ApprovalException NotVisible() => new("审批不存在或无权查看") { Code = ApprovalErrorCode.NotFound };
 }
 

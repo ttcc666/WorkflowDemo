@@ -5,7 +5,10 @@ defineProps<{
   dirty: boolean
   validating: boolean
   publishing: boolean
+  saving?: boolean
+  canSave?: boolean
   canPublish: boolean
+  canValidate?: boolean
   canUndo: boolean
   canRedo: boolean
 }>()
@@ -19,6 +22,7 @@ const emit = defineEmits<{
   layout: []
   validate: []
   publish: []
+  save: []
 }>()
 </script>
 
@@ -37,8 +41,9 @@ const emit = defineEmits<{
         <el-button :disabled="!canRedo" title="重做（Ctrl+Y / Ctrl+Shift+Z）" @click="emit('redo')">↷ 重做</el-button>
       </el-button-group>
       <el-button @click="emit('layout')">自动排版</el-button>
-      <el-button :loading="validating" @click="emit('validate')">校验</el-button>
-      <el-tooltip :disabled="canPublish" content="仅管理员可发布流程" placement="bottom">
+      <el-button v-if="canValidate" :loading="validating" @click="emit('validate')">校验</el-button>
+      <el-button v-if="canSave" :loading="saving" :disabled="publishing" @click="emit('save')">保存草稿</el-button>
+      <el-tooltip :disabled="canPublish" content="缺少发布流程权限" placement="bottom">
         <span>
           <el-button type="primary" :loading="publishing" :disabled="!canPublish" @click="emit('publish')">发布新版本</el-button>
         </span>

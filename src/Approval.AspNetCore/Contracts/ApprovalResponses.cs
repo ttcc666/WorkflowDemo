@@ -42,6 +42,7 @@ public sealed record ApprovalTaskResponse(
     int RemindCount,
     DateTime? LastRemindedAt)
 {
+    public IReadOnlyDictionary<string, bool> Capabilities { get; init; } = new Dictionary<string, bool>();
     public static ApprovalTaskResponse From(ApprovalTask value) => new(
         value.Id, value.InstanceId, value.NodeId, value.NodeName, value.AssigneeKind, value.Kind, value.ParentTaskId, value.Round, value.AssigneeValue, value.Status, value.Order, value.HandledBy, value.Comment, value.CreatedAt, value.CompletedAt, value.DueAt, value.NextRemindAt, value.RemindCount, value.LastRemindedAt);
 }
@@ -111,6 +112,7 @@ public sealed record ApprovalInstanceResponse(
     IReadOnlyList<ApprovalLogResponse> Logs, ApprovalAccessLevel Access,
     IReadOnlyList<string> HiddenFields, bool CanWithdraw)
 {
+    public IReadOnlyDictionary<string, bool> Capabilities { get; init; } = new Dictionary<string, bool>();
     public static ApprovalInstanceResponse From(InstanceDetail value) => new(
         value.Id, value.DefinitionId, value.DefinitionKey, value.DefinitionVersion,
         value.BusinessType, value.BusinessKey, value.Title, value.InitiatorId, value.Status,
@@ -121,9 +123,16 @@ public sealed record ApprovalInstanceResponse(
 
 /// <summary>当前用户及审批功能权限。</summary>
 public sealed record ApprovalMeResponse(string UserId, string Name, IReadOnlyList<string> Roles,
-    bool IsAdmin, bool CanViewDefinitions, bool FormsEnabled, string? FormBusinessType);
+    bool IsAdmin, bool CanViewDefinitions, bool FormsEnabled, string? FormBusinessType)
+{
+    public string TenantId { get; init; } = string.Empty;
+    public IReadOnlyDictionary<string, bool> Capabilities { get; init; } = new Dictionary<string, bool>();
+}
 /// <summary>当前用户可处理的任务和允许编辑的字段。</summary>
-public sealed record ApprovalMyTaskResponse(ApprovalTaskResponse? Task, IReadOnlyList<string> EditableFields);
+public sealed record ApprovalMyTaskResponse(ApprovalTaskResponse? Task, IReadOnlyList<string> EditableFields)
+{
+    public IReadOnlyDictionary<string, bool> Capabilities { get; init; } = new Dictionary<string, bool>();
+}
 /// <summary>列表计数或批量处理计数。</summary>
 public sealed record CountResponse(int Count);
 /// <summary>任务是否可由当前用户处理。</summary>

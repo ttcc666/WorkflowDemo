@@ -183,6 +183,10 @@ public sealed class NotificationTests : IAsyncLifetime
             var service = sp.GetRequiredService<ApprovalMessageService>();
             Assert.Equal(1, await service.UnreadCountAsync("r1"));
             await Assert.ThrowsAsync<ApprovalException>(() => service.MarkReadAsync("r2", r1Message.Id));
+        });
+        await _host.RunAsync(async sp =>
+        {
+            var service = sp.GetRequiredService<ApprovalMessageService>();
             await service.MarkReadAsync("r1", r1Message.Id);
             Assert.Equal(0, await service.UnreadCountAsync("r1"));
             Assert.Equal(1, await service.MarkAllReadAsync("r2"));

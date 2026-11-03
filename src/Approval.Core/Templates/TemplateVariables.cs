@@ -41,10 +41,11 @@ public static class TemplateVariables
     }
 
     public static Dictionary<string, object?> Build(ApprovalInstance instance, IReadOnlyDictionary<string, object?> form,
-        FlowNode? node, ApprovalOptions options, EventValues? values = null)
+        FlowNode? node, ApprovalOptions options, EventValues? values = null, Approval.Core.Abstractions.ApprovalTenantSettings? settings = null)
     {
         var result = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
         foreach (var (key, value) in options.GlobalVariables) result[key] = value;
+        foreach (var (key, value) in settings?.GlobalVariables ?? options.GlobalVariables) result[key] = value;
 
         void Add(string name, string alias, object? value)
         {
@@ -67,7 +68,8 @@ public static class TemplateVariables
         Add("业务类型", "businessType", instance.BusinessType);
         Add("业务单号", "businessKey", instance.BusinessKey);
         Add("实例ID", "instanceId", instance.Id.ToString());
-        Add("链接", "link", options.InstanceUrlFormat is null ? "" : string.Format(options.InstanceUrlFormat, instance.Id));
+        var url = settings is null ? options.InstanceUrlFormat : settings.InstanceUrlFormat;
+        Add("链接", "link", url is null ? "" : string.Format(url, instance.Id));
         Add("表单", "form", form);
         return result;
     }

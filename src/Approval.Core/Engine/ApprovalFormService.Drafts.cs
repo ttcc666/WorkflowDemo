@@ -28,9 +28,14 @@ public sealed partial class ApprovalFormService
     public const int MaxDraftBytes = 256 * 1024;
 
     /// <summary>保存草稿（draftId 为空时新建），返回保存后的草稿。</summary>
-    public async Task<ApprovalDraft> SaveDraftAsync(string userId, string key, Guid? draftId, JsonElement formData, string? comment,
+    public Task<ApprovalDraft> SaveDraftAsync(string userId, string key, Guid? draftId, JsonElement formData, string? comment,
+        CancellationToken ct = default) =>
+        _unit.ExecuteCommandAsync(token => SaveDraftAsyncCore(userId, key, draftId, formData, comment, token), ct);
+
+    private async Task<ApprovalDraft> SaveDraftAsyncCore(string userId, string key, Guid? draftId, JsonElement formData, string? comment,
         CancellationToken ct = default)
     {
+        await _authorization.RequireAsync(Approval.Core.Abstractions.ApprovalPermissions.DraftWrite, new() { DraftId = draftId, DefinitionKey = key }, userId, ct);
         var (definition, flow) = await LoadStartableAsync(key, userId, ct);
         var schema = flow.Form ?? new FormSchema();
         var json = FormDataValidator.NormalizeLenient(schema, formData);
@@ -50,7 +55,7 @@ public sealed partial class ApprovalFormService
         {
             if (await _db.Set<ApprovalDraft>().CountAsync(d => d.UserId == userId, ct) >= MaxDraftsPerUser)
                 throw new ApprovalException($"草稿最多保存 {MaxDraftsPerUser} 份，请先删除不需要的草稿");
-            draft = new ApprovalDraft { Id = Guid.NewGuid(), UserId = userId, DefinitionKey = definition.Key, CreatedAt = now };
+            draft = new ApprovalDraft { Id = _unit.NewId("ApprovalFormService.Drafts"), UserId = userId, DefinitionKey = definition.Key, CreatedAt = now };
             _db.Set<ApprovalDraft>().Add(draft);
         }
 
@@ -67,6 +72,7 @@ public sealed partial class ApprovalFormService
     /// <summary>我的草稿（最近修改的在前）；流程已停用发起的草稿也列出，打开时提示。</summary>
     public async Task<List<DraftSummary>> ListDraftsAsync(string userId, CancellationToken ct = default)
     {
+        await _authorization.RequireAsync(Approval.Core.Abstractions.ApprovalPermissions.DraftRead, new(), userId, ct);
         var drafts = await _db.Set<ApprovalDraft>().AsNoTracking()
             .Where(d => d.UserId == userId)
             .OrderByDescending(d => d.UpdatedAt)
@@ -80,6 +86,7 @@ public sealed partial class ApprovalFormService
     /// <summary>打开草稿：按最新版本的表单宽松规范化（保留可用的值）；只能打开自己的草稿。</summary>
     public async Task<DraftDetail> GetDraftAsync(string userId, Guid id, CancellationToken ct = default)
     {
+        await _authorization.RequireAsync(Approval.Core.Abstractions.ApprovalPermissions.DraftRead, new() { DraftId = id }, userId, ct);
         var draft = await FindDraftAsync(userId, id, ct, tracking: false);
         var (definition, flow) = await LoadStartableAsync(draft.DefinitionKey, userId, ct);
         using var document = JsonDocument.Parse(draft.FormDataJson);
@@ -91,8 +98,12 @@ public sealed partial class ApprovalFormService
             Adjusted: json != draft.FormDataJson);
     }
 
-    public async Task DeleteDraftAsync(string userId, Guid id, CancellationToken ct = default)
+    public Task DeleteDraftAsync(string userId, Guid id, CancellationToken ct = default) =>
+        _unit.ExecuteCommandAsync(token => DeleteDraftAsyncCore(userId, id, token), ct);
+
+    private async Task DeleteDraftAsyncCore(string userId, Guid id, CancellationToken ct = default)
     {
+        await _authorization.RequireAsync(Approval.Core.Abstractions.ApprovalPermissions.DraftDelete, new() { DraftId = id }, userId, ct);
         _db.Set<ApprovalDraft>().Remove(await FindDraftAsync(userId, id, ct));
         // 草稿中的附件解除绑定，过期后清理
         await files.BindToDraftAsync(id, [], ct);

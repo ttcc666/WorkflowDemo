@@ -18,6 +18,8 @@ public class DefaultApprovalAccessPolicy(ApprovalDbContextAccessor accessor, IAp
 
     public virtual async Task<ApprovalAccess> GetAccessAsync(ApprovalViewer viewer, ApprovalInstance instance, CancellationToken ct)
     {
+        viewer = await accessor.Authorization.ViewerAsync(viewer, instance.Id, ct);
+        instance = await Db.Set<ApprovalInstance>().AsNoTracking().SingleAsync(i => i.Id == instance.Id, ct);
         if (viewer.IsAdmin || instance.InitiatorId == viewer.UserId) return ApprovalAccess.Full;
 
         var nodes = await GetParticipatedNodesAsync(viewer.UserId, instance.Id, ct);
@@ -48,7 +50,9 @@ public class DefaultApprovalAccessPolicy(ApprovalDbContextAccessor accessor, IAp
     /// <summary>默认规则的批量可见范围，供宿主在数据库内分页。扩展查看规则时应同时重写此方法。</summary>
     public virtual async Task<IQueryable<ApprovalInstance>> VisibleInstancesAsync(ApprovalViewer viewer, CancellationToken ct)
     {
-        var instances = Db.Set<ApprovalInstance>().AsNoTracking();
+        await accessor.Authorization.RequireAsync(ApprovalPermissions.InstanceRead, userId: viewer.UserId, ct: ct);
+        viewer = await accessor.Authorization.ViewerAsync(viewer, ct: ct);
+        var instances = await accessor.Authorization.ScopeAsync(Db.Set<ApprovalInstance>().AsNoTracking(), ct);
         if (viewer.IsAdmin) return instances;
         var roles = (await Identity.GetRolesAsync(viewer.UserId, ct)).ToList();
         var tasks = ParticipatingTasks(viewer.UserId, roles);

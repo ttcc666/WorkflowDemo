@@ -17,6 +17,124 @@ namespace Certificate.Api.Infrastructure.Migrations
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.14");
 
+            modelBuilder.Entity("Approval.Core.Domain.ApprovalArchiveRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("ArchivedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("BusinessKey")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("BusinessType")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("ConcurrencyStamp")
+                        .IsConcurrencyToken()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid?>("DefinitionId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DefinitionKey")
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("InstanceId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("PayloadExpiredAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("PurgedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("ResourceId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SnapshotHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SnapshotJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("SourceVersion")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Target")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("TenantId")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UserId")
+                        .HasMaxLength(256)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "ArchivedAt");
+
+                    b.HasIndex("TenantId", "Target", "ResourceId", "SourceVersion")
+                        .IsUnique();
+
+                    b.ToTable("ApprovalArchives", (string)null);
+                });
+
+            modelBuilder.Entity("Approval.Core.Domain.ApprovalBusinessSlot", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("BusinessKey")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("BusinessType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("InstanceId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("LookupHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("TenantId")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "InstanceId")
+                        .IsUnique();
+
+                    b.HasIndex("TenantId", "LookupHash")
+                        .IsUnique();
+
+                    b.ToTable("ApprovalBusinessSlots", (string)null);
+                });
+
             modelBuilder.Entity("Approval.Core.Domain.ApprovalCarbonCopy", b =>
                 {
                     b.Property<Guid>("Id")
@@ -47,11 +165,17 @@ namespace Certificate.Api.Infrastructure.Migrations
                     b.Property<int>("Round")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("TenantId")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
 
-                    b.HasIndex("InstanceId");
+                    b.HasIndex("TenantId", "InstanceId");
 
-                    b.HasIndex("AssigneeKind", "AssigneeValue");
+                    b.HasIndex("TenantId", "AssigneeKind", "AssigneeValue");
 
                     b.ToTable("ApprovalCarbonCopies", (string)null);
                 });
@@ -82,15 +206,150 @@ namespace Certificate.Api.Infrastructure.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("TenantId")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
                     b.Property<int>("Version")
                         .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Key", "Version")
+                    b.HasIndex("TenantId", "Key", "Version")
                         .IsUnique();
 
                     b.ToTable("ApprovalDefinitions", (string)null);
+                });
+
+            modelBuilder.Entity("Approval.Core.Domain.ApprovalDefinitionAudit", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ActorId")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ChangeNote")
+                        .HasMaxLength(1000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DefinitionHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("DefinitionId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("Revision")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid?>("SourceDefinitionId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("TenantId")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("Version")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "DefinitionId");
+
+                    b.HasIndex("TenantId", "SourceDefinitionId");
+
+                    b.HasIndex("TenantId", "Key", "Revision")
+                        .IsUnique();
+
+                    b.ToTable("ApprovalDefinitionAudits", (string)null);
+                });
+
+            modelBuilder.Entity("Approval.Core.Domain.ApprovalDefinitionManagement", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("ActiveDefinitionId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DraftJson")
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("DraftRevision")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid?>("DraftSourceDefinitionId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("IsEnabled")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("LastVersion")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<long?>("PublishedDraftRevision")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("Revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("TenantId")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UpdatedBy")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "ActiveDefinitionId");
+
+                    b.HasIndex("TenantId", "DraftSourceDefinitionId");
+
+                    b.HasIndex("TenantId", "Key")
+                        .IsUnique();
+
+                    b.ToTable("ApprovalDefinitionManagement", (string)null);
                 });
 
             modelBuilder.Entity("Approval.Core.Domain.ApprovalDraft", b =>
@@ -115,6 +374,12 @@ namespace Certificate.Api.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("TenantId")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("TEXT");
 
@@ -125,7 +390,7 @@ namespace Certificate.Api.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("UserId", "UpdatedAt");
+                    b.HasIndex("TenantId", "UserId", "UpdatedAt");
 
                     b.ToTable("ApprovalDrafts", (string)null);
                 });
@@ -136,10 +401,20 @@ namespace Certificate.Api.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid?>("ArchiveId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("ConcurrencyStamp")
+                        .IsConcurrencyToken()
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("ContentType")
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("TEXT");
+
+                    b.Property<bool>("DeletionPending")
+                        .HasColumnType("INTEGER");
 
                     b.Property<Guid?>("DraftId")
                         .HasColumnType("TEXT");
@@ -165,6 +440,12 @@ namespace Certificate.Api.Infrastructure.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("TenantId")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
                     b.Property<DateTime>("UploadedAt")
                         .HasColumnType("TEXT");
 
@@ -175,13 +456,70 @@ namespace Certificate.Api.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("DraftId");
+                    b.HasIndex("TenantId", "ArchiveId");
 
-                    b.HasIndex("InstanceId");
+                    b.HasIndex("TenantId", "DraftId");
 
-                    b.HasIndex("UploadedAt");
+                    b.HasIndex("TenantId", "InstanceId");
+
+                    b.HasIndex("TenantId", "UploadedAt");
 
                     b.ToTable("ApprovalFiles", (string)null);
+                });
+
+            modelBuilder.Entity("Approval.Core.Domain.ApprovalFileDeletion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("ConcurrencyStamp")
+                        .IsConcurrencyToken()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid>("FileId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("LastErrorCode")
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("LeaseId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("NextAttemptAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("StartedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("StorageKey")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("TenantId")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "FileId")
+                        .IsUnique();
+
+                    b.HasIndex("TenantId", "Status", "NextAttemptAt");
+
+                    b.ToTable("ApprovalFileDeletions", (string)null);
                 });
 
             modelBuilder.Entity("Approval.Core.Domain.ApprovalInstance", b =>
@@ -248,19 +586,27 @@ namespace Certificate.Api.Infrastructure.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("TenantId")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Title")
                         .HasMaxLength(500)
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("BusinessType", "BusinessKey");
+                    b.HasIndex("TenantId", "DefinitionId");
 
-                    b.HasIndex("InitiatorId", "CreatedAt");
+                    b.HasIndex("TenantId", "BusinessType", "BusinessKey");
 
-                    b.HasIndex("InitiatorId", "Status");
+                    b.HasIndex("TenantId", "InitiatorId", "CreatedAt");
 
-                    b.HasIndex("Status", "CreatedAt");
+                    b.HasIndex("TenantId", "InitiatorId", "Status");
+
+                    b.HasIndex("TenantId", "Status", "CreatedAt");
 
                     b.ToTable("ApprovalInstances", (string)null);
                 });
@@ -304,14 +650,147 @@ namespace Certificate.Api.Infrastructure.Migrations
                     b.Property<int>("Sequence")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("TenantId")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
 
-                    b.HasIndex("InstanceId", "Sequence")
+                    b.HasIndex("TenantId", "InstanceId", "Sequence")
                         .IsUnique();
 
-                    b.HasIndex("OperatorId", "Action");
+                    b.HasIndex("TenantId", "OperatorId", "Action");
 
                     b.ToTable("ApprovalLogs", (string)null);
+                });
+
+            modelBuilder.Entity("Approval.Core.Domain.ApprovalMaintenanceAudit", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ActorId")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("Batch")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Count")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("JobId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("ResourceId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Target")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("TenantId")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "JobId", "Batch")
+                        .IsUnique();
+
+                    b.ToTable("ApprovalMaintenanceAudits", (string)null);
+                });
+
+            modelBuilder.Entity("Approval.Core.Domain.ApprovalMaintenanceJob", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ActorId")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("CompletedBatches")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("ConcurrencyStamp")
+                        .IsConcurrencyToken()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("Cutoff")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("LastErrorCode")
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("LeaseId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("LeaseUntil")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Mode")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("PolicyHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Processed")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("SystemRequested")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Target")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("TenantId")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "Status", "CreatedAt");
+
+                    b.ToTable("ApprovalMaintenanceJobs", (string)null);
                 });
 
             modelBuilder.Entity("Approval.Core.Domain.ApprovalMessage", b =>
@@ -346,6 +825,12 @@ namespace Certificate.Api.Infrastructure.Migrations
                     b.Property<DateTime?>("ReadAt")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("TenantId")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Title")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -358,9 +843,84 @@ namespace Certificate.Api.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("UserId", "IsRead", "CreatedAt");
+                    b.HasIndex("TenantId", "InstanceId");
+
+                    b.HasIndex("TenantId", "UserId", "IsRead", "CreatedAt");
 
                     b.ToTable("ApprovalMessages", (string)null);
+                });
+
+            modelBuilder.Entity("Approval.Core.Domain.ApprovalOperation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ActorId")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CommittedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("DefinitionId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("HashVersion")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid?>("InstanceId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("IsTombstone")
+                        .IsConcurrencyToken()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("LookupHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RequestHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RequestKey")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ResultJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("ResultVersion")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Scope")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("TenantId")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "LookupHash")
+                        .IsUnique();
+
+                    b.ToTable("ApprovalOperations", (string)null);
                 });
 
             modelBuilder.Entity("Approval.Core.Domain.ApprovalOutboxMessage", b =>
@@ -398,6 +958,9 @@ namespace Certificate.Api.Infrastructure.Migrations
                         .HasMaxLength(2000)
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid?>("LeaseId")
+                        .HasColumnType("TEXT");
+
                     b.Property<int>("MaxAttempts")
                         .HasColumnType("INTEGER");
 
@@ -422,13 +985,60 @@ namespace Certificate.Api.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("TenantId")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
 
-                    b.HasIndex("InstanceId");
+                    b.HasIndex("TenantId", "InstanceId");
 
-                    b.HasIndex("Status", "NextAttemptAt");
+                    b.HasIndex("TenantId", "Status", "NextAttemptAt");
 
                     b.ToTable("ApprovalOutbox", (string)null);
+                });
+
+            modelBuilder.Entity("Approval.Core.Domain.ApprovalRetentionHold", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ActorId")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("ResourceId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Target")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("TenantId")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId", "Target", "ResourceId")
+                        .IsUnique();
+
+                    b.ToTable("ApprovalRetentionHolds", (string)null);
                 });
 
             modelBuilder.Entity("Approval.Core.Domain.ApprovalTask", b =>
@@ -504,15 +1114,21 @@ namespace Certificate.Api.Infrastructure.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("TenantId")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
 
-                    b.HasIndex("HandledBy");
+                    b.HasIndex("TenantId", "HandledBy");
 
-                    b.HasIndex("InstanceId");
+                    b.HasIndex("TenantId", "InstanceId");
 
-                    b.HasIndex("Status", "NextRemindAt");
+                    b.HasIndex("TenantId", "Status", "NextRemindAt");
 
-                    b.HasIndex("AssigneeKind", "AssigneeValue", "Status");
+                    b.HasIndex("TenantId", "AssigneeKind", "AssigneeValue", "Status");
 
                     b.ToTable("ApprovalTasks", (string)null);
                 });
@@ -671,12 +1287,84 @@ namespace Certificate.Api.Infrastructure.Migrations
                     b.ToTable("CertificateRequests", (string)null);
                 });
 
+            modelBuilder.Entity("Approval.Core.Domain.ApprovalBusinessSlot", b =>
+                {
+                    b.HasOne("Approval.Core.Domain.ApprovalInstance", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "InstanceId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.NoAction)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Approval.Core.Domain.ApprovalCarbonCopy", b =>
                 {
                     b.HasOne("Approval.Core.Domain.ApprovalInstance", null)
                         .WithMany()
-                        .HasForeignKey("InstanceId")
+                        .HasForeignKey("TenantId", "InstanceId")
+                        .HasPrincipalKey("TenantId", "Id")
                         .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Approval.Core.Domain.ApprovalDefinitionAudit", b =>
+                {
+                    b.HasOne("Approval.Core.Domain.ApprovalDefinition", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "DefinitionId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("Approval.Core.Domain.ApprovalDefinition", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "SourceDefinitionId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.NoAction);
+                });
+
+            modelBuilder.Entity("Approval.Core.Domain.ApprovalDefinitionManagement", b =>
+                {
+                    b.HasOne("Approval.Core.Domain.ApprovalDefinition", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "ActiveDefinitionId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("Approval.Core.Domain.ApprovalDefinition", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "DraftSourceDefinitionId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.NoAction);
+                });
+
+            modelBuilder.Entity("Approval.Core.Domain.ApprovalFile", b =>
+                {
+                    b.HasOne("Approval.Core.Domain.ApprovalArchiveRecord", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "ArchiveId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("Approval.Core.Domain.ApprovalDraft", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "DraftId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.NoAction);
+
+                    b.HasOne("Approval.Core.Domain.ApprovalInstance", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "InstanceId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.NoAction);
+                });
+
+            modelBuilder.Entity("Approval.Core.Domain.ApprovalInstance", b =>
+                {
+                    b.HasOne("Approval.Core.Domain.ApprovalDefinition", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "DefinitionId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.NoAction)
                         .IsRequired();
                 });
 
@@ -684,16 +1372,36 @@ namespace Certificate.Api.Infrastructure.Migrations
                 {
                     b.HasOne("Approval.Core.Domain.ApprovalInstance", null)
                         .WithMany("Logs")
-                        .HasForeignKey("InstanceId")
+                        .HasForeignKey("TenantId", "InstanceId")
+                        .HasPrincipalKey("TenantId", "Id")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("Approval.Core.Domain.ApprovalMessage", b =>
+                {
+                    b.HasOne("Approval.Core.Domain.ApprovalInstance", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "InstanceId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.NoAction);
+                });
+
+            modelBuilder.Entity("Approval.Core.Domain.ApprovalOutboxMessage", b =>
+                {
+                    b.HasOne("Approval.Core.Domain.ApprovalInstance", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "InstanceId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.NoAction);
                 });
 
             modelBuilder.Entity("Approval.Core.Domain.ApprovalTask", b =>
                 {
                     b.HasOne("Approval.Core.Domain.ApprovalInstance", null)
                         .WithMany("Tasks")
-                        .HasForeignKey("InstanceId")
+                        .HasForeignKey("TenantId", "InstanceId")
+                        .HasPrincipalKey("TenantId", "Id")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });

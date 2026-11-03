@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, shallowRef, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { useCommandIntent } from '../composables/useCommandIntent'
 import { useApprovalClient } from '../client'
 import type { ApprovalMessage } from '../contracts/api'
 import { approvalRouteNames } from '../routes'
@@ -10,6 +11,7 @@ const { api: approvalApi, userKey: approvalUserKey } = useApprovalClient()
 
 /** 站内信：铃铛显示未读数，展开查看最近消息，点击跳转审批详情并标记已读。 */
 const router = useRouter()
+const intent = useCommandIntent('message')
 const unread = shallowRef(0)
 const messages = shallowRef<ApprovalMessage[]>([])
 const loading = shallowRef(false)
@@ -33,7 +35,7 @@ async function loadMessages() {
 
 async function open(message: ApprovalMessage) {
   if (!message.isRead) {
-    await approvalApi.markRead(message.id)
+    await intent.run(message.id, {}, (_, operationId) => approvalApi.markRead(message.id, operationId))
     void refreshCount()
     void loadMessages()
   }
@@ -41,7 +43,7 @@ async function open(message: ApprovalMessage) {
 }
 
 async function readAll() {
-  await approvalApi.markAllRead()
+  await intent.run('read-all', {}, (_, operationId) => approvalApi.markAllRead(operationId))
   await Promise.all([refreshCount(), loadMessages()])
 }
 

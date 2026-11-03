@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount } from 'vue'
 import { ElMessage } from 'element-plus'
+import { useCommandIntent } from '../composables/useCommandIntent'
 import { useApprovalClient } from '../client'
 import { errorMessage } from '../api/http'
 import type { OutboxMessage } from '../contracts/api'
@@ -11,7 +12,8 @@ import { formatDateTime, outboxStatusLabels } from '../utils/labels'
 const { api: approvalApi, userKey: approvalUserKey, config: approvalConfig } = useApprovalClient()
 
 /** 投递记录：外部渠道通知与异步动作的投递状态、重试（分页，状态与页码同步到地址栏）。宿主可通过 outboxPanel 选项在下方追加面板。 */
-const { isAdmin } = useApprovalUser()
+const { can } = useApprovalUser()
+const intent = useCommandIntent('outbox-retry')
 const outboxPanel = approvalConfig().outboxPanel
 
 const outbox = usePagedList((query, signal) => approvalApi.outbox(query, signal), {
@@ -21,14 +23,14 @@ const outbox = usePagedList((query, signal) => approvalApi.outbox(query, signal)
 })
 
 function refresh() {
-  if (isAdmin.value) void outbox.reload()
+  if (can('approval.outbox.read')) void outbox.reload()
 }
 const timer = window.setInterval(refresh, 3000)
 onBeforeUnmount(() => window.clearInterval(timer))
 
 async function retry(message: OutboxMessage) {
   try {
-    await approvalApi.retryOutbox(message.id)
+    await intent.run(message.id, {}, (_, operationId) => approvalApi.retryOutbox(message.id, operationId))
     ElMessage.success('已重新投递')
     refresh()
   } catch (e) {
@@ -40,7 +42,7 @@ const msg = (r: unknown) => r as OutboxMessage
 </script>
 
 <template>
-  <el-alert v-if="!isAdmin" type="warning" :closable="false" show-icon title="投递记录仅管理员可查看" />
+  <el-alert v-if="!can('approval.outbox.read')" type="warning" :closable="false" show-icon title="没有投递记录查看权限" />
   <div v-else class="outbox">
     <el-card shadow="never">
       <template #header>
@@ -77,7 +79,7 @@ const msg = (r: unknown) => r as OutboxMessage
         </el-table-column>
         <el-table-column label="" width="70">
           <template #default="{ row }">
-            <el-button v-if="msg(row).status !== 'Succeeded'" link type="primary" size="small" @click="retry(msg(row))">重试</el-button>
+            <el-button v-if="can('approval.outbox.retry') && msg(row).status !== 'Succeeded'" link type="primary" size="small" @click="retry(msg(row))">重试</el-button>
           </template>
         </el-table-column>
       </el-table>

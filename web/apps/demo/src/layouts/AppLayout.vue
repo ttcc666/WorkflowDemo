@@ -7,13 +7,15 @@ import UserSwitcher from '@/components/UserSwitcher.vue'
 const route = useRoute()
 
 // 审批页面来自 @approval/ui（createApprovalRoutes），证书管理为示例业务；流程定义、流程监控、投递记录仅管理员可见
-const { formsEnabled, isAdmin, canViewDefinitions } = useApprovalUser()
+const { formsEnabled, can, canViewDefinitions } = useApprovalUser()
 const menus = computed(() => [
   { path: '/workbench', title: '审批工作台' },
-  ...(formsEnabled.value ? [{ path: '/start', title: '发起申请' }] : []),
+  ...(formsEnabled.value && can('approval.instance.start') ? [{ path: '/start', title: '发起申请' }] : []),
   { path: '/certificates', title: '证书管理' },
   ...(canViewDefinitions.value ? [{ path: '/definitions', title: '流程定义' }] : []),
-  ...(isAdmin.value ? [{ path: '/monitor', title: '流程监控' }, { path: '/outbox', title: '投递记录' }] : []),
+  ...(['approval.instance.read-all', 'approval.statistics.read', 'approval.task.reassign-bulk'].some(can) ? [{ path: '/monitor', title: '流程监控' }] : []),
+  ...(can('approval.outbox.read') ? [{ path: '/outbox', title: '投递记录' }] : []),
+  ...(['approval.diagnostics.read', 'approval.archive.read'].some(can) ? [{ path: '/maintenance', title: '诊断与维护' }] : []),
 ])
 
 // 详情页、设计器归属到对应菜单高亮

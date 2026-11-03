@@ -27,7 +27,10 @@ public sealed partial class ApprovalEngine
     public const string SystemOperator = "system";
     private const int MaxAutoSteps = 200;
 
+    private readonly Approval.Core.Authorization.IApprovalAuthorization _authorization;
     private readonly DbContext _db;
+    private readonly ApprovalUnitOfWork _unit;
+    private readonly IApprovalCommandExecutor? _commands;
     private readonly IApprovalIdentityProvider _identity;
     private readonly ApprovalAssigneeService _assignees;
     private readonly IReadOnlyDictionary<string, IApprovalBusinessHandler> _handlers;
@@ -36,6 +39,7 @@ public sealed partial class ApprovalEngine
     private readonly IReadOnlyList<IApprovalNotifier> _notifiers;
     private readonly IConditionEvaluator _evaluator;
     private readonly ApprovalOptions _options;
+    private readonly ApprovalTenantSettings _tenantSettings;
     private readonly ApprovalOutboxSignal _outboxSignal;
     private readonly TimeProvider _clock;
     private readonly ILogger<ApprovalEngine> _logger;
@@ -79,6 +83,9 @@ public sealed partial class ApprovalEngine
         IApprovalUserDirectory? directory)
     {
         _db = accessor.Context;
+        _unit = accessor.UnitOfWork;
+        _commands = accessor.Commands;
+        _authorization = accessor.Authorization;
         _identity = identity;
         _assignees = new(identity, extensions.Resolvers, options, directory);
         _handlers = extensions.BusinessHandlers;
@@ -87,6 +94,7 @@ public sealed partial class ApprovalEngine
         _notifiers = notifiers.ToList();
         _evaluator = evaluator;
         _options = options;
+        _tenantSettings = accessor.TenantSettings ?? new(options.DisplayTimeZone, options.InstanceUrlFormat, options.GlobalVariables);
         _outboxSignal = outboxSignal;
         _clock = clock;
         _logger = logger;
@@ -95,26 +103,36 @@ public sealed partial class ApprovalEngine
 
     private DateTime Now => _clock.GetUtcNow().UtcDateTime;
 
-    public async Task<ApprovalInstance> StartAsync(StartApprovalRequest request, CancellationToken ct = default)
+    public Task<ApprovalInstance> StartAsync(StartApprovalRequest request, CancellationToken ct = default) => StartCommandAsync(request, ct);
+
+    private async Task<ApprovalInstance> StartAsyncCore(StartApprovalRequest request, CancellationToken ct = default)
     {
-        var definition = await _db.Set<ApprovalDefinition>()
-            .Where(d => d.Key == request.DefinitionKey && d.IsPublished && (request.DefinitionId == null || d.Id == request.DefinitionId))
+        await _authorization.RequireAsync(Approval.Core.Abstractions.ApprovalPermissions.InstanceStart, new() { DefinitionKey = request.DefinitionKey, DefinitionId = request.DefinitionId, BusinessType = request.BusinessType, BusinessKey = request.BusinessKey }, request.InitiatorId, ct);
+        if (await _db.Set<ApprovalDefinitionManagement>().AnyAsync(m => m.Key == request.DefinitionKey && !m.IsEnabled, ct))
+            throw new ApprovalException($"流程 '{request.DefinitionKey}' 已停用，不能发起新审批");
+        var pinned = _unit.PinnedDefinition(request.DefinitionKey);
+        var definitionId = request.DefinitionId ?? pinned;
+        var available = definitionId is not null ? _db.Set<ApprovalDefinition>().AsQueryable() : ApprovalDefinitionAvailability.ForNewStarts(_db);
+        var definition = await available
+            .Where(d => d.Key == request.DefinitionKey && d.IsPublished && (definitionId == null || d.Id == definitionId))
             .OrderByDescending(d => d.Version)
             .FirstOrDefaultAsync(ct)
             ?? throw new ApprovalException($"流程 '{request.DefinitionKey}' 未发布") { Code = ApprovalErrorCode.NotFound };
+        _unit.PinDefinition(request.DefinitionKey, definition.Id);
 
         if (_options.SingleRunningInstancePerBusiness &&
-            await _db.Set<ApprovalInstance>().AnyAsync(i =>
+            (await _db.Set<ApprovalInstance>().AsNoTracking().Where(i =>
                 i.BusinessType == request.BusinessType &&
                 i.BusinessKey == request.BusinessKey &&
-                i.Status == InstanceStatus.Running, ct))
+                i.Status == InstanceStatus.Running).Select(i => new { i.BusinessType, i.BusinessKey }).ToListAsync(ct))
+                .Any(i => string.Equals(i.BusinessType, request.BusinessType, StringComparison.Ordinal) && string.Equals(i.BusinessKey, request.BusinessKey, StringComparison.Ordinal)))
         {
             throw new ApprovalException("该业务单据已有进行中的审批") { Code = ApprovalErrorCode.Conflict };
         }
 
         var instance = new ApprovalInstance
         {
-            Id = request.InstanceId ?? Guid.NewGuid(),
+            Id = request.InstanceId ?? _unit.NewId("ApprovalEngine"),
             DefinitionId = definition.Id,
             DefinitionKey = definition.Key,
             DefinitionVersion = definition.Version,
@@ -127,6 +145,10 @@ public sealed partial class ApprovalEngine
             CreatedAt = Now
         };
         _db.Set<ApprovalInstance>().Add(instance);
+        _unit.Reference(instance.Id, definition.Id);
+        if (_options.SingleRunningInstancePerBusiness)
+            _db.Set<ApprovalBusinessSlot>().Add(new() { Id = _unit.NewId("ApprovalEngine"), InstanceId = instance.Id,
+                LookupHash = ApprovalCommandHash.Of(instance.BusinessType, instance.BusinessKey), BusinessType = instance.BusinessType, BusinessKey = instance.BusinessKey });
 
         var flow = FlowDefinition.Parse(definition.DefinitionJson);
         var start = flow.GetNode(flow.StartNodeId);
@@ -138,9 +160,13 @@ public sealed partial class ApprovalEngine
     }
 
     /// <summary>同意。对“重新提交”任务（退回发起人后）等同于不修改表单直接重新提交。</summary>
-    public async Task ApproveAsync(Guid taskId, string userId, string? comment = null, CancellationToken ct = default)
+    public Task ApproveAsync(Guid taskId, string userId, string? comment = null, CancellationToken ct = default) =>
+        _unit.ExecuteCommandAsync(token => ApproveAsyncCore(taskId, userId, comment, token), ct);
+
+    private async Task ApproveAsyncCore(Guid taskId, string userId, string? comment = null, CancellationToken ct = default)
     {
         var (instance, task, flow) = await LoadTaskAsync(taskId, ct);
+        await _authorization.RequireAsync(task.Kind == ApprovalTaskKind.Resubmit ? ApprovalPermissions.TaskResubmit : ApprovalPermissions.TaskApprove, new() { TaskId = taskId }, userId, ct);
         await EnsureCanHandleAsync(instance, task, userId, ct);
         if (task.Kind == ApprovalTaskKind.Resubmit) await ResubmitCoreAsync(instance, flow, task, userId, comment, null, ct);
         else await ApproveCoreAsync(instance, flow, task, userId, comment, ApprovalAction.Approve, ct);
@@ -151,9 +177,14 @@ public sealed partial class ApprovalEngine
     /// 同意并修改表单（表单审批的节点可编辑字段，由 <see cref="ApprovalFormService"/> 调用）：校验处理权限后由 <paramref name="edit"/>
     /// 计算修改（返回 null 表示没有修改）；表单数据替换为修改后的数据，轨迹先记录修改了哪些字段（差异存入 Details），再记录同意并按新数据流转。
     /// </summary>
-    internal async Task ApproveWithFormAsync(Guid taskId, string userId, string? comment,
+    internal Task ApproveWithFormAsync(Guid taskId, string userId, string? comment,
+        Func<ApprovalInstance, ApprovalTask, FlowDefinition, Task<FormEdit?>> edit, CancellationToken ct) =>
+        _unit.ExecuteCommandAsync(token => ApproveWithFormCoreAsync(taskId, userId, comment, edit, token), ct);
+
+    private async Task ApproveWithFormCoreAsync(Guid taskId, string userId, string? comment,
         Func<ApprovalInstance, ApprovalTask, FlowDefinition, Task<FormEdit?>> edit, CancellationToken ct)
     {
+        await _authorization.RequireAsync(Approval.Core.Abstractions.ApprovalPermissions.TaskApprove, new() { TaskId = taskId }, userId, ct);
         var (instance, task, flow) = await LoadTaskAsync(taskId, ct);
         await EnsureCanHandleAsync(instance, task, userId, ct);
         if (task.Kind == ApprovalTaskKind.Resubmit) throw new ApprovalException("退回到发起人的申请请修改后重新提交");
@@ -169,8 +200,12 @@ public sealed partial class ApprovalEngine
     }
 
     /// <summary>驳回：流程结束为 Rejected，业务方可修改后重新发起新流程。退回到指定节点见 <see cref="ReturnAsync"/>。</summary>
-    public async Task RejectAsync(Guid taskId, string userId, string comment, CancellationToken ct = default)
+    public Task RejectAsync(Guid taskId, string userId, string comment, CancellationToken ct = default) =>
+        _unit.ExecuteCommandAsync(token => RejectAsyncCore(taskId, userId, comment, token), ct);
+
+    private async Task RejectAsyncCore(Guid taskId, string userId, string comment, CancellationToken ct = default)
     {
+        await _authorization.RequireAsync(Approval.Core.Abstractions.ApprovalPermissions.TaskReject, new() { TaskId = taskId }, userId, ct);
         if (string.IsNullOrWhiteSpace(comment)) throw new ApprovalException("驳回必须填写意见");
 
         var (instance, task, flow) = await LoadTaskAsync(taskId, ct);
@@ -181,8 +216,12 @@ public sealed partial class ApprovalEngine
     }
 
     /// <summary>发起人撤回进行中的申请。</summary>
-    public async Task WithdrawAsync(Guid instanceId, string userId, string? comment = null, CancellationToken ct = default)
+    public Task WithdrawAsync(Guid instanceId, string userId, string? comment = null, CancellationToken ct = default) =>
+        _unit.ExecuteCommandAsync(token => WithdrawAsyncCore(instanceId, userId, comment, token), ct);
+
+    private async Task WithdrawAsyncCore(Guid instanceId, string userId, string? comment = null, CancellationToken ct = default)
     {
+        await _authorization.RequireAsync(Approval.Core.Abstractions.ApprovalPermissions.InstanceWithdraw, new() { InstanceId = instanceId }, userId, ct);
         var instance = await _db.Set<ApprovalInstance>()
             .Include(i => i.Tasks)
             .FirstOrDefaultAsync(i => i.Id == instanceId, ct)
@@ -212,8 +251,12 @@ public sealed partial class ApprovalEngine
             || !instance.Tasks.Any(t => t.Status == ApprovalTaskStatus.Approved));
 
     /// <summary>把自己的待办转交给指定用户。</summary>
-    public async Task TransferAsync(Guid taskId, string userId, string toUserId, string? comment = null, CancellationToken ct = default)
+    public Task TransferAsync(Guid taskId, string userId, string toUserId, string? comment = null, CancellationToken ct = default) =>
+        _unit.ExecuteCommandAsync(token => TransferAsyncCore(taskId, userId, toUserId, comment, token), ct);
+
+    private async Task TransferAsyncCore(Guid taskId, string userId, string toUserId, string? comment = null, CancellationToken ct = default)
     {
+        await _authorization.RequireAsync(Approval.Core.Abstractions.ApprovalPermissions.TaskTransfer, new() { TaskId = taskId }, userId, ct);
         if (string.IsNullOrWhiteSpace(toUserId) || toUserId == userId) throw new ApprovalException("转交对象无效");
 
         var (instance, task, flow) = await LoadTaskAsync(taskId, ct);
@@ -221,7 +264,7 @@ public sealed partial class ApprovalEngine
         if (task.Kind == ApprovalTaskKind.Resubmit) throw new ApprovalException("重新提交的任务不能转交");
         var node = flow.GetNode(task.NodeId);
         if (!node.AllowTransfer) throw new ApprovalException("该节点不允许转交") { Code = ApprovalErrorCode.Forbidden };
-        if (node.RequireQualifiedAssignee && !(await GetEligibleApproversAsync(instance, node, ct)).Contains(toUserId))
+        if (node.RequireQualifiedAssignee && !(await _assignees.GetEligibleApproversAsync(instance, node, ct)).Contains(toUserId))
             throw new ApprovalException("转交对象不具备本节点审批资格") { Code = ApprovalErrorCode.Forbidden };
         if (!_options.AllowInitiatorApprove && toUserId == instance.InitiatorId)
             throw new ApprovalException("不能转交给发起人");
@@ -244,13 +287,15 @@ public sealed partial class ApprovalEngine
     /// <summary>当前用户能否处理该任务（供前端控制按钮显示，最终仍以操作时的校验为准）。</summary>
     public async Task<bool> CanHandleAsync(Guid taskId, string userId, CancellationToken ct = default)
     {
+        await _authorization.RequireAsync(Approval.Core.Abstractions.ApprovalPermissions.SessionRead, new(), userId, ct);
         try
         {
+            await _authorization.RequireAsync(ApprovalPermissions.TaskRead, new() { TaskId = taskId }, userId, ct);
             var (instance, task, _) = await LoadTaskAsync(taskId, ct);
             await EnsureCanHandleAsync(instance, task, userId, ct);
             return true;
         }
-        catch (ApprovalException)
+        catch (ApprovalException ex) when (ex.Code is ApprovalErrorCode.Forbidden or ApprovalErrorCode.NotFound or ApprovalErrorCode.InvalidOperation)
         {
             return false;
         }
@@ -259,6 +304,7 @@ public sealed partial class ApprovalEngine
     /// <summary>查找当前用户在该流程中可处理的待办任务（审批详情页据此显示同意/驳回按钮），没有则返回 null。</summary>
     public async Task<ApprovalTask?> FindHandleableTaskAsync(Guid instanceId, string userId, CancellationToken ct = default)
     {
+        await _authorization.RequireAsync(Approval.Core.Abstractions.ApprovalPermissions.TaskRead, new() { InstanceId = instanceId }, userId, ct);
         var instance = await _db.Set<ApprovalInstance>().AsNoTracking()
             .Include(i => i.Tasks)
             .FirstOrDefaultAsync(i => i.Id == instanceId, ct);
@@ -271,7 +317,7 @@ public sealed partial class ApprovalEngine
                 await EnsureCanHandleAsync(instance, task, userId, ct);
                 return task;
             }
-            catch (ApprovalException)
+            catch (ApprovalException ex) when (ex.Code is ApprovalErrorCode.Forbidden or ApprovalErrorCode.NotFound or ApprovalErrorCode.InvalidOperation)
             {
                 // 该任务当前用户无权处理，继续检查下一个
             }
@@ -459,7 +505,7 @@ public sealed partial class ApprovalEngine
             var pending = node.Mode != ApproveMode.Sequential || i == 0;
             AddTask(instance, new ApprovalTask
             {
-                Id = Guid.NewGuid(),
+                Id = _unit.NewId("ApprovalEngine"),
                 InstanceId = instance.Id,
                 NodeId = node.Id,
                 NodeName = node.Name,
@@ -501,6 +547,9 @@ public sealed partial class ApprovalEngine
         CancellationToken ct)
     {
         instance.Status = status;
+        foreach (var slot in await _db.Set<ApprovalBusinessSlot>().Where(s => s.InstanceId == instance.Id).ToListAsync(ct)) _db.Remove(slot);
+        foreach (var slot in _db.ChangeTracker.Entries<ApprovalBusinessSlot>().Where(e => e.State == EntityState.Added && e.Entity.InstanceId == instance.Id).ToArray())
+            slot.State = EntityState.Detached;
         instance.CompletedAt = Now;
         instance.CurrentNodeId = status == InstanceStatus.Approved ? null : node?.Id;
         StateOf(instance).Joins.Clear();
@@ -509,6 +558,7 @@ public sealed partial class ApprovalEngine
 
         if (_handlers.TryGetValue(instance.BusinessType, out var handler))
         {
+            using var extension = _unit.Extension();
             var callback = status switch
             {
                 InstanceStatus.Approved => handler.OnApprovedAsync(instance, ct),
@@ -571,13 +621,36 @@ public sealed partial class ApprovalEngine
             throw new ApprovalException("您已审批过该申请的其他环节") { Code = ApprovalErrorCode.Forbidden };
 
         var node = (await LoadFlowAsync(instance, ct)).GetNode(task.NodeId);
-        if (node.RequireQualifiedAssignee && !(await GetEligibleApproversAsync(instance, node, ct)).Contains(userId))
+        if (node.RequireQualifiedAssignee && !(await _assignees.GetEligibleApproversAsync(instance, node, ct)).Contains(userId))
             throw new ApprovalException("您已不具备本节点审批资格，请联系管理员改派") { Code = ApprovalErrorCode.Forbidden };
     }
 
     /// <summary>按当前组织/用户目录计算合格人员；供岗位约束、宿主预检和无人处理告警共用。实例应包含任务历史。</summary>
-    public Task<IReadOnlyList<string>> GetEligibleApproversAsync(ApprovalInstance instance, FlowNode node, CancellationToken ct = default) =>
-        _assignees.GetEligibleApproversAsync(instance, node, ct);
+    public async Task<IReadOnlyList<string>> GetEligibleApproversAsync(ApprovalInstance instance, FlowNode node, CancellationToken ct = default)
+    {
+        if (!await _authorization.CanAsync(ApprovalPermissions.TaskRead, new() { InstanceId = instance.Id }, ct: ct))
+            await _authorization.RequireAsync(ApprovalPermissions.DiagnosticsRead, new() { InstanceId = instance.Id }, ct: ct);
+        var actual = await _db.Set<ApprovalInstance>().AsNoTracking().Include(i => i.Tasks).SingleAsync(i => i.Id == instance.Id, ct);
+        var flow = await LoadFlowAsync(actual, ct);
+        if (!flow.Nodes.TryGetValue(node.Id, out var actualNode)) throw new ApprovalException("节点不存在") { Code = ApprovalErrorCode.NotFound };
+        return await _assignees.GetEligibleApproversAsync(actual, actualNode, ct);
+    }
+
+    /// <summary>发起前人员预检：校验可信发起人和发起权限，使用当前租户的已发布定义，不创建实例。</summary>
+    public async Task<IReadOnlyList<string>> GetStartEligibleApproversAsync(StartApprovalRequest request, string nodeId, CancellationToken ct = default)
+    {
+        await _authorization.RequireAsync(ApprovalPermissions.InstanceStart, new() { DefinitionKey = request.DefinitionKey,
+            DefinitionId = request.DefinitionId, BusinessType = request.BusinessType, BusinessKey = request.BusinessKey }, request.InitiatorId, ct);
+        var definition = await _db.Set<ApprovalDefinition>().AsNoTracking()
+            .Where(d => d.Key == request.DefinitionKey && d.IsPublished && (request.DefinitionId == null || d.Id == request.DefinitionId))
+            .OrderByDescending(d => d.Version).FirstOrDefaultAsync(ct)
+            ?? throw new ApprovalException("流程未发布") { Code = ApprovalErrorCode.NotFound };
+        var flow = FlowDefinition.Parse(definition.DefinitionJson);
+        if (!flow.Nodes.TryGetValue(nodeId, out var node)) throw new ApprovalException("节点不存在") { Code = ApprovalErrorCode.NotFound };
+        return await _assignees.GetEligibleApproversAsync(new ApprovalInstance { DefinitionId = definition.Id, DefinitionKey = definition.Key,
+            DefinitionVersion = definition.Version, BusinessType = request.BusinessType, BusinessKey = request.BusinessKey,
+            InitiatorId = request.InitiatorId, FormDataJson = FormData.Serialize(request.FormData), Status = InstanceStatus.Running }, node, ct);
+    }
 
     // ───────────────────────── 辅助方法 ─────────────────────────
 
@@ -644,7 +717,7 @@ public sealed partial class ApprovalEngine
     private void AddCarbonCopy(ApprovalInstance instance, FlowNode node, Assignee recipient) =>
         _db.Set<ApprovalCarbonCopy>().Add(new ApprovalCarbonCopy
         {
-            Id = Guid.NewGuid(),
+            Id = _unit.NewId("ApprovalEngine"),
             InstanceId = instance.Id,
             NodeId = node.Id,
             AssigneeKind = recipient.Kind,
@@ -660,7 +733,7 @@ public sealed partial class ApprovalEngine
         string? nodeId, string? nodeName, string? details = null) =>
         _db.Set<ApprovalLog>().Add(new ApprovalLog
         {
-            Id = Guid.NewGuid(),
+            Id = _unit.NewId("ApprovalEngine"),
             InstanceId = instance.Id,
             Sequence = ++instance.LogSequence,
             NodeId = nodeId,
@@ -687,6 +760,7 @@ public sealed partial class ApprovalEngine
 
     private async Task CommitAsync(ApprovalInstance instance, CancellationToken ct)
     {
+        _unit.Reference(instance.Id, instance.DefinitionId);
         // 保存运行时状态与当前活动节点（并行时为多个）
         StateOf(instance).SaveTo(instance);
         if (instance.Status == InstanceStatus.Running)
@@ -716,23 +790,26 @@ public sealed partial class ApprovalEngine
         if (_outboxWritten)
         {
             _outboxWritten = false;
-            _outboxSignal.Notify();
+            _unit.AfterCommit(() => { _outboxSignal.Notify(); return Task.CompletedTask; });
         }
 
         // 通知在事务提交后发送，失败不影响审批结果
-        foreach (var notification in notifications)
+        _unit.AfterCommit(async () =>
         {
+          foreach (var notification in notifications)
+          {
             foreach (var notifier in _notifiers)
             {
                 try
                 {
-                    await notifier.NotifyAsync(notification, ct);
+                    await notifier.NotifyAsync(notification, CancellationToken.None);
                 }
                 catch (Exception ex)
                 {
                     _logger.LogWarning(ex, "审批通知发送失败：{Kind} {InstanceId}", notification.Kind, notification.InstanceId);
                 }
             }
-        }
+          }
+        });
     }
 }

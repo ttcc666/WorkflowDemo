@@ -13,6 +13,7 @@ type ActionKind = 'approve' | 'reject' | 'transfer' | 'withdraw' | 'addSign' | '
 
 const props = defineProps<{
   myTask: ApprovalTask | null | undefined
+  capabilities?: Record<string, boolean>
   canWithdraw: boolean
   /** 管理员：流程进行中时可终止 */
   canTerminate?: boolean
@@ -69,6 +70,8 @@ const form = reactive({
   signMode: 'Before' as AddSignMode,
 })
 
+const can = (action: string) => props.capabilities?.[`approval.task.${action}`] === true
+const canReturn = computed(() => props.allowReturn && can('return'))
 const isResubmit = computed(() => props.myTask?.kind === 'Resubmit')
 // 重新提交时编辑的表单数据（深层响应，DynamicForm 就地修改）
 const resubmitData = ref<FormValues>({})
@@ -86,6 +89,11 @@ const commentLabel = computed(() => {
   return '意见'
 })
 const canSubmit = computed(() => {
+  const taskActions = { approve: 'approve', transfer: 'transfer', addSign: 'add-sign', resubmit: 'resubmit' }
+  if (action.value in taskActions && !can(taskActions[action.value as keyof typeof taskActions])) return false
+  if (action.value === 'withdraw' && !props.canWithdraw) return false
+  if (action.value === 'terminate' && !props.canTerminate) return false
+  if (action.value === 'reject' && !(form.rejectMode === 'return' ? canReturn.value : can('reject'))) return false
   if (commentRequired.value && !form.comment.trim()) return false
   if (action.value === 'transfer') return !!form.toUserId
   if (action.value === 'addSign') return (form.signers ?? []).length > 0
@@ -95,11 +103,11 @@ const canSubmit = computed(() => {
 
 async function open(kind: ActionKind) {
   action.value = kind
-  Object.assign(form, { comment: '', toUserId: null, rejectMode: 'end', targetNodeId: '', signers: [], signMode: 'Before' })
+  Object.assign(form, { comment: '', toUserId: null, rejectMode: can('reject') ? 'end' : 'return', targetNodeId: '', signers: [], signMode: 'Before' })
   if (kind === 'resubmit' && props.resubmitForm) resubmitData.value = initialValues(props.resubmitForm, props.formData)
   dialogVisible.value = true
 
-  if (kind === 'reject' && props.allowReturn && props.myTask) {
+  if (kind === 'reject' && canReturn.value && props.myTask) {
     loadingTargets.value = true
     try {
       returnTargets.value = await approvalApi.returnTargets(props.myTask.id)
@@ -114,6 +122,7 @@ async function open(kind: ActionKind) {
 const targetLabel = (t: ReturnTarget) => (t.isInitiator ? '发起人（修改后重新提交）' : t.nodeName)
 
 async function submit() {
+  if (!canSubmit.value) return
   const comment = form.comment.trim()
   if (editingForm.value && !(await resubmitFormRef.value?.validate())) return
   switch (action.value) {
@@ -146,17 +155,17 @@ async function submit() {
   <div v-if="myTask || canWithdraw || canTerminate" class="approval-actions">
     <template v-if="myTask && isResubmit">
       <span class="approval-actions__hint">申请已被退回，请修改后<strong>重新提交</strong>，或撤回本次申请</span>
-      <el-button type="primary" :loading="busy" @click="open('resubmit')">重新提交</el-button>
+      <el-button v-if="can('resubmit')" type="primary" :loading="busy" @click="open('resubmit')">重新提交</el-button>
     </template>
     <template v-else-if="myTask">
       <span class="approval-actions__hint">
         待您处理：<strong>{{ myTask.nodeName }}</strong>（{{ assigneeText(myTask.assigneeKind, myTask.assigneeValue) }}）
         <el-tag v-if="taskKindLabels[myTask.kind]" size="small" type="warning" effect="plain">{{ taskKindLabels[myTask.kind] }}</el-tag>
       </span>
-      <el-button type="success" :loading="busy" @click="open('approve')">同意</el-button>
-      <el-button type="danger" :loading="busy" @click="open('reject')">{{ allowReturn ? '驳回 / 退回' : '驳回' }}</el-button>
-      <el-button v-if="allowTransfer" :loading="busy" @click="open('transfer')">转交</el-button>
-      <el-button v-if="allowAddSign" :loading="busy" @click="open('addSign')">加签</el-button>
+      <el-button v-if="can('approve')" type="success" :loading="busy" @click="open('approve')">同意</el-button>
+      <el-button v-if="can('reject') || canReturn" type="danger" :loading="busy" @click="open('reject')">{{ canReturn ? (can('reject') ? '驳回 / 退回' : '退回') : '驳回' }}</el-button>
+      <el-button v-if="allowTransfer && can('transfer')" :loading="busy" @click="open('transfer')">转交</el-button>
+      <el-button v-if="allowAddSign && can('add-sign')" :loading="busy" @click="open('addSign')">加签</el-button>
     </template>
     <span v-else class="approval-actions__hint" />
     <el-button v-if="canWithdraw" :loading="busy" @click="open('withdraw')">撤回申请</el-button>
@@ -175,10 +184,10 @@ async function submit() {
     <el-alert v-else-if="pendingChanges?.length && action !== 'withdraw' && action !== 'terminate'" type="info" :closable="false" show-icon
       class="dialog-help--block" :title="`对申请内容的修改（${pendingChanges.join('、')}）只在同意时提交，本操作不会保存`" />
     <el-form label-position="top">
-      <template v-if="action === 'reject' && allowReturn">
+      <template v-if="action === 'reject' && canReturn">
         <el-form-item label="处理方式">
           <el-radio-group v-model="form.rejectMode">
-            <el-radio value="end">驳回，结束流程</el-radio>
+            <el-radio v-if="can('reject')" value="end">驳回，结束流程</el-radio>
             <el-radio value="return">退回到指定节点，流程继续</el-radio>
           </el-radio-group>
         </el-form-item>

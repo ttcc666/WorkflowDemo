@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.TestHost;
+using Microsoft.AspNetCore.Routing;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -15,9 +16,9 @@ using Microsoft.Extensions.Logging;
 
 namespace Approval.AspNetCore.Tests;
 
-public sealed class ApiDbContext(DbContextOptions<ApiDbContext> options) : DbContext(options)
+public sealed class ApiDbContext(DbContextOptions<ApiDbContext> options) : ApprovalDbContext(options, new Approval.Core.Abstractions.FixedApprovalTenantContext("tests"))
 {
-    protected override void OnModelCreating(ModelBuilder modelBuilder) => modelBuilder.ConfigureApproval();
+    protected override void OnModelCreating(ModelBuilder modelBuilder) => modelBuilder.ConfigureApproval(this);
 }
 
 /// <summary>内存用户表，同时作为身份提供者与用户目录。</summary>
@@ -87,9 +88,10 @@ public sealed class ApiHost : IAsyncDisposable
 
     public FakeUsers Users { get; }
     public HttpClient Client { get; }
+    public IReadOnlyList<Endpoint> Endpoints => ((IEndpointRouteBuilder)_app).DataSources.SelectMany(d => d.Endpoints).ToArray();
 
     public static async Task<ApiHost> StartAsync(bool withDirectory = true, Action<ApprovalBuilder>? build = null,
-        Action<ApprovalAspNetCoreOptions>? api = null, Action<ApprovalOptions>? workflow = null)
+        Action<ApprovalAspNetCoreOptions>? api = null, Action<ApprovalOptions>? workflow = null, Action<RouteGroupBuilder>? routes = null, bool readiness = false)
     {
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseTestServer();
@@ -106,6 +108,7 @@ public sealed class ApiHost : IAsyncDisposable
         var approval = builder.Services
             .AddApprovalWorkflow<ApiDbContext>(o =>
             {
+                o.FixedTenantId = "tests";
                 o.EnableBackgroundServices = false;
                 workflow?.Invoke(o);
             })
@@ -113,9 +116,12 @@ public sealed class ApiHost : IAsyncDisposable
         build?.Invoke(approval);
 
         var app = builder.Build();
+        if (readiness) app.MapApprovalReadiness();
         app.UseExceptionHandler();
-        app.MapApprovalEndpoints();
-        await app.StartAsync();
+        routes?.Invoke(app.MapApprovalEndpoints());
+        if (routes is null) app.MapApprovalEndpoints();
+        try { await app.StartAsync(); }
+        catch { await app.DisposeAsync(); await connection.DisposeAsync(); throw; }
 
         await using (var scope = app.Services.CreateAsyncScope())
             await scope.ServiceProvider.GetRequiredService<ApiDbContext>().Database.EnsureCreatedAsync();
@@ -156,6 +162,8 @@ public sealed class ApiHost : IAsyncDisposable
     public async Task<T> RunAsync<T>(Func<IServiceProvider, Task<T>> action)
     {
         await using var scope = _app.Services.CreateAsyncScope();
+        scope.ServiceProvider.GetRequiredService<Approval.Core.Tenancy.ApprovalExecutionContext>().InitializeTrusted(new("tests", "test-fixture"), []);
+        scope.ServiceProvider.GetRequiredService<ApprovalDbContextAccessor>().Authorization = Approval.Tests.Infrastructure.FlowFixtureAuthorization.Instance;
         return await action(scope.ServiceProvider);
     }
 

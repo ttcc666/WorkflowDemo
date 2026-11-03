@@ -3,8 +3,11 @@ using Approval.Core.Definitions;
 namespace Approval.Core.Domain;
 
 /// <summary>站内信，每个接收人一条；与审批数据在同一事务中写入。</summary>
-public class ApprovalMessage
+public class ApprovalMessage : IApprovalTenantEntity
 {
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string TenantId { get; set; } = string.Empty;
+
     public Guid Id { get; set; }
     public required string UserId { get; set; }
     public required string Title { get; set; }
@@ -31,8 +34,11 @@ public enum OutboxStatus { Pending, Succeeded, Failed }
 /// 待投递消息（Outbox）：与审批数据在同一事务中写入，事务提交后由后台任务投递，失败按指数退避重试。
 /// 投递为“至少一次”，接收方可用 <see cref="Id"/> 作为幂等键去重。
 /// </summary>
-public class ApprovalOutboxMessage
+public class ApprovalOutboxMessage : IApprovalTenantEntity
 {
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string TenantId { get; set; } = string.Empty;
+
     public Guid Id { get; set; }
     public OutboxKind Kind { get; set; }
     public required string Target { get; set; }
@@ -55,5 +61,6 @@ public class ApprovalOutboxMessage
     public DateTime? CompletedAt { get; set; }
 
     /// <summary>乐观并发令牌：多个后台实例同时抢占同一条消息时只有一个成功。</summary>
+    public Guid? LeaseId { get; set; }
     public long ConcurrencyStamp { get; set; }
 }

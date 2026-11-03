@@ -27,6 +27,7 @@ Invoke-CheckedCommand 'pnpm' @('pack', '--out', $tarball) (Join-Path $webRoot 'p
 $consumerRoot = Join-Path $repositoryRoot ('output/engineering/consumer-' + [Guid]::NewGuid().ToString('N'))
 $apiRoot = Join-Path $consumerRoot 'api'
 $sampleRoot = Join-Path $consumerRoot 'samples/Approval.Certificate'
+$referenceRoot = Join-Path $consumerRoot 'samples/Approval.MultiTenant.Api'
 $uiRoot = Join-Path $consumerRoot 'web'
 $feed = Join-Path $consumerRoot 'feed'
 New-Item -ItemType 'Directory' -Path $apiRoot,$uiRoot,$feed -Force | Out-Null
@@ -47,6 +48,7 @@ function Copy-HostSources {
 }
 Copy-HostSources (Join-Path $repositoryRoot 'samples/Certificate.Api') $apiRoot
 Copy-HostSources (Join-Path $repositoryRoot 'samples/Approval.Certificate') $sampleRoot
+Copy-HostSources (Join-Path $repositoryRoot 'samples/Approval.MultiTenant.Api') $referenceRoot
 Copy-HostSources (Join-Path $webRoot 'apps/demo') $uiRoot
 Copy-Item -LiteralPath (Join-Path $repositoryRoot 'global.json') -Destination $consumerRoot
 '<Project />' | Set-Content -LiteralPath (Join-Path $consumerRoot 'Directory.Build.props')
@@ -105,6 +107,35 @@ foreach ($name in $frameworkPackages) {
     if ($deps.libraries.($name + '/' + $version).sha512 -cne $expectedHash) { throw ('Consumer restored stale package bytes: ' + $name) }
 }
 if ($deps.libraries.('Approval.Certificate/' + $version).type -ne 'project') { throw 'The business sample must be built from the copied sample project.' }
+$referenceProjectPath = Join-Path $referenceRoot 'Approval.MultiTenant.Api.csproj'
+$referenceProject = [xml](Get-Content -LiteralPath $referenceProjectPath -Raw)
+foreach ($property in ([ordered]@{ TargetFramework = 'net10.0'; ImplicitUsings = 'enable'; Nullable = 'enable' }).GetEnumerator()) {
+    $element = $referenceProject.CreateElement($property.Key)
+    $element.InnerText = $property.Value
+    $referenceProject.Project.PropertyGroup.AppendChild($element) | Out-Null
+}
+foreach ($reference in $referenceProject.SelectNodes('/Project/ItemGroup/PackageReference')) {
+    $dependency = $versions.Project.ItemGroup.PackageVersion | Where-Object Include -eq $reference.Include
+    if ($null -eq $dependency) { throw ('Missing reference-host dependency version: ' + $reference.Include) }
+    $reference.SetAttribute('Version', $dependency.Version)
+}
+foreach ($reference in $referenceProject.SelectNodes('/Project/ItemGroup/ProjectReference')) {
+    $name = [IO.Path]::GetFileNameWithoutExtension($reference.Include)
+    if ($name -notin $frameworkPackages) { throw ('Unexpected reference-host project dependency: ' + $name) }
+    $packageReference = $referenceProject.CreateElement('PackageReference')
+    $packageReference.SetAttribute('Include', $name)
+    $packageReference.SetAttribute('Version', $version)
+    $reference.ParentNode.ReplaceChild($packageReference, $reference) | Out-Null
+}
+$referenceProject.Save($referenceProjectPath)
+Invoke-CheckedCommand 'dotnet' @('build', 'Approval.MultiTenant.Api.csproj', '--configuration', 'Release', ('-p:RestorePackagesPath=' + (Join-Path $consumerRoot 'nuget-packages'))) $referenceRoot
+$referenceDeps = Get-Content -LiteralPath (Join-Path $referenceRoot 'bin/Release/net10.0/Approval.MultiTenant.Api.deps.json') -Raw | ConvertFrom-Json
+foreach ($name in $frameworkPackages) {
+    $dependency = $referenceDeps.libraries.($name + '/' + $version)
+    $expectedHash = 'sha512-' + [Convert]::ToBase64String([Security.Cryptography.SHA512]::HashData([IO.File]::ReadAllBytes((Join-Path $feed ($name + '.' + $version + '.nupkg')))))
+    if ($dependency.type -ne 'package' -or $dependency.sha512 -cne $expectedHash) { throw ('Reference host did not consume the validated package: ' + $name) }
+}
+Invoke-CheckedCommand 'pwsh' @('-NoProfile', '-File', (Join-Path $PSScriptRoot 'verify-reference-host.ps1'), '-SkipBuild', '-SamplePath', $referenceRoot) $repositoryRoot
 foreach ($name in @('certificate.create.json', 'certificate.update.json', 'certificate.revoke.json')) {
     if (-not (Test-Path -LiteralPath (Join-Path $apiRoot ('bin/Release/net10.0/Flows/' + $name)))) { throw ('Missing sample workflow: ' + $name) }
 }
@@ -149,7 +180,7 @@ try {
 }
 finally { Pop-Location; $sourceHasher.Dispose() }
 $contractHashes = @(Get-ChildItem -LiteralPath (Join-Path $repositoryRoot 'contracts') -File | ForEach-Object { [pscustomobject]@{ File = $_.Name; Sha256 = (Get-FileHash -LiteralPath $_.FullName).Hash.ToLowerInvariant() } })
-$manifest = [ordered]@{ Version = $version; Commit = $commit; SourceSha256 = $sourceHash; ConsumerRoot = $consumerRoot; ApiRoot = $apiRoot; UiRoot = $uiRoot; Packages = $hashes; Contracts = $contractHashes; ChangelogSha256 = (Get-FileHash -LiteralPath (Join-Path $repositoryRoot 'CHANGELOG.md')).Hash.ToLowerInvariant() }
+$manifest = [ordered]@{ Version = $version; Commit = $commit; SourceSha256 = $sourceHash; ConsumerRoot = $consumerRoot; ApiRoot = $apiRoot; ReferenceApiRoot = $referenceRoot; UiRoot = $uiRoot; Packages = $hashes; Contracts = $contractHashes; ChangelogSha256 = (Get-FileHash -LiteralPath (Join-Path $repositoryRoot 'CHANGELOG.md')).Hash.ToLowerInvariant() }
 $manifestPath = Join-Path $consumerRoot 'verification.json'
 $manifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $manifestPath
 $manifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $repositoryRoot 'output/engineering/package-verification.json')

@@ -4,6 +4,7 @@ using System.Net;
 using System.Text.Json;
 using Approval.Core.Definitions;
 using Approval.Core.Domain;
+using Approval.Core.Abstractions;
 using Certificate.Api.Infrastructure;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -14,6 +15,28 @@ namespace Certificate.Api.Tests;
 
 public sealed class CertificateOperationsTests
 {
+    private sealed class ObserverPermissions : IApprovalPermissionProvider
+    {
+        public Task<bool> AuthorizeAsync(ApprovalPermissionRequest request, CancellationToken ct) => Task.FromResult(
+            request.Subject.IsSystem || request.Subject.ActorId != "alice" || request.Permission is
+                ApprovalPermissions.InstanceStart or ApprovalPermissions.DiagnosticsRead or ApprovalPermissions.OutboxRead);
+    }
+    [Fact]
+    public async Task DiagnosticsPermission_DoesNotRequireAdminOrGrantRetry()
+    {
+        await using var host = await CertificateHost.StartAsync(configure: services => services.AddSingleton<IApprovalPermissionProvider, ObserverPermissions>());
+        await host.CreateAsync();
+        var id = Guid.NewGuid();
+        await host.DbAsync(async db => { db.Add(new ApprovalOutboxMessage { Id = id, Target = "test", PayloadJson = "{}", Status = OutboxStatus.Failed }); return await db.SaveChangesAsync(); });
+        using var diagnostic = await host.SendAsync(HttpMethod.Get, "/api/approval/admin/certificates/diagnostics", "alice");
+        Assert.Equal(HttpStatusCode.OK, diagnostic.StatusCode);
+        using var json = JsonDocument.Parse(await diagnostic.Content.ReadAsStringAsync());
+        Assert.Equal(1, json.RootElement.GetProperty("pendingApplications").GetInt32());
+        using var retry = await host.SendAsync(HttpMethod.Post, $"/api/approval/outbox/{id}/retry", "alice", new { });
+        Assert.Equal(HttpStatusCode.Forbidden, retry.StatusCode);
+        Assert.Equal(OutboxStatus.Failed, await host.DbAsync(db => db.Set<ApprovalOutboxMessage>().Where(m => m.Id == id).Select(m => m.Status).SingleAsync()));
+    }
+
     [Fact]
     public async Task Database_busy_is_retryable_service_unavailable_not_business_conflict()
     {

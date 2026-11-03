@@ -19,7 +19,7 @@ beforeEach(() => {
   api.instanceDefinition.mockResolvedValue({
     id: 'definition', key: 'doc', version: 1, name: '文档审批', definitionJson: '{"nodes":{}}', isPublished: true, createdAt: '2026-11-01T00:00:00Z',
   })
-  api.myTask.mockResolvedValue({ task: null, editableFields: [] })
+  api.myTask.mockResolvedValue({ task: null, editableFields: [], capabilities: {} })
 })
 
 afterEach(() => scope.stop())
@@ -29,7 +29,7 @@ function instance(canWithdraw: boolean, tasks: ApprovalTask[] = []): ApprovalIns
     id: 'instance', definitionId: 'definition', definitionKey: 'doc', definitionVersion: 1,
     businessType: 'Doc', businessKey: 'D1', title: '文档', initiatorId: 'alice', status: 'Running',
     currentNodeId: 'second', round: 0, formDataJson: '{}', createdAt: '2026-11-01T00:00:00Z', completedAt: null,
-    tasks, logs: [], access: 'Full', hiddenFields: [], canWithdraw,
+    capabilities: {}, tasks, logs: [], access: 'Full', hiddenFields: [], canWithdraw,
   }
 }
 

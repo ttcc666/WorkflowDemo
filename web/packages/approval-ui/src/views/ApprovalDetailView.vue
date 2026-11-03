@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, shallowRef, useTemplateRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { useCommandIntent } from '../composables/useCommandIntent'
 import { useApprovalClient } from '../client'
 import { ApiError, errorMessage } from '../api/http'
 import type { AddSignMode, ApprovalTask } from '../contracts/api'
@@ -26,12 +27,13 @@ import FlowViewer from '../features/flow/FlowViewer.vue'
 
 const { api: approvalApi, config: approvalConfig } = useApprovalClient()
 
+const intent = useCommandIntent('approval-detail')
 const route = useRoute()
 const router = useRouter()
-const { userId, formBusinessType, isAdmin } = useApprovalUser()
+const { userId, formBusinessType } = useApprovalUser()
 
 const instanceId = computed(() => route.params.id as string)
-const { instance, loading, error, notFound, definition, myTask, editableFields, canWithdraw, nodeOptions, reload } =
+const { instance, loading, error, notFound, definition, myTask, editableFields, taskCapabilities, canWithdraw, nodeOptions, reload } =
   useApprovalDetail(instanceId)
 
 const businessPanel = computed(() => (instance.value ? businessPanelOf(instance.value.businessType, approvalConfig().businessPanels) : undefined))
@@ -53,7 +55,7 @@ const formData = computed(() => {
 })
 
 // ───── 审批人修改本节点的可编辑字段：在“申请内容”中直接修改，同意时一并提交 ─────
-const editing = computed(() => !!formSchema.value && isFormApproval.value && editableFields.value.length > 0)
+const editing = computed(() => !!formSchema.value && isFormApproval.value && editableFields.value.length > 0 && taskCapabilities.value['approval.task.approve'] === true)
 // 被 DynamicForm 就地修改，需要深层响应
 const editData = ref<FormValues>({})
 const editErrors = shallowRef<Record<string, string[]>>()
@@ -67,6 +69,14 @@ const pendingChanges = computed(() =>
 )
 
 const busy = shallowRef(false)
+async function restartIntent() {
+  const scope = intent.pending.value
+  if (!scope) return
+  try {
+    await ElMessageBox.confirm('请先刷新并核对审批轨迹中的上次操作结果。确认后，将允许提交新的内容。', '开始新操作', { type: 'warning' })
+    intent.reset(scope)
+  } catch { /* Preserve the original intent for retry. */ }
+}
 
 async function run(action: () => Promise<unknown>, successText: string) {
   busy.value = true
@@ -96,21 +106,22 @@ async function onApprove(comment: string) {
     return
   }
   const changes = pendingChanges.value.length ? pickValues(editData.value, editableFields.value) : undefined
-  await run(() => approvalApi.approve(taskId(), comment, changes), '已同意')
+  await run(() => intent.run(`approve:${taskId()}`, { taskId: taskId(), comment, changes }, (body, id) => approvalApi.approve(body.taskId, body.comment, body.changes, id)), '已同意')
 }
 
 const onReject = (comment: string, target: string | null) =>
-  run(() => approvalApi.reject(taskId(), comment, target ?? undefined), target ? '已退回' : '已驳回')
+  run(() => intent.run(`reject:${taskId()}`, { taskId: taskId(), comment, target }, (body, id) => approvalApi.reject(body.taskId, body.comment, body.target ?? undefined, id)), target ? '已退回' : '已驳回')
 const onAddSign = (userIds: string[], mode: AddSignMode, comment: string) =>
-  run(() => approvalApi.addSign(taskId(), userIds, mode, comment), `已加签 ${userIds.join('、')}`)
+  run(() => intent.run(`add-sign:${taskId()}`, { taskId: taskId(), userIds, mode, comment }, (body, id) => approvalApi.addSign(body.taskId, body.userIds, body.mode, body.comment, id)), `已加签 ${userIds.join('、')}`)
 const onResubmit = (comment: string, data?: Record<string, unknown>) =>
-  run(() => approvalApi.resubmit(taskId(), comment, data), '已重新提交')
-const onTransfer = (to: string, comment: string) => run(() => approvalApi.transfer(taskId(), to, comment), `已转交给 ${to}`)
-const onWithdraw = (comment: string) => run(() => approvalApi.withdraw(instanceId.value, comment), '已撤回')
+  run(() => intent.run(`resubmit:${taskId()}`, { taskId: taskId(), comment, data }, (body, id) => approvalApi.resubmit(body.taskId, body.comment, body.data, id)), '已重新提交')
+const onTransfer = (to: string, comment: string) => run(() => intent.run(`transfer:${taskId()}`, { taskId: taskId(), to, comment }, (body, id) => approvalApi.transfer(body.taskId, body.to, body.comment, id)), `已转交给 ${to}`)
+const onWithdraw = (comment: string) => run(() => intent.run(`withdraw:${instanceId.value}`, { instanceId: instanceId.value, comment }, (body, id) => approvalApi.withdraw(body.instanceId, body.comment, id)), '已撤回')
 
 // ───── 管理员：终止流程、改派待办 ─────
-const canAdminister = computed(() => isAdmin.value && instance.value?.status === 'Running')
-const onTerminate = (reason: string) => run(() => approvalApi.terminate(instanceId.value, reason), '已终止流程')
+const canTerminate = computed(() => instance.value?.status === 'Running' && instance.value.capabilities?.['approval.instance.terminate'] === true)
+const canReassign = computed(() => instance.value?.status === 'Running')
+const onTerminate = (reason: string) => run(() => intent.run(`terminate:${instanceId.value}`, { instanceId: instanceId.value, reason }, (body, id) => approvalApi.terminate(body.instanceId, body.reason, id)), '已终止流程')
 const reassignVisible = shallowRef(false)
 const reassignTask = shallowRef<ApprovalTask | null>(null)
 function openReassign(task: ApprovalTask) {
@@ -118,7 +129,7 @@ function openReassign(task: ApprovalTask) {
   reassignVisible.value = true
 }
 const onReassign = (task: ApprovalTask, to: string, reason: string) =>
-  run(() => approvalApi.reassign(task.id, to, reason), `已改派给 ${to}`)
+  run(() => intent.run(`reassign:${task.id}`, { taskId: task.id, to, reason }, (body, id) => approvalApi.reassign(body.taskId, body.to, body.reason, id)), `已改派给 ${to}`)
 </script>
 
 <template>
@@ -132,10 +143,12 @@ const onReassign = (task: ApprovalTask, to: string, reason: string) =>
     <el-result v-else-if="error && !instance" icon="error" title="加载失败" :sub-title="error" />
 
     <template v-if="instance">
+      <el-button v-if="intent.pending.value" :disabled="busy" @click="restartIntent">确认上次结果后开始新操作</el-button>
       <ApprovalActions
         :my-task="myTask"
         :can-withdraw="canWithdraw"
-        :can-terminate="canAdminister"
+        :can-terminate="canTerminate"
+        :capabilities="taskCapabilities"
         :current-user-id="userId"
         :initiator-id="instance.initiatorId"
         :allow-return="nodeOptions.allowReturn"
@@ -181,7 +194,7 @@ const onReassign = (task: ApprovalTask, to: string, reason: string) =>
         </el-col>
         <el-col :span="10" class="detail-col">
           <el-card shadow="never" header="审批轨迹">
-            <ApprovalTimeline :logs="instance.logs" :tasks="instance.tasks" :form="formSchema" :can-reassign="canAdminister"
+            <ApprovalTimeline :logs="instance.logs" :tasks="instance.tasks" :form="formSchema" :can-reassign="canReassign"
               @reassign="openReassign" />
           </el-card>
         </el-col>

@@ -64,10 +64,14 @@ public static class CertificateApplication
         var approval = builder.Services
             .AddApprovalWorkflow<AppDbContext>(o =>
             {
+                o.FixedTenantId = "certificate";
                 o.AllowInitiatorApprove = false;
                 o.AllowSameUserMultipleNodes = false;
                 o.DisplayTimeZone = TimeZoneInfo.FindSystemTimeZoneById(certificateOptions.BusinessTimeZone);
                 o.RequireBusinessHandler = true;
+                o.RequireOperationId = approvalConfig.GetValue("RequireOperationId", false);
+                o.CommitVerificationTimeout = approvalConfig.GetValue("CommitVerificationTimeout", o.CommitVerificationTimeout);
+                o.AllowSynchronousExternalActions = approvalConfig.GetValue("AllowSynchronousExternalActions", false);
                 o.EnableBackgroundServices = approvalConfig.GetValue("EnableBackgroundServices", true);
                 // 模板变量 {appBaseUrl}、{链接}
                 o.GlobalVariables["appBaseUrl"] = baseUrl;
@@ -77,6 +81,8 @@ public static class CertificateApplication
                 approvalConfig.GetSection("Outbox").Bind(o.Outbox);
                 // 附件：本地目录（相对于内容根目录，不在 wwwroot 下）、大小限制
                 approvalConfig.GetSection("Files").Bind(o.Files);
+                approvalConfig.GetSection("Lifecycle").Bind(o.Lifecycle);
+                approvalConfig.GetSection("Background").Bind(o.Background);
                 o.TimeoutScanInterval = approvalConfig.GetValue("TimeoutScanInterval", o.TimeoutScanInterval);
             })
             .AddCertificateModule()
@@ -143,6 +149,7 @@ public static class CertificateApplication
         app.UseStaticFiles();
 
         app.MapApprovalEndpoints();
+        app.MapApprovalReadiness();
         app.MapCertificateEndpoints();
         app.MapCertificateOperations();
         if (demo)
@@ -191,6 +198,8 @@ public static class CertificateApplication
     public static async Task<int> PublishFlowsAsync(WebApplication app, bool replaceExisting, CancellationToken ct = default)
     {
         await using var scope = app.Services.CreateAsyncScope();
+        scope.ServiceProvider.GetRequiredService<Approval.Core.Tenancy.ApprovalExecutionContext>().InitializeSystem("certificate", "certificate-bootstrap",
+            [ApprovalPermissions.DefinitionReadSensitive, ApprovalPermissions.DefinitionPublish]);
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var definitions = scope.ServiceProvider.GetRequiredService<ApprovalDefinitionService>();
         var count = 0;

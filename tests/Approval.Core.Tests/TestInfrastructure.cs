@@ -11,11 +11,11 @@ using Microsoft.Extensions.Time.Testing;
 
 namespace Approval.Core.Tests;
 
-public sealed class TestDbContext(DbContextOptions<TestDbContext> options) : DbContext(options)
+public sealed class TestDbContext(DbContextOptions<TestDbContext> options) : ApprovalDbContext(options, new Approval.Core.Abstractions.FixedApprovalTenantContext("tests"))
 {
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        modelBuilder.ConfigureApproval();
+        modelBuilder.ConfigureApproval(this);
         modelBuilder.Entity<TestRecord>().HasIndex(x => x.Name).IsUnique();
     }
 }
@@ -190,6 +190,8 @@ public sealed class TestHost : IAsyncDisposable
         services.AddSingleton<TimeProvider>(Clock);
         var builder = services.AddApprovalWorkflow<TestDbContext>(o =>
         {
+            o.FixedTenantId = "tests";
+            o.AllowSynchronousExternalActions = true; // Existing flow-algorithm fixtures explicitly cover legacy sync HTTP.
             o.Http.AllowedHosts.Add("api.example.com");
             configure?.Invoke(o);
         });
@@ -202,8 +204,23 @@ public sealed class TestHost : IAsyncDisposable
     }
 
     /// <summary>模拟一次独立的 HTTP 请求（新的 DI 作用域和 DbContext）。</summary>
-    public AsyncServiceScope NewScope() => _provider.CreateAsyncScope();
+    public AsyncServiceScope NewScope(bool authorize = false)
+    {
+        var scope = _provider.CreateAsyncScope();
+        if (!authorize)
+        {
+            scope.ServiceProvider.GetRequiredService<Approval.Core.Tenancy.ApprovalExecutionContext>().InitializeTrusted(new("tests", "test-fixture"), []);
+            scope.ServiceProvider.GetRequiredService<Approval.Core.Persistence.ApprovalDbContextAccessor>().Authorization = Approval.Tests.Infrastructure.FlowFixtureAuthorization.Instance;
+        }
+        return scope;
+    }
 
+    public async Task<T> RunAsAsync<T>(string actor, Func<IServiceProvider, Task<T>> action)
+    {
+        await using var scope = NewScope(authorize: true);
+        scope.ServiceProvider.GetRequiredService<Approval.Core.Tenancy.ApprovalExecutionContext>().InitializeTrusted(new("tests", actor), []);
+        return await action(scope.ServiceProvider);
+    }
     public async Task<T> RunAsync<T>(Func<IServiceProvider, Task<T>> action)
     {
         await using var scope = NewScope();
@@ -214,7 +231,7 @@ public sealed class TestHost : IAsyncDisposable
         RunAsync<object?>(async sp => { await action(sp); return null; });
 
     public Task PublishAsync(string key, string flowJson) =>
-        RunAsync(sp => sp.GetRequiredService<ApprovalDefinitionService>().PublishAsync(key, key, flowJson));
+        RunAsync(sp => sp.GetRequiredService<IApprovalUnitOfWork>().ExecuteAsync(token => sp.GetRequiredService<ApprovalDefinitionService>().PublishAsync(key, key, flowJson, token)));
 
     public Task<ApprovalInstance> StartAsync(string key, string businessKey, string initiator, object? form = null) =>
         RunAsync(sp => sp.GetRequiredService<ApprovalEngine>().StartAsync(

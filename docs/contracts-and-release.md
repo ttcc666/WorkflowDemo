@@ -34,6 +34,8 @@ pwsh -File './eng/verify.ps1' -Scope 'Packages'       # 打包、独立消费者
 
 消费者复制示例宿主和注册证示例类库，宿主引用复制后的示例项目，示例通过 PackageReference 消费两个框架包，不引用仓库中的框架项目；前端通过 tarball 消费 UI 包。独立 NuGet 缓存和 PackageSourceMapping 保证框架包来自本次本地 feed；安装后的 SHA512 与原包逐一比较，注册证依赖则必须显示为本地项目。前端检查 dist 导出、独立协议类型和 CSS，并执行真实构建。
 
+多租户参考宿主也复制到独立消费者，改为 PackageReference 后构建；检查 deps.json 中两个框架包的类型与 SHA512，并在该包宿主上执行真实 Kestrel 双租户/撤权/恢复授权冒烟。`verification.json` 的 `ReferenceApiRoot` 标明消费者位置。
+
 浏览器在临时端口、新 SQLite 文件上运行，实际操作打包后的设计器、提交与三级审批，检查终审前台账为空、终审后正式生效。Windows 使用已安装的 Edge；其他环境可预先运行 `pnpm --dir 'web' exec playwright install chromium`，也可设置 `APPROVAL_BROWSER_CHANNEL`。测试进程只清理自己启动的服务。
 
 `release-manifest.json` 关联版本、Git 基线、源文件指纹、契约、CHANGELOG 与包校验和；浏览器的 `passed.json` 进一步关联已验收包。CI 保存清单、测试报告和截图。实际向 NuGet/npm 发布或更新运行中的宿主不由此验收脚本执行。

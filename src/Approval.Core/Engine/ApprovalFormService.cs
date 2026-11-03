@@ -39,12 +39,15 @@ public sealed partial class ApprovalFormService(
     IApprovalUserDirectory? directory = null)
 {
     private const int MaxTitleLength = 500;
+    private readonly Approval.Core.Authorization.IApprovalAuthorization _authorization = accessor.Authorization;
     private readonly DbContext _db = accessor.Context;
+    private readonly ApprovalUnitOfWork _unit = accessor.UnitOfWork;
 
     public string BusinessType => formOptions.BusinessType;
 
     public async Task<List<StartableFlow>> ListStartableAsync(string userId, CancellationToken ct = default)
     {
+        await _authorization.RequireAsync(Approval.Core.Abstractions.ApprovalPermissions.InstanceStart, new(), userId, ct);
         var result = new List<StartableFlow>();
         foreach (var definition in await LatestDefinitions().ToListAsync(ct))
         {
@@ -57,25 +60,31 @@ public sealed partial class ApprovalFormService(
 
     public async Task<StartForm> GetStartFormAsync(string key, string userId, CancellationToken ct = default)
     {
+        await _authorization.RequireAsync(Approval.Core.Abstractions.ApprovalPermissions.InstanceStart, new() { DefinitionKey = key }, userId, ct);
         var (definition, flow) = await LoadStartableAsync(key, userId, ct);
         return new StartForm(definition.Id, definition.Key, definition.Name, definition.Version, flow.Settings!, flow.Form ?? new FormSchema());
     }
 
     /// <summary>发起表单审批：校验表单 → 生成标题 → 发起实例（业务主键为新 ID）。从草稿提交时同一事务删除草稿。</summary>
-    public async Task<ApprovalInstance> StartAsync(string key, string userId, JsonElement formData, string? comment = null,
+    public Task<ApprovalInstance> StartAsync(string key, string userId, JsonElement formData, string? comment = null,
+        Guid? draftId = null, CancellationToken ct = default) =>
+        _unit.ExecuteCommandAsync(token => StartAsyncCore(key, userId, formData, comment, draftId, token), ct);
+
+    private async Task<ApprovalInstance> StartAsyncCore(string key, string userId, JsonElement formData, string? comment = null,
         Guid? draftId = null, CancellationToken ct = default)
     {
+        await _authorization.RequireAsync(Approval.Core.Abstractions.ApprovalPermissions.InstanceStart, new() { DefinitionKey = key }, userId, ct);
         var (definition, flow) = await LoadStartableAsync(key, userId, ct);
         var schema = flow.Form ?? new FormSchema();
         var draft = draftId is { } id ? await FindDraftAsync(userId, id, ct) : null;
         var (json, attachments) = await files.ResolveAsync(schema, await NormalizeAsync(schema, formData, ct), userId, null, draft?.Id, false, ct);
 
         // 草稿删除、附件绑定随发起一起提交（引擎在同一 DbContext 中 SaveChanges）
-        var instanceId = Guid.NewGuid();
+        var instanceId = _unit.NewId("ApprovalFormService");
         await files.BindToInstanceAsync(instanceId, attachments, draft?.Id, ct);
         if (draft is not null) _db.Set<ApprovalDraft>().Remove(draft);
 
-        return await engine.StartAsync(new StartApprovalRequest(definition.Key, BusinessType, Guid.NewGuid().ToString("N"), userId)
+        return await engine.StartAsync(new StartApprovalRequest(definition.Key, BusinessType, _unit.NewId("ApprovalFormService").ToString("N"), userId)
         {
             InstanceId = instanceId,
             DefinitionId = definition.Id,
@@ -89,8 +98,12 @@ public sealed partial class ApprovalFormService(
     /// 退回发起人后重新提交。表单审批可传入新的表单数据（按实例绑定版本的表单校验，标题随之更新）；
     /// 其他业务的数据由业务单据决定，传入表单数据会被拒绝。
     /// </summary>
-    public async Task ResubmitAsync(Guid taskId, string userId, JsonElement? formData, string? comment = null, CancellationToken ct = default)
+    public Task ResubmitAsync(Guid taskId, string userId, JsonElement? formData, string? comment = null, CancellationToken ct = default) =>
+        _unit.ExecuteCommandAsync(token => ResubmitAsyncCore(taskId, userId, formData, comment, token), ct);
+
+    private async Task ResubmitAsyncCore(Guid taskId, string userId, JsonElement? formData, string? comment = null, CancellationToken ct = default)
     {
+        await _authorization.RequireAsync(Approval.Core.Abstractions.ApprovalPermissions.TaskResubmit, new() { TaskId = taskId }, userId, ct);
         if (formData is not { ValueKind: not (JsonValueKind.Null or JsonValueKind.Undefined) } data)
         {
             await engine.ResubmitAsync(taskId, userId, comment, ct: ct);
@@ -129,6 +142,8 @@ public sealed partial class ApprovalFormService(
     /// <summary>任务所在节点可在同意时修改的字段（仅表单审批的审批任务）；审批详情页据此显示编辑框。</summary>
     public async Task<IReadOnlyList<string>> GetEditableFieldsAsync(ApprovalTask task, CancellationToken ct = default)
     {
+        await _authorization.RequireAsync(Approval.Core.Abstractions.ApprovalPermissions.TaskRead, new() { TaskId = task.Id }, null, ct);
+        task = await _db.Set<ApprovalTask>().AsNoTracking().SingleAsync(t => t.Id == task.Id, ct);
         if (task.Kind == ApprovalTaskKind.Resubmit) return [];
         var instance = await _db.Set<ApprovalInstance>().AsNoTracking().FirstOrDefaultAsync(i => i.Id == task.InstanceId, ct);
         if (instance is null || !IsFormInstance(instance)) return [];
@@ -233,7 +248,7 @@ public sealed partial class ApprovalFormService(
         variables["form"] = form;
         variables["表单"] = form;
 
-        var tz = options.DisplayTimeZone;
+        var tz = accessor.TenantSettings?.DisplayTimeZone ?? options.DisplayTimeZone;
         var title = TemplateRenderer.Render(template, variables, timeZone: tz).Trim();
         if (title.Length == 0) title = flowName;
         return title.Length > MaxTitleLength ? title[..MaxTitleLength] : title;
@@ -241,11 +256,15 @@ public sealed partial class ApprovalFormService(
 
     private async Task<(ApprovalDefinition Definition, FlowDefinition Flow)> LoadStartableAsync(string key, string userId, CancellationToken ct)
     {
-        var definition = await LatestDefinitions().FirstOrDefaultAsync(d => d.Key == key, ct);
+        var pinned = _unit.PinnedDefinition(key);
+        var definition = pinned is { } id
+            ? await _db.Set<ApprovalDefinition>().AsNoTracking().SingleOrDefaultAsync(d => d.Id == id && d.Key == key && d.IsPublished, ct)
+            : await LatestDefinitions().FirstOrDefaultAsync(d => d.Key == key, ct);
         if (definition is null || TryParse(definition) is not { Settings.Startable: true } flow)
             throw new ApprovalException($"流程 '{key}' 不存在或不支持在发起中心发起") { Code = ApprovalErrorCode.NotFound };
         if (!await CanStartAsync(flow.Settings!, userId, ct))
             throw new ApprovalException("你没有发起该流程的权限") { Code = ApprovalErrorCode.Forbidden };
+        _unit.PinDefinition(key, definition.Id);
         return (definition, flow);
     }
 
@@ -260,9 +279,7 @@ public sealed partial class ApprovalFormService(
     }
 
     private IQueryable<ApprovalDefinition> LatestDefinitions() =>
-        _db.Set<ApprovalDefinition>().AsNoTracking()
-            .Where(d => d.IsPublished && d.Version == _db.Set<ApprovalDefinition>()
-                .Where(x => x.Key == d.Key && x.IsPublished).Max(x => x.Version));
+        ApprovalDefinitionAvailability.ForNewStarts(_db).AsNoTracking();
 
     private static FlowDefinition? TryParse(ApprovalDefinition definition)
     {

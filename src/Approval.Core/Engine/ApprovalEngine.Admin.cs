@@ -2,6 +2,7 @@ using Approval.Core.Abstractions;
 using Approval.Core.Definitions;
 using Approval.Core.Domain;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Approval.Core.Engine;
 
@@ -11,12 +12,16 @@ public sealed record ReassignSkip(Guid TaskId, Guid InstanceId, string? Title, s
 /// <summary>批量改派结果：成功改派的待办数与跳过的待办。</summary>
 public sealed record ReassignResult(int Count, IReadOnlyList<ReassignSkip> Skipped);
 
-// 管理操作：终止流程、改派待办、离职交接（批量改派）。是否管理员由调用方（接口层）判断，这里只记录操作人
+// 管理操作同样经过 Core 权限门禁；批量改派逐项校验资源范围。
 public sealed partial class ApprovalEngine
 {
     /// <summary>终止进行中的流程：取消全部待办，状态为 Terminated，调用业务回调 OnTerminatedAsync（默认按驳回处理），通知申请人。</summary>
-    public async Task TerminateAsync(Guid instanceId, string operatorId, string reason, CancellationToken ct = default)
+    public Task TerminateAsync(Guid instanceId, string operatorId, string reason, CancellationToken ct = default) =>
+        _unit.ExecuteCommandAsync(token => TerminateAsyncCore(instanceId, operatorId, reason, token), ct);
+
+    private async Task TerminateAsyncCore(Guid instanceId, string operatorId, string reason, CancellationToken ct = default)
     {
+        await _authorization.RequireAsync(Approval.Core.Abstractions.ApprovalPermissions.InstanceTerminate, new() { InstanceId = instanceId }, operatorId, ct);
         if (string.IsNullOrWhiteSpace(reason)) throw new ApprovalException("终止流程必须填写原因");
 
         var instance = await _db.Set<ApprovalInstance>()
@@ -39,8 +44,12 @@ public sealed partial class ApprovalEngine
     /// 管理员把待办改派给指定用户（处理人长期不在、离职）：不校验当前处理人；角色任务可改派给具体用户；
     /// 依次审批中尚未轮到、等待加签的任务也可改派（状态不变）；不重置时限。
     /// </summary>
-    public async Task ReassignAsync(Guid taskId, string operatorId, string toUserId, string? reason = null, CancellationToken ct = default)
+    public Task ReassignAsync(Guid taskId, string operatorId, string toUserId, string? reason = null, CancellationToken ct = default) =>
+        _unit.ExecuteCommandAsync(token => ReassignAsyncCore(taskId, operatorId, toUserId, reason, token), ct);
+
+    private async Task ReassignAsyncCore(Guid taskId, string operatorId, string toUserId, string? reason = null, CancellationToken ct = default)
     {
+        await _authorization.RequireAsync(Approval.Core.Abstractions.ApprovalPermissions.TaskReassign, new() { TaskId = taskId }, operatorId, ct);
         toUserId = toUserId?.Trim() ?? "";
         var (instance, task, flow) = await LoadTaskAsync(taskId, ct);
         if (await ReassignErrorAsync(instance, task, flow, toUserId, reason, ct) is { } error) throw new ApprovalException(error);
@@ -52,18 +61,20 @@ public sealed partial class ApprovalEngine
     /// <summary>
     /// 离职交接：把某人的全部待办（指派给本人的任务，不含角色任务）改派给另一人，逐个流程提交。
     /// 不能改派的待办（对方是发起人且不允许自审、对方已是该节点审批人、并发冲突）跳过并在结果中说明。
-    /// 处理过程中会清空 DbContext 的跟踪状态，请在独立的请求 / 作用域中调用。
+    /// 每个实例使用独立事务与作用域；拒绝加入外层原子工作单元，不清空宿主跟踪器。
     /// </summary>
     public async Task<ReassignResult> ReassignUserAsync(string fromUserId, string toUserId, string operatorId, string? reason = null,
         CancellationToken ct = default)
     {
+        await _authorization.RequireAsync(Approval.Core.Abstractions.ApprovalPermissions.TaskReassignBulk, new() { TargetUserId = fromUserId }, operatorId, ct);
         toUserId = toUserId?.Trim() ?? "";
         if (string.IsNullOrWhiteSpace(fromUserId) || toUserId.Length == 0 || fromUserId == toUserId)
             throw new ApprovalException("改派对象无效");
 
+        var scoped = await _authorization.ScopeAsync(_db.Set<ApprovalInstance>().AsNoTracking(), ct);
         var instanceIds = await (
                 from t in _db.Set<ApprovalTask>().AsNoTracking()
-                join i in _db.Set<ApprovalInstance>().AsNoTracking() on t.InstanceId equals i.Id
+                join i in scoped on t.InstanceId equals i.Id
                 where t.AssigneeKind == AssigneeKind.User && t.AssigneeValue == fromUserId
                       && (t.Status == ApprovalTaskStatus.Pending || t.Status == ApprovalTaskStatus.Waiting || t.Status == ApprovalTaskStatus.Suspended)
                       && i.Status == InstanceStatus.Running
@@ -72,45 +83,42 @@ public sealed partial class ApprovalEngine
             .Distinct()
             .ToListAsync(ct);
 
-        var count = 0;
-        var skipped = new List<ReassignSkip>();
+        if (_unit.IsActive || _db.Database.CurrentTransaction is not null || _db.ChangeTracker.HasChanges())
+            throw new InvalidOperationException("批量改派逐实例提交，不能加入外层原子工作单元或带未提交修改的作用域");
+        var commands = _commands ?? throw new InvalidOperationException("批量改派需要 DI 注册的命令协调器");
+        var count = 0; var skipped = new List<ReassignSkip>();
         foreach (var instanceId in instanceIds)
         {
-            _db.ChangeTracker.Clear();
-            var instance = await _db.Set<ApprovalInstance>().Include(i => i.Tasks).FirstAsync(i => i.Id == instanceId, ct);
-            var flow = await LoadFlowAsync(instance, ct);
-            var tasks = instance.Tasks
-                .Where(t => t.AssigneeKind == AssigneeKind.User && t.AssigneeValue == fromUserId && IsOpen(t))
-                .OrderBy(t => t.CreatedAt)
-                .ToList();
-
-            var reassigned = new List<ApprovalTask>();
-            foreach (var task in tasks)
-            {
-                if (await ReassignErrorAsync(instance, task, flow, toUserId, reason, ct) is { } error)
-                {
-                    skipped.Add(new ReassignSkip(task.Id, instance.Id, instance.Title, task.NodeName, error));
-                    continue;
-                }
-                await ReassignCoreAsync(instance, flow, task, operatorId, toUserId, reason, ct);
-                reassigned.Add(task);
-            }
-            if (reassigned.Count == 0) continue;
-
-            Touch(instance);
             try
             {
-                await CommitAsync(instance, ct);
-                count += reassigned.Count;
+                var result = await commands.ExecuteAsync(new("task.reassign-bulk.item", instanceId.ToString(), null,
+                    new { fromUserId, toUserId, reason }, ApprovalPermissions.TaskReassignBulk,
+                    new() { InstanceId = instanceId, TargetUserId = fromUserId }) { AllowUnkeyed = true },
+                    (sp, token) => sp.GetRequiredService<ApprovalEngine>().ReassignBatchInstanceAsync(instanceId, fromUserId, toUserId, operatorId, reason, token), ct);
+                count += result.Count; skipped.AddRange(result.Skipped);
             }
             catch (ApprovalException ex) when (ex.Code == ApprovalErrorCode.Conflict)
             {
-                // 与其他操作同时修改了该流程：本流程不改派，可稍后重试
-                skipped.AddRange(reassigned.Select(t => new ReassignSkip(t.Id, instance.Id, instance.Title, t.NodeName, ex.Message)));
+                var tasks = await _db.Set<ApprovalTask>().AsNoTracking().Where(t => t.InstanceId == instanceId && t.AssigneeValue == fromUserId).ToListAsync(ct);
+                skipped.AddRange(tasks.Select(t => new ReassignSkip(t.Id, instanceId, null, t.NodeName, ex.Message)));
             }
         }
-        _db.ChangeTracker.Clear();
-        return new ReassignResult(count, skipped);
+        return new(count, skipped);
+    }
+
+    private async Task<ReassignResult> ReassignBatchInstanceAsync(Guid instanceId, string fromUserId, string toUserId, string operatorId, string? reason, CancellationToken ct)
+    {
+        var instance = await _db.Set<ApprovalInstance>().Include(i => i.Tasks).FirstAsync(i => i.Id == instanceId, ct);
+        var flow = await LoadFlowAsync(instance, ct); var skipped = new List<ReassignSkip>(); var count = 0;
+        foreach (var task in instance.Tasks.Where(t => t.AssigneeKind == AssigneeKind.User && t.AssigneeValue == fromUserId && IsOpen(t)).OrderBy(t => t.CreatedAt).ToList())
+        {
+            var error = !await _authorization.CanAsync(ApprovalPermissions.TaskReassign, new() { TaskId = task.Id }, operatorId, ct)
+                ? "没有改派此任务的权限" : await ReassignErrorAsync(instance, task, flow, toUserId, reason, ct);
+            if (error is not null) { skipped.Add(new(task.Id, instance.Id, instance.Title, task.NodeName, error)); continue; }
+            await ReassignCoreAsync(instance, flow, task, operatorId, toUserId, reason, ct); count++;
+        }
+        if (count > 0) { Touch(instance); await CommitAsync(instance, ct); }
+        return new(count, skipped);
     }
 
     /// <summary>能否改派，不能时返回原因。</summary>
@@ -130,7 +138,7 @@ public sealed partial class ApprovalEngine
         if (node.RequireQualifiedAssignee)
         {
             if (string.IsNullOrWhiteSpace(reason)) return "岗位改派必须填写原因";
-            if (!(await GetEligibleApproversAsync(instance, node, ct)).Contains(toUserId)) return "目标用户不存在或不具备本节点审批资格";
+            if (!(await _assignees.GetEligibleApproversAsync(instance, node, ct)).Contains(toUserId)) return "目标用户不存在或不具备本节点审批资格";
         }
         return null;
     }
@@ -163,7 +171,7 @@ public sealed partial class ApprovalEngine
 
         var handed = new ApprovalTask
         {
-            Id = Guid.NewGuid(),
+            Id = _unit.NewId("ApprovalEngine.Admin"),
             InstanceId = instance.Id,
             NodeId = task.NodeId,
             NodeName = task.NodeName,

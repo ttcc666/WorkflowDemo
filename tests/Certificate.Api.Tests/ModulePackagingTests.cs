@@ -38,7 +38,7 @@ public sealed class ModulePackagingTests
     public void Module_preserves_migration_history_and_model()
     {
         using var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseSqlite("Data Source=:memory:").Options);
-        Assert.Equal(new[] { "20261101034706_CertificateBaseline", "20261101040302_CertificatePilotHardening" }, db.Database.GetMigrations());
+        Assert.Equal(new[] { "20261101034706_CertificateBaseline", "20261101040302_CertificatePilotHardening", "20261101174625_ExpandApprovalTenants", "20261101174626_TenantIsolation", "20261102014813_AtomicOperations", "20261102043317_DefinitionGovernance", "20261102054547_LifecycleMaintenance" }, db.Database.GetMigrations());
         Assert.False(db.Database.HasPendingModelChanges());
     }
 }

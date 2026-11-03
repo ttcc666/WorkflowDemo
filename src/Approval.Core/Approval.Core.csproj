@@ -19,6 +19,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Approval.Core.Tests" />
+    <InternalsVisibleTo Include="Approval.AspNetCore.Tests" />
     <None Include="../../README.md" Pack="true" PackagePath="README.md" />
   </ItemGroup>
 

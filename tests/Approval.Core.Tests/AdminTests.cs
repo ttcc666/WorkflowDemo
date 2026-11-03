@@ -140,7 +140,8 @@ public sealed class AdminTests : IAsyncLifetime
         var sequential = await _host.StartAsync("seq", "B3", "alice");
 
         var preview = await _host.RunAsync(sp => sp.GetRequiredService<ApprovalQueryService>().GetOpenUserTasksAsync("dave"));
-        var result = await _host.RunAsync(sp => sp.GetRequiredService<ApprovalEngine>().ReassignUserAsync("dave", "erin", "admin", "离职交接"));
+        _host.Identity.Add("admin", "Admin");
+        var result = await _host.RunAsAsync("admin", sp => sp.GetRequiredService<ApprovalEngine>().ReassignUserAsync("dave", "erin", "admin", "离职交接"));
 
         Assert.Equal(3, preview.Total);
         Assert.Contains(preview.Items, t => t.Status == ApprovalTaskStatus.Waiting);

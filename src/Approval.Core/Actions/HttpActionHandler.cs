@@ -15,6 +15,7 @@ public sealed class HttpActionHandler(IHttpClientFactory httpClientFactory, Appr
 {
     public const string ActionType = "Http";
     public const string HttpClientName = "Approval.HttpAction";
+    public bool HasExternalSideEffects => true;
 
     public ApprovalActionDescriptor Descriptor { get; } = new(ActionType, "HTTP 请求",
     [

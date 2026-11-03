@@ -9,6 +9,27 @@ permissions:
   contents: read
 
 jobs:
+  databases:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        provider: [MySql, SqlServer, PostgreSql]
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - run: ./eng/verify-databases.ps1 -Provider '${{ matrix.provider }}'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: database-${{ matrix.provider }}
+          path: output/database-tests/
   verify:
     runs-on: windows-latest
     timeout-minutes: 30
@@ -38,3 +59,4 @@ jobs:
             output/engineering/consumer-*/browser/results.json
             output/engineering/consumer-*/browser/**/*.png
             output/engineering/consumer-*/browser/**/*.zip
+            output/reference-host/**/smoke.json

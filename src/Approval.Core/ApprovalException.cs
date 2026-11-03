@@ -17,7 +17,11 @@ public enum ApprovalErrorCode
     /// <summary>未识别当前用户（未登录）。</summary>
     Unauthorized,
     /// <summary>输入校验失败，详见 <see cref="ApprovalValidationException.Errors"/>。</summary>
-    Validation
+    Validation,
+    AuthorizationUnavailable,
+    OperationIdRequired,
+    CommitOutcomeUnknown,
+    ReplayExpired
 }
 
 /// <summary>输入校验失败（如表单数据），<see cref="Errors"/> 为“字段 → 错误信息”。</summary>

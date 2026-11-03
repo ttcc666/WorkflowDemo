@@ -1,7 +1,7 @@
-import { computed, hasInjectionContext, inject, type App, type ComputedRef, type InjectionKey } from 'vue'
+import { computed, effectScope, watch, hasInjectionContext, inject, type App, type ComputedRef, type InjectionKey } from 'vue'
 import { approvalApi, createApprovalApi, type ApprovalApiClient } from './api/approval'
 import { http, createHttpClient, type ApprovalHttpClient } from './api/http'
-import { approvalConfig, resolveApprovalUIOptions, type ApprovalUIOptions, type ResolvedApprovalUIOptions } from './config'
+import { approvalConfig, approvalIdentityKey, resolveApprovalUIOptions, type ApprovalUIOptions, type ResolvedApprovalUIOptions } from './config'
 
 export interface ApprovalClient {
   readonly api: ApprovalApiClient
@@ -30,9 +30,10 @@ function managedClient(
   getApi: () => ApprovalApiClient,
 ): ApprovalClient {
   let installations = 0
+  const scope = effectScope(true)
   const client: ApprovalClient = {
     config,
-    userKey: computed(() => config().userKey?.() ?? ''),
+    userKey: computed(() => approvalIdentityKey(config())),
     get http() { return getHttp() },
     get api() { return getApi() },
     install(app) {
@@ -43,11 +44,14 @@ function managedClient(
       })
     },
     dispose() {
+      scope.stop()
+      getHttp().abortPending()
       const callbacks = resources.get(client)
       resources.delete(client)
       for (const cleanup of callbacks ?? []) cleanup()
     },
   }
+  scope.run(() => watch(client.userKey, () => getHttp().abortPending(), { flush: 'sync' }))
   return client
 }
 

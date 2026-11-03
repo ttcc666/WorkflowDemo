@@ -107,7 +107,7 @@ const toggle = (id: string) => (expanded.has(id) ? expanded.delete(id) : expande
         <el-tag size="small" :type="taskStatusLabels[task.status].type">{{ taskStatusLabels[task.status].text }}</el-tag>
         <el-tag v-if="taskKindLabels[task.kind]" size="small" type="warning" effect="plain">{{ taskKindLabels[task.kind] }}</el-tag>
         <span class="timeline-operator">{{ assigneeText(task.assigneeKind, task.assigneeValue) }}</span>
-        <el-button v-if="canReassign && task.kind !== 'Resubmit'" link type="primary" size="small" @click="emit('reassign', task)">改派</el-button>
+        <el-button v-if="canReassign && task.capabilities?.['approval.task.reassign'] === true && task.kind !== 'Resubmit'" link type="primary" size="small" @click="emit('reassign', task)">改派</el-button>
       </div>
       <div v-if="task.dueAt && task.status === 'Pending'" class="timeline-comment">
         截止 {{ formatDateTime(task.dueAt) }}（{{ dueText(task.dueAt).text }}<template v-if="task.remindCount">，已提醒 {{ task.remindCount }} 次</template>）

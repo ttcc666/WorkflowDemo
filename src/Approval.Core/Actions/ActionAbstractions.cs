@@ -78,6 +78,10 @@ public sealed class ApprovalActionResult
 /// </summary>
 public interface IApprovalActionHandler
 {
+    /// <summary>外部写副作用必须声明；新定义默认只能异步执行。声明不提供远程回滚保证。</summary>
+    bool HasExternalSideEffects => false;
+    /// <summary>旧扩展若自行提交必须声明；新发布禁止此行为，扫描报告用于人工迁移。</summary>
+    bool CommitsWorkUnit => false;
     ApprovalActionDescriptor Descriptor { get; }
 
     Task<ApprovalActionResult> ExecuteAsync(ApprovalActionContext context, CancellationToken ct);

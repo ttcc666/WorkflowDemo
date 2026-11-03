@@ -56,3 +56,4 @@ export {
 export * from './utils/labels'
 
 export { createApprovalClient, useApprovalClient, approvalClientKey, type ApprovalClient } from './client'
+export { createCommandIntent, useCommandIntent } from './composables/useCommandIntent'

@@ -1,6 +1,7 @@
 using System.Data;
 using System.Text.Json;
 using Approval.Core.Domain;
+using Approval.Core.Persistence;
 using Certificate.Api.Certificates;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -101,6 +102,13 @@ public sealed class CertificateDatabase(AppDbContext db, TimeProvider clock)
             var history = target.GetService<IHistoryRepository>();
             await target.Database.ExecuteSqlRawAsync(history.GetCreateIfNotExistsScript(), ct);
             await target.Database.ExecuteSqlRawAsync(history.GetInsertScript(new HistoryRow(known.First(), "10.0.14")), ct);
+        }
+        var expand = target.Database.GetMigrations().Single(id => id.EndsWith("_ExpandApprovalTenants", StringComparison.Ordinal));
+        if ((await target.Database.GetPendingMigrationsAsync(ct)).Contains(expand))
+        {
+            await target.GetService<IMigrator>().MigrateAsync(expand, ct);
+            var mapping = await new ApprovalTenantBackfill(target.Database.GetDbConnection(), "Sqlite").ApplyAsync([], target.TenantId, ct);
+            if (!mapping.Ready) throw new InvalidOperationException("租户映射预检失败：" + string.Join("；", mapping.Problems));
         }
         await target.Database.MigrateAsync(ct);
         await using var transaction = await target.Database.BeginTransactionAsync(ct);

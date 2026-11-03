@@ -2,6 +2,20 @@ namespace Approval.Core;
 
 public sealed class ApprovalOptions
 {
+    public ApprovalLifecycleOptions Lifecycle { get; } = new();
+    public ApprovalBackgroundOptions Background { get; } = new();
+    /// <summary>共享表多租户模式；必须由宿主解析可信租户及操作人，不能回落到固定租户。</summary>
+    public bool MultiTenant { get; set; }
+    /// <summary>单租户模式必须显式指定，升级旧库时还须显式回填同一归属。</summary>
+    public string? FixedTenantId { get; set; }
+    /// <summary>严格模式要求提交标识；默认 false 是旧客户端过渡模式，不提供无键请求防重保障。</summary>
+    public bool RequireOperationId { get; set; }
+    /// <summary>旧同步外部动作的显式过渡开关；宿主自行负责远程幂等/补偿，不获得远程回滚保证。</summary>
+    public bool AllowSynchronousExternalActions { get; set; }
+    public TimeSpan CommitVerificationTimeout { get; set; } = TimeSpan.FromSeconds(10);
+    public TimeSpan PermissionTimeout { get; set; } = TimeSpan.FromSeconds(5);
+    public string AdminRole { get; set; } = "Admin";
+    public List<string> DefinitionReaders { get; } = [];
     /// <summary>是否允许发起人审批自己的申请（职责分离，默认不允许）。</summary>
     public bool AllowInitiatorApprove { get; set; }
 

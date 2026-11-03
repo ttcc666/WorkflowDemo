@@ -4,6 +4,7 @@ using System.Text.Json;
 using Approval.Core;
 using Approval.Core.Abstractions;
 using Approval.Core.Engine;
+using Approval.Core.Authorization;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
@@ -11,11 +12,23 @@ namespace Certificate.Api.Certificates;
 
 /// <summary>每次调用是一份申请的完整提交；数据库约束负责并发防重，结果重放不重新推进流程。</summary>
 public sealed class CertificateService(AppDbContext db, ApprovalEngine engine, TimeProvider clock,
-    CertificateDataValidator validator, CertificateAccessPolicy access, CertificateWorkflowPolicy workflows, ILogger<CertificateService> logger)
+    CertificateDataValidator validator, CertificateAccessPolicy access, CertificateWorkflowPolicy workflows, ILogger<CertificateService> logger, IApprovalCommandExecutor commands,
+    IApprovalUnitOfWork unit, IApprovalActorContext actor, ApprovalAuthorizationService authorization)
 {
     public const string BusinessType = "Certificate";
 
-    public async Task<CertificateRequest> SubmitCreateAsync(CertificateData data, ApprovalViewer viewer, string key,
+    public async Task<CertificateRequest> SubmitCreateAsync(CertificateData data, ApprovalViewer viewer, string key, Guid? sourceRequestId, CancellationToken ct)
+    {
+        if (viewer.UserId != actor.ActorId) throw new ApprovalException("操作人参数与当前身份不一致") { Code = ApprovalErrorCode.Forbidden };
+        viewer = viewer with { IsAdmin = await authorization.CanAsync(ApprovalPermissions.InstanceReadAll, ct: ct) };
+        data = validator.Validate(data, checkExpiry: false);
+        var id = await commands.ExecuteAsync(new("certificate.create", "new", key, new { data, sourceRequestId },
+            ApprovalPermissions.InstanceStart, new() { DefinitionKey = CertificateWorkflowPolicy.Key(CertOperation.Create), BusinessType = BusinessType }),
+            async (sp, token) => (await sp.GetRequiredService<CertificateService>().SubmitCreateAsyncCore(data, viewer, key, sourceRequestId, token)).Id, ct);
+        return await db.CertificateRequests.AsNoTracking().SingleAsync(r => r.Id == id, ct);
+    }
+
+    private async Task<CertificateRequest> SubmitCreateAsyncCore(CertificateData data, ApprovalViewer viewer, string key,
         Guid? sourceRequestId, CancellationToken ct)
     {
         data = validator.Validate(data, checkExpiry: false);
@@ -29,7 +42,18 @@ public sealed class CertificateService(AppDbContext db, ApprovalEngine engine, T
         return await SubmitAsync(null, CertOperation.Create, data, null, viewer, key, hash, sourceRequestId, ct);
     }
 
-    public async Task<CertificateRequest> SubmitUpdateAsync(Guid certificateId, CertificateData data, ApprovalViewer viewer,
+    public async Task<CertificateRequest> SubmitUpdateAsync(Guid certificateId, CertificateData data, ApprovalViewer viewer, string key, Guid? sourceRequestId, CancellationToken ct)
+    {
+        if (viewer.UserId != actor.ActorId) throw new ApprovalException("操作人参数与当前身份不一致") { Code = ApprovalErrorCode.Forbidden };
+        viewer = viewer with { IsAdmin = await authorization.CanAsync(ApprovalPermissions.InstanceReadAll, ct: ct) };
+        data = validator.Validate(data, checkExpiry: false);
+        var id = await commands.ExecuteAsync(new("certificate.update", certificateId.ToString(), key, new { certificateId, data, sourceRequestId },
+            ApprovalPermissions.InstanceStart, new() { DefinitionKey = CertificateWorkflowPolicy.Key(CertOperation.Update), BusinessType = BusinessType }),
+            async (sp, token) => (await sp.GetRequiredService<CertificateService>().SubmitUpdateAsyncCore(certificateId, data, viewer, key, sourceRequestId, token)).Id, ct);
+        return await db.CertificateRequests.AsNoTracking().SingleAsync(r => r.Id == id, ct);
+    }
+
+    private async Task<CertificateRequest> SubmitUpdateAsyncCore(Guid certificateId, CertificateData data, ApprovalViewer viewer,
         string key, Guid? sourceRequestId, CancellationToken ct)
     {
         data = validator.Validate(data, checkExpiry: false);
@@ -43,7 +67,18 @@ public sealed class CertificateService(AppDbContext db, ApprovalEngine engine, T
         return await SubmitAsync(cert, CertOperation.Update, data, null, viewer, key, hash, sourceRequestId, ct);
     }
 
-    public async Task<CertificateRequest> SubmitRevokeAsync(Guid certificateId, string? reason, ApprovalViewer viewer,
+    public async Task<CertificateRequest> SubmitRevokeAsync(Guid certificateId, string? reason, ApprovalViewer viewer, string key, Guid? sourceRequestId, CancellationToken ct)
+    {
+        if (viewer.UserId != actor.ActorId) throw new ApprovalException("操作人参数与当前身份不一致") { Code = ApprovalErrorCode.Forbidden };
+        viewer = viewer with { IsAdmin = await authorization.CanAsync(ApprovalPermissions.InstanceReadAll, ct: ct) };
+        reason = CertificateDataValidator.ValidateReason(reason);
+        var id = await commands.ExecuteAsync(new("certificate.revoke", certificateId.ToString(), key, new { certificateId, reason, sourceRequestId },
+            ApprovalPermissions.InstanceStart, new() { DefinitionKey = CertificateWorkflowPolicy.Key(CertOperation.Revoke), BusinessType = BusinessType }),
+            async (sp, token) => (await sp.GetRequiredService<CertificateService>().SubmitRevokeAsyncCore(certificateId, reason, viewer, key, sourceRequestId, token)).Id, ct);
+        return await db.CertificateRequests.AsNoTracking().SingleAsync(r => r.Id == id, ct);
+    }
+
+    private async Task<CertificateRequest> SubmitRevokeAsyncCore(Guid certificateId, string? reason, ApprovalViewer viewer,
         string key, Guid? sourceRequestId, CancellationToken ct)
     {
         reason = CertificateDataValidator.ValidateReason(reason);
@@ -80,6 +115,7 @@ public sealed class CertificateService(AppDbContext db, ApprovalEngine engine, T
             .FirstOrDefaultAsync(r => r.ApplicantId == userId && r.Operation == operation && r.IdempotencyKey == key, ct);
         if (previous is not null && previous.RequestHash != hash)
             throw new ApprovalException("同一提交标识不能用于不同的申请内容") { Code = ApprovalErrorCode.Conflict };
+        if (previous?.ApprovalInstanceId is { } id) await unit.SetResultInstanceAsync(id, ct);
         return previous;
     }
 
@@ -121,8 +157,6 @@ public sealed class CertificateService(AppDbContext db, ApprovalEngine engine, T
             cert.ConcurrencyStamp++;
         }
 
-        try
-        {
             await engine.StartAsync(new StartApprovalRequest(CertificateWorkflowPolicy.Key(operation), BusinessType, request.Id.ToString(), viewer.UserId)
             {
                 InstanceId = request.ApprovalInstanceId,
@@ -142,20 +176,7 @@ public sealed class CertificateService(AppDbContext db, ApprovalEngine engine, T
             }, ct);
             logger.LogInformation("注册证申请已提交：{Operation} RequestId={RequestId} InstanceId={InstanceId}", operation, request.Id, request.ApprovalInstanceId);
             return request;
-        }
-        catch (Exception ex) when (IsUniqueConflict(ex) || ex is ApprovalException { Code: ApprovalErrorCode.Conflict })
-        {
-            // 本业务入口按独立请求作用域使用。失败的图不再参与后续保存，只读取已提交的赢家。
-            db.ChangeTracker.Clear();
-            if (await ReplayAsync(viewer.UserId, operation, key, hash, ct) is { } previous) return previous;
-            if (operation == CertOperation.Create && await db.CertificateNumberReservations.AnyAsync(r => r.NormalizedCertNo == number, ct))
-                throw NumberConflict();
-            throw;
-        }
     }
-
-    private static bool IsUniqueConflict(Exception ex) =>
-        ex is DbUpdateException { InnerException: SqliteException { SqliteExtendedErrorCode: 1555 or 2067 } };
 
     private static string Hash(CertOperation operation, Guid? certificateId, CertificateData? data, string? reason, Guid? sourceId) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(

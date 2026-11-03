@@ -135,6 +135,12 @@ public sealed class CertificateHost : IAsyncDisposable
         return await action(scope.ServiceProvider);
     }
 
+    public async Task<int> ProcessDueAsync()
+    {
+        await using var scope = await _app.Services.GetRequiredService<Approval.Core.Abstractions.IApprovalTenantScopeFactory>().CreateAsync("certificate");
+        return await scope.ServiceProvider.GetRequiredService<Approval.Core.Engine.ApprovalOutboxService>().ProcessDueAsync();
+    }
+
     public Task<T> DbAsync<T>(Func<AppDbContext, Task<T>> action) => RunAsync(sp => action(sp.GetRequiredService<AppDbContext>()));
 
     public async Task<Guid> RegisterAsync(CertificateData? data = null)

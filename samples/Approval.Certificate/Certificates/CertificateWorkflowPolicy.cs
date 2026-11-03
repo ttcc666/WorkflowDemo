@@ -4,16 +4,25 @@ using Approval.Core.Conditions;
 using Approval.Core.Definitions;
 using Approval.Core.Domain;
 using Approval.Core.Engine;
+using Approval.Core.Authorization;
+using Certificate.Api.Infrastructure;
+using Microsoft.EntityFrameworkCore;
 
 namespace Certificate.Api.Certificates;
 
 /// <summary>证书业务对已发布流程的准入检查；用户与组织变化后仍由引擎在实际操作时重新校验。</summary>
-public sealed class CertificateWorkflowPolicy(ApprovalDefinitionService definitions, ApprovalEngine engine, IConditionEvaluator evaluator)
+public sealed class CertificateWorkflowPolicy(AppDbContext db, ApprovalAuthorizationService authorization, ApprovalEngine engine, IConditionEvaluator evaluator)
 {
     public async Task<Guid> EnsureReadyAsync(CertOperation operation, CertificateData data, string userId, CancellationToken ct)
     {
         var key = Key(operation);
-        var definition = await definitions.GetLatestAsync(key, ct) ?? throw Invalid("注册证流程未发布");
+        await authorization.RequireAsync(ApprovalPermissions.InstanceStart, new() { DefinitionKey = key, BusinessType = CertificateService.BusinessType }, userId, ct);
+        // Host-internal staffing preflight: never expose the full definition through a user response.
+        var management = await db.Set<ApprovalDefinitionManagement>().AsNoTracking().SingleOrDefaultAsync(m => m.Key == key, ct);
+        if (management is { IsEnabled: false }) throw new ApprovalException("注册证流程已停用，不能发起新审批");
+        var activeId = management?.ActiveDefinitionId;
+        var definition = await db.Set<ApprovalDefinition>().AsNoTracking().Where(d => d.Key == key && d.IsPublished && (activeId == null || d.Id == activeId))
+            .OrderByDescending(d => d.Version).FirstOrDefaultAsync(ct) ?? throw Invalid("注册证流程未发布");
         var flow = FlowDefinition.Parse(definition.DefinitionJson);
         if (operation == CertOperation.Create)
         {
@@ -46,7 +55,8 @@ public sealed class CertificateWorkflowPolicy(ApprovalDefinitionService definiti
                 if (!node.RequireQualifiedAssignee || node.AllowTransfer || node.AllowAddSign || node.AllowReturn
                     || node.EmptyApproverPolicy == EmptyApproverPolicy.AutoApprove || node.Timeout?.Action == TimeoutAction.AutoApprove)
                     throw Invalid($"节点「{node.Name}」尚未启用注册证岗位保护，请发布试点版本");
-                var users = await engine.GetEligibleApproversAsync(instance, node, ct);
+                var users = await engine.GetStartEligibleApproversAsync(new(key, instance.BusinessType, instance.BusinessKey, userId)
+                    { DefinitionId = definition.Id, FormData = data }, node.Id, ct);
                 if (users.Count == 0) throw Invalid($"节点「{node.Name}」没有合格审批人，请完善部门与岗位配置");
                 if (node.Mode == ApproveMode.Any) slots.Add(users);
                 else slots.AddRange(users.Select(u => (IReadOnlyList<string>)new[] { u }));

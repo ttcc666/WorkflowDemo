@@ -1,5 +1,31 @@
 # Changelog
 
+## Unreleased — 2026-11-02
+
+- 增加独立真实服务演练入口：Keycloak HTTPS/JWT、三库原生备份到新库恢复、附件/维护游标与原键核对、实际 TCP 中断及 COMMIT 确认丢失恢复；不修改生产认证默认值或系统信任库。
+- 数据库验证探针改为实际 TCP（MySQL 同时验证 TLS），避免初始化时临时 Unix socket 被误判为就绪。演练客户端根据真实响应进行有界原键重试，并记录镜像、工具、备份和报告摘要。
+
+- 阶段 6：新增不可打包的 `Approval.MultiTenant.Api` 参考宿主，支持共享表双租户、JWT 默认认证、Development 专用演示令牌和第三方权限适配；写入口强制稳定提交键，数据库迁移显式执行。
+- 新增四 Provider 独立空库迁移及真实宿主双租户/撤权/恢复授权/原版本重放和 20 请求并发验收，接入统一验证、三库契约和 Kestrel 冒烟。最终支持/升级/回退及未演练边界见 `docs/production-acceptance.md`。
+
+- 阶段 5：通用诊断、可选匿名 Ready 探针、ActivitySource/Meter 和限量轮转的租户后台；诊断不输出配置或任意异常文本。
+- 默认关闭归档/清理。新增预览、当前策略核验、租约与同事务批次游标、保留标记、历史快照、独立敏感读取/归档范围接口和永久命令 tombstone；附件先提交删除任务再幂等执行。宿主追加 LifecycleMaintenance 迁移，并配置各自保留期，见 `docs/diagnostics-and-lifecycle.md`。
+
+- 阶段 4：独立设计草稿、编辑令牌与发布计数，发布版本不可变；启停和历史版本选择接入权限、原键重放及同事务审计，在途实例保持原定义与 Schema。
+- 设计器支持保存草稿和刷新恢复、变更说明；版本抽屉增加启停、历史版本选择和审计。增加旧同步外部动作/声明自提交动作的分页只读扫描，不输出参数或更改旧定义。宿主追加 DefinitionGovernance 迁移，见 `docs/definition-governance.md`。
+
+- 阶段 3：新增工作单元与整段命令协调器、租户范围的操作结果/业务占用、稳定 Idempotency-Key、同内容重放及提交结果未知核验；宿主委托在全新作用域重试。
+- Core/HTTP/证照写入接入事务，批量改派保留显式部分成功；Outbox 使用独立事务、租约 fencing 与提交后唤醒；前端按逻辑意图保留重试键。升级须新增 AtomicOperations 迁移并停写回填存量业务占用，详见 `docs/transactions-and-idempotency.md`。
+
+- 阶段 2：统一 Core/HTTP 权限 provider、稳定权限码、ASP.NET policy/默认角色适配、可信操作人参数校验、受限系统身份与数据库查询范围；权限超时/失败拒绝并返回 503，默认不缓存授权。
+- `/me`、实例和当前任务提供 capabilities，UI 按能力显示动作；端点权限元数据启动时校验。后台调用须显式授权，详见 `docs/permissions.md`。
+
+- 阶段 1：九类审批实体加入 TenantId、Context 命名过滤、写入/批量保护及同租户复合关联；HTTP 从可信 Claim 解析企业，后台按启用企业独立调度。
+- 默认本地附件采用租户范围存储键；支持租户时区、链接和模板变量，前端企业切换清空缓存及未提交内容并拒绝迟到响应。
+- 新增四种 Provider 的 Expand/Mapping/Harden 迁移、离线租户回填 CLI 与报告；三库验证旧待办在升级后继续审批。
+- 接入变更：宿主 Context 须继承 ApprovalDbContext 并调用 ConfigureApproval(this)，单租户须配置 FixedTenantId；多租户禁止固定回退，适配器按作用域注册。升级步骤见 docs/multitenancy.md。
+- 生产认证中心、真实业务库备份还原和网络故障演练由宿主按最终支持矩阵完成；本机验收不代表已部署或已发布。
+
 ## 0.2.0 — 2026-11-01
 
 - 将注册证业务整理为 `samples/Approval.Certificate` 示例类库，携带默认流程和原 EF 迁移；保留原命名空间及程序集类型转发，不作为框架包发布。

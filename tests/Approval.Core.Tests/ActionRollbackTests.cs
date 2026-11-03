@@ -160,6 +160,16 @@ public sealed class ActionRollbackTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Sync_action_cannot_save_early_and_continue_on_error_leaks_no_writes()
+    {
+        await _host.PublishAsync("f", Flow("save-then-fail", "Sync", continueOnError: true));
+        var instance = await _host.StartAsync("f", "B1", "alice");
+        Assert.Empty(await RecordsAsync());
+        Assert.Equal("review", (await _host.GetInstanceAsync(instance.Id)).CurrentNodeId);
+        Assert.Contains(await _host.LogsAsync(instance.Id), log => log.Comment?.Contains("SaveChanges") == true);
+    }
+
+    [Fact]
     public async Task Sync_success_saves_changes_with_the_approval()
     {
         await _host.PublishAsync("f", Flow("ok", "Sync"));

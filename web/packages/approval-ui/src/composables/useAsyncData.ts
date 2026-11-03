@@ -1,6 +1,7 @@
 import { readonly, shallowRef, watch, type Ref, type ShallowRef, type WatchSource } from 'vue'
 import { ElMessage } from 'element-plus'
 import { errorMessage } from '../api/http'
+import { useApprovalClient } from '../client'
 
 interface UseAsyncDataOptions<T> {
   /** 变化时自动重新加载（如路由参数、当前用户） */
@@ -46,7 +47,11 @@ export function useAsyncData<T>(loader: (signal: AbortSignal) => Promise<T>, opt
     }
   }
 
-  watch(options.watch ?? [], reload, { immediate: true })
+  const client = useApprovalClient()
+  watch([client.userKey, ...(options.watch ?? [])], (values, previous) => {
+    if (values[0] !== previous?.[0]) data.value = options.initial
+    void reload()
+  }, { immediate: true, flush: 'sync' })
 
   return { data, loading: readonly(loading), error: readonly(error), reload }
 }

@@ -68,8 +68,11 @@ public enum ApprovalAction
 }
 
 /// <summary>流程定义的一个版本。发布新版本不影响已发起的实例。所有时间字段均为 UTC。</summary>
-public class ApprovalDefinition
+public class ApprovalDefinition : IApprovalTenantEntity
 {
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string TenantId { get; set; } = string.Empty;
+
     public Guid Id { get; set; }
     public required string Key { get; set; }
     public int Version { get; set; }
@@ -79,8 +82,11 @@ public class ApprovalDefinition
     public DateTime CreatedAt { get; set; }
 }
 
-public class ApprovalInstance
+public class ApprovalInstance : IApprovalTenantEntity
 {
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string TenantId { get; set; } = string.Empty;
+
     public Guid Id { get; set; }
     public Guid DefinitionId { get; set; }
     public required string DefinitionKey { get; set; }
@@ -120,8 +126,11 @@ public class ApprovalInstance
     public List<ApprovalLog> Logs { get; set; } = [];
 }
 
-public class ApprovalTask
+public class ApprovalTask : IApprovalTenantEntity
 {
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string TenantId { get; set; } = string.Empty;
+
     public Guid Id { get; set; }
     public Guid InstanceId { get; set; }
     public required string NodeId { get; set; }
@@ -162,8 +171,11 @@ public class ApprovalTask
 }
 
 /// <summary>抄送记录：抄送节点的每个接收人一条，用于“抄送我的”列表与查看权限判断。角色抄送在查看时按角色成员判断。</summary>
-public class ApprovalCarbonCopy
+public class ApprovalCarbonCopy : IApprovalTenantEntity
 {
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string TenantId { get; set; } = string.Empty;
+
     public Guid Id { get; set; }
     public Guid InstanceId { get; set; }
     public required string NodeId { get; set; }
@@ -179,8 +191,11 @@ public class ApprovalCarbonCopy
 }
 
 /// <summary>表单审批的草稿：不校验必填，只做结构规范化；提交时删除。</summary>
-public class ApprovalDraft
+public class ApprovalDraft : IApprovalTenantEntity
 {
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string TenantId { get; set; } = string.Empty;
+
     public Guid Id { get; set; }
     public required string UserId { get; set; }
     public required string DefinitionKey { get; set; }
@@ -191,8 +206,11 @@ public class ApprovalDraft
 }
 
 /// <summary>审批轨迹，只追加不修改。</summary>
-public class ApprovalLog
+public class ApprovalLog : IApprovalTenantEntity
 {
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string TenantId { get; set; } = string.Empty;
+
     public Guid Id { get; set; }
     public Guid InstanceId { get; set; }
 

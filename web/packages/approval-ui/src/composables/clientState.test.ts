@@ -5,6 +5,56 @@ import { useApprovalUser } from './useApprovalUser'
 import { useDirectory } from './useDirectory'
 
 const clients: ApprovalClient[] = []
+
+it('权限使用服务端能力并在撤权和租户切换时立即清空', async () => {
+  const tenant = shallowRef('a')
+  let allowed = true
+  const client = createApprovalClient({ tenantId: () => tenant.value, userKey: () => 'admin',
+    fetcher: async () => Response.json({ userId: 'admin', name: 'Admin', roles: ['Admin'], isAdmin: true,
+      capabilities: { 'approval.definition.publish': allowed && tenant.value === 'a' } }) })
+  clients.push(client)
+  const user = createApp({}).use(client).runWithContext(useApprovalUser)
+  expect(user.can('approval.definition.publish')).toBe(false)
+  await vi.waitFor(() => expect(user.can('approval.definition.publish')).toBe(true))
+  allowed = false; await user.reload()
+  expect(user.isAdmin.value).toBe(true)
+  expect(user.can('approval.definition.publish')).toBe(false)
+  allowed = true; await user.reload()
+  expect(user.can('approval.definition.publish')).toBe(true)
+  tenant.value = 'b'
+  expect(user.can('approval.definition.publish')).toBe(false)
+  await vi.waitFor(() => expect(user.me.value?.userId).toBe('admin'))
+  expect(user.can('approval.definition.publish')).toBe(false)
+})
+
+it('isolates identical users when only the tenant changes and rejects late submission responses', async () => {
+  const tenant = shallowRef('a')
+  const fetcher = vi.fn(async (url: string, _init: RequestInit) => {
+    if (url.endsWith('/me')) return Response.json({ userId: 'shared', name: tenant.value, roles: [] })
+    return Response.json([{ id: 'shared', name: tenant.value, roles: [] }])
+  })
+  const client = createApprovalClient({ tenantId: () => tenant.value, userKey: () => 'shared', fetcher })
+  clients.push(client)
+  const app = createApp({}).use(client)
+  const directory = app.runWithContext(useDirectory)
+  const user = app.runWithContext(useApprovalUser)
+  await vi.waitFor(() => expect(user.me.value?.name).toBe('a'))
+  await directory.resolve(['shared'])
+  expect(directory.displayName('shared')).toBe('a')
+  let complete!: (response: Response) => void
+  fetcher.mockImplementationOnce(() => new Promise<Response>(resolve => { complete = resolve }))
+  const pending = expect(client.http.post('/submit', { amount: 1 })).rejects.toMatchObject({ name: 'AbortError' })
+  const signal = fetcher.mock.calls.at(-1)![1].signal
+  const oldKey = client.userKey.value
+  tenant.value = 'b'
+  expect(client.userKey.value).not.toBe(oldKey)
+  expect(signal?.aborted).toBe(true)
+  expect(directory.displayName('shared')).toBe('shared')
+  expect((await directory.resolve(['shared']))[0]?.name).toBe('b')
+  complete(Response.json({ instanceId: 'old-tenant-instance' }))
+  await pending
+  await vi.waitFor(() => expect(user.me.value?.name).toBe('b'))
+})
 afterEach(() => clients.splice(0).forEach(client => client.dispose()))
 
 function host(name: string) {

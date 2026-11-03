@@ -41,6 +41,10 @@ for (const document of [doc, sampleDoc]) {
       if (!success.length) throw new Error(`Missing success response: ${method} ${path}`)
       for (const [status, response] of success) {
         if (status === '204' || (method === 'get' && path === '/api/approval/files/{id}')) continue
+        if (method === 'get' && path === '/api/approval/archives/{id}/files/{fileId}') {
+          if (!response.content?.['application/octet-stream']) throw new Error(`Missing binary response content: ${method} ${path}`)
+          continue
+        }
         if (!response.content?.['application/json']?.schema) throw new Error(`Missing response schema: ${method} ${path}`)
       }
     }

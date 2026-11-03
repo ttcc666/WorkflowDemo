@@ -21,7 +21,7 @@ public sealed partial class ApprovalEngine
 
             var label = string.IsNullOrWhiteSpace(step.Name) ? handler.Descriptor.DisplayName : step.Name;
             var form = FormData.Parse(instance.FormDataJson);
-            var parameters = ResolveParameters(handler.Descriptor, step, TemplateVariables.Build(instance, form, node, _options));
+            var parameters = ResolveParameters(handler.Descriptor, step, TemplateVariables.Build(instance, form, node, _options, settings: _tenantSettings));
 
             if (step.Mode == ActionMode.Async)
             {
@@ -33,9 +33,17 @@ public sealed partial class ApprovalEngine
 
             // 动作可通过注入的 DbContext 修改数据：失败后继续流转时撤销其做了一半的修改，避免随审批一起提交
             var checkpoint = step.ContinueOnError ? ChangeTrackerCheckpoint.Create(_db) : null;
+            var transaction = _db.Database.CurrentTransaction;
+            var savepoint = "approval_action_" + Guid.NewGuid().ToString("N");
+            if (step.ContinueOnError)
+            {
+                if (transaction?.SupportsSavepoints != true) throw new InvalidOperationException("失败继续动作需要数据库保存点；SQL Server 必须关闭 MARS");
+                await transaction.CreateSavepointAsync(savepoint, ct);
+            }
             ApprovalActionResult result;
             try
             {
+                using var extension = _unit.Extension();
                 result = await handler.ExecuteAsync(new ApprovalActionContext
                 {
                     Instance = instance,
@@ -50,11 +58,14 @@ public sealed partial class ApprovalEngine
                 if (!step.ContinueOnError)
                     throw new ApprovalException($"节点 '{node.Name}' 的动作 '{label}' 执行失败：{ex.Message}", ex);
 
+                await transaction!.RollbackToSavepointAsync(savepoint, CancellationToken.None);
                 checkpoint!.Rollback();
                 _logger.LogWarning(ex, "动作执行失败（已配置失败继续）：{Flow} {Node} {Step}", instance.DefinitionKey, node.Id, label);
                 AddLog(instance, node, ApprovalAction.Action, SystemOperator, Truncate($"{label}：执行失败（已忽略）：{ex.Message}", 1000));
                 continue;
             }
+
+            if (step.ContinueOnError) await transaction!.ReleaseSavepointAsync(savepoint, ct);
 
             ApplyActionResult(instance, step, result);
             AddLog(instance, node, ApprovalAction.Action, SystemOperator,
@@ -75,7 +86,7 @@ public sealed partial class ApprovalEngine
             if (string.IsNullOrEmpty(value)) continue;
             var meta = descriptor.Parameters.FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
             var encoding = meta is null ? TemplateEncoding.Raw : meta.Template;
-            result[name] = encoding is { } e ? TemplateRenderer.Render(value, variables, e, _options.DisplayTimeZone) : value;
+            result[name] = encoding is { } e ? TemplateRenderer.Render(value, variables, e, _tenantSettings.DisplayTimeZone) : value;
         }
         return result;
     }

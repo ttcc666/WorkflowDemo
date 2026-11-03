@@ -29,6 +29,8 @@ public sealed class HttpResponseContractTests
             expected["canWithdraw"] = false;
         }
         var detail = expected.Deserialize<InstanceDetail>(Json)!;
+        expected["capabilities"] = new JsonObject();
+        expected["tasks"]![0]!["capabilities"] = new JsonObject();
         var response = ApprovalInstanceResponse.From(detail);
         AssertJson(expected, JsonSerializer.SerializeToNode(response, Json)!);
         detail.Tasks[0].NodeName = "changed after projection";

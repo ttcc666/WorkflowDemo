@@ -28,6 +28,7 @@ public sealed class HttpActionRedirectTests
         builder.Services.AddSingleton<IApprovalIdentityProvider>(new FakeUsers());
         builder.Services.AddApprovalWorkflow<ApiDbContext>(o =>
         {
+            o.FixedTenantId = "tests";
             o.EnableBackgroundServices = false;
             o.Http.AllowedHosts.Add("127.0.0.1");
         });

@@ -3,6 +3,8 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Approval.Core.Abstractions;
 using Approval.Core.Domain;
+using Approval.AspNetCore;
+using Microsoft.AspNetCore.Http;
 using Certificate.Api.Certificates;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
@@ -19,7 +21,7 @@ public sealed class CertificateConcurrencyTests
     {
         var barrier = new SubmissionBarrier();
         await using var host = await CertificateHost.StartAsync(configure: services =>
-            services.AddDbContext<AppDbContext>(o => o.AddInterceptors(barrier)));
+            services.AddScoped<IApprovalPermissionProvider>(sp => new BarrierPermissions(barrier, new ApprovalPolicyPermissionProvider(sp.GetRequiredService<IHttpContextAccessor>(), sp.GetRequiredService<IApprovalIdentityProvider>(), sp.GetRequiredService<ApprovalAspNetCoreOptions>()))));
         var key = Guid.NewGuid().ToString();
         var data = CertificateHost.ValidData("reg-race");
         var second = sameKey ? data : data with { CertNo = " REG-RACE " };
@@ -78,7 +80,7 @@ public sealed class CertificateConcurrencyTests
     public async Task Concurrent_update_and_revoke_cannot_acquire_the_same_certificate_lock()
     {
         var barrier = new SubmissionBarrier { Enabled = false };
-        await using var host = await CertificateHost.StartAsync(configure: services => services.AddDbContext<AppDbContext>(o => o.AddInterceptors(barrier)));
+        await using var host = await CertificateHost.StartAsync(configure: services => services.AddScoped<IApprovalPermissionProvider>(sp => new BarrierPermissions(barrier, new ApprovalPolicyPermissionProvider(sp.GetRequiredService<IHttpContextAccessor>(), sp.GetRequiredService<IApprovalIdentityProvider>(), sp.GetRequiredService<ApprovalAspNetCoreOptions>()))));
         var certificate = await host.RegisterAsync();
         barrier.Enabled = true;
         var responses = await Task.WhenAll(
@@ -132,19 +134,25 @@ public sealed class CertificateConcurrencyTests
     }
 }
 
-public sealed class SubmissionBarrier : SaveChangesInterceptor
+public sealed class SubmissionBarrier
 {
     private readonly TaskCompletionSource _gate = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private int _arrivals;
     public bool Enabled { get; set; } = true;
     public int Arrivals => Volatile.Read(ref _arrivals);
-
-    public override async ValueTask<InterceptionResult<int>> SavingChangesAsync(DbContextEventData eventData,
-        InterceptionResult<int> result, CancellationToken ct = default)
+    public async Task EnterAsync(CancellationToken ct)
     {
-        if (!Enabled || eventData.Context is null || !eventData.Context.ChangeTracker.Entries<CertificateRequest>().Any(e => e.State == EntityState.Added)) return result;
+        if (!Enabled || Volatile.Read(ref _arrivals) >= 2) return;
         if (Interlocked.Increment(ref _arrivals) == 2) _gate.TrySetResult();
         await _gate.Task.WaitAsync(TimeSpan.FromSeconds(30), ct);
-        return result;
+    }
+}
+internal sealed class BarrierPermissions(SubmissionBarrier barrier, IApprovalPermissionProvider inner) : IApprovalPermissionProvider
+{
+    public async Task<bool> AuthorizeAsync(ApprovalPermissionRequest request, CancellationToken ct)
+    {
+        // Both intents arrive before their transaction starts. Identical keys intentionally execute the business delegate once.
+        if (!request.Subject.IsSystem && request.Permission == ApprovalPermissions.InstanceStart) await barrier.EnterAsync(ct);
+        return await inner.AuthorizeAsync(request, ct);
     }
 }

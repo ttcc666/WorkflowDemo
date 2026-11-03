@@ -15,6 +15,7 @@
 
   <ItemGroup>
     <Using Include="Xunit" />
+    <Compile Include="../shared/FlowFixtureAuthorization.cs" Link="Infrastructure/FlowFixtureAuthorization.cs" />
   </ItemGroup>
 
   <ItemGroup>

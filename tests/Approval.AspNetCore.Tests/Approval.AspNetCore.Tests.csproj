@@ -19,11 +19,18 @@
 
   <ItemGroup>
     <Using Include="Xunit" />
+    <Compile Include="../shared/FlowFixtureAuthorization.cs" Link="Infrastructure/FlowFixtureAuthorization.cs" />
+    <Compile Include="../shared/ReferenceHostScenario.cs" Link="Infrastructure/ReferenceHostScenario.cs" />
+    <None Include="../../samples/Approval.MultiTenant.Api/appsettings.json" Link="ReferenceHostConfiguration.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Approval.AspNetCore\Approval.AspNetCore.csproj" />
     <None Include="../shared/http-*.json" Link="ContractFixtures/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\samples\Approval.MultiTenant.Api\Approval.MultiTenant.Api.csproj" />
   </ItemGroup>
 
 </Project>

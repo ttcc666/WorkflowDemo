@@ -2,11 +2,14 @@ using System.Text.Json.Serialization;
 using Approval.AspNetCore.Endpoints;
 using Approval.Core;
 using Approval.Core.Engine;
+using Approval.Core.Abstractions;
+using Approval.Core.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
 
 namespace Approval.AspNetCore;
 
@@ -21,6 +24,12 @@ public static class ApprovalAspNetCoreExtensions
         var options = new ApprovalAspNetCoreOptions();
         configure?.Invoke(options);
         services.AddSingleton(options);
+        services.AddHttpContextAccessor();
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, ApprovalEndpointValidationService>());
+        services.TryAddScoped<IApprovalContextResolver, ClaimsApprovalContextResolver>();
+        if (services.Any(d => d.ServiceType == typeof(IApprovalPermissionProvider) && d.ImplementationType == typeof(DefaultApprovalPermissionProvider)))
+            services.Replace(ServiceDescriptor.Scoped<IApprovalPermissionProvider, ApprovalPolicyPermissionProvider>());
+        else services.TryAddScoped<IApprovalPermissionProvider, ApprovalPolicyPermissionProvider>();
 
         services.TryAddSingleton<IApprovalCurrentUser, ClaimsApprovalCurrentUser>();
         services.AddProblemDetails();
@@ -49,13 +58,36 @@ public static class ApprovalAspNetCoreExtensions
             ?? throw new InvalidOperationException("请先调用 services.AddApprovalAspNetCore()");
 
         var group = app.MapGroup(prefix).WithTags("Approval");
-        foreach (var status in new[] { 400, 401, 403, 404, 409 })
+        ((IEndpointConventionBuilder)group).Add(builder =>
+        {
+            if (builder is not RouteEndpointBuilder route) return;
+            var path = route.RoutePattern.RawText ?? throw new InvalidOperationException("缺少审批路由");
+            var relative = path.StartsWith(prefix, StringComparison.Ordinal) ? path[prefix.Length..] : path;
+            var methods = builder.Metadata.OfType<HttpMethodMetadata>().Single().HttpMethods;
+            if (methods.Count != 1) throw new InvalidOperationException("审批端点必须声明单一 HTTP 方法");
+            builder.Metadata.Add(ApprovalEndpointPermissions.For(methods[0], relative));
+        });
+        foreach (var status in new[] { 400, 401, 403, 404, 409, 410, 503 })
             group.WithMetadata(new ProducesResponseTypeMetadata(status, typeof(Microsoft.AspNetCore.Mvc.ProblemDetails), ["application/problem+json"]));
         group.AddEndpointFilter(async (context, next) =>
         {
             try
             {
                 context.HttpContext.GetApprovalUserId();
+                var services = context.HttpContext.RequestServices;
+                var tenantId = services.GetRequiredService<IApprovalTenantContext>().TenantId;
+                if (services.GetRequiredService<ApprovalOptions>().MultiTenant &&
+                    !(await services.GetRequiredService<IApprovalTenantCatalog>().GetTenantsAsync(context.HttpContext.RequestAborted))
+                        .Any(t => t.Enabled && t.TenantId == tenantId))
+                    throw new ApprovalException("租户不存在或已停用") { Code = ApprovalErrorCode.Forbidden };
+                var metadata = context.HttpContext.GetEndpoint()?.Metadata.GetMetadata<ApprovalPermissionMetadata>() ?? throw new InvalidOperationException("审批端点缺少权限元数据");
+                var authorization = services.GetRequiredService<ApprovalAuthorizationService>();
+                var keyedCommand = ApprovalHttpCommands.Managed(context.HttpContext, metadata) && context.HttpContext.Request.Headers.ContainsKey(ApprovalHttpCommands.Header);
+                var allowed = false;
+                foreach (var permission in keyedCommand ? [] : metadata.Permissions)
+                    if (await authorization.CanAsync(permission, ApprovalEndpointPermissions.Resource(context.HttpContext, metadata), context.HttpContext.RequestAborted)) { allowed = true; break; }
+                if (!allowed && !keyedCommand)
+                    throw new ApprovalException("没有执行此审批操作的权限") { Code = ApprovalErrorCode.Forbidden };
                 return await next(context);
             }
             catch (ApprovalException ex)
@@ -63,6 +95,7 @@ public static class ApprovalAspNetCoreExtensions
                 return ApprovalProblems.ToResult(ex);
             }
         });
+        ApprovalHttpCommands.Add(group);
 
         // 表单审批为可选能力：未调用 AddFormApprovals() 时不映射相关接口（避免把未注册的服务参数推断为请求体）
         var formsEnabled = app.ServiceProvider.GetService<IServiceProviderIsService>()?.IsService(typeof(ApprovalFormService)) == true;
@@ -74,6 +107,7 @@ public static class ApprovalAspNetCoreExtensions
         MessageEndpoints.Map(group, options);
         DirectoryEndpoints.Map(group, formBusinessType);
         AdminEndpoints.Map(group);
+        MaintenanceEndpoints.Map(group);
         if (formsEnabled) FormEndpoints.Map(group, app.ServiceProvider.GetRequiredService<ApprovalOptions>());
         return group;
     }

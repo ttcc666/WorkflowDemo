@@ -1,0 +1,130 @@
+using System.Text.Json;
+using Approval.Core.Abstractions;
+using Approval.Core.Authorization;
+using Approval.Core.Domain;
+using Approval.Core.Tenancy;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace Approval.Core.Persistence;
+
+internal sealed class ApprovalCommandExecutor<TContext>(IServiceScopeFactory scopes, IApprovalTenantContext tenant,
+    IApprovalActorContext actor, ApprovalOptions options, TimeProvider clock) : IApprovalCommandExecutor where TContext : ApprovalDbContext
+{
+    private static readonly JsonSerializerOptions Json = JsonSerializerOptions.Web;
+    public async Task<T> ExecuteAsync<T>(ApprovalCommand command, Func<IServiceProvider, CancellationToken, Task<T>> operation, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(command.Kind) || command.Kind.Length > 100 || command.Scope.Length > 2000)
+            throw new ArgumentException("命令类型/范围无效", nameof(command));
+        var key = command.OperationId;
+        if (key is null && options.RequireOperationId && !command.AllowUnkeyed) throw new ApprovalException("缺少稳定提交标识 Idempotency-Key") { Code = ApprovalErrorCode.OperationIdRequired };
+        if (key is not null && (string.IsNullOrWhiteSpace(key) || key.Length > 200 || key.Any(char.IsControl)))
+            throw new ApprovalException("提交标识必须为 1–200 个非控制字符") { Code = ApprovalErrorCode.OperationIdRequired };
+        var identity = new ApprovalExecutionIdentity(tenant.TenantId, actor.ActorId, actor.IsSystem);
+        using var observation = Approval.Core.Diagnostics.ApprovalInstrumentation.Command(identity.TenantId, command.Kind, key);
+        var attempts = 0;
+        if (identity.ActorId!.Length > 256) throw new InvalidOperationException("操作人标识超过 256 字符");
+        var grants = actor is IApprovalSystemActorContext system ? system.AllowedPermissions.ToArray() : [];
+        var hash = ApprovalCommandHash.Payload(command.Payload);
+        var lookup = key is null ? null : ApprovalCommandHash.Of(identity.ActorId, command.Kind, command.Scope, key);
+        var seed = ApprovalCommandHash.Of(identity.TenantId, lookup ?? Guid.NewGuid().ToString("N"));
+        var definitions = new Dictionary<string, Guid>(StringComparer.Ordinal);
+
+        AsyncServiceScope CreateScope()
+        {
+            var scope = scopes.CreateAsyncScope();
+            scope.ServiceProvider.GetRequiredService<ApprovalExecutionContext>().InitializeTrusted(identity, grants);
+            return scope;
+        }
+        async Task<ApprovalOperation?> FindAsync(CancellationToken token)
+        {
+            if (lookup is null) return null;
+            await using var scope = CreateScope();
+            if (options.MultiTenant && !(await scope.ServiceProvider.GetRequiredService<IApprovalTenantCatalog>().GetTenantsAsync(token)).Any(t => t.Enabled && t.TenantId == identity.TenantId))
+                throw new ApprovalException("租户已停用") { Code = ApprovalErrorCode.Forbidden };
+            return await scope.ServiceProvider.GetRequiredService<TContext>().Set<ApprovalOperation>().AsNoTracking().SingleOrDefaultAsync(o => o.LookupHash == lookup, token);
+        }
+        async Task<T> ReplayAsync(ApprovalOperation previous, CancellationToken token)
+        {
+            if (previous.ActorId != identity.ActorId || previous.Kind != command.Kind || previous.Scope != command.Scope || previous.RequestKey != key
+                || previous.RequestHash != hash || previous.HashVersion != 1 || previous.ResultVersion != 2)
+                throw new ApprovalException("同一提交标识不能用于不同内容或不支持的结果版本") { Code = ApprovalErrorCode.Conflict };
+            await using var scope = CreateScope(); var sp = scope.ServiceProvider;
+            if (previous.IsTombstone) throw new ApprovalException("原操作结果已结束重放保留期；原键仍永久防重，请查询归档记录") { Code = ApprovalErrorCode.ReplayExpired };
+            var auth = sp.GetRequiredService<ApprovalAuthorizationService>();
+            var stored = JsonSerializer.Deserialize<StoredResult<T>>(previous.ResultJson, Json)!;
+            if (previous.InstanceId is { } id && !identity.IsSystem)
+            {
+                await auth.RequireAsync(ApprovalPermissions.InstanceRead, new() { InstanceId = id }, identity.ActorId, token);
+                var db = sp.GetRequiredService<TContext>();
+                var instance = await db.Set<ApprovalInstance>().AsNoTracking().SingleAsync(i => i.Id == id, token);
+                if (!(await sp.GetRequiredService<IApprovalAccessPolicy>().GetAccessAsync(new(identity.ActorId, false), instance, token)).CanView)
+                    throw new ApprovalException("无权读取原操作结果") { Code = ApprovalErrorCode.NotFound };
+            }
+            else await auth.Inner.RequireRecordedAsync(command.Permission, stored.Resource, token);
+            return stored.Value;
+        }
+        await using var strategyScope = CreateScope();
+        var strategy = strategyScope.ServiceProvider.GetRequiredService<TContext>().Database.CreateExecutionStrategy();
+        try
+        {
+            return await strategy.ExecuteAsync(async () =>
+            {
+                if (++attempts > 1) Approval.Core.Diagnostics.ApprovalInstrumentation.Retries.Add(1);
+                ct.ThrowIfCancellationRequested();
+                if (await FindAsync(ct) is { } previous) return await ReplayAsync(previous, ct);
+                await using var scope = CreateScope(); var sp = scope.ServiceProvider;
+                if (options.MultiTenant && !(await sp.GetRequiredService<IApprovalTenantCatalog>().GetTenantsAsync(ct)).Any(t => t.Enabled && t.TenantId == identity.TenantId))
+                    throw new ApprovalException("租户已停用") { Code = ApprovalErrorCode.Forbidden };
+                await sp.GetRequiredService<ApprovalAuthorizationService>().RequireAsync(command.Permission, command.Resource, identity.ActorId, ct);
+                var authorizedResource = await sp.GetRequiredService<ApprovalAuthorizationService>().Inner.ResolveResourceAsync(command.Resource ?? new(), ct);
+                var db = sp.GetRequiredService<TContext>(); var unit = (ApprovalUnitOfWork)sp.GetRequiredService<IApprovalUnitOfWork>();
+                db.TransactionState.OperationSeed = seed; db.TransactionState.Definitions = definitions;
+                if (db.ChangeTracker.HasChanges()) throw new InvalidOperationException("命令作用域必须从干净的 DbContext 开始");
+                var committing = false;
+                try
+                {
+                    return await unit.ExecuteAsync(async token =>
+                    {
+                        ApprovalOperation? record = null;
+                        if (lookup is not null)
+                        {
+                            record = new() { Id = Guid.NewGuid(), LookupHash = lookup, ActorId = identity.ActorId, Kind = command.Kind,
+                                Scope = command.Scope, RequestKey = key!, RequestHash = hash };
+                            db.Add(record);
+                            // Reserve before invoking host code; concurrent requests cannot both execute a committed command.
+                            await db.SaveChangesAsync(token);
+                        }
+                        var result = await operation(sp, token);
+                        if (record is not null)
+                        {
+                            record.ResultJson = JsonSerializer.Serialize(new StoredResult<T>(result, authorizedResource), Json);
+                            record.InstanceId = db.TransactionState.InstanceId; record.DefinitionId = db.TransactionState.DefinitionId;
+                            record.CommittedAt = clock.GetUtcNow().UtcDateTime;
+                        }
+                        // Any failure after here is conservatively verified using a separate context.
+                        committing = true;
+                        return result;
+                    }, ct);
+                }
+                catch (Exception ex) when (committing && lookup is not null && ex is not ApprovalException)
+                {
+                    using var verification = new CancellationTokenSource(options.CommitVerificationTimeout);
+                    try { if (await FindAsync(verification.Token) is { } committed) return await ReplayAsync(committed, verification.Token); }
+                    catch (ApprovalException) { throw; }
+                    catch (Exception verificationFailure)
+                    { throw new ApprovalException("提交结果待确认，请保留原提交标识重试", verificationFailure) { Code = ApprovalErrorCode.CommitOutcomeUnknown }; }
+                    throw;
+                }
+            });
+        }
+        catch (Exception ex) when (ApprovalDatabaseErrors.Unique(ex) || ex is ApprovalException { Code: ApprovalErrorCode.Conflict })
+        {
+            Approval.Core.Diagnostics.ApprovalInstrumentation.Conflicts.Add(1);
+            // Transaction/scope have been disposed; PostgreSQL is no longer in an aborted transaction.
+            if (await FindAsync(ct) is { } winner) return await ReplayAsync(winner, ct);
+            throw new ApprovalException("业务已被其他提交占用或资源已更新，请刷新后重试", ex) { Code = ApprovalErrorCode.Conflict };
+        }
+    }
+    private sealed record StoredResult<T>(T Value, ApprovalResource Resource);
+}

@@ -2,6 +2,16 @@ Approval.Certificate.CertificateFlowTemplates
   Method System.Collections.Generic.IReadOnlyDictionary`2[System.String,System.String] ReadDefaults() [return=NotNull/NotNull<NotNull/NotNull,NotNull/NotNull>; args=]
 Approval.Certificate.CertificateModuleExtensions
   Method Approval.Core.ApprovalBuilder AddCertificateModule(Approval.Core.ApprovalBuilder) [return=NotNull/NotNull; args=NotNull/NotNull]
+Approval.Certificate.Infrastructure.Migrations.AtomicOperations
+  Constructor Void .ctor() [args=]
+Approval.Certificate.Infrastructure.Migrations.DefinitionGovernance
+  Constructor Void .ctor() [args=]
+Approval.Certificate.Infrastructure.Migrations.ExpandApprovalTenants
+  Constructor Void .ctor() [args=]
+Approval.Certificate.Infrastructure.Migrations.LifecycleMaintenance
+  Constructor Void .ctor() [args=]
+Approval.Certificate.Infrastructure.Migrations.TenantIsolation
+  Constructor Void .ctor() [args=]
 Certificate.Api.Certificates.AppDbContext
   Constructor Void .ctor(Microsoft.EntityFrameworkCore.DbContextOptions`1[Certificate.Api.Certificates.AppDbContext]) [args=NotNull/NotNull<NotNull/NotNull>]
   Property Microsoft.EntityFrameworkCore.DbSet`1[Certificate.Api.Certificates.CertificateEntity] Certificates [NotNull/Unknown<NotNull/NotNull>]
@@ -135,7 +145,7 @@ Certificate.Api.Certificates.CertificateRequestView
   Property System.String ApplicantId [NotNull/NotNull]
   Property System.String Reason [Nullable/Nullable]
 Certificate.Api.Certificates.CertificateService
-  Constructor Void .ctor(Certificate.Api.Certificates.AppDbContext, Approval.Core.Engine.ApprovalEngine, System.TimeProvider, Certificate.Api.Certificates.CertificateDataValidator, Certificate.Api.Certificates.CertificateAccessPolicy, Certificate.Api.Certificates.CertificateWorkflowPolicy, Microsoft.Extensions.Logging.ILogger`1[Certificate.Api.Certificates.CertificateService]) [args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull<NotNull/NotNull>]
+  Constructor Void .ctor(Certificate.Api.Certificates.AppDbContext, Approval.Core.Engine.ApprovalEngine, System.TimeProvider, Certificate.Api.Certificates.CertificateDataValidator, Certificate.Api.Certificates.CertificateAccessPolicy, Certificate.Api.Certificates.CertificateWorkflowPolicy, Microsoft.Extensions.Logging.ILogger`1[Certificate.Api.Certificates.CertificateService], Approval.Core.Abstractions.IApprovalCommandExecutor, Approval.Core.Abstractions.IApprovalUnitOfWork, Approval.Core.Abstractions.IApprovalActorContext, Approval.Core.Authorization.ApprovalAuthorizationService) [args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull<NotNull/NotNull>,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull]
   Field System.String BusinessType [NotNull/NotNull] value="Certificate"
   Method System.String OperationName(Certificate.Api.Certificates.CertOperation) [return=NotNull/NotNull; args=NotNull/NotNull]
   Method System.Threading.Tasks.Task`1[Certificate.Api.Certificates.CertificateRequest] SubmitCreateAsync(Certificate.Api.Certificates.CertificateData, Approval.Core.Abstractions.ApprovalViewer, System.String, System.Nullable`1[System.Guid], System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,Nullable/Nullable,NotNull/NotNull]
@@ -164,7 +174,7 @@ Certificate.Api.Certificates.CertificateView
   Property System.String Holder [NotNull/NotNull]
   Property System.String Name [NotNull/NotNull]
 Certificate.Api.Certificates.CertificateWorkflowPolicy
-  Constructor Void .ctor(Approval.Core.Engine.ApprovalDefinitionService, Approval.Core.Engine.ApprovalEngine, Approval.Core.Abstractions.IConditionEvaluator) [args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull]
+  Constructor Void .ctor(Certificate.Api.Certificates.AppDbContext, Approval.Core.Authorization.ApprovalAuthorizationService, Approval.Core.Engine.ApprovalEngine, Approval.Core.Abstractions.IConditionEvaluator) [args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull]
   Method System.String Key(Certificate.Api.Certificates.CertOperation) [return=NotNull/NotNull; args=NotNull/NotNull]
   Method System.Threading.Tasks.Task`1[System.Guid] EnsureReadyAsync(Certificate.Api.Certificates.CertOperation, Certificate.Api.Certificates.CertificateData, System.String, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull]
 Certificate.Api.Certificates.FieldChange
@@ -248,7 +258,7 @@ Certificate.Api.Infrastructure.CertificateDatabaseExceptionHandler
   Constructor Void .ctor(Microsoft.Extensions.Logging.ILogger`1[Certificate.Api.Infrastructure.CertificateDatabaseExceptionHandler]) [args=NotNull/NotNull<NotNull/NotNull>]
   Method System.Threading.Tasks.ValueTask`1[System.Boolean] TryHandleAsync(Microsoft.AspNetCore.Http.HttpContext, System.Exception, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull]
 Certificate.Api.Infrastructure.CertificateDiagnostics
-  Constructor Void .ctor(Certificate.Api.Certificates.AppDbContext, Approval.Core.Engine.ApprovalEngine, Certificate.Api.Infrastructure.CertificateDatabase, System.TimeProvider) [args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull]
+  Constructor Void .ctor(Certificate.Api.Certificates.AppDbContext, Approval.Core.Engine.ApprovalEngine, Certificate.Api.Infrastructure.CertificateDatabase, System.TimeProvider, Approval.Core.Authorization.ApprovalAuthorizationService) [args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull]
   Method System.Threading.Tasks.Task`1[Certificate.Api.Infrastructure.CertificateDiagnosticsResult] GetAsync(System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull]
 Certificate.Api.Infrastructure.CertificateDiagnosticsResult
   Constructor Void .ctor(Int32, Int32, Int32, Int32, System.Collections.Generic.IReadOnlyList`1[Certificate.Api.Infrastructure.UnstaffedTask], Boolean, Certificate.Api.Infrastructure.DatabaseReadiness) [args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull<NotNull/NotNull>,NotNull/NotNull,NotNull/NotNull]

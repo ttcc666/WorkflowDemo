@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, provide, shallowRef, useTemplateRef, watch } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { useDefinitionGovernance } from '../features/designer/useDefinitionGovernance'
 import { useApprovalClient } from '../client'
 import { ApiError, errorMessage } from '../api/http'
 import { useAsyncData } from '../composables/useAsyncData'
@@ -23,11 +24,11 @@ import { newFlowDefinition, notifyEventsFor, type FlowDefinition, type NodeType 
 import type { ApprovalMeta } from '../contracts/api'
 import { approvalRouteNames } from '../routes'
 
-const { api: approvalApi } = useApprovalClient()
+const { api: approvalApi, userKey } = useApprovalClient()
 
 const route = useRoute()
 const router = useRouter()
-const { me, isAdmin, canViewDefinitions } = useApprovalUser()
+const { me, can, canViewDefinitions } = useApprovalUser()
 const directory = useDirectory()
 void directory.loadRoles()
 const designer = useFlowDesigner()
@@ -39,20 +40,39 @@ provide(designerFormKey, computed(() => designer.form.value))
 const fieldCount = computed(() => designer.form.value.fields.length)
 
 const flowKey = computed(() => route.params.key as string)
+const governance = useDefinitionGovernance(() => flowKey.value)
+const intent = governance.intent
+const saving = shallowRef(false)
+const changeNote = shallowRef('')
+const canGovern = (permission: string) => governance.state.value?.capabilities[permission] ?? can(permission)
+async function restartPublish() {
+  try {
+    await ElMessageBox.confirm('请先在版本记录中核对上次发布结果。确认后，将开始一次新的发布。', '重新发布', { type: 'warning' })
+    intent.reset(flowKey.value)
+  } catch { /* Keep the original intent until the result has been checked. */ }
+}
 const fromId = computed(() => route.query.from as string | undefined)
 const name = shallowRef('')
 const version = shallowRef<number | null>(null)
 
 // 加载：?from=<定义ID> 基于历史版本编辑；否则取最新版本；不存在则新建。完整定义仅管理员（及 DefinitionReaders）可读。
-// 首次确认有权查看后才加载；之后切换用户不重新加载，避免丢失未发布的修改（演示中切换到 admin 发布）
-const canLoad = shallowRef(false)
-watch(canViewDefinitions, (value) => {
-  if (value) canLoad.value = true
-}, { immediate: true })
+// 每次身份变化都重新确认当前企业的权限与定义。
+const canLoad = canViewDefinitions
+watch(userKey, () => {
+  designer.load(newFlowDefinition())
+  name.value = ''
+  version.value = null
+  governance.state.value = null
+  changeNote.value = ''
+  tab.value = 'flow'
+  if (route.query.from) void router.replace({ query: { ...route.query, from: undefined } })
+}, { flush: 'sync' })
 const loader = useAsyncData(
   async (signal) => {
     if (!canLoad.value) return undefined
     try {
+      await governance.load(signal)
+      if (!fromId.value && governance.state.value?.draftJson) return { name: governance.state.value.name, version: governance.state.value.lastVersion, definitionJson: governance.state.value.draftJson }
       return fromId.value ? await approvalApi.definitionById(fromId.value, signal) : await approvalApi.latestDefinition(flowKey.value)
     } catch (e) {
       if (e instanceof ApiError && e.status === 404) return null
@@ -117,11 +137,21 @@ const selectedEdgeData = computed(() => designer.selectedEdge.value?.data)
 
 const validating = shallowRef(false)
 const publishing = shallowRef(false)
+async function saveDraft() {
+  if (!name.value.trim()) return ElMessage.warning('请填写流程名称')
+  saving.value = true
+  try {
+    await governance.save(name.value.trim(), JSON.stringify(designer.buildDefinition()), fromId.value ?? governance.state.value?.draftSourceDefinitionId ?? governance.state.value?.activeDefinitionId ?? null)
+    designer.markSaved()
+    ElMessage.success('设计草稿已保存；发起审批仍使用当前选用的发布版本')
+  } catch (error) { ElMessage.error(errorMessage(error)) }
+  finally { saving.value = false }
+}
 
 async function validate() {
   validating.value = true
   try {
-    return await designer.validate()
+    return await designer.validate(can('approval.definition.validate'))
   } catch (e) {
     ElMessage.error(errorMessage(e))
     return { ok: false, definition: null }
@@ -131,19 +161,24 @@ async function validate() {
 }
 
 async function publish() {
+  const identity = userKey.value
   if (!name.value.trim()) return ElMessage.warning('请填写流程名称')
   const { ok, definition } = await validate()
+  if (identity !== userKey.value) return
   if (!ok || !definition) return ElMessage.error('校验未通过，请先修正问题')
 
   try {
     await ElMessageBox.confirm('发布后新发起的审批将使用新版本，进行中的审批仍按原版本流转。', '发布新版本', { type: 'info' })
+    if (identity !== userKey.value) return
   } catch {
     return
   }
 
   publishing.value = true
   try {
-    const result = await approvalApi.publish(flowKey.value, name.value.trim(), JSON.stringify(definition))
+    if (intent.pending.value !== flowKey.value && (!governance.state.value?.draftJson || designer.dirty.value || name.value.trim() !== governance.state.value.name || fromId.value))
+      await governance.save(name.value.trim(), JSON.stringify(definition), fromId.value ?? governance.state.value?.draftSourceDefinitionId ?? governance.state.value?.activeDefinitionId ?? null)
+    const result = await governance.publish(changeNote.value.trim())
     version.value = result.version
     designer.markSaved()
     ElMessage.success(`已发布 ${result.key} v${result.version}`)
@@ -160,7 +195,7 @@ async function publish() {
 onBeforeRouteLeave(async () => {
   if (!designer.dirty.value) return true
   try {
-    await ElMessageBox.confirm('有未发布的修改，离开后将丢失。确定离开？', '提示', { type: 'warning' })
+    await ElMessageBox.confirm('有未保存的修改，离开后将丢失。确定离开？', '提示', { type: 'warning' })
     return true
   } catch {
     return false
@@ -175,7 +210,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', onBeforeUnload)
 </script>
 
 <template>
-  <el-alert v-if="me && !canViewDefinitions" type="warning" :closable="false" show-icon title="流程设计仅管理员可用" />
+  <el-alert v-if="me && (!canViewDefinitions || !can('approval.definition.design'))" type="warning" :closable="false" show-icon title="没有流程设计或定义读取权限" />
   <div v-else v-loading="loader.loading.value" class="designer">
     <el-card shadow="never" body-class="designer__toolbar-body">
       <DesignerToolbar
@@ -185,7 +220,10 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', onBeforeUnload)
         :dirty="designer.dirty.value"
         :validating="validating"
         :publishing="publishing"
-        :can-publish="isAdmin"
+        :saving="saving"
+        :can-save="canGovern('approval.definition.design')"
+        :can-publish="canGovern('approval.definition.publish')"
+        :can-validate="can('approval.definition.validate')"
         :can-undo="designer.canUndo.value"
         :can-redo="designer.canRedo.value"
         @back="router.push({ name: approvalRouteNames.definitions })"
@@ -194,10 +232,15 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', onBeforeUnload)
         @layout="autoLayout"
         @validate="validate"
         @publish="publish"
+        @save="saveDraft"
       />
     </el-card>
 
     <ValidationResult :errors="designer.errors.value" :warnings="designer.warnings.value" />
+    <el-input v-model="changeNote" placeholder="发布变更说明（最多 1000 字符）" maxlength="1000" />
+    <el-alert v-if="governance.state.value && !governance.state.value.isEnabled" type="warning" :closable="false" title="此流程已停用；保存或发布不会自动启用" />
+    <el-alert v-if="governance.state.value?.hasDraftChanges" type="info" :closable="false" title="设计草稿已保存，尚未发布；新申请继续使用选用的发布版本" />
+    <el-button v-if="intent.pending.value" :disabled="publishing" @click="restartPublish">确认旧版本后重新发布</el-button>
 
     <el-tabs v-model="tab" class="designer__tabs">
       <el-tab-pane label="流程" name="flow" />

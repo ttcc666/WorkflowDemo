@@ -10,6 +10,12 @@ namespace Certificate.Api.Tests;
 
 public sealed class CertificateMigrationTests
 {
+    private static async Task ExecuteMaintenanceAsync(AppDbContext db, FormattableString sql)
+    {
+        // Deliberately privileged legacy fixture setup, outside runtime tenant guards.
+        await using var maintenance = new DbContext(new DbContextOptionsBuilder().UseSqlite(db.Database.GetConnectionString()).Options);
+        await maintenance.Database.ExecuteSqlInterpolatedAsync(sql);
+    }
     [Fact]
     public async Task Legacy_upgrade_builds_a_ready_copy_without_changing_source_or_inventing_history()
     {
@@ -59,7 +65,7 @@ public sealed class CertificateMigrationTests
                 case "schema": await db.Database.ExecuteSqlRawAsync("ALTER TABLE Certificates ADD COLUMN Unrecognized TEXT"); break;
                 case "orphan": await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE CertificateRequests SET CertificateId = {Guid.NewGuid()}"); break;
                 case "snapshot": await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE CertificateRequests SET Snapshot = {JsonSerializer.Serialize(CertificateHost.ValidData(), JsonSerializerOptions.Web)}"); break;
-                case "definition": await db.Database.ExecuteSqlRawAsync("UPDATE ApprovalInstances SET DefinitionVersion = 999"); break;
+                case "definition": await ExecuteMaintenanceAsync(db, $"UPDATE ApprovalInstances SET DefinitionVersion = 999"); break;
                 case "missing-certificate": await db.Database.ExecuteSqlRawAsync("UPDATE CertificateRequests SET CertificateId = NULL"); break;
             }
         }
@@ -117,8 +123,8 @@ public sealed class CertificateMigrationTests
             var flow = await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "Flows", key + ".json"));
             var json = JsonSerializer.Serialize(CertificateHost.ValidData("reg-legacy") with { Name = operation == "Create" ? "版本一" : "版本二" });
             const string time = "2026-11-01 01:00:00";
-            await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO ApprovalDefinitions (Id, [Key], Version, Name, DefinitionJson, IsPublished, CreatedAt) VALUES ({definition}, {key}, {1}, {key}, {flow}, {true}, {time})");
-            await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO ApprovalInstances (Id, DefinitionId, DefinitionKey, DefinitionVersion, BusinessType, BusinessKey, InitiatorId, Status, Round, FormDataJson, CreatedAt, CompletedAt, ConcurrencyStamp, LogSequence) VALUES ({instance}, {definition}, {key}, {1}, {"Certificate"}, {request.ToString()}, {"alice"}, {"Approved"}, {0}, {json}, {time}, {time}, {1}, {0})");
+            await ExecuteMaintenanceAsync(db, $"INSERT INTO ApprovalDefinitions (Id, [Key], Version, Name, DefinitionJson, IsPublished, CreatedAt) VALUES ({definition}, {key}, {1}, {key}, {flow}, {true}, {time})");
+            await ExecuteMaintenanceAsync(db, $"INSERT INTO ApprovalInstances (Id, DefinitionId, DefinitionKey, DefinitionVersion, BusinessType, BusinessKey, InitiatorId, Status, Round, FormDataJson, CreatedAt, CompletedAt, ConcurrencyStamp, LogSequence) VALUES ({instance}, {definition}, {key}, {1}, {"Certificate"}, {request.ToString()}, {"alice"}, {"Approved"}, {0}, {json}, {time}, {time}, {1}, {0})");
             await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO CertificateRequests (Id, CertificateId, Operation, Snapshot, Status, ApplicantId, CreatedAt, CompletedAt) VALUES ({request}, {certificate}, {operation}, {json}, {"Approved"}, {"alice"}, {time}, {time})");
             last = request;
         }

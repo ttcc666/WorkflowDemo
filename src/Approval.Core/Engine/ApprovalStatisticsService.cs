@@ -52,6 +52,7 @@ public sealed class ApprovalStatisticsService(ApprovalDbContextAccessor accessor
     public const int MaxInstances = 100_000;
     private const int BacklogSize = 10;
 
+    private readonly Approval.Core.Authorization.IApprovalAuthorization _authorization = accessor.Authorization;
     private readonly DbContext _db = accessor.Context;
 
     private sealed record InstanceRow(Guid Id, string DefinitionKey, InstanceStatus Status, DateTime CreatedAt, DateTime? CompletedAt);
@@ -61,6 +62,7 @@ public sealed class ApprovalStatisticsService(ApprovalDbContextAccessor accessor
 
     public async Task<ApprovalStatistics> GetStatisticsAsync(StatisticsQuery query, CancellationToken ct = default)
     {
+        await _authorization.RequireAsync(Approval.Core.Abstractions.ApprovalPermissions.StatisticsRead, new(), null, ct);
         if (query.To <= query.From) throw new ApprovalException("统计结束时间必须晚于开始时间");
         if (query.To - query.From > TimeSpan.FromDays(MaxDays)) throw new ApprovalException($"统计时间范围不能超过 {MaxDays} 天");
 
@@ -68,7 +70,7 @@ public sealed class ApprovalStatisticsService(ApprovalDbContextAccessor accessor
         var key = string.IsNullOrWhiteSpace(query.DefinitionKey) ? null : query.DefinitionKey.Trim();
         var names = await LatestNamesAsync(ct);
 
-        var inRange = _db.Set<ApprovalInstance>().AsNoTracking().Where(i => i.CreatedAt >= query.From && i.CreatedAt < query.To);
+        var inRange = (await _authorization.ScopeAsync(_db.Set<ApprovalInstance>().AsNoTracking(), ct)).Where(i => i.CreatedAt >= query.From && i.CreatedAt < query.To);
         if (key is not null) inRange = inRange.Where(i => i.DefinitionKey == key);
 
         var instances = await inRange
@@ -135,9 +137,10 @@ public sealed class ApprovalStatisticsService(ApprovalDbContextAccessor accessor
     /// <summary>当前待处理任务按处理人汇总，取数量最多的前 10 个。</summary>
     private async Task<List<BacklogItem>> BacklogAsync(string? key, DateTime now, CancellationToken ct)
     {
+        var scoped = await _authorization.ScopeAsync(_db.Set<ApprovalInstance>().AsNoTracking(), ct);
         var pending = await (
                 from t in _db.Set<ApprovalTask>().AsNoTracking()
-                join i in _db.Set<ApprovalInstance>().AsNoTracking() on t.InstanceId equals i.Id
+                join i in scoped on t.InstanceId equals i.Id
                 where t.Status == ApprovalTaskStatus.Pending && i.Status == InstanceStatus.Running && (key == null || i.DefinitionKey == key)
                 select new { t.AssigneeKind, t.AssigneeValue, t.CreatedAt, t.DueAt })
             .ToListAsync(ct);

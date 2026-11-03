@@ -96,8 +96,9 @@ it('passes cancellation through the host transport without converting AbortError
   }))
   const bound = client({ fetcher })
   const pending = expect(bound.http.get('/pending', controller.signal)).rejects.toMatchObject({ name: 'AbortError' })
-  expect(fetcher).toHaveBeenCalledWith('/pending', expect.objectContaining({ signal: controller.signal }))
+  expect(fetcher.mock.calls[0]![1].signal?.aborted).toBe(false)
   controller.abort()
+  expect(fetcher.mock.calls[0]![1].signal?.aborted).toBe(true)
   await pending
 })
 

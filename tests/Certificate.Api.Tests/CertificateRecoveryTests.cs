@@ -129,7 +129,7 @@ public sealed class CertificateRecoveryTests
     }
 
     private static Task<int> DispatchAsync(CertificateHost host) =>
-        host.RunAsync(sp => sp.GetRequiredService<ApprovalOutboxService>().ProcessDueAsync());
+        host.ProcessDueAsync();
 }
 
 public sealed class TestDirectory : IDisposable

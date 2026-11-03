@@ -36,6 +36,8 @@ function createUserState(client: ApprovalClient) {
     me: computed(() => me.value),
     userId: computed(() => me.value?.userId ?? ''),
     roles: computed(() => me.value?.roles ?? []),
+    capabilities: computed(() => me.value?.capabilities ?? {}),
+    can: (permission: string) => me.value?.capabilities?.[permission] === true,
     isAdmin: computed(() => me.value?.isAdmin ?? false),
     canViewDefinitions: computed(() => me.value?.canViewDefinitions ?? false),
     formsEnabled: computed(() => me.value?.formsEnabled ?? false),

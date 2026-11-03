@@ -10,12 +10,14 @@ public sealed record UnstaffedTask(Guid TaskId, Guid InstanceId, string NodeName
 public sealed record CertificateDiagnosticsResult(int PendingApplications, int FailedDeliveries, int DueDeliveries, int OverdueTasks,
     IReadOnlyList<UnstaffedTask> UnstaffedTasks, bool Truncated, DatabaseReadiness Database);
 
-public sealed class CertificateDiagnostics(AppDbContext db, ApprovalEngine engine, CertificateDatabase database, TimeProvider clock)
+public sealed class CertificateDiagnostics(AppDbContext db, ApprovalEngine engine, CertificateDatabase database, TimeProvider clock,
+    Approval.Core.Authorization.ApprovalAuthorizationService authorization)
 {
     public async Task<CertificateDiagnosticsResult> GetAsync(CancellationToken ct)
     {
+        await authorization.RequireAsync(Approval.Core.Abstractions.ApprovalPermissions.DiagnosticsRead, ct: ct);
         var now = clock.GetUtcNow().UtcDateTime;
-        var instances = db.Set<ApprovalInstance>().Where(i => i.BusinessType == CertificateService.BusinessType);
+        var instances = await authorization.ScopeInstancesAsync(db.Set<ApprovalInstance>().Where(i => i.BusinessType == CertificateService.BusinessType), ct);
         var outbox = db.Set<ApprovalOutboxMessage>().Where(m => instances.Any(i => i.Id == m.InstanceId));
         var tasks = db.Set<ApprovalTask>().Where(t => t.Status == ApprovalTaskStatus.Pending
             && instances.Any(i => i.Id == t.InstanceId && i.Status == InstanceStatus.Running));
@@ -37,7 +39,7 @@ public sealed class CertificateDiagnostics(AppDbContext db, ApprovalEngine engin
             if (eligible.Count == 0 || (task.AssigneeKind == AssigneeKind.User && !eligible.Contains(task.AssigneeValue)))
                 unavailable.Add(new(task.Id, task.InstanceId, task.NodeName, "待办缺少合格的当前处理人，请核查岗位并改派"));
         }
-        return new(await db.CertificateRequests.CountAsync(r => r.Status == RequestStatus.Reviewing, ct),
+        return new(await db.CertificateRequests.CountAsync(r => r.Status == RequestStatus.Reviewing && instances.Any(i => i.Id == r.ApprovalInstanceId), ct),
             await outbox.CountAsync(m => m.Status == OutboxStatus.Failed, ct),
             await outbox.CountAsync(m => m.Status == OutboxStatus.Pending && m.NextAttemptAt <= now, ct),
             await tasks.CountAsync(t => t.DueAt < now, ct), unavailable, count > sample.Count, await database.CheckAsync(ct));
