@@ -101,7 +101,20 @@ try {
     if ($testExitCode -ne 0) { throw ('Database test command failed with exit code ' + $testExitCode) }
     [xml]$trx = Get-Content -LiteralPath (Join-Path $reportDirectory 'database.trx') -Raw
     $counters = $trx.TestRun.ResultSummary.Counters
-    if ([int]$counters.total -lt 33 -or [int]$counters.passed -ne [int]$counters.total) { throw 'Tests were absent, skipped or unsuccessful.' }
+    $definitions = @($trx.TestRun.TestDefinitions.UnitTest)
+    $results = @($trx.TestRun.Results.UnitTestResult)
+    $total = [int]$counters.total
+    if ($total -le 0 -or $definitions.Count -ne $total -or $results.Count -ne $total
+        -or [int]$counters.executed -ne $total -or [int]$counters.passed -ne $total
+        -or [int]$counters.failed -ne 0 -or [int]$counters.notExecuted -ne 0
+        -or @($results | Where-Object outcome -ne 'Passed').Count -gt 0) { throw 'Tests were absent, skipped or unsuccessful.' }
+    foreach ($required in @('Migrations_RollBackAndReapply_WithoutModelDrift',
+        'EmbeddedBoundaryMigration_PreservesLegacyArchiveAndAttachmentData',
+        'FinalAcceptance_SynchronousActionFailureRollsBackHostApprovalOperationAndOutbox')) {
+        if (-not @($results | Where-Object { $_.testName.EndsWith('.' + $required, [StringComparison]::Ordinal) }).Count) {
+            throw ('Required database contract test was not executed: ' + $required)
+        }
+    }
     $validated = $true
     Write-Host ('Database verification succeeded: {0}, Passed: {1}, Failed: {2}, Skipped: {3}' -f $Provider, $counters.passed, $counters.failed, $counters.notExecuted)
 }

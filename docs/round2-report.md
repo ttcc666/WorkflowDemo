@@ -84,7 +84,8 @@ flowchart BT
 | NuGet | 四包独立 pack、隔离缓存/摘要核对、两个现有宿主构建通过；Core-only Identity 消费者 10 项通过 | output/engineering/package-verification.json、consumer-*/embedded-host/verification.json |
 | npm | tgz 独立安装、dist exports、types、CSS、消费者构建通过 | consumer-*/web |
 | 浏览器 | 5 项消费者回归通过：发布及审批、匿名/协议拒绝、诊断/维护路由移除、退回重提/抄送已读、分类过滤 | consumer-*/browser/results.json |
-| SQL Server / PostgreSQL / MySQL 本地 | 三入口实际退出 1：Docker daemon 不可用，未跳过、未宣称通过 | output/database-tests 各 provider 报告 |
+| SQL Server / PostgreSQL / MySQL 本地 | 三入口实际退出 1：Docker daemon 不可用 | output/database-tests 各 provider 报告 |
+| SQL Server / PostgreSQL / MySQL GitHub | run 41595865430 中各 30 项实际通过，验证脚本因过时的至少 33 项阈值退出；已改为核验本次 TRX 完整性和关键病例，待新 run 确认 | output/round2/*-ci.log |
 | GitHub Actions | 当前改造尚待本次分支提交的远端执行确认 | 下述远端验收记录更新后才算完成 |
 
 改造前远端 run 41585928243 的实际失败已核对：SQL Server/PostgreSQL 失败在被移除的维护双 Worker 病例；Windows verify 失败在缺失 rg。它们不是本轮运行结果。
