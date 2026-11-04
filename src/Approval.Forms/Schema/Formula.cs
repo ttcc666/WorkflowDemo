@@ -80,7 +80,8 @@ public sealed class Formula
 
     // ───────────────────────── 词法 ─────────────────────────
 
-    private enum TokenKind { Number, Identifier, Operator, LeftParen, RightParen, Comma, End }
+    private enum TokenKind
+    { Number, Identifier, Operator, LeftParen, RightParen, Comma, End }
 
     private sealed record Token(TokenKind Kind, string Text, int Position);
 
@@ -139,13 +140,15 @@ public sealed class Formula
 
     // ───────────────────────── 语法：递归下降 ─────────────────────────
 
-    private enum ValueType { Number, Boolean }
+    private enum ValueType
+    { Number, Boolean }
 
     private readonly record struct Value(decimal? Number, bool? Boolean);
 
     private abstract class Node
     {
         public abstract ValueType Type { get; }
+
         public abstract Value Evaluate(Func<string, decimal?> variables);
     }
 
@@ -153,18 +156,21 @@ public sealed class Formula
     {
         public decimal Value { get; } = value;
         public override ValueType Type => ValueType.Number;
+
         public override Value Evaluate(Func<string, decimal?> variables) => new(Value, null);
     }
 
     private sealed class VariableNode(string name) : Node
     {
         public override ValueType Type => ValueType.Number;
+
         public override Value Evaluate(Func<string, decimal?> variables) => new(variables(name), null);
     }
 
     private sealed class NegateNode(Node operand) : Node
     {
         public override ValueType Type => ValueType.Number;
+
         public override Value Evaluate(Func<string, decimal?> variables) => new(-operand.Evaluate(variables).Number, null);
     }
 
@@ -203,6 +209,7 @@ public sealed class Formula
                     return args[0].Evaluate(variables).Boolean is { } condition
                         ? args[condition ? 1 : 2].Evaluate(variables)
                         : default;
+
                 case "ifnull":
                     return args[0].Evaluate(variables) is { Number: not null } value ? value : args[1].Evaluate(variables);
             }
@@ -301,12 +308,12 @@ public sealed class Formula
                     return new VariableNode(token.Text);
 
                 case TokenKind.LeftParen:
-                {
-                    Next();
-                    var node = Nested(ParseComparison);
-                    Expect(TokenKind.RightParen, "缺少右括号");
-                    return node;
-                }
+                    {
+                        Next();
+                        var node = Nested(ParseComparison);
+                        Expect(TokenKind.RightParen, "缺少右括号");
+                        return node;
+                    }
 
                 default:
                     throw Unexpected();
@@ -346,24 +353,29 @@ public sealed class Formula
                     RequireNumber(args[1]);
                     RequireNumber(args[2]);
                     break;
+
                 case "ifnull":
                     Arity(2);
                     args.ForEach(a => RequireNumber(a));
                     break;
+
                 case "round":
                     Arity(2);
                     RequireNumber(args[0]);
                     if (args[1] is not NumberNode { Value: var n } || n != decimal.Truncate(n) || n > 10)
                         throw new FormulaSyntaxException("round 的第二个参数必须是 0–10 的整数，如 round(amount, 2)");
                     break;
+
                 case "abs":
                     Arity(1);
                     RequireNumber(args[0]);
                     break;
+
                 case "min" or "max":
                     Arity(1, int.MaxValue);
                     args.ForEach(a => RequireNumber(a));
                     break;
+
                 default:
                     throw new FormulaSyntaxException($"不支持的函数 {nameToken.Text}（可用：round、min、max、abs、if、ifnull）");
             }

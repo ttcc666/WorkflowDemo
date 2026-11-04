@@ -1,7 +1,7 @@
-using System.Transactions;
 using Approval.Core.Abstractions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
+using System.Transactions;
 
 namespace Approval.Core.Persistence;
 
@@ -21,6 +21,7 @@ internal sealed class ApprovalTransactionState
     public Dictionary<string, Guid> Definitions = new(StringComparer.Ordinal);
     public readonly Dictionary<string, int> IdCounters = new(StringComparer.Ordinal);
     public readonly List<Func<Task>> Callbacks = [];
+
     internal void ResetLease(DbContextId contextId)
     {
         Writes?.ResetLease(); ContextId = contextId;
@@ -35,15 +36,22 @@ internal sealed class ApprovalUnitOfWork(DbContext db) : IApprovalUnitOfWork
     private ApprovalTransactionState State => ApprovalPersistence.State(db);
     internal ApprovalWriteAuthorization Writes => State.Writes ??= new(db);
     public bool IsActive => State.Active;
-    internal void Reference(Guid instance, Guid definition) { State.InstanceId = instance; State.DefinitionId = definition; }
+
+    internal void Reference(Guid instance, Guid definition)
+    { State.InstanceId = instance; State.DefinitionId = definition; }
+
     internal Guid NewId(string kind)
     {
         if (State.OperationSeed is null) return Guid.NewGuid();
         var index = State.IdCounters.GetValueOrDefault(kind); State.IdCounters[kind] = index + 1;
         return Guid.ParseExact(ApprovalCommandHash.Of(State.OperationSeed, kind, index.ToString(System.Globalization.CultureInfo.InvariantCulture))[..32], "N");
     }
+
     internal Guid? PinnedDefinition(string key) => IsActive && State.Definitions.TryGetValue(key, out var id) ? id : null;
-    internal void PinDefinition(string key, Guid id) { if (IsActive) State.Definitions.TryAdd(key, id); }
+
+    internal void PinDefinition(string key, Guid id)
+    { if (IsActive) State.Definitions.TryAdd(key, id); }
+
     public async Task SetResultInstanceAsync(Guid instanceId, CancellationToken ct = default)
     {
         CheckUsable();
@@ -52,6 +60,7 @@ internal sealed class ApprovalUnitOfWork(DbContext db) : IApprovalUnitOfWork
             ?? throw new ApprovalException("结果实例不存在") { Code = ApprovalErrorCode.NotFound };
         Reference(instance.Id, instance.DefinitionId);
     }
+
     internal IDisposable Extension(bool allowSave = false)
     {
         var boundary = Writes.Enter(ApprovalWriteOwner.None);
@@ -59,18 +68,22 @@ internal sealed class ApprovalUnitOfWork(DbContext db) : IApprovalUnitOfWork
         if (!allowSave) State.ExtensionDepth++;
         return new OnDispose(() => { try { boundary.Dispose(); } finally { State.ExtensionCommitDepth--; if (!allowSave) State.ExtensionDepth--; } });
     }
+
     internal void CheckUsable()
     {
         if (State.Failed) throw new InvalidOperationException("审批操作失败后必须释放当前作用域，不能继续保存或重用实体图");
     }
+
     internal Task<T> ExecuteCommandAsync<T>(Func<CancellationToken, Task<T>> operation, CancellationToken ct = default) =>
         ExecuteCommandAsync(ApprovalWriteOwner.Engine, operation, ct);
+
     internal Task<T> ExecuteCommandAsync<T>(ApprovalWriteOwner owner, Func<CancellationToken, Task<T>> operation, CancellationToken ct = default)
     {
         if (!State.KeyedCommand && State.RequireOperationId && !State.SystemActor)
             throw new ApprovalException("写操作需要通过带稳定标识的命令协调器执行") { Code = ApprovalErrorCode.OperationIdRequired };
         return ExecuteOwnedAsync(owner, operation, ct);
     }
+
     internal Task<T> ExecuteOwnedAsync<T>(ApprovalWriteOwner owner, Func<CancellationToken, Task<T>> operation, CancellationToken ct = default) =>
         ExecuteAsync(async token =>
         {
@@ -84,10 +97,13 @@ internal sealed class ApprovalUnitOfWork(DbContext db) : IApprovalUnitOfWork
             }
             catch { State.Failed = true; throw; }
         }, ct);
+
     internal async Task ExecuteCommandAsync(ApprovalWriteOwner owner, Func<CancellationToken, Task> operation, CancellationToken ct = default) =>
         await ExecuteCommandAsync<object?>(owner, async token => { await operation(token); return null; }, ct);
+
     internal async Task ExecuteCommandAsync(Func<CancellationToken, Task> operation, CancellationToken ct = default) =>
         await ExecuteCommandAsync<object?>(async token => { await operation(token); return null; }, ct);
+
     public void AfterCommit(Func<Task> callback)
     {
         CheckUsable();
@@ -95,8 +111,10 @@ internal sealed class ApprovalUnitOfWork(DbContext db) : IApprovalUnitOfWork
         if (!IsActive) throw new InvalidOperationException("提交后回调必须在审批工作单元内登记");
         State.Callbacks.Add(callback);
     }
+
     public async Task ExecuteAsync(Func<CancellationToken, Task> operation, CancellationToken ct = default) =>
         await ExecuteAsync<object?>(async token => { await operation(token); return null; }, ct);
+
     public async Task<T> ExecuteAsync<T>(Func<CancellationToken, Task<T>> operation, CancellationToken ct = default)
     {
         CheckUsable();
@@ -144,5 +162,7 @@ internal sealed class ApprovalUnitOfWork(DbContext db) : IApprovalUnitOfWork
         foreach (var callback in callbacks) { try { await callback(); } catch { /* In-process post-commit callbacks are best effort. Reliable delivery uses Outbox. */ } }
         return result;
     }
-    private sealed class OnDispose(Action action) : IDisposable { public void Dispose() => action(); }
+
+    private sealed class OnDispose(Action action) : IDisposable
+    { public void Dispose() => action(); }
 }

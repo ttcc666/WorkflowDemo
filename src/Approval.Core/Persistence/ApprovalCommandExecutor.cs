@@ -1,10 +1,10 @@
-using System.Text.Json;
 using Approval.Core.Abstractions;
 using Approval.Core.Authorization;
 using Approval.Core.Domain;
 using Approval.Core.Hosting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using System.Text.Json;
 
 namespace Approval.Core.Persistence;
 
@@ -12,6 +12,7 @@ internal sealed class ApprovalCommandExecutor<TContext>(IServiceScopeFactory sco
     IApprovalActorContext actor, ApprovalOptions options, TimeProvider clock) : IApprovalCommandExecutor where TContext : DbContext
 {
     private static readonly JsonSerializerOptions Json = JsonSerializerOptions.Web;
+
     public async Task<T> ExecuteAsync<T>(ApprovalCommand command, Func<IServiceProvider, CancellationToken, Task<T>> operation, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(command.Kind) || command.Kind.Length > 100 || command.Scope.Length > 2000)
@@ -86,8 +87,16 @@ internal sealed class ApprovalCommandExecutor<TContext>(IServiceScopeFactory sco
                         ApprovalOperation? record = null;
                         if (lookup is not null)
                         {
-                            record = new() { Id = Guid.NewGuid(), LookupHash = lookup, ActorId = identity.ActorId, Kind = command.Kind,
-                                Scope = command.Scope, RequestKey = key!, RequestHash = hash };
+                            record = new()
+                            {
+                                Id = Guid.NewGuid(),
+                                LookupHash = lookup,
+                                ActorId = identity.ActorId,
+                                Kind = command.Kind,
+                                Scope = command.Scope,
+                                RequestKey = key!,
+                                RequestHash = hash
+                            };
                             using (unit.Writes.Enter(ApprovalWriteOwner.Operations))
                             {
                                 db.Add(record);
@@ -132,5 +141,6 @@ internal sealed class ApprovalCommandExecutor<TContext>(IServiceScopeFactory sco
             throw new ApprovalException("业务已被其他提交占用或资源已更新，请刷新后重试", ex) { Code = ApprovalErrorCode.Conflict };
         }
     }
+
     private sealed record StoredResult<T>(T Value, ApprovalResource Resource);
 }

@@ -11,13 +11,18 @@ public enum ApprovalErrorCode
     InvalidOperation,
     NotFound,
     Forbidden,
+
     /// <summary>并发冲突（例如会签时多人同时提交），调用方可重新加载后重试。</summary>
     Conflict,
+
     InvalidDefinition,
+
     /// <summary>未识别当前用户（未登录）。</summary>
     Unauthorized,
+
     /// <summary>输入校验失败，详见 <see cref="ApprovalValidationException.Errors"/>。</summary>
     Validation,
+
     AuthorizationUnavailable,
     OperationIdRequired,
     CommitOutcomeUnknown,

@@ -1,10 +1,8 @@
 using Approval.Core;
-using System.Text;
-using System.Text.Json;
-using Approval.Core.Domain;
-using Approval.Core.Persistence;
 using Approval.Forms.Schema;
 using Microsoft.EntityFrameworkCore;
+using System.Text;
+using System.Text.Json;
 
 namespace Approval.Forms.Runtime;
 

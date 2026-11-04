@@ -1,7 +1,6 @@
 using Approval.Core.Abstractions;
 using Approval.Core.Definitions;
 using Approval.Core.Domain;
-using Approval.Core.Notifications;
 using Approval.Core.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -16,7 +15,6 @@ internal sealed class ApprovalTaskCoordinator(DbContext db, ApprovalUnitOfWork u
     private readonly ApprovalEventWriter _events = events;
     private readonly TimeProvider _clock = clock;
     private DateTime Now => _clock.GetUtcNow().UtcDateTime;
-
 
     /// <summary>
     /// 把任务交给另一位用户（转交、改派）：原任务标记为已转交，生成新任务；保留状态、时限与提醒进度（避免通过转交拖延），

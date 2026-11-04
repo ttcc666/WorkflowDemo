@@ -1,9 +1,9 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using System.Data;
 using System.Data.Common;
 using System.Reflection;
 using System.Runtime.ExceptionServices;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Storage;
 
 namespace Approval.Core.Persistence;
 
@@ -11,6 +11,7 @@ internal sealed class ApprovalTransaction(IDbContextTransaction transaction, DbC
 {
     public IDbContextTransaction Transaction { get; } = transaction;
     private bool _disposed;
+
     public static async Task<ApprovalTransaction> BeginAsync(DbContext db, bool deferredRead, CancellationToken ct)
     {
         if (!deferredRead || db.Database.ProviderName != "Microsoft.EntityFrameworkCore.Sqlite")
@@ -34,6 +35,7 @@ internal sealed class ApprovalTransaction(IDbContextTransaction transaction, DbC
         }
         catch { if (native is not null) await native.DisposeAsync(); if (close) await db.Database.CloseConnectionAsync(); throw; }
     }
+
     public async ValueTask DisposeAsync()
     {
         if (_disposed) return; _disposed = true;

@@ -3,6 +3,7 @@ namespace Approval.AspNetCore;
 public sealed class ApprovalAspNetCoreOptions
 {
     public Dictionary<string, string> PermissionPolicies { get; } = new(StringComparer.Ordinal);
+
     /// <summary>是否映射投递记录（Outbox）接口。</summary>
     public bool EnableOutboxEndpoints { get; set; } = true;
 

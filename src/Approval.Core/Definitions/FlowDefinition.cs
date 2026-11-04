@@ -9,10 +9,13 @@ public enum NodeType
     Approval,
     Cc,
     Condition,
+
     /// <summary>并行分叉：<see cref="FlowNode.Branches"/> 中的所有分支同时进行，必须由一个 <see cref="Join"/> 合并。</summary>
     Parallel,
+
     /// <summary>并行合并：等待对应并行节点的所有分支到达后进入下一节点。</summary>
     Join,
+
     End
 }
 
@@ -21,14 +24,17 @@ public enum ApproveMode
 {
     /// <summary>或签：任一处理人同意即通过；角色任务由角色内任意一人处理。</summary>
     Any,
+
     /// <summary>会签：所有处理人同意才通过；角色会展开为具体用户。</summary>
     All,
+
     /// <summary>依次审批：按顺序逐个审批；角色会展开为具体用户。</summary>
     Sequential
 }
 
 /// <summary>节点解析不到审批人时的处理策略。</summary>
-public enum EmptyApproverPolicy { Error, AutoApprove }
+public enum EmptyApproverPolicy
+{ Error, AutoApprove }
 
 /// <summary>流程定义（节点图），以 JSON 存储在 <see cref="Domain.ApprovalDefinition.DefinitionJson"/> 中。</summary>
 public sealed class FlowDefinition
@@ -121,7 +127,6 @@ public sealed class FlowDefinition
         {
             node.Notifications = [];
             node.Timeout = null;
-
         }
         return view;
     }
@@ -159,6 +164,7 @@ public sealed class FlowNode
 
     /// <summary>处理、改派和加签时重新核对原审批人规则与用户目录，避免岗位任务变为任意用户任务。</summary>
     public bool RequireQualifiedAssignee { get; set; }
+
     public bool RequireComment { get; set; }
 
     /// <summary>节点通知规则。</summary>
@@ -202,13 +208,17 @@ public enum NotifyEvent
 {
     /// <summary>到达节点（审批节点生成待办或抄送）。</summary>
     Enter,
+
     Approved,
     Rejected,
     Transferred,
+
     /// <summary>待办超过处理时限。</summary>
     Timeout,
+
     /// <summary>流程结束（通过、驳回、撤回）。</summary>
     Completed,
+
     Returned,
     Resubmitted
 }
@@ -238,6 +248,7 @@ public enum TimeoutAction
 {
     /// <summary>通知（按节点的 Timeout 通知规则），可按间隔重复催办。</summary>
     Remind,
+
     AutoApprove,
     AutoReject
 }

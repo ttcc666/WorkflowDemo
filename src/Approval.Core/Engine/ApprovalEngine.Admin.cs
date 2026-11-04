@@ -1,8 +1,8 @@
 using Approval.Core.Abstractions;
 using Approval.Core.Definitions;
 using Approval.Core.Domain;
-using Approval.Core.Persistence;
 using Approval.Core.Engine.Runtime;
+using Approval.Core.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -108,7 +108,8 @@ public sealed partial class ApprovalEngine
             {
                 var result = await commands.ExecuteAsync(new("task.reassign-bulk.item", instanceId.ToString(), operationId,
                     payload, ApprovalPermissions.TaskReassignBulk,
-                    new() { InstanceId = instanceId, TargetUserId = fromUserId }) { AllowUnkeyed = operationId is null },
+                    new() { InstanceId = instanceId, TargetUserId = fromUserId })
+                { AllowUnkeyed = operationId is null },
                     (sp, token) => sp.GetRequiredService<ApprovalEngine>().ReassignBatchInstanceAsync(instanceId, fromUserId, toUserId, operatorId, reason, token), ct);
                 count += result.Count; skipped.AddRange(result.Skipped);
             }
@@ -126,11 +127,12 @@ public sealed partial class ApprovalEngine
     {
         var scoped = await _authorization.ScopeAsync(_db.Set<ApprovalInstance>().AsNoTracking(), ct);
         return await (from t in _db.Set<ApprovalTask>().AsNoTracking()
-            join i in scoped on t.InstanceId equals i.Id
-            where t.AssigneeKind == AssigneeKind.User && t.AssigneeValue == fromUserId
-                && (t.Status == ApprovalTaskStatus.Pending || t.Status == ApprovalTaskStatus.Waiting || t.Status == ApprovalTaskStatus.Suspended)
-                && (i.Status == InstanceStatus.Running || i.Status == InstanceStatus.Returned)
-            orderby i.CreatedAt, i.Id select i.Id).Distinct().ToListAsync(ct);
+                      join i in scoped on t.InstanceId equals i.Id
+                      where t.AssigneeKind == AssigneeKind.User && t.AssigneeValue == fromUserId
+                          && (t.Status == ApprovalTaskStatus.Pending || t.Status == ApprovalTaskStatus.Waiting || t.Status == ApprovalTaskStatus.Suspended)
+                          && (i.Status == InstanceStatus.Running || i.Status == InstanceStatus.Returned)
+                      orderby i.CreatedAt, i.Id
+                      select i.Id).Distinct().ToListAsync(ct);
     }
 
     private async Task<ReassignResult> ReassignBatchInstanceAsync(Guid instanceId, string fromUserId, string toUserId, string operatorId, string? reason, CancellationToken ct)

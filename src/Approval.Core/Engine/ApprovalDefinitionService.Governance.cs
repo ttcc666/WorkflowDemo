@@ -28,6 +28,7 @@ public sealed partial class ApprovalDefinitionService
             throw new ApprovalException("流程分类不能超过100字符或包含控制字符");
         return string.IsNullOrEmpty(category) ? null : category;
     }
+
     public Task<DefinitionGovernance> CopyAsync(string sourceKey, string targetKey, string name, Guid? sourceDefinitionId = null,
         CancellationToken ct = default) => _unit.ExecuteCommandAsync(ApprovalWriteOwner.Definitions, async token =>
     {
@@ -49,9 +50,12 @@ public sealed partial class ApprovalDefinitionService
             || string.IsNullOrWhiteSpace(name) || name.Length > 200)
             throw new ApprovalException("流程标识须为 1–100 字符，名称须为 1–200 字符");
     }
+
     private static void ValidateNote(string? note)
     { if (note?.Length > 1000) throw new ApprovalException("变更说明不能超过 1000 字符"); }
+
     private static ApprovalException Conflict() => new("流程已被其他操作修改，请重新读取后提交") { Code = ApprovalErrorCode.Conflict };
+
     private static void CheckRevision(ApprovalDefinitionManagement management, long expected)
     { if (expected < 0 || management.Revision != expected) throw Conflict(); }
 
@@ -60,22 +64,40 @@ public sealed partial class ApprovalDefinitionService
         var managed = await _db.Set<ApprovalDefinitionManagement>().SingleOrDefaultAsync(x => x.Key == key, ct);
         if (managed is not null) return managed;
         // The unique management row and Revision serialize publication; conflicts roll back the whole unit.
-        managed = new() { Id = _unit.NewId("DefinitionManagement"), Key = key, Name = name,
-            UpdatedBy = _accessor.ActorId, UpdatedAt = _clock.GetUtcNow().UtcDateTime };
+        managed = new()
+        {
+            Id = _unit.NewId("DefinitionManagement"),
+            Key = key,
+            Name = name,
+            UpdatedBy = _accessor.ActorId,
+            UpdatedAt = _clock.GetUtcNow().UtcDateTime
+        };
         _db.Add(managed);
         return managed;
     }
+
     private void Audit(ApprovalDefinitionManagement management, DefinitionAuditAction action, Guid? definitionId = null,
         Guid? source = null, int? version = null, string? note = null, string? json = null)
     {
         ValidateNote(note);
         management.Revision = checked(management.Revision + 1);
         management.UpdatedBy = _accessor.ActorId; management.UpdatedAt = _clock.GetUtcNow().UtcDateTime;
-        _db.Add(new ApprovalDefinitionAudit { Id = _unit.NewId("DefinitionAudit"), Key = management.Key,
-            Revision = management.Revision, Action = action, ActorId = management.UpdatedBy, CreatedAt = management.UpdatedAt,
-            DefinitionId = definitionId, SourceDefinitionId = source, Version = version, ChangeNote = note,
-            DefinitionHash = json is null ? null : ApprovalCommandHash.Of(json) });
+        _db.Add(new ApprovalDefinitionAudit
+        {
+            Id = _unit.NewId("DefinitionAudit"),
+            Key = management.Key,
+            Revision = management.Revision,
+            Action = action,
+            ActorId = management.UpdatedBy,
+            CreatedAt = management.UpdatedAt,
+            DefinitionId = definitionId,
+            SourceDefinitionId = source,
+            Version = version,
+            ChangeNote = note,
+            DefinitionHash = json is null ? null : ApprovalCommandHash.Of(json)
+        });
     }
+
     private async Task SaveGovernanceAsync(CancellationToken ct)
     {
         try { await _db.SaveChangesAsync(ct); }
@@ -83,13 +105,22 @@ public sealed partial class ApprovalDefinitionService
         catch (DbUpdateException ex) when (ApprovalDatabaseErrors.Unique(ex))
         { throw new ApprovalException(Conflict().Message, ex) { Code = ApprovalErrorCode.Conflict }; }
     }
+
     private async Task<ApprovalDefinition> PublishManagedAsync(ApprovalDefinitionManagement management, string name,
         FlowDefinition flow, Guid? source, string? note, bool fromDraft, CancellationToken ct)
     {
         ValidateNote(note);
-        var definition = new ApprovalDefinition { Id = _unit.NewId("ApprovalDefinitionService"), Key = management.Key,
-            Name = name, Version = checked(management.LastVersion + 1), DefinitionJson = SerializeDefinition(flow), IsPublished = true, Category = CategoryOf(flow),
-            CreatedAt = _clock.GetUtcNow().UtcDateTime };
+        var definition = new ApprovalDefinition
+        {
+            Id = _unit.NewId("ApprovalDefinitionService"),
+            Key = management.Key,
+            Name = name,
+            Version = checked(management.LastVersion + 1),
+            DefinitionJson = SerializeDefinition(flow),
+            IsPublished = true,
+            Category = CategoryOf(flow),
+            CreatedAt = _clock.GetUtcNow().UtcDateTime
+        };
         _db.Add(definition); management.LastVersion = definition.Version; management.ActiveDefinitionId = definition.Id;
         if (fromDraft || management.DraftJson is null) management.Category = definition.Category;
         if (!fromDraft && management.DraftJson is null) management.Name = name;
@@ -98,6 +129,7 @@ public sealed partial class ApprovalDefinitionService
         await SaveGovernanceAsync(ct);
         return definition;
     }
+
     public Task<DefinitionGovernance> SaveDesignDraftAsync(string key, string name, string definitionJson, long expectedRevision,
         Guid? sourceDefinitionId = null, CancellationToken ct = default) => _unit.ExecuteCommandAsync(ApprovalWriteOwner.Definitions, async token =>
     {
@@ -164,16 +196,20 @@ public sealed partial class ApprovalDefinitionService
             result[code] = await _authorization.CanAsync(code, new() { DefinitionKey = key }, ct: ct);
         return result;
     }
+
     private async Task<DefinitionGovernance> DescribeAsync(ApprovalDefinitionManagement value, CancellationToken ct, bool includeDraft = true) =>
         new(value.Key, value.Name, includeDraft ? value.DraftJson : null, value.Revision, value.LastVersion, value.IsEnabled, value.ActiveDefinitionId,
             value.DraftSourceDefinitionId, value.DraftJson is not null && value.PublishedDraftRevision != value.DraftRevision,
-            value.UpdatedAt, value.UpdatedBy, await GovernanceCapabilitiesAsync(value.Key, ct)) { Category = value.Category };
+            value.UpdatedAt, value.UpdatedBy, await GovernanceCapabilitiesAsync(value.Key, ct))
+        { Category = value.Category };
+
     public async Task<DefinitionGovernance?> GetGovernanceAsync(string key, CancellationToken ct = default)
     {
         await _authorization.RequireAsync(ApprovalPermissions.DefinitionReadSensitive, new() { DefinitionKey = key }, ct: ct);
         var managed = await _db.Set<ApprovalDefinitionManagement>().AsNoTracking().SingleOrDefaultAsync(x => x.Key == key, ct);
         return managed is null ? null : await DescribeAsync(managed, ct);
     }
+
     public Task<List<DefinitionGovernanceSummary>> ListGovernanceAsync(CancellationToken ct = default) =>
         ListGovernanceAsync(null, false, ct);
 
@@ -185,20 +221,33 @@ public sealed partial class ApprovalDefinitionService
         var management = await _db.Set<ApprovalDefinitionManagement>().AsNoTracking()
             .Where(d => (category == null || d.Category == category) && (!uncategorized || d.Category == null))
             .OrderBy(d => d.Key)
-            .Select(d => new { d.Key, d.Name, d.Revision, d.LastVersion, d.IsEnabled, d.ActiveDefinitionId, d.UpdatedAt, d.Category,
-                HasDraftChanges = d.DraftJson != null && d.PublishedDraftRevision != d.DraftRevision })
+            .Select(d => new
+            {
+                d.Key,
+                d.Name,
+                d.Revision,
+                d.LastVersion,
+                d.IsEnabled,
+                d.ActiveDefinitionId,
+                d.UpdatedAt,
+                d.Category,
+                HasDraftChanges = d.DraftJson != null && d.PublishedDraftRevision != d.DraftRevision
+            })
             .ToListAsync(ct);
         var result = new List<DefinitionGovernanceSummary>();
         foreach (var state in management)
         {
             if (!await _authorization.CanAsync(ApprovalPermissions.DefinitionReadSensitive, new() { DefinitionKey = state.Key }, ct: ct)) continue;
             result.Add(new(state.Key, state.Name, state.Revision, state.LastVersion, state.IsEnabled, state.ActiveDefinitionId,
-                state.HasDraftChanges, state.UpdatedAt, await GovernanceCapabilitiesAsync(state.Key, ct)) { Category = state.Category });
+                state.HasDraftChanges, state.UpdatedAt, await GovernanceCapabilitiesAsync(state.Key, ct))
+            { Category = state.Category });
         }
         return result;
     }
+
     public async Task<IReadOnlyList<string>> ListCategoriesAsync(CancellationToken ct = default) =>
         (await ListGovernanceAsync(ct)).Where(d => d.Category is not null).Select(d => d.Category!).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
+
     public async Task<PagedResult<ApprovalDefinitionAudit>> ListAuditAsync(string key, PageRequest? page = null, CancellationToken ct = default)
     {
         await _authorization.RequireAsync(ApprovalPermissions.DefinitionReadSensitive, new() { DefinitionKey = key }, ct: ct);

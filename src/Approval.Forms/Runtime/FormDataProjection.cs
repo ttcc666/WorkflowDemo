@@ -1,9 +1,9 @@
-using Approval.Core;
 using Approval.Core.Abstractions;
 using Approval.Core.Definitions;
-using Approval.Core.Domain;
 using Approval.Forms.Schema;
+
 namespace Approval.Forms.Runtime;
+
 internal sealed class FormDataProjection : IApprovalDataProjection
 {
     public ApprovalDataView Project(FlowDefinition definition, ApprovalDataProjectionContext context, ApprovalAccess access)

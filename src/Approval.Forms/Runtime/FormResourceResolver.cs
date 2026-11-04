@@ -3,7 +3,9 @@ using Approval.Core.Abstractions;
 using Approval.Core.Persistence;
 using Approval.Forms.Attachments;
 using Microsoft.EntityFrameworkCore;
+
 namespace Approval.Forms.Runtime;
+
 internal sealed class FormResourceResolver(IApprovalHostContext accessor) : IApprovalResourceResolver
 {
     public async Task<ApprovalResource> ResolveAsync(ApprovalResource resource, CancellationToken ct)

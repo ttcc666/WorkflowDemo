@@ -1,6 +1,5 @@
 using Approval.Core.Abstractions;
 using Approval.Core.Domain;
-using Approval.Core.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -21,8 +20,13 @@ public sealed partial class ApprovalEngine
         var commands = _commands ?? throw new InvalidOperationException("请通过 DI 注册的命令协调器使用 OperationId");
         var body = request with { OperationId = null };
         var id = await commands.ExecuteAsync(new("instance.start", request.BusinessType + "/" + request.BusinessKey, request.OperationId,
-            body, ApprovalPermissions.InstanceStart, new() { DefinitionKey = request.DefinitionKey, DefinitionId = request.DefinitionId,
-                BusinessType = request.BusinessType, BusinessKey = request.BusinessKey }),
+            body, ApprovalPermissions.InstanceStart, new()
+            {
+                DefinitionKey = request.DefinitionKey,
+                DefinitionId = request.DefinitionId,
+                BusinessType = request.BusinessType,
+                BusinessKey = request.BusinessKey
+            }),
             async (sp, token) => (await sp.GetRequiredService<ApprovalEngine>().StartAsync(body, token)).Id, ct);
         return await _db.Set<ApprovalInstance>().AsNoTracking().Include(i => i.Tasks).Include(i => i.Logs).AsSplitQuery().SingleAsync(i => i.Id == id, ct);
     }

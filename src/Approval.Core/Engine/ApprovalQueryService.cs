@@ -1,8 +1,8 @@
 using Approval.Core.Abstractions;
 using Approval.Core.Definitions;
 using Approval.Core.Domain;
-using Approval.Core.Persistence;
 using Approval.Core.Engine.Query;
+using Approval.Core.Persistence;
 using Microsoft.EntityFrameworkCore;
 
 namespace Approval.Core.Engine;
@@ -68,7 +68,9 @@ public sealed record InstanceDetail(
 }
 
 /// <summary>待办筛选：关键字（标题 / 申请人）、流程标识、只看已超时。</summary>
-public enum ApprovalSort { Newest, Oldest, Title }
+public enum ApprovalSort
+{ Newest, Oldest, Title }
+
 public sealed record TodoQuery(string? Keyword = null, string? DefinitionKey = null, bool OverdueOnly = false,
     string? BusinessType = null, string? BusinessKey = null, string? InitiatorId = null, string? ApproverId = null,
     DateTime? From = null, DateTime? To = null, InstanceStatus? Status = null, ApprovalSort Sort = ApprovalSort.Oldest);
@@ -138,14 +140,14 @@ public sealed class ApprovalQueryService(
         await _authorization.RequireAsync(Approval.Core.Abstractions.ApprovalPermissions.TaskReassignBulk, new() { TargetUserId = userId }, null, ct);
         var scopedInstances = await _authorization.ScopeAsync(_db.Set<ApprovalInstance>().AsNoTracking(), ct);
         return await (from t in _db.Set<ApprovalTask>().AsNoTracking()
-         join i in scopedInstances on t.InstanceId equals i.Id
-         join d in _db.Set<ApprovalDefinition>().AsNoTracking() on i.DefinitionId equals d.Id
-         where t.AssigneeKind == AssigneeKind.User && t.AssigneeValue == userId && t.Kind != ApprovalTaskKind.Resubmit
-               && (t.Status == ApprovalTaskStatus.Pending || t.Status == ApprovalTaskStatus.Waiting || t.Status == ApprovalTaskStatus.Suspended)
-               && (i.Status == InstanceStatus.Running || i.Status == InstanceStatus.Returned)
-         orderby t.CreatedAt, t.Id
-         select new TodoItem(t.Id, i.Id, i.DefinitionKey, d.Name, i.BusinessType, i.BusinessKey, i.Title, i.InitiatorId,
-             t.NodeName, t.AssigneeKind, t.AssigneeValue, t.CreatedAt, t.DueAt, t.Kind, t.Status))
+                      join i in scopedInstances on t.InstanceId equals i.Id
+                      join d in _db.Set<ApprovalDefinition>().AsNoTracking() on i.DefinitionId equals d.Id
+                      where t.AssigneeKind == AssigneeKind.User && t.AssigneeValue == userId && t.Kind != ApprovalTaskKind.Resubmit
+                            && (t.Status == ApprovalTaskStatus.Pending || t.Status == ApprovalTaskStatus.Waiting || t.Status == ApprovalTaskStatus.Suspended)
+                            && (i.Status == InstanceStatus.Running || i.Status == InstanceStatus.Returned)
+                      orderby t.CreatedAt, t.Id
+                      select new TodoItem(t.Id, i.Id, i.DefinitionKey, d.Name, i.BusinessType, i.BusinessKey, i.Title, i.InitiatorId,
+                          t.NodeName, t.AssigneeKind, t.AssigneeValue, t.CreatedAt, t.DueAt, t.Kind, t.Status))
         .ToPagedAsync(page ?? new PageRequest(), ct);
     }
 
@@ -242,9 +244,9 @@ public sealed class ApprovalQueryService(
             _ => instances.OrderByDescending(i => i.CreatedAt).ThenByDescending(i => i.Id)
         };
         return await (from i in ordered.AsNoTracking()
-                join d in _db.Set<ApprovalDefinition>().AsNoTracking() on i.DefinitionId equals d.Id
-                select new InstanceListItem(i.Id, i.DefinitionKey, d.Name, i.DefinitionVersion, i.BusinessType, i.BusinessKey, i.Title,
-                    i.InitiatorId, i.Status, i.CurrentNodeId, i.CreatedAt, i.CompletedAt))
+                      join d in _db.Set<ApprovalDefinition>().AsNoTracking() on i.DefinitionId equals d.Id
+                      select new InstanceListItem(i.Id, i.DefinitionKey, d.Name, i.DefinitionVersion, i.BusinessType, i.BusinessKey, i.Title,
+                          i.InitiatorId, i.Status, i.CurrentNodeId, i.CreatedAt, i.CompletedAt))
             .ToPagedAsync(page ?? new PageRequest(), ct);
     }
 

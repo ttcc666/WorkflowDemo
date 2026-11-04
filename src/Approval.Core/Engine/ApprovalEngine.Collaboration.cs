@@ -1,9 +1,8 @@
 using Approval.Core.Abstractions;
-using Approval.Core.Conditions;
 using Approval.Core.Definitions;
 using Approval.Core.Domain;
-using Approval.Core.Notifications;
 using Approval.Core.Engine.Runtime;
+using Approval.Core.Notifications;
 
 namespace Approval.Core.Engine;
 
@@ -11,8 +10,10 @@ public enum AddSignMode
 {
     /// <summary>前加签：加签人先审，全部同意后回到自己继续审批。</summary>
     Before,
+
     /// <summary>后加签：自己同意，加签人也同意后节点才算通过（依次审批时才轮到下一位）。</summary>
     After,
+
     /// <summary>并加签：与自己同时审批，节点通过前加签人必须同意。</summary>
     Parallel
 }
@@ -219,6 +220,7 @@ public sealed partial class ApprovalEngine
                 task.Status = ApprovalTaskStatus.Suspended;
                 task.NextRemindAt = null;
                 break;
+
             case AddSignMode.After:
                 _tasks.CompleteTask(task, ApprovalTaskStatus.Approved, userId, comment);
                 break;

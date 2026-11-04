@@ -1,4 +1,3 @@
-using Approval.Core;
 namespace Approval.Forms.Schema;
 
 /// <summary>

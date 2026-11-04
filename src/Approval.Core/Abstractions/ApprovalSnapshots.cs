@@ -77,33 +77,67 @@ internal static class ApprovalContextSnapshots
 {
     internal static ApprovalInstanceContext Instance(ApprovalInstance value) => new()
     {
-        Id = value.Id, DefinitionId = value.DefinitionId, DefinitionKey = value.DefinitionKey,
-        DefinitionVersion = value.DefinitionVersion, BusinessType = value.BusinessType, BusinessKey = value.BusinessKey,
-        Title = value.Title, InitiatorId = value.InitiatorId, Status = value.Status, CurrentNodeId = value.CurrentNodeId,
-        Round = value.Round, FormDataJson = value.FormDataJson, CreatedAt = value.CreatedAt, CompletedAt = value.CompletedAt
+        Id = value.Id,
+        DefinitionId = value.DefinitionId,
+        DefinitionKey = value.DefinitionKey,
+        DefinitionVersion = value.DefinitionVersion,
+        BusinessType = value.BusinessType,
+        BusinessKey = value.BusinessKey,
+        Title = value.Title,
+        InitiatorId = value.InitiatorId,
+        Status = value.Status,
+        CurrentNodeId = value.CurrentNodeId,
+        Round = value.Round,
+        FormDataJson = value.FormDataJson,
+        CreatedAt = value.CreatedAt,
+        CompletedAt = value.CompletedAt
     };
 
     internal static ApprovalNodeContext Node(FlowNode value) => new(value.Id, value.Name, value.Type, value.Mode);
 
     internal static ApprovalTaskContext Task(ApprovalTask value) => new()
     {
-        Id = value.Id, InstanceId = value.InstanceId, NodeId = value.NodeId, NodeName = value.NodeName,
-        AssigneeKind = value.AssigneeKind, Kind = value.Kind, ParentTaskId = value.ParentTaskId, Round = value.Round,
-        AssigneeValue = value.AssigneeValue, Status = value.Status, Order = value.Order, HandledBy = value.HandledBy,
-        Comment = value.Comment, CreatedAt = value.CreatedAt, CompletedAt = value.CompletedAt, DueAt = value.DueAt,
-        NextRemindAt = value.NextRemindAt, RemindCount = value.RemindCount, LastRemindedAt = value.LastRemindedAt
+        Id = value.Id,
+        InstanceId = value.InstanceId,
+        NodeId = value.NodeId,
+        NodeName = value.NodeName,
+        AssigneeKind = value.AssigneeKind,
+        Kind = value.Kind,
+        ParentTaskId = value.ParentTaskId,
+        Round = value.Round,
+        AssigneeValue = value.AssigneeValue,
+        Status = value.Status,
+        Order = value.Order,
+        HandledBy = value.HandledBy,
+        Comment = value.Comment,
+        CreatedAt = value.CreatedAt,
+        CompletedAt = value.CompletedAt,
+        DueAt = value.DueAt,
+        NextRemindAt = value.NextRemindAt,
+        RemindCount = value.RemindCount,
+        LastRemindedAt = value.LastRemindedAt
     };
 
     internal static ApprovalLogContext Log(ApprovalLog value) => new()
     {
-        Id = value.Id, InstanceId = value.InstanceId, TaskId = value.TaskId, Sequence = value.Sequence,
-        NodeId = value.NodeId, NodeName = value.NodeName, Action = value.Action, OperatorId = value.OperatorId,
-        Comment = value.Comment, Details = value.Details, CreatedAt = value.CreatedAt
+        Id = value.Id,
+        InstanceId = value.InstanceId,
+        TaskId = value.TaskId,
+        Sequence = value.Sequence,
+        NodeId = value.NodeId,
+        NodeName = value.NodeName,
+        Action = value.Action,
+        OperatorId = value.OperatorId,
+        Comment = value.Comment,
+        Details = value.Details,
+        CreatedAt = value.CreatedAt
     };
 
     internal static IReadOnlyList<ApprovalTaskContext> Tasks(IEnumerable<ApprovalTask> values) => Array.AsReadOnly(values.Select(Task).ToArray());
+
     internal static IReadOnlyList<ApprovalLogContext> Logs(IEnumerable<ApprovalLog> values) => Array.AsReadOnly(values.Select(Log).ToArray());
 
     internal static ApprovalDefinitionSnapshot Definition(ApprovalDefinition value) => new(
-        value.Id, value.Key, value.Version, value.Name, value.DefinitionJson, value.IsPublished, value.CreatedAt) { Category = value.Category };
+        value.Id, value.Key, value.Version, value.Name, value.DefinitionJson, value.IsPublished, value.CreatedAt)
+    { Category = value.Category };
 }

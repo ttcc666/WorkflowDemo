@@ -10,7 +10,10 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace Approval.Core.Diagnostics;
 
 public sealed record ApprovalDiagnosticContribution(string Code, bool Healthy, long Count);
-public interface IApprovalDiagnosticsContributor { Task<ApprovalDiagnosticContribution> CheckAsync(CancellationToken ct); }
+
+public interface IApprovalDiagnosticsContributor
+{ Task<ApprovalDiagnosticContribution> CheckAsync(CancellationToken ct); }
+
 public sealed record ApprovalDiagnosticFinding(string Code, Guid ResourceId);
 public sealed record ApprovalDiagnosticReport(bool Ready, bool DataAvailable, bool SchemaManaged, int PendingMigrations, bool ModelDrift,
     int RunningInstances, int PendingOutbox, int FailedOutbox, DateTime? OldestPendingAt, int OverdueTasks,
@@ -23,6 +26,7 @@ public sealed class ApprovalDiagnosticsService(ApprovalDbContextAccessor accesso
     IEnumerable<IApprovalDiagnosticsContributor> contributors)
 {
     private readonly DbContext _db = accessor.Context;
+
     public async Task<ApprovalDiagnosticReport> CheckAsync(CancellationToken ct = default)
     {
         await accessor.Authorization.RequireAsync(ApprovalPermissions.DiagnosticsRead, ct: ct);
@@ -68,7 +72,7 @@ public sealed class ApprovalDiagnosticsService(ApprovalDbContextAccessor accesso
         }
         var running = instances.Where(i => (i.Status == InstanceStatus.Running || i.Status == InstanceStatus.Returned));
         var slots = _db.Set<ApprovalBusinessSlot>().AsNoTracking();
-        var stale = slots.Where(s => ! _db.Set<ApprovalInstance>().Any(i => i.Id == s.InstanceId && (i.Status == InstanceStatus.Running || i.Status == InstanceStatus.Returned))
+        var stale = slots.Where(s => !_db.Set<ApprovalInstance>().Any(i => i.Id == s.InstanceId && (i.Status == InstanceStatus.Running || i.Status == InstanceStatus.Returned))
             && (!_db.Set<ApprovalInstance>().Any(i => i.Id == s.InstanceId) || instances.Any(i => i.Id == s.InstanceId)));
         return new(ready && pending == 0 && !drift, true, managed, pending, drift, await running.CountAsync(ct),
             await outbox.CountAsync(o => o.Status == OutboxStatus.Pending, ct), await outbox.CountAsync(o => o.Status == OutboxStatus.Failed, ct),
@@ -78,6 +82,7 @@ public sealed class ApprovalDiagnosticsService(ApprovalDbContextAccessor accesso
             await stale.CountAsync(ct),
             total > sample.Count, findings, background.Snapshot(), contributions);
     }
+
     public static async Task<bool> ReadinessAsync(DbContext db, CancellationToken ct = default)
     {
         try

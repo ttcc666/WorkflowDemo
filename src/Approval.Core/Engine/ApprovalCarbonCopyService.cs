@@ -49,11 +49,21 @@ public sealed class ApprovalCarbonCopyService(ApprovalDbContextAccessor accessor
                    || copy.AssigneeKind == AssigneeKind.Role && roles.Contains(copy.AssigneeValue)
                select new CarbonCopyItem
                {
-                   Id = copy.Id, InstanceId = instance.Id, NodeId = copy.NodeId, Round = copy.Round,
-                   AssigneeKind = copy.AssigneeKind, AssigneeValue = copy.AssigneeValue, CreatedAt = copy.CreatedAt,
-                   DefinitionKey = instance.DefinitionKey, DefinitionName = definition.Name, DefinitionVersion = instance.DefinitionVersion,
-                   BusinessType = instance.BusinessType, BusinessKey = instance.BusinessKey, Title = instance.Title,
-                   InitiatorId = instance.InitiatorId, Status = instance.Status,
+                   Id = copy.Id,
+                   InstanceId = instance.Id,
+                   NodeId = copy.NodeId,
+                   Round = copy.Round,
+                   AssigneeKind = copy.AssigneeKind,
+                   AssigneeValue = copy.AssigneeValue,
+                   CreatedAt = copy.CreatedAt,
+                   DefinitionKey = instance.DefinitionKey,
+                   DefinitionName = definition.Name,
+                   DefinitionVersion = instance.DefinitionVersion,
+                   BusinessType = instance.BusinessType,
+                   BusinessKey = instance.BusinessKey,
+                   Title = instance.Title,
+                   InitiatorId = instance.InitiatorId,
+                   Status = instance.Status,
                    ReadAt = _db.Set<ApprovalCarbonCopyRead>().Where(r => r.CarbonCopyId == copy.Id && r.UserId == userId)
                        .Select(r => (DateTime?)r.ReadAt).FirstOrDefault()
                };
@@ -93,7 +103,9 @@ public sealed class ApprovalCarbonCopyService(ApprovalDbContextAccessor accessor
             _db.Add(new ApprovalCarbonCopyRead
             {
                 Id = Guid.ParseExact(ApprovalCommandHash.Of(id.ToString(), userId)[..32], "N"),
-                CarbonCopyId = id, UserId = userId, ReadAt = _clock.GetUtcNow().UtcDateTime
+                CarbonCopyId = id,
+                UserId = userId,
+                ReadAt = _clock.GetUtcNow().UtcDateTime
             });
             try { await _db.SaveChangesAsync(token); }
             catch (DbUpdateException error) when (ApprovalDatabaseErrors.Unique(error))

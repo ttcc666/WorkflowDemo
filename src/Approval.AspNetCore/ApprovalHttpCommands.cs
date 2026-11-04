@@ -1,25 +1,27 @@
-using System.Text;
-using System.Text.Json;
 using Approval.Core;
 using Approval.Core.Abstractions;
 using Approval.Core.Authorization;
-using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using System.Text;
+using System.Text.Json;
 
 namespace Approval.AspNetCore;
 
 internal sealed record ApprovalHttpCommandResult(int Status, JsonElement? Value);
+
 internal static class ApprovalHttpCommands
 {
     public const string Header = "Idempotency-Key";
+
     internal static string? OperationId(HttpContext http)
     {
         if (http.Request.Headers[Header].Count > 1) throw new ApprovalException("只能提供一个 Idempotency-Key") { Code = ApprovalErrorCode.OperationIdRequired };
         return http.Request.Headers[Header].FirstOrDefault();
     }
+
     internal static bool Managed(HttpContext http, ApprovalPermissionMetadata metadata) =>
         HttpMethods.IsPost(http.Request.Method) || HttpMethods.IsPut(http.Request.Method) || HttpMethods.IsDelete(http.Request.Method)
             ? !metadata.Permissions.Any(p => p is ApprovalPermissions.DefinitionValidate or ApprovalPermissions.FileUpload or ApprovalPermissions.TaskReassignBulk)
@@ -87,5 +89,7 @@ internal static class ApprovalHttpCommands
             catch (Rejected rejected) { return rejected.Result; }
         });
     }
-    private sealed class Rejected(object? result) : Exception { public object? Result { get; } = result; }
+
+    private sealed class Rejected(object? result) : Exception
+    { public object? Result { get; } = result; }
 }

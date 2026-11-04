@@ -21,10 +21,12 @@ public enum OutboxKind
 {
     /// <summary>旧通知载荷的兼容类型，Target 是宿主声明的通知路由；发送由宿主事件处理器负责。</summary>
     Notification,
+
     Event
 }
 
-public enum OutboxStatus { Pending, Succeeded, Failed }
+public enum OutboxStatus
+{ Pending, Succeeded, Failed }
 
 /// <summary>
 /// 待投递消息（Outbox）：与审批数据在同一事务中写入，事务提交后由后台任务投递，失败按指数退避重试。

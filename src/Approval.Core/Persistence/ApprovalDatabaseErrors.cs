@@ -1,8 +1,8 @@
-using System.Data.Common;
-using System.Text.RegularExpressions;
 using Approval.Core.Domain;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
+using System.Data.Common;
+using System.Text.RegularExpressions;
 
 namespace Approval.Core.Persistence;
 

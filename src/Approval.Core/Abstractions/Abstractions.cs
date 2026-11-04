@@ -44,6 +44,7 @@ public sealed class ApproverResolveContext
 {
     public required ApprovalInstanceContext Instance { get; init; }
     public required ApprovalNodeContext Node { get; init; }
+
     /// <summary>引擎为每次 Resolver 调用创建独立快照。顶层字典只读；嵌套动态对象与数组可在本次快照内修改，不影响其他调用或实例表单。</summary>
     public required IReadOnlyDictionary<string, object?> FormData { get; init; }
 }
@@ -53,14 +54,19 @@ public enum ApproverValueKind
 {
     /// <summary>无参数（如发起人）。</summary>
     None,
+
     /// <summary>用户 ID，逗号分隔。</summary>
     User,
+
     /// <summary>角色名，逗号分隔。</summary>
     Role,
+
     /// <summary>表单人员字段（User / Users）的标识。</summary>
     FormUserField,
+
     /// <summary>级数 N（1–10），可写 <c>N@字段</c> 表示以表单人员字段中的人为基准（默认以发起人为基准）。</summary>
     Level,
+
     /// <summary>自由文本（自定义解析器的默认值）。</summary>
     Text
 }

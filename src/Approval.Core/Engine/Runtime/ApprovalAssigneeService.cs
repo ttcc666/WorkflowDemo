@@ -49,8 +49,12 @@ internal sealed class ApprovalAssigneeService(
         {
             if (!_resolvers.TryGetValue(rule.Type, out var resolver))
                 throw new ApprovalException($"未注册的审批人类型 '{rule.Type}'") { Code = ApprovalErrorCode.InvalidDefinition };
-            var context = new ApproverResolveContext { Instance = ApprovalContextSnapshots.Instance(instance),
-                Node = ApprovalContextSnapshots.Node(node), FormData = FormData.Snapshot(form) };
+            var context = new ApproverResolveContext
+            {
+                Instance = ApprovalContextSnapshots.Instance(instance),
+                Node = ApprovalContextSnapshots.Node(node),
+                FormData = FormData.Snapshot(form)
+            };
             using var callback = unit.Extension();
             result.AddRange(await resolver.ResolveAsync(rule.Value, context, ct));
         }

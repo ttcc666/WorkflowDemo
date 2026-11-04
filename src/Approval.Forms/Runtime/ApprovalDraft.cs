@@ -1,5 +1,5 @@
-using Approval.Core;
 using Approval.Core.Domain;
+
 namespace Approval.Forms.Runtime;
 
 public class ApprovalDraft : IApprovalEntity

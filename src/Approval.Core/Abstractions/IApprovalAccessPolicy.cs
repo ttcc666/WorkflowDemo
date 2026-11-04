@@ -1,5 +1,3 @@
-using Approval.Core.Domain;
-
 namespace Approval.Core.Abstractions;
 
 /// <summary>查看审批的人：用户 ID 与是否管理员（管理员由接口层判断，如 ASP.NET Core 授权策略）。</summary>
@@ -9,8 +7,10 @@ public enum ApprovalAccessLevel
 {
     /// <summary>无权查看（接口返回 404，不暴露实例是否存在）。</summary>
     None,
+
     /// <summary>参与人（处理人、候选人、抄送人）：受节点字段隐藏规则约束。</summary>
     Participant,
+
     /// <summary>发起人、管理员或宿主授权：查看全部内容。</summary>
     Full
 }

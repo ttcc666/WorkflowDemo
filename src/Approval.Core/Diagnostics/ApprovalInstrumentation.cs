@@ -14,6 +14,7 @@ public static class ApprovalInstrumentation
     internal static readonly Histogram<double> CommandDuration = Metrics.CreateHistogram<double>("approval.command.duration", "ms");
     internal static readonly Histogram<double> BackgroundDuration = Metrics.CreateHistogram<double>("approval.background.duration", "ms");
     internal static readonly Histogram<double> TransactionDuration = Metrics.CreateHistogram<double>("approval.transaction.duration", "ms");
+
     internal static IDisposable Command(string kind, string? key)
     {
         Commands.Add(1);
@@ -21,10 +22,14 @@ public static class ApprovalInstrumentation
         activity?.SetTag("approval.command.kind", kind); activity?.SetTag("approval.operation.id", key);
         return new Observation(CommandDuration, activity);
     }
+
     internal static IDisposable Transaction() => new Observation(TransactionDuration, Activities.StartActivity("approval.transaction"));
+
     private sealed class Observation(Histogram<double> histogram, Activity? activity) : IDisposable
     {
         private readonly long _started = Stopwatch.GetTimestamp();
-        public void Dispose() { histogram.Record(Stopwatch.GetElapsedTime(_started).TotalMilliseconds); activity?.Dispose(); }
+
+        public void Dispose()
+        { histogram.Record(Stopwatch.GetElapsedTime(_started).TotalMilliseconds); activity?.Dispose(); }
     }
 }

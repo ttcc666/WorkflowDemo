@@ -1,8 +1,7 @@
-using Approval.Core;
-using System.Text.Json;
-using System.Text.RegularExpressions;
 using Approval.Core.Definitions;
 using Approval.Core.Templates;
+using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace Approval.Forms.Schema;
 
@@ -167,8 +166,14 @@ public static partial class FormSchemaValidator
             var defaultErrors = new Dictionary<string, List<string>>();
             FormDataValidator.Normalize(new FormField
             {
-                Key = field.Key, Label = field.Label, Type = field.Type, Options = field.Options, Min = field.Min, Max = field.Max,
-                Precision = field.Precision, MaxLength = field.MaxLength
+                Key = field.Key,
+                Label = field.Label,
+                Type = field.Type,
+                Options = field.Options,
+                Min = field.Min,
+                Max = field.Max,
+                Precision = field.Precision,
+                MaxLength = field.MaxLength
             }, defaultValue, field.Key, defaultErrors);
             if (defaultErrors.Count > 0) errors.Add($"{name}的默认值无效：{string.Join("；", defaultErrors.Values.SelectMany(e => e))}");
         }

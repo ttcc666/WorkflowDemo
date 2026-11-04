@@ -17,8 +17,12 @@ public interface IApprovalCommandExecutor
 public interface IApprovalUnitOfWork
 {
     bool IsActive { get; }
+
     Task<T> ExecuteAsync<T>(Func<CancellationToken, Task<T>> operation, CancellationToken ct = default);
+
     Task ExecuteAsync(Func<CancellationToken, Task> operation, CancellationToken ct = default);
+
     void AfterCommit(Func<Task> callback);
+
     Task SetResultInstanceAsync(Guid instanceId, CancellationToken ct = default);
 }

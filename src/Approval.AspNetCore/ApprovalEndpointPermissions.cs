@@ -1,8 +1,8 @@
 using Approval.Core.Abstractions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
-using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 
 namespace Approval.AspNetCore;
 
@@ -10,6 +10,7 @@ public sealed record ApprovalPermissionMetadata(IReadOnlyList<string> Permission
 {
     public string Operation { get; init; } = string.Empty;
 }
+
 internal sealed class ApprovalEndpointValidationService(IServiceProvider services) : IHostedService
 {
     public Task StartAsync(CancellationToken ct)
@@ -18,8 +19,10 @@ internal sealed class ApprovalEndpointValidationService(IServiceProvider service
         _ = services.GetService<EndpointDataSource>()?.Endpoints.Count;
         return Task.CompletedTask;
     }
+
     public Task StopAsync(CancellationToken ct) => Task.CompletedTask;
 }
+
 internal static class ApprovalEndpointPermissions
 {
     public static ApprovalPermissionMetadata For(string method, string path)
@@ -75,21 +78,30 @@ internal static class ApprovalEndpointPermissions
             "/definitions/by-id/{id:guid}" => "definition",
             _ when path.Contains("/tasks/{id:guid}", StringComparison.Ordinal) => "task",
             _ when path.Contains("/instances/{id:guid}", StringComparison.Ordinal) => "instance",
-            "/files/{id:guid}" => "file", "/forms/drafts/{id:guid}" => "draft", "/outbox/{id:guid}/retry" => "outbox", "/messages/{id:guid}/read" => "message", _ => null
+            "/files/{id:guid}" => "file",
+            "/forms/drafts/{id:guid}" => "draft",
+            "/outbox/{id:guid}/retry" => "outbox",
+            "/messages/{id:guid}/read" => "message",
+            _ => null
         };
         var codes = path == "/tasks/{id:guid}/approve" ? new[] { permission, ApprovalPermissions.TaskResubmit }
             : path == "/tasks/{id:guid}/reject" ? new[] { permission, ApprovalPermissions.TaskReturn } : new[] { permission };
         return new(codes, kind) { Operation = method + " " + path };
     }
+
     public static ApprovalResource Resource(HttpContext http, ApprovalPermissionMetadata metadata)
     {
         Guid? id = Guid.TryParse(Convert.ToString(http.Request.RouteValues["id"]), out var value) ? value : null;
         return new()
         {
-            DefinitionKey = Convert.ToString(http.Request.RouteValues["key"]), DefinitionId = metadata.ResourceKind == "definition" ? id : null,
-            InstanceId = metadata.ResourceKind == "instance" ? id : null, TaskId = metadata.ResourceKind == "task" ? id : null,
-            FileId = metadata.ResourceKind == "file" ? id : null, DraftId = metadata.ResourceKind == "draft" ? id : null,
-            OutboxId = metadata.ResourceKind == "outbox" ? id : null, MessageId = metadata.ResourceKind == "message" ? id : null,
+            DefinitionKey = Convert.ToString(http.Request.RouteValues["key"]),
+            DefinitionId = metadata.ResourceKind == "definition" ? id : null,
+            InstanceId = metadata.ResourceKind == "instance" ? id : null,
+            TaskId = metadata.ResourceKind == "task" ? id : null,
+            FileId = metadata.ResourceKind == "file" ? id : null,
+            DraftId = metadata.ResourceKind == "draft" ? id : null,
+            OutboxId = metadata.ResourceKind == "outbox" ? id : null,
+            MessageId = metadata.ResourceKind == "message" ? id : null,
             TargetUserId = Convert.ToString(http.Request.RouteValues["userId"])
         };
     }

@@ -2,13 +2,13 @@ using Approval.AspNetCore.Contracts;
 using Approval.Core;
 using Approval.Core.Abstractions;
 using Approval.Core.Authorization;
-using Microsoft.Extensions.DependencyInjection;
 using Approval.Core.Definitions;
 using Approval.Core.Domain;
 using Approval.Core.Engine;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Approval.AspNetCore.Endpoints;
 
@@ -20,6 +20,7 @@ internal static class DefinitionEndpoints
     public sealed record CopyDefinitionRequest(string TargetKey, string Name, Guid? SourceDefinitionId = null);
     public sealed record EnableDefinitionRequest(bool Enabled, long ExpectedRevision, string? ChangeNote = null);
     public sealed record SelectDefinitionVersionRequest(Guid DefinitionId, long ExpectedRevision, string? ChangeNote = null);
+
     public static void Map(RouteGroupBuilder group)
     {
         group.MapGet("/definitions/governance", (string? category, bool? uncategorized, ApprovalDefinitionService d, CancellationToken ct) => d.ListGovernanceAsync(category, uncategorized ?? false, ct));
@@ -88,7 +89,6 @@ internal static class DefinitionEndpoints
             return TypedResults.Ok(new ApprovalPublishedResponse(definition.Id, definition.Key, definition.Version));
         }).Accepts<FlowDefinition>("application/json");
     }
-
 }
 
 /// <summary>站内信与投递记录。</summary>
@@ -133,7 +133,6 @@ internal static class MessageEndpoints
     private static async Task<IReadOnlyList<ApprovalMessageResponse>> MapMessagesAsync(
         ApprovalMessageService service, string userId, bool unreadOnly, int take, CancellationToken ct) =>
         (await service.ListAsync(userId, unreadOnly, take, ct)).Select(ApprovalMessageResponse.From).ToArray();
-
 }
 
 /// <summary>当前用户与用户目录。</summary>
@@ -153,8 +152,9 @@ internal static class DirectoryEndpoints
             return new ApprovalMeResponse(userId, user?.Name ?? userId,
                 await identity.GetRolesAsync(userId, ct), await http.IsApprovalAdminAsync(ct),
                 await http.CanReadApprovalDefinitionsAsync(ct), formBusinessType is not null, formBusinessType)
-                {
-                  Capabilities = await http.RequestServices.GetRequiredService<ApprovalAuthorizationService>().CapabilitiesAsync(ct: ct) };
+            {
+                Capabilities = await http.RequestServices.GetRequiredService<ApprovalAuthorizationService>().CapabilitiesAsync(ct: ct)
+            };
         });
 
         // ids=a,b 时按 ID 批量获取（回显已选用户），否则按关键字搜索

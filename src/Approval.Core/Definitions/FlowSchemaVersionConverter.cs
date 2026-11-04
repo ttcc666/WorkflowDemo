@@ -6,7 +6,8 @@ namespace Approval.Core.Definitions;
 /// <summary>协议版本只接受 JSON 整数值；1 与 1.0 含义相同，不接受字符串或 null。</summary>
 internal sealed class FlowSchemaVersionConverter : JsonConverter<int>
 {
-    public FlowSchemaVersionConverter() { }
+    public FlowSchemaVersionConverter()
+    { }
 
     public override int Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {

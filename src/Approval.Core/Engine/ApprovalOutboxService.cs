@@ -1,14 +1,12 @@
-using System.Text.Json;
 using Approval.Core.Abstractions;
-using Microsoft.Extensions.DependencyInjection;
-using Approval.Core.Conditions;
 using Approval.Core.Domain;
 using Approval.Core.Engine.Extensions;
 using Approval.Core.Notifications;
 using Approval.Core.Persistence;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using System.Text.Json;
 
 namespace Approval.Core.Engine;
 
@@ -195,20 +193,22 @@ public sealed class ApprovalOutboxService
                 await (EventHandler ?? throw new InvalidOperationException("宿主未注册 IApprovalEventHandler"))
                     .HandleAsync(approvalEvent, ct);
                 break;
+
             case OutboxKind.Notification:
-            {
-                // Upgrade existing pending notification rows through the same host event boundary.
-                var payload = JsonSerializer.Deserialize<ApprovalNotificationRequest>(message.PayloadJson, OutboxJson.Options)
-                    ?? throw new InvalidOperationException("旧通知正文无效");
-                var instance = message.InstanceId is { } id
-                    ? await _db.Set<ApprovalInstance>().SingleAsync(i => i.Id == id, ct) : null;
-                await (EventHandler ?? throw new InvalidOperationException("宿主未注册 IApprovalEventHandler"))
-                    .HandleAsync(new ApprovalEvent(message.Id, "NotificationRequested", instance?.Id ?? Guid.Empty,
-                        instance?.DefinitionId ?? Guid.Empty, instance?.DefinitionVersion ?? 0, instance?.BusinessType ?? "",
-                        instance?.BusinessKey ?? "", instance?.Status ?? InstanceStatus.Running, message.NodeId, null, null,
-                        "approval-background", null, message.CreatedAt) { DeliveryTarget = message.Target, Notification = payload }, ct);
-                break;
-            }
+                {
+                    // Upgrade existing pending notification rows through the same host event boundary.
+                    var payload = JsonSerializer.Deserialize<ApprovalNotificationRequest>(message.PayloadJson, OutboxJson.Options)
+                        ?? throw new InvalidOperationException("旧通知正文无效");
+                    var instance = message.InstanceId is { } id
+                        ? await _db.Set<ApprovalInstance>().SingleAsync(i => i.Id == id, ct) : null;
+                    await (EventHandler ?? throw new InvalidOperationException("宿主未注册 IApprovalEventHandler"))
+                        .HandleAsync(new ApprovalEvent(message.Id, "NotificationRequested", instance?.Id ?? Guid.Empty,
+                            instance?.DefinitionId ?? Guid.Empty, instance?.DefinitionVersion ?? 0, instance?.BusinessType ?? "",
+                            instance?.BusinessKey ?? "", instance?.Status ?? InstanceStatus.Running, message.NodeId, null, null,
+                            "approval-background", null, message.CreatedAt)
+                        { DeliveryTarget = message.Target, Notification = payload }, ct);
+                    break;
+                }
 
             default:
                 throw new InvalidOperationException($"不支持的 Outbox 消息类型 '{message.Kind}'");

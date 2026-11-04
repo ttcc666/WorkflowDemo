@@ -1,6 +1,5 @@
 using Approval.Core;
 using Approval.Core.Abstractions;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 

@@ -1,18 +1,23 @@
 namespace Approval.Core.Domain;
 
-public enum InstanceStatus { Running, Approved, Rejected, Withdrawn, Terminated, Returned }
+public enum InstanceStatus
+{ Running, Approved, Rejected, Withdrawn, Terminated, Returned }
 
 public enum ApprovalTaskStatus
 {
     /// <summary>依次审批中尚未轮到。</summary>
     Waiting,
+
     Pending,
     Approved,
     Rejected,
+
     /// <summary>或签时被他人处理、或流程结束时被取消。</summary>
     Canceled,
+
     /// <summary>已转交给他人。</summary>
     Transferred,
+
     /// <summary>前加签：等待加签人审批完成后恢复为待处理。</summary>
     Suspended
 }
@@ -21,12 +26,16 @@ public enum ApprovalTaskKind
 {
     /// <summary>节点审批人的普通任务。</summary>
     Approval,
+
     /// <summary>退回发起人后，发起人重新提交的任务。</summary>
     Resubmit,
+
     /// <summary>前加签：加签人先审，完成后回到原审批人。</summary>
     AddSignBefore,
+
     /// <summary>后加签：原审批人已同意，加签人审批后节点才能通过。</summary>
     AddSignAfter,
+
     /// <summary>并加签：与原审批人同时审批，节点通过前必须同意。</summary>
     AddSignParallel
 }
@@ -34,6 +43,7 @@ public enum ApprovalTaskKind
 public enum AssigneeKind
 {
     User,
+
     /// <summary>角色任务（候选组）：角色内任意一人可处理，处理时实时校验角色。</summary>
     Role
 }
@@ -48,21 +58,30 @@ public enum ApprovalAction
     AutoApprove,
     Cc,
     Complete,
+
     /// <summary>超时提醒 / 催办。</summary>
     Remind,
+
     TimeoutApprove,
     TimeoutReject,
+
     /// <summary>驳回并退回到之前的节点或发起人，流程继续。</summary>
     Return,
+
     AddSign,
+
     /// <summary>退回发起人后重新提交。</summary>
     Resubmit,
+
     /// <summary>管理员终止流程。</summary>
     Terminate,
+
     /// <summary>管理员把待办改派给其他人（含离职交接的批量改派）。</summary>
     Reassign,
+
     /// <summary>审批人在节点修改了可编辑的表单字段。</summary>
     FormEdit,
+
     NodeEntered
 }
 
@@ -74,8 +93,10 @@ public class ApprovalDefinition : IApprovalEntity
     public int Version { get; set; }
     public required string Name { get; set; }
     public required string DefinitionJson { get; set; }
+
     /// <summary>发布时从 settings.category 固化的查询投影，不修改发布 JSON。</summary>
     public string? Category { get; set; }
+
     public bool IsPublished { get; set; }
     public DateTime CreatedAt { get; set; }
 }
@@ -96,6 +117,7 @@ public class ApprovalInstance : IApprovalEntity
     public string? Title { get; set; }
     public required string InitiatorId { get; set; }
     public InstanceStatus Status { get; set; }
+
     /// <summary>当前活动节点；并行时为多个节点 ID，以逗号分隔。</summary>
     public string? CurrentNodeId { get; set; }
 
@@ -178,8 +200,6 @@ public class ApprovalCarbonCopy : IApprovalEntity
 
     public DateTime CreatedAt { get; set; }
 }
-
-
 
 /// <summary>审批轨迹，只追加不修改。</summary>
 public class ApprovalLog : IApprovalEntity

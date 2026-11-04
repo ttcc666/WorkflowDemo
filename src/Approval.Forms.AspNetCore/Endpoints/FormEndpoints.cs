@@ -76,6 +76,5 @@ internal static class FormEndpoints
             var instance = await forms.StartAsync(key, http.GetApprovalUserId(), body.FormData, body.Comment, body.DraftId, ct);
             return TypedResults.Ok(new ApprovalStartedResponse(instance.Id));
         });
-
     }
 }

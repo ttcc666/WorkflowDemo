@@ -1,8 +1,7 @@
 using Approval.Core;
 using Approval.Forms.Runtime;
-using System.Security.Cryptography;
 using Microsoft.Extensions.Hosting;
-using Approval.Core.Abstractions;
+using System.Security.Cryptography;
 
 namespace Approval.Forms.Attachments;
 
@@ -98,8 +97,13 @@ internal sealed class LimitedHashingStream(Stream inner, long maxBytes, string t
     public override bool CanWrite => false;
     public override long Length => throw new NotSupportedException();
     public override long Position { get => BytesRead; set => throw new NotSupportedException(); }
-    public override void Flush() { }
+
+    public override void Flush()
+    { }
+
     public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+
     public override void SetLength(long value) => throw new NotSupportedException();
+
     public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
 }

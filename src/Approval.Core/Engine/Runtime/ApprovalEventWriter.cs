@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Approval.Core.Abstractions;
 using Approval.Core.Conditions;
 using Approval.Core.Definitions;
@@ -8,6 +7,7 @@ using Approval.Core.Persistence;
 using Approval.Core.Templates;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using System.Text.Json;
 
 namespace Approval.Core.Engine.Runtime;
 
@@ -38,7 +38,6 @@ internal sealed class ApprovalEventWriter(
     private readonly TimeProvider _clock = clock;
     private readonly ILogger<ApprovalEngine> _logger = logger;
     private DateTime Now => _clock.GetUtcNow().UtcDateTime;
-
 
     internal void AddCarbonCopy(ApprovalInstance instance, FlowNode node, Assignee recipient) =>
         _db.Set<ApprovalCarbonCopy>().Add(new ApprovalCarbonCopy
@@ -89,8 +88,10 @@ internal sealed class ApprovalEventWriter(
                     "Terminate" => InstanceStatus.Terminated,
                     _ => instance.Status
                 }, nodeId, nodeName, taskId, operatorId, comment, Now)
-            { Recipients = taskId is { } tid && instance.Tasks.FirstOrDefault(t => t.Id == tid) is { } task
-                ? [new Assignee(task.AssigneeKind, task.AssigneeValue)] : [] });
+            {
+                Recipients = taskId is { } tid && instance.Tasks.FirstOrDefault(t => t.Id == tid) is { } task
+                ? [new Assignee(task.AssigneeKind, task.AssigneeValue)] : []
+            });
     }
 
     internal static string Describe(Assignee a) => a.Kind == AssigneeKind.Role ? $"角色[{a.Value}]" : a.Value;
@@ -145,14 +146,17 @@ internal sealed class ApprovalEventWriter(
                         id => new ApprovalEvent(id, "NotificationRequested", instance.Id, instance.DefinitionId, instance.DefinitionVersion,
                             instance.BusinessType, instance.BusinessKey, instance.Status, node?.Id, node?.Name, null,
                             info.OperatorId ?? SystemOperator, info.Comment, Now)
-                        { DeliveryTarget = channel, Notification = new ApprovalNotificationRequest(id, evt, instance.Id, node?.Id,
-                            title, content, users, string.IsNullOrEmpty(link) ? null : link) });
+                        {
+                            DeliveryTarget = channel,
+                            Notification = new ApprovalNotificationRequest(id, evt, instance.Id, node?.Id,
+                            title, content, users, string.IsNullOrEmpty(link) ? null : link)
+                        });
                 }
                 else
                 {
                     // 发布后宿主也可能撤下适配器；不能静默丢失流程承诺的通知。
                     throw new ApprovalException($"通知适配器 '{channel}' 未注册，请先配置宿主适配器后重试")
-                        { Code = ApprovalErrorCode.InvalidDefinition };
+                    { Code = ApprovalErrorCode.InvalidDefinition };
                 }
             }
         }

@@ -1,5 +1,5 @@
-using System.Text.Json;
 using Approval.Core.Domain;
+using System.Text.Json;
 
 namespace Approval.Core.Engine;
 

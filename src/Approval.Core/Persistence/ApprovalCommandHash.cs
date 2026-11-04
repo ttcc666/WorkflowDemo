@@ -8,6 +8,7 @@ internal static class ApprovalCommandHash
 {
     public static string Of(params string[] parts) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
         string.Concat(parts.Select(p => $"{Encoding.UTF8.GetByteCount(p)}:{p}")))));
+
     public static string Payload(object? payload)
     {
         var element = payload is JsonElement json ? json : JsonSerializer.SerializeToElement(payload, JsonSerializerOptions.Web);
@@ -15,6 +16,7 @@ internal static class ApprovalCommandHash
         using (var writer = new Utf8JsonWriter(stream)) Write(writer, element);
         return Convert.ToHexString(SHA256.HashData(stream.ToArray()));
     }
+
     private static void Write(Utf8JsonWriter writer, JsonElement value)
     {
         switch (value.ValueKind)

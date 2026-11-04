@@ -30,6 +30,7 @@ public sealed class DynamicExpressoConditionEvaluator : IConditionEvaluator
         }
         catch (Exception ex) { return ex.Message; }
     }
+
     public bool Evaluate(string expression, IReadOnlyDictionary<string, object?> variables)
     {
         var interpreter = new Interpreter(InterpreterOptions.PrimitiveTypes | InterpreterOptions.SystemKeywords);

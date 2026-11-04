@@ -1,12 +1,12 @@
 using Approval.AspNetCore.Contracts;
-using System.Text.Json;
 using Approval.Core;
-using Approval.Core.Engine;
 using Approval.Core.Authorization;
+using Approval.Core.Engine;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
+using System.Text.Json;
 
 namespace Approval.AspNetCore.Endpoints;
 
@@ -80,16 +80,24 @@ internal static class InstanceEndpoints
         foreach (var detail in details) results.Add(await ResponseAsync(detail, http, ct));
         return results.ToArray();
     }
+
     private static async Task<ApprovalInstanceResponse> ResponseAsync(InstanceDetail detail, HttpContext http, CancellationToken ct)
     {
         var authorization = http.RequestServices.GetRequiredService<ApprovalAuthorizationService>();
         var tasks = new List<ApprovalTaskResponse>();
         foreach (var task in detail.Tasks)
-            tasks.Add(ApprovalTaskResponse.From(task) with { Capabilities = new Dictionary<string, bool>
-            { [Approval.Core.Abstractions.ApprovalPermissions.TaskReassign] = await authorization.CanAsync(Approval.Core.Abstractions.ApprovalPermissions.TaskReassign, new() { TaskId = task.Id }, ct) } });
-        return ApprovalInstanceResponse.From(detail) with { Tasks = tasks,
-            Capabilities = await authorization.CapabilitiesAsync(new() { InstanceId = detail.Id }, ct) };
+            tasks.Add(ApprovalTaskResponse.From(task) with
+            {
+                Capabilities = new Dictionary<string, bool>
+                { [Approval.Core.Abstractions.ApprovalPermissions.TaskReassign] = await authorization.CanAsync(Approval.Core.Abstractions.ApprovalPermissions.TaskReassign, new() { TaskId = task.Id }, ct) }
+            });
+        return ApprovalInstanceResponse.From(detail) with
+        {
+            Tasks = tasks,
+            Capabilities = await authorization.CapabilitiesAsync(new() { InstanceId = detail.Id }, ct)
+        };
     }
+
     private static ApprovalException NotVisible() => new("审批不存在或无权查看") { Code = ApprovalErrorCode.NotFound };
 }
 

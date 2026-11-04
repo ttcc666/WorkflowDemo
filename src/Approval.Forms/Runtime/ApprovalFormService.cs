@@ -1,16 +1,16 @@
-using Approval.Core.Engine;
 using Approval.Core;
-using System.Text.Json;
-using System.Text.Json.Nodes;
 using Approval.Core.Abstractions;
 using Approval.Core.Conditions;
 using Approval.Core.Definitions;
 using Approval.Core.Domain;
-using Approval.Forms.Attachments;
-using Approval.Forms.Schema;
+using Approval.Core.Engine;
 using Approval.Core.Persistence;
 using Approval.Core.Templates;
+using Approval.Forms.Attachments;
+using Approval.Forms.Schema;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace Approval.Forms.Runtime;
 
@@ -23,6 +23,7 @@ public sealed record StartForm(Guid DefinitionId, string Key, string Name, int V
 public sealed class ApprovalFormOptions
 {
     public ApprovalFileOptions Files { get; } = new();
+
     /// <summary>表单审批实例的业务类型；表单数据即单据，存放在 <see cref="ApprovalInstance.FormDataJson"/>。</summary>
     public string BusinessType { get; set; } = "Form";
 }
@@ -225,12 +226,16 @@ public sealed partial class ApprovalFormService(
         {
             var values = FormData.Parse(result.Json);
             var userFields = schema.Fields.Where(f => f.Type is FormFieldType.User or FormFieldType.Users && Reported(f.Key))
-                .Select(field => new { Field = field, Ids = values.GetValueOrDefault(field.Key) switch
+                .Select(field => new
                 {
-                    string id => new[] { id },
-                    object?[] list => list.OfType<string>().ToArray(),
-                    _ => Array.Empty<string>()
-                } }).ToList();
+                    Field = field,
+                    Ids = values.GetValueOrDefault(field.Key) switch
+                    {
+                        string id => new[] { id },
+                        object?[] list => list.OfType<string>().ToArray(),
+                        _ => Array.Empty<string>()
+                    }
+                }).ToList();
             var ids = userFields.SelectMany(f => f.Ids).Distinct().ToArray();
             var found = ids.Length == 0 ? new HashSet<string>() : (await _hostDirectory!.GetUsersAsync(ids, ct)).Select(u => u.Id).ToHashSet();
             foreach (var item in userFields)

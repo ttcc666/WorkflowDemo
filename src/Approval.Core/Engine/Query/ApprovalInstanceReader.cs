@@ -15,7 +15,6 @@ internal sealed class ApprovalInstanceReader(
     private readonly Dictionary<Guid, FlowDefinition> _flows = [];
     private readonly Dictionary<Guid, string> _definitionJson = [];
 
-
     /// <summary>审批详情（含任务与轨迹）。需要敏感数据读取权限，供宿主后台使用；接口请用 <see cref="GetInstanceForViewerAsync"/>。</summary>
     internal async Task<InstanceDetail?> GetInstanceAsync(Guid instanceId, CancellationToken ct = default)
     {

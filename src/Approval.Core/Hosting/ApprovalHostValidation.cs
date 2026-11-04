@@ -8,7 +8,9 @@ namespace Approval.Core.Hosting;
 internal sealed class ApprovalHostValidation(IServiceScopeFactory scopes, ApprovalOptions options) : IHostedService
 {
     public async Task StartAsync(CancellationToken ct) => await ValidateAsync(ct);
+
     public Task StopAsync(CancellationToken ct) => Task.CompletedTask;
+
     internal async Task ValidateAsync(CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();

@@ -1,8 +1,7 @@
-using System.Text.RegularExpressions;
 using Approval.Core.Abstractions;
 using Approval.Core.Notifications;
 using Approval.Core.Resolvers;
-using Approval.Core.Templates;
+using System.Text.RegularExpressions;
 
 namespace Approval.Core.Definitions;
 
@@ -17,7 +16,6 @@ public sealed class FlowValidationContext
 
     /// <summary>宿主声明的通知路由（含内置站内信 InApp）；名称保留以兼容现有契约。</summary>
     public IReadOnlySet<string>? Channels { get; init; }
-
 }
 
 /// <summary>发布前对流程定义做结构校验，避免运行时才发现配置错误。</summary>
@@ -214,5 +212,4 @@ public static partial class FlowDefinitionValidator
         foreach (var unreachable in definition.Nodes.Keys.Where(k => !state.ContainsKey(k)))
             errors.Add($"节点 '{unreachable}' 从开始节点不可达");
     }
-
 }

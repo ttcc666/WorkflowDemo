@@ -74,11 +74,13 @@ public sealed partial class ApprovalDefinitionService
         _authorization.RequireAsync(Approval.Core.Abstractions.ApprovalPermissions.DefinitionValidate).GetAwaiter().GetResult();
         return ValidateCore(flow);
     }
+
     public async Task<IReadOnlyList<string>> ValidateAsync(FlowDefinition flow, CancellationToken ct = default)
     {
         await _authorization.RequireAsync(Approval.Core.Abstractions.ApprovalPermissions.DefinitionValidate, new(), null, ct);
         return ValidateCore(flow);
     }
+
     private IReadOnlyList<string> ValidateCore(FlowDefinition flow)
     {
         using var callback = _unit.Extension();
@@ -91,6 +93,7 @@ public sealed partial class ApprovalDefinitionService
         }).ToList();
         return errors;
     }
+
     private string SerializeDefinition(FlowDefinition flow)
     { using var callback = _unit.Extension(); return flow.ToJson(); }
 

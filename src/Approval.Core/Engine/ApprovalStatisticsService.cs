@@ -134,7 +134,8 @@ public sealed class ApprovalStatisticsService(ApprovalDbContextAccessor accessor
         return new FlowStatistics(key, name, rows.Count, Count(InstanceStatus.Running), Count(InstanceStatus.Approved),
             Count(InstanceStatus.Rejected), Count(InstanceStatus.Withdrawn), Count(InstanceStatus.Terminated),
             durations.Count == 0 ? null : Round(durations.Average()),
-            durations.Count == 0 ? null : Round(durations[(int)Math.Ceiling(durations.Count * 0.9) - 1])) { Returned = Count(InstanceStatus.Returned) };
+            durations.Count == 0 ? null : Round(durations[(int)Math.Ceiling(durations.Count * 0.9) - 1]))
+        { Returned = Count(InstanceStatus.Returned) };
     }
 
     /// <summary>当前待处理任务按处理人汇总，取数量最多的前 10 个。</summary>

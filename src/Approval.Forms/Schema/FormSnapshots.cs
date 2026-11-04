@@ -1,12 +1,15 @@
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using Approval.Core;
 using Approval.Core.Definitions;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+
 namespace Approval.Forms.Schema;
+
 public static class FormSnapshots
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
     { Converters = { new JsonStringEnumConverter(allowIntegerValues: false) } };
+
     public static FormSchema? GetForm(this FlowDefinition flow)
     {
         if (flow.Form is null) return null;

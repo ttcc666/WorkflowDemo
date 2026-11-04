@@ -1,9 +1,6 @@
-using Approval.Core;
 using System.Text.Json;
 
 namespace Approval.Forms.Schema;
-
-
 
 /// <summary>表单结构：字段按顺序渲染，提交时服务端按此校验并规范化数据。</summary>
 public sealed class FormSchema
@@ -16,27 +13,38 @@ public enum FormFieldType
     Text,
     TextArea,
     Number,
+
     /// <summary>金额，默认保留 2 位小数。</summary>
     Money,
+
     /// <summary>日期，值为 <c>yyyy-MM-dd</c>。</summary>
     Date,
+
     /// <summary>日期区间，值为 <c>["yyyy-MM-dd", "yyyy-MM-dd"]</c>。</summary>
     DateRange,
+
     Select,
     MultiSelect,
     Radio,
+
     /// <summary>开关，值为 bool；必填表示必须打开（如“我已阅读并同意”）。</summary>
     Switch,
+
     /// <summary>单个用户，值为用户 ID，可作为审批人（审批人规则 FormField）。</summary>
     User,
+
     /// <summary>多个用户，值为用户 ID 数组。</summary>
     Users,
+
     /// <summary>明细表，值为对象数组；列由 <see cref="FormField.Columns"/> 定义。</summary>
     Table,
+
     /// <summary>说明文字（<see cref="FormField.Label"/> 为标题、<see cref="FormField.Help"/> 为正文），没有值。</summary>
     Description,
+
     /// <summary>计算字段：值由 <see cref="FormField.Formula"/> 在服务端计算（忽略提交的值），可作为明细列按行计算。</summary>
     Formula,
+
     /// <summary>附件，值为 <c>[{ id, name, size, contentType }]</c>；文件先通过上传接口保存，提交时按上传记录校验并以服务端元数据为准。</summary>
     File
 }

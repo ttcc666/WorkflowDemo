@@ -64,7 +64,8 @@ public sealed record ApprovalLogResponse(
     [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
     public Guid? TaskId { get; init; }
     public static ApprovalLogResponse From(ApprovalLogContext value) => new(
-        value.Id, value.InstanceId, value.Sequence, value.NodeId, value.NodeName, value.Action, value.OperatorId, value.Comment, value.Details, value.CreatedAt) { TaskId = value.TaskId };
+        value.Id, value.InstanceId, value.Sequence, value.NodeId, value.NodeName, value.Action, value.OperatorId, value.Comment, value.Details, value.CreatedAt)
+    { TaskId = value.TaskId };
 }
 
 /// <summary>ApprovalMessage 的 HTTP 快照；保持既有 JSON 字段与 UTC 日期表示。</summary>

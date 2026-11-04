@@ -8,7 +8,8 @@ using System.Text.RegularExpressions;
 namespace Approval.Core.Templates;
 
 /// <summary>占位符的默认编码方式，可在占位符中用 <c>{标题|json}</c>、<c>{标题|url}</c>、<c>{标题|raw}</c> 覆盖。</summary>
-public enum TemplateEncoding { Raw, Json, Url }
+public enum TemplateEncoding
+{ Raw, Json, Url }
 
 /// <summary>
 /// 文本模板：把 <c>{变量名}</c> 替换为变量值。变量名可以是中文别名（如 <c>{标题}</c>）、
@@ -65,6 +66,7 @@ public static partial class TemplateRenderer
         {
             case IReadOnlyDictionary<string, object?> dict when dict.TryGetValue(name, out value):
                 return true;
+
             case IDictionary<string, object?> dict:
                 // ExpandoObject 区分大小写，这里按不区分大小写查找
                 foreach (var (key, v) in dict)

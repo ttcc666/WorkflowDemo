@@ -1,13 +1,12 @@
 using Approval.Core.Abstractions;
+using Approval.Core.Authorization;
 using Approval.Core.Background;
 using Approval.Core.Conditions;
 using Approval.Core.Engine;
 using Approval.Core.Engine.Extensions;
-using Approval.Core.Notifications;
+using Approval.Core.Hosting;
 using Approval.Core.Persistence;
 using Approval.Core.Resolvers;
-using Approval.Core.Hosting;
-using Approval.Core.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -208,5 +207,4 @@ public sealed class ApprovalBuilder(IServiceCollection services)
         Services.Replace(ServiceDescriptor.Scoped<IApprovalEventHandler, T>());
         return this;
     }
-
 }

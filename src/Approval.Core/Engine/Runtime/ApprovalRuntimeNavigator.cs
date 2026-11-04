@@ -17,7 +17,6 @@ internal sealed class ApprovalRuntimeNavigator(
     private readonly ApprovalTaskCoordinator _tasks = tasks;
     private readonly ApprovalEventWriter _events = events;
 
-
     /// <summary>
     /// 从 nodeId 开始自动推进，直到停在需要人工处理的节点、到达结束节点，或在合并节点等待其他分支。
     /// 并行节点对每个分支递归推进。
@@ -73,7 +72,6 @@ internal sealed class ApprovalRuntimeNavigator(
                         nodeId = node.Next!;
                         continue;
                     }
-
 
                 case NodeType.Cc:
                     {

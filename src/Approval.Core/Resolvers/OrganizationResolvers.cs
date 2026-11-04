@@ -1,6 +1,6 @@
-using System.Text.RegularExpressions;
 using Approval.Core.Abstractions;
 using Approval.Core.Domain;
+using System.Text.RegularExpressions;
 
 namespace Approval.Core.Resolvers;
 

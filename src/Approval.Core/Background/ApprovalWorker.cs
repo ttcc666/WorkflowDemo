@@ -1,6 +1,6 @@
+using Approval.Core.Engine;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Approval.Core.Engine;
 
 namespace Approval.Core.Background;
 
@@ -26,8 +26,6 @@ public sealed class ApprovalWorker(
         }
 
         if (options.Outbox.EnableDispatcher) await RunAsync("Outbox 投递", outbox.DispatchOnceAsync, ct);
-
-
     }
 
     private async Task RunAsync(string operation, Func<CancellationToken, Task> run, CancellationToken ct)

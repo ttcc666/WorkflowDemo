@@ -1,5 +1,5 @@
-using System.Text;
 using Microsoft.EntityFrameworkCore;
+using System.Text;
 
 namespace Approval.Core.Persistence;
 
@@ -65,6 +65,7 @@ internal static class ApprovalSqlWriteGuard
         }
         return false;
     }
+
     private static List<Token> Tokens(string sql, bool mysql = false)
     {
         var result = new List<Token>();

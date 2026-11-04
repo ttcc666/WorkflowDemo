@@ -98,6 +98,7 @@ public sealed partial class ApprovalEngine
     }
 
     private DateTime Now => _clock.GetUtcNow().UtcDateTime;
+
     private string SerializeData(object? data)
     { using var callback = _unit.Extension(); return FormData.Serialize(data); }
 
@@ -149,8 +150,14 @@ public sealed partial class ApprovalEngine
         _db.Set<ApprovalInstance>().Add(instance);
         _unit.Reference(instance.Id, definition.Id);
         if (_options.SingleRunningInstancePerBusiness)
-            _db.Set<ApprovalBusinessSlot>().Add(new() { Id = _unit.NewId("ApprovalEngine"), InstanceId = instance.Id,
-                LookupHash = ApprovalCommandHash.Of(instance.BusinessType, instance.BusinessKey), BusinessType = instance.BusinessType, BusinessKey = instance.BusinessKey });
+            _db.Set<ApprovalBusinessSlot>().Add(new()
+            {
+                Id = _unit.NewId("ApprovalEngine"),
+                InstanceId = instance.Id,
+                LookupHash = ApprovalCommandHash.Of(instance.BusinessType, instance.BusinessKey),
+                BusinessType = instance.BusinessType,
+                BusinessKey = instance.BusinessKey
+            });
 
         if (Lifecycle is not null)
         {
@@ -517,8 +524,13 @@ public sealed partial class ApprovalEngine
     /// <summary>发起前人员预检：校验可信发起人和发起权限，使用当前宿主的已发布定义，不创建实例。</summary>
     public async Task<IReadOnlyList<string>> GetStartEligibleApproversAsync(StartApprovalRequest request, string nodeId, CancellationToken ct = default)
     {
-        await _authorization.RequireAsync(ApprovalPermissions.InstanceStart, new() { DefinitionKey = request.DefinitionKey,
-            DefinitionId = request.DefinitionId, BusinessType = request.BusinessType, BusinessKey = request.BusinessKey }, request.InitiatorId, ct);
+        await _authorization.RequireAsync(ApprovalPermissions.InstanceStart, new()
+        {
+            DefinitionKey = request.DefinitionKey,
+            DefinitionId = request.DefinitionId,
+            BusinessType = request.BusinessType,
+            BusinessKey = request.BusinessKey
+        }, request.InitiatorId, ct);
         var definition = await _db.Set<ApprovalDefinition>().AsNoTracking()
             .Where(d => d.Key == request.DefinitionKey && d.IsPublished && (request.DefinitionId == null || d.Id == request.DefinitionId))
             .OrderByDescending(d => d.Version).FirstOrDefaultAsync(ct)
@@ -527,9 +539,17 @@ public sealed partial class ApprovalEngine
         if (flow.Form is not null && DefinitionExtension is null)
             throw new ApprovalException("此定义包含可选模块快照，请注册拥有它的模块") { Code = ApprovalErrorCode.InvalidDefinition };
         if (!flow.Nodes.TryGetValue(nodeId, out var node)) throw new ApprovalException("节点不存在") { Code = ApprovalErrorCode.NotFound };
-        return await _assignees.GetEligibleApproversAsync(new ApprovalInstance { DefinitionId = definition.Id, DefinitionKey = definition.Key,
-            DefinitionVersion = definition.Version, BusinessType = request.BusinessType, BusinessKey = request.BusinessKey,
-            InitiatorId = request.InitiatorId, FormDataJson = SerializeData(request.FormData), Status = InstanceStatus.Running }, node, ct);
+        return await _assignees.GetEligibleApproversAsync(new ApprovalInstance
+        {
+            DefinitionId = definition.Id,
+            DefinitionKey = definition.Key,
+            DefinitionVersion = definition.Version,
+            BusinessType = request.BusinessType,
+            BusinessKey = request.BusinessKey,
+            InitiatorId = request.InitiatorId,
+            FormDataJson = SerializeData(request.FormData),
+            Status = InstanceStatus.Running
+        }, node, ct);
     }
 
     private async Task EnsureActiveUserAsync(string userId, CancellationToken ct)
@@ -570,6 +590,5 @@ public sealed partial class ApprovalEngine
         {
             _unit.AfterCommit(() => { _outboxSignal.Notify(); return Task.CompletedTask; });
         }
-
     }
 }

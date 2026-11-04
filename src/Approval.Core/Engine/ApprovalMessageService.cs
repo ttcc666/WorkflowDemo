@@ -59,6 +59,7 @@ public sealed class ApprovalMessageService(ApprovalDbContextAccessor accessor, T
             if (batch.Count < 200) return count;
         }
     }
+
     private async Task<IQueryable<ApprovalMessage>> VisibleAsync(CancellationToken ct)
     {
         var visible = await _authorization.ScopeAsync(_db.Set<ApprovalInstance>().AsNoTracking(), ct);

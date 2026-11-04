@@ -1,8 +1,8 @@
 using Approval.Core;
+using Approval.Core.Conditions;
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using Approval.Core.Conditions;
 
 namespace Approval.Forms.Schema;
 
@@ -113,40 +113,40 @@ public static class FormDataValidator
         switch (field.Type)
         {
             case FormFieldType.Text or FormFieldType.TextArea:
-            {
-                if (element.ValueKind != JsonValueKind.String) { Error($"{field.Label}应为文本"); return null; }
-                var text = element.GetString()!.Trim();
-                var limit = Math.Min(field.MaxLength ?? (field.Type == FormFieldType.Text ? 200 : 2000), MaxTextLength);
-                if (text.Length > limit) Error($"{field.Label}不能超过 {limit} 个字符");
-                return JsonValue.Create(text);
-            }
+                {
+                    if (element.ValueKind != JsonValueKind.String) { Error($"{field.Label}应为文本"); return null; }
+                    var text = element.GetString()!.Trim();
+                    var limit = Math.Min(field.MaxLength ?? (field.Type == FormFieldType.Text ? 200 : 2000), MaxTextLength);
+                    if (text.Length > limit) Error($"{field.Label}不能超过 {limit} 个字符");
+                    return JsonValue.Create(text);
+                }
 
             case FormFieldType.Number or FormFieldType.Money:
-            {
-                if (!TryGetDecimal(element, out var number)) { Error($"{field.Label}应为数字"); return null; }
-                var precision = field.Precision ?? (field.Type == FormFieldType.Money ? 2 : null);
-                if (precision is { } p && decimal.Round(number, p) != number)
-                    Error(p == 0 ? $"{field.Label}应为整数" : $"{field.Label}最多 {p} 位小数");
-                if (field.Min is { } min && number < min) Error($"{field.Label}不能小于 {min.ToString(CultureInfo.InvariantCulture)}");
-                if (field.Max is { } max && number > max) Error($"{field.Label}不能大于 {max.ToString(CultureInfo.InvariantCulture)}");
-                return JsonValue.Create(number);
-            }
+                {
+                    if (!TryGetDecimal(element, out var number)) { Error($"{field.Label}应为数字"); return null; }
+                    var precision = field.Precision ?? (field.Type == FormFieldType.Money ? 2 : null);
+                    if (precision is { } p && decimal.Round(number, p) != number)
+                        Error(p == 0 ? $"{field.Label}应为整数" : $"{field.Label}最多 {p} 位小数");
+                    if (field.Min is { } min && number < min) Error($"{field.Label}不能小于 {min.ToString(CultureInfo.InvariantCulture)}");
+                    if (field.Max is { } max && number > max) Error($"{field.Label}不能大于 {max.ToString(CultureInfo.InvariantCulture)}");
+                    return JsonValue.Create(number);
+                }
 
             case FormFieldType.Date:
                 if (!TryGetDate(element, out var date)) { Error($"{field.Label}应为日期（{DateFormat}）"); return null; }
                 return JsonValue.Create(date);
 
             case FormFieldType.DateRange:
-            {
-                if (element.ValueKind != JsonValueKind.Array || element.GetArrayLength() != 2
-                    || !TryGetDate(element[0], out var from) || !TryGetDate(element[1], out var to))
                 {
-                    Error($"{field.Label}应为开始和结束日期");
-                    return null;
+                    if (element.ValueKind != JsonValueKind.Array || element.GetArrayLength() != 2
+                        || !TryGetDate(element[0], out var from) || !TryGetDate(element[1], out var to))
+                    {
+                        Error($"{field.Label}应为开始和结束日期");
+                        return null;
+                    }
+                    if (string.CompareOrdinal(from, to) > 0) Error($"{field.Label}的开始日期不能晚于结束日期");
+                    return new JsonArray(from, to);
                 }
-                if (string.CompareOrdinal(from, to) > 0) Error($"{field.Label}的开始日期不能晚于结束日期");
-                return new JsonArray(from, to);
-            }
 
             case FormFieldType.Select or FormFieldType.Radio:
                 if (element.ValueKind != JsonValueKind.String || field.Options.All(o => o.Value != element.GetString()))
@@ -157,11 +157,11 @@ public static class FormDataValidator
                 return JsonValue.Create(element.GetString());
 
             case FormFieldType.MultiSelect:
-            {
-                var values = StringArray(element);
-                if (values is null || values.Any(v => field.Options.All(o => o.Value != v))) { Error($"{field.Label}的选项无效"); return new JsonArray(); }
-                return ToArray(values);
-            }
+                {
+                    var values = StringArray(element);
+                    if (values is null || values.Any(v => field.Options.All(o => o.Value != v))) { Error($"{field.Label}的选项无效"); return new JsonArray(); }
+                    return ToArray(values);
+                }
 
             case FormFieldType.User:
                 if (element.ValueKind != JsonValueKind.String || element.GetString()!.Trim() is not { Length: > 0 and <= 100 } user)
@@ -172,36 +172,36 @@ public static class FormDataValidator
                 return JsonValue.Create(user);
 
             case FormFieldType.Users:
-            {
-                var users = StringArray(element);
-                if (users is null || users.Any(u => u.Length > 100)) { Error($"{field.Label}应为用户列表"); return new JsonArray(); }
-                if (users.Count > MaxUsers) Error($"{field.Label}最多选择 {MaxUsers} 人");
-                return ToArray(users);
-            }
+                {
+                    var users = StringArray(element);
+                    if (users is null || users.Any(u => u.Length > 100)) { Error($"{field.Label}应为用户列表"); return new JsonArray(); }
+                    if (users.Count > MaxUsers) Error($"{field.Label}最多选择 {MaxUsers} 人");
+                    return ToArray(users);
+                }
 
             case FormFieldType.Table:
                 return NormalizeTable(field, element, path, errors, Error);
 
             case FormFieldType.File:
-            {
-                // 只保留文件 ID（去重）；名称、大小、类型由表单服务按上传记录补全，不信任提交的值
-                var files = new JsonArray();
-                var ids = new HashSet<Guid>();
-                if (element.ValueKind != JsonValueKind.Array) { Error($"{field.Label}格式不正确"); return files; }
-                foreach (var item in element.EnumerateArray())
                 {
-                    if (item.ValueKind != JsonValueKind.Object || !item.TryGetProperty("id", out var idElement)
-                        || idElement.ValueKind != JsonValueKind.String || !Guid.TryParse(idElement.GetString(), out var id))
+                    // 只保留文件 ID（去重）；名称、大小、类型由表单服务按上传记录补全，不信任提交的值
+                    var files = new JsonArray();
+                    var ids = new HashSet<Guid>();
+                    if (element.ValueKind != JsonValueKind.Array) { Error($"{field.Label}格式不正确"); return files; }
+                    foreach (var item in element.EnumerateArray())
                     {
-                        Error($"{field.Label}格式不正确");
-                        return new JsonArray();
+                        if (item.ValueKind != JsonValueKind.Object || !item.TryGetProperty("id", out var idElement)
+                            || idElement.ValueKind != JsonValueKind.String || !Guid.TryParse(idElement.GetString(), out var id))
+                        {
+                            Error($"{field.Label}格式不正确");
+                            return new JsonArray();
+                        }
+                        if (ids.Add(id)) files.Add(new JsonObject { ["id"] = id.ToString() });
                     }
-                    if (ids.Add(id)) files.Add(new JsonObject { ["id"] = id.ToString() });
+                    var max = field.MaxFiles ?? DefaultMaxFiles;
+                    if (files.Count > max) Error($"{field.Label}最多上传 {max} 个文件");
+                    return files;
                 }
-                var max = field.MaxFiles ?? DefaultMaxFiles;
-                if (files.Count > max) Error($"{field.Label}最多上传 {max} 个文件");
-                return files;
-            }
 
             default:
                 return null;

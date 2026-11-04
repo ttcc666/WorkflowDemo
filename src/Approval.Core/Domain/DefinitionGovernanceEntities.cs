@@ -6,8 +6,10 @@ public sealed class ApprovalDefinitionManagement : IApprovalEntity
     public Guid Id { get; set; }
     public required string Key { get; set; }
     public required string Name { get; set; }
+
     /// <summary>有草稿时为草稿分类，否则为当前选用发布版本的分类。</summary>
     public string? Category { get; set; }
+
     public string? DraftJson { get; set; }
     public Guid? DraftSourceDefinitionId { get; set; }
     public long Revision { get; set; }
@@ -20,7 +22,8 @@ public sealed class ApprovalDefinitionManagement : IApprovalEntity
     public required string UpdatedBy { get; set; }
 }
 
-public enum DefinitionAuditAction { DraftSaved, Published, Enabled, Disabled, VersionSelected }
+public enum DefinitionAuditAction
+{ DraftSaved, Published, Enabled, Disabled, VersionSelected }
 
 /// <summary>同事务落库的治理审计，不含流程 JSON、动作参数或凭据。</summary>
 public sealed class ApprovalDefinitionAudit : IApprovalEntity

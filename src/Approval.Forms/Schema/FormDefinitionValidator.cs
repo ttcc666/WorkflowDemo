@@ -1,20 +1,24 @@
-using Approval.Core;
 using Approval.Core.Abstractions;
 using Approval.Core.Definitions;
 using Approval.Core.Templates;
+
 namespace Approval.Forms.Schema;
+
 public sealed class FormDefinitionValidator : IApprovalDefinitionExtension
 {
     public IReadOnlySet<string>? UserFields(FlowDefinition definition) => definition.GetForm()?.Fields
         .Where(f => f.Type is FormFieldType.User or FormFieldType.Users).Select(f => f.Key).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
     public void Validate(FlowDefinition definition, List<string> errors)
     {
         FormSchemaValidator.Validate(definition, errors);
         foreach (var (key, node) in definition.Nodes)
             if (node.FieldPermissions.Count > 0) ValidateFieldPermissions(errors, key, node, definition.GetForm());
     }
+
     public static IReadOnlyList<string> Validate(FlowDefinition definition, IReadOnlySet<string> types) =>
         Approval.Core.Definitions.FlowDefinitionValidator.Validate(definition, new FlowValidationContext { ApproverTypes = types, Extension = new FormDefinitionValidator() });
+
     /// <summary>字段权限：审批节点可设可编辑 / 隐藏，抄送节点只能设隐藏；字段须为表单字段（不区分大小写、不能重复），计算字段不能设为可编辑。</summary>
     private static void ValidateFieldPermissions(List<string> errors, string key, FlowNode node, FormSchema? form)
     {
@@ -99,5 +103,4 @@ public sealed class FormDefinitionValidator : IApprovalDefinitionExtension
         }
         return warnings;
     }
-
 }

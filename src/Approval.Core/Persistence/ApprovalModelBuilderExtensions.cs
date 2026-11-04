@@ -85,10 +85,6 @@ public static class ApprovalModelBuilderExtensions
             b.HasIndex(x => new { x.AssigneeKind, x.AssigneeValue });
         });
 
-
-
-
-
         modelBuilder.Entity<ApprovalMessage>(b =>
         {
             b.ToTable($"{tablePrefix}Messages");
@@ -177,7 +173,6 @@ public static class ApprovalModelBuilderExtensions
         {
             var entity = modelBuilder.Entity(type);
             entity.UseUtcDateTimes();
-
         }
 
         modelBuilder.Entity<ApprovalInstance>().HasOne<ApprovalDefinition>().WithMany()
@@ -188,7 +183,6 @@ public static class ApprovalModelBuilderExtensions
             .HasForeignKey(x => new { x.InstanceId }).OnDelete(DeleteBehavior.Cascade);
         modelBuilder.Entity<ApprovalCarbonCopy>().HasOne<ApprovalInstance>().WithMany()
             .HasForeignKey(x => new { x.InstanceId }).OnDelete(DeleteBehavior.Cascade);
-
 
         modelBuilder.Entity<ApprovalMessage>().HasOne<ApprovalInstance>().WithMany()
             .HasForeignKey(x => new { x.InstanceId }).OnDelete(DeleteBehavior.NoAction);

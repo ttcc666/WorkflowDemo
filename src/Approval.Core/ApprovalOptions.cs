@@ -3,10 +3,13 @@ namespace Approval.Core;
 public sealed class ApprovalOptions
 {
     public ApprovalBackgroundOptions Background { get; } = new();
+
     /// <summary>严格模式要求提交标识；默认 false 允许无键调用，不提供请求级防重保障。生产部署建议开启。</summary>
     public bool RequireOperationId { get; set; }
+
     public TimeSpan CommitVerificationTimeout { get; set; } = TimeSpan.FromSeconds(10);
     public TimeSpan PermissionTimeout { get; set; } = TimeSpan.FromSeconds(5);
+
     /// <summary>是否允许发起人审批自己的申请（职责分离，默认不允许）。</summary>
     public bool AllowInitiatorApprove { get; set; }
 
@@ -39,9 +42,9 @@ public sealed class ApprovalOptions
 
     public ApprovalOutboxOptions Outbox { get; } = new();
 
-
     /// <summary>超时扫描间隔。</summary>
     public TimeSpan TimeoutScanInterval { get; set; } = TimeSpan.FromMinutes(1);
+
     /// <summary>旧定义的超时自动审批仅在宿主显式允许时执行；默认只提醒。</summary>
     public bool EnableAutomaticTimeoutDecisions { get; set; }
 }
@@ -50,6 +53,7 @@ public sealed class ApprovalOutboxOptions
 {
     /// <summary>是否允许后台或手动投递。关闭时事件仍持久化为 Pending，宿主不会收到事件。</summary>
     public bool EnableDispatcher { get; set; } = true;
+
     /// <summary>没有新消息时的轮询间隔；审批操作写入消息后会立即唤醒投递任务。</summary>
     public TimeSpan PollInterval { get; set; } = TimeSpan.FromSeconds(5);
 
@@ -62,5 +66,4 @@ public sealed class ApprovalOutboxOptions
     public TimeSpan BaseRetryDelay { get; set; } = TimeSpan.FromSeconds(30);
 
     public TimeSpan MaxRetryDelay { get; set; } = TimeSpan.FromHours(1);
-
 }

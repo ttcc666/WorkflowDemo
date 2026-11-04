@@ -9,7 +9,6 @@ namespace Approval.Core.Authorization;
 internal sealed class ApprovalResourceReader(
     DbContext db, IApprovalQueryScope scope, ApprovalOptions options, IEnumerable<IApprovalResourceResolver> resolvers)
 {
-
     internal async Task<ApprovalResource> ResolveAsync(ApprovalResource resource, ApprovalPermissionSubject subject, CancellationToken ct)
     {
         static ApprovalException Missing() => new("资源不存在或无权查看") { Code = ApprovalErrorCode.NotFound };
@@ -42,6 +41,7 @@ internal sealed class ApprovalResourceReader(
         }
         return resource;
     }
+
     internal async Task<IQueryable<ApprovalInstance>> ApplyScopeAsync(ApprovalPermissionSubject subject, IQueryable<ApprovalInstance> query, CancellationToken ct)
     {
         using var callback = new ApprovalUnitOfWork(db).Extension();

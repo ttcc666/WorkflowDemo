@@ -9,6 +9,7 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Approval.AspNetCore;
 
 public sealed record ApprovalReadiness(bool Ready);
+
 public static class ApprovalReadinessEndpoint
 {
     /// <summary>可选匿名探针，只返回整体 Ready；不读取当前 HTTP 主体，不公开企业或数据库细节。</summary>

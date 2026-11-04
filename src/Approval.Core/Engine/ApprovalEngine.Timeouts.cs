@@ -1,8 +1,8 @@
 using Approval.Core.Abstractions;
 using Approval.Core.Definitions;
 using Approval.Core.Domain;
-using Approval.Core.Notifications;
 using Approval.Core.Engine.Runtime;
+using Approval.Core.Notifications;
 
 namespace Approval.Core.Engine;
 

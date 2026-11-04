@@ -1,10 +1,11 @@
-using Approval.Core;
 using Approval.Core.Domain;
 using Approval.Core.Persistence;
-using Approval.Forms.Runtime;
 using Approval.Forms.Attachments;
+using Approval.Forms.Runtime;
 using Microsoft.EntityFrameworkCore;
+
 namespace Approval.Forms;
+
 public static class ApprovalFormsModelBuilderExtensions
 {
     public static ModelBuilder ConfigureApprovalForms(this ModelBuilder modelBuilder, string tablePrefix = "Approval")
