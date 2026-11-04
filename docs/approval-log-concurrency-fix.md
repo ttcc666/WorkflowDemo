@@ -6,7 +6,7 @@
 
 `ApprovalEventWriter.AddLog` 使用 `++instance.LogSequence`。两个独立上下文读取相同旧实例后，都可能生成相同 `(InstanceId, Sequence)`。实体模型 `ConfigureApproval` 保留唯一索引 `IX_ApprovalLogs_InstanceId_Sequence`；原始 CI 的 MySQL1062 / PostgreSQL23505 明确指向该索引，调用栈由 EF ReaderModificationCommandBatch / SaveChanges 到 Flush。
 
-不能仅根据语句先后顺序推断异常优先级。本次实际三个 Provider 的命令都在同一个批次中执行 DELETE BusinessSlots → UPDATE Instances → INSERT Logs；MySQL还带SELECT ROW_COUNT，SQL Server带OUTPUT 1。即使实例UPDATE在前，MySQL/PostgreSQL仍先暴露后续日志INSERT的唯一约束异常，早于EF对受影响行数完成并发判断；SQL Server本次走EF concurrency异常。原 Flush 只 catch `DbUpdateConcurrencyException`，因此普通 `ApproveAsync` 等操作泄漏 `DbUpdateException`。协调器的通用 Unique 处理不能覆盖不经过协调器的 Engine 调用。
+不能仅根据语句先后顺序推断异常优先级。本次实际捕获的三个 Provider 都发出一个批次，其中语句排列为 DELETE BusinessSlots → UPDATE Instances → INSERT Logs；MySQL还带SELECT ROW_COUNT，SQL Server带OUTPUT 1。即使实例UPDATE在前，MySQL/PostgreSQL仍先暴露后续日志INSERT的唯一约束异常，早于EF对受影响行数完成并发判断；SQL Server本次走EF concurrency异常。记录的是实际发出的批次文本，不假设异常发生后剩余语句都执行。原 Flush 只 catch `DbUpdateConcurrencyException`，因此普通 `ApproveAsync` 等操作泄漏 `DbUpdateException`。协调器的通用 Unique 处理不能覆盖不经过协调器的 Engine 调用。
 
 普通 Approve / Reject / Return / Transfer 等调用 `_unit.ExecuteCommandAsync`，经过 Engine 写所有者的 `ExecuteOwnedAsync`。带 OperationId 的 Start、HTTP/宿主显式协调命令经过 `IApprovalCommandExecutor`，它使用新的 Scope/DbContext 再调用同样的 Engine/UnitOfWork 路径。同步业务/生命周期回调**不能自行 SaveChanges**，仍由现有保存保护执行；异步事件处理器的既有保存边界不改。
 
@@ -22,6 +22,7 @@
 | `tests/Approval.Core.Tests/ApprovalLogConflictTests.cs` | 3项新用例：实际 SQLite 日志唯一冲突、整笔回滚/失败作用域/协调器异常身份，以及无关业务唯一约束不误报 |
 | `tests/Approval.Database.Tests/ApprovalLogConflictDatabaseTests.cs` | 8项新用例：同任务两审批人同步竞争、原始陈旧审批、四种真实约束、普通 SQL、连接失败；记录真实写命令和结果 |
 | `plans/2026-11-04-approval-log-conflicts.md`、本文 | 实施计划、完整验收与风险记录 |
+| `docs/backend-refactoring-final-report.md` | 链接本轮已完成的并发异常修复与实际验收 |
 
 没有修改 Engine Facade、Resolver、Governance、权限模型、生产DI、程序集、NuGet、数据库模型或 Migration。原 Touch/ConcurrencyStamp/EF concurrency catch、日志唯一索引和陈旧实体检查全部保留。
 
@@ -59,6 +60,16 @@ SQLite 普通事务在 BEGIN 保留写锁，会自然串行化两个写事务；
 
 原始陈旧审批场景：两个上下文先加载同一个 Pending 任务；第一个真实同意提交，第二个旧实体同意必须报 Conflict，赢家日志/Outbox/状态/业务记录保持完整。原提醒清理竞争令牌测试未改未删。
 
+本次最终服务端产物中的实际结果：
+
+| Provider | 成功操作 | 失败操作 | 失败业务码 / 原始数据库原因 |
+| --- | --- | --- | --- |
+| MySql | carol | bob | Conflict / MySqlException1062，准确日志索引 |
+| PostgreSql | bob | carol | Conflict / PostgresException23505，准确ConstraintName和TableName |
+| SqlServer | bob | carol | Conflict / DbUpdateConcurrencyException，原有EF保护 |
+
+三个数据库最终均为一个Approved实例、一个Approved任务；stamp=1，日志sequence=1..5，其中决策日志恰为3..5的Approve/NodeEntered/Complete；一个站内通知、五条决策Outbox；两条宿主记录分别为成功操作标记和业务回调写入，失败操作标记不存在；仅一个AfterCommit回调。原始陈旧审批在MySQL/PostgreSQL确实由日志唯一索引抛出并转换，不是用令牌清理替代审批竞争。
+
 ## 需求与测试证据
 
 | Requirement | Evidence |
@@ -77,7 +88,29 @@ SQLite 普通事务在 BEGIN 保留写锁，会自然串行化两个写事务；
 
 本地实际执行：Release Solution Build 0 warnings / 0 errors；Core419、ASP.NET Core81、Certificate58，共Passed558 / Failed0 / Skipped0；Contracts匹配全部既有基线。窄回归包含3项新增和13项原并发令牌测试，Passed16 / Failed0 / Skipped0。TRX位于 `output/log-conflicts/local`。
 
-数据库专项本地仅编译，不执行、不启动Docker。MySQL / PostgreSQL / SQL Server / SQLite 以及Model Drift的本次实际CI结果待远端验证完成后记录；不使用上一轮Run替代验收。
+数据库专项本地仅编译，不执行、不启动Docker。生产修复提交 `56bc60e075211c0813c3c2772bdf34fc6bdbf5a8`；最终代码/测试验收提交 `0134b9d9b31adb9396c7d6161a1f9a9190786bb1`，[Run 41760607909](https://github.com/ttcc666/WorkflowDemo/actions/runs/41760607909)。
+
+MySQL / PostgreSQL / SQL Server各Passed51 / Failed0 / Skipped0，包含8项新增及原有43项。TRX、manifest.head、validated=true、testExitCode=0、每Provider11份产物SHA256全部核验。实际竞态与六项异常识别JSON、完整命令批次保存在 `output/log-conflicts/ci/41760607909`，汇总 `database-evidence.json`。
+
+首个Run41759088851仅新增同步测试的日志计数预期漏记结束节点NodeEntered；修正为精确三条连续日志并新增完整动作顺序断言，竞争和回滚要求未放宽。之后补强无关业务唯一约束的实际实例与UnitOfWork自动推断路径断言；最终使用最新提交本次Run结果，不用先前成功Run替代。
+
+最终Run41760607909已completed/success，四个作业全部success。Windows实际执行 `eng/verify.ps1` 并输出 `Verification succeeded: All`：
+
+| 实际执行位置 | 测试 | Passed | Failed | Skipped |
+| --- | --- | --- | --- | --- |
+| 本地 | Core | 419 | 0 | 0 |
+| 本地 | ASP.NET Core | 81 | 0 | 0 |
+| 本地 | Certificate | 58 | 0 | 0 |
+| GitHub Linux | MySQL数据库专项 | 51 | 0 | 0 |
+| GitHub Linux | PostgreSQL数据库专项 | 51 | 0 | 0 |
+| GitHub Linux | SQL Server数据库专项 | 51 | 0 | 0 |
+| GitHub Windows | SQLite数据库专项 | 51 | 0 | 0 |
+
+Windows同时实际执行Core419/HTTP81/Certificate58，含SQLite共609/0/0。所有原有测试与本轮新增测试通过，原ConcurrencyStamp独立测试和既有跨数据库并发测试全部保留。数据库专项在本地仅编译，最终四Provider均有本次代码/测试SHA的实际远端结果。
+
+Release solution编译0 warnings/0 errors；九项Migration Model Drift无变化；Contracts、前端Boundary/Typecheck/Tests/Build、消费者、ReferenceHost全部通过。Windows产物验证release-manifest.Commit及Browser metadata.ci.commitHash与验收SHA一致；Browser5通过、0失败/跳过/flaky，Core-only18项检查通过，两个ReferenceHost报告各27项通过。
+
+完整日志 `output/log-conflicts/ci/41760607909/windows.log`、状态 `run.json`、产物核验 `windows-evidence.json`。CI的既有Actions/前端工具提示不属于C#编译警告。
 
 ## E. 风险边界
 
@@ -89,6 +122,8 @@ MySQL/SQL Server没有Npgsql式结构化约束名，此识别器结合错误码�
 
 本地检查完成后创建可由Actions拉取的修复验证提交，CI全部通过后提交最终验收记录；不改历史、不强推。
 
+生产修复：`56bc60e075211c0813c3c2772bdf34fc6bdbf5a8`，`fix: map approval log sequence conflicts at the engine write boundary`。测试链断言修正`827df25`、生产实例推断路径补强`0134b9d`；完整最终验收以0134b9d为准。之后仅提交验收文档及计划完成状态，不改变已验收代码/测试。本轮所有明确验收项已完成，保留风险边界见E。
+
 ```powershell
 Set-Location -LiteralPath 'D:\Study\CSharp\Workflow'
 dotnet build 'Workflow.slnx' --configuration 'Release' --no-restore --verbosity 'minimal'
@@ -97,4 +132,5 @@ dotnet test 'tests/Approval.AspNetCore.Tests/Approval.AspNetCore.Tests.csproj' -
 dotnet test 'tests/Certificate.Api.Tests/Certificate.Api.Tests.csproj' --configuration 'Release' --no-build --no-restore --verbosity 'minimal'
 pnpm --dir 'web' 'contracts:check' --no-build
 gh run list --repo 'ttcc666/WorkflowDemo' --branch 'codex/backend-progressive-refactoring' --limit 5
+gh run view '41760607909' --repo 'ttcc666/WorkflowDemo' --json 'headSha,status,conclusion,jobs,url'
 ```
