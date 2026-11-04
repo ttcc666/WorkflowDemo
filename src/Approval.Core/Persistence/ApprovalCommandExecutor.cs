@@ -128,6 +128,7 @@ internal sealed class ApprovalCommandExecutor<TContext>(IServiceScopeFactory sco
             Approval.Core.Diagnostics.ApprovalInstrumentation.Conflicts.Add(1);
             // Transaction/scope have been disposed; PostgreSQL is no longer in an aborted transaction.
             if (await FindAsync(ct) is { } winner) return await ReplayAsync(winner, ct);
+            if (ex is ApprovalException { Code: ApprovalErrorCode.Conflict }) throw;
             throw new ApprovalException("业务已被其他提交占用或资源已更新，请刷新后重试", ex) { Code = ApprovalErrorCode.Conflict };
         }
     }

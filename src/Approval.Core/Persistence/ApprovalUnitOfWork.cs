@@ -76,6 +76,12 @@ internal sealed class ApprovalUnitOfWork(DbContext db) : IApprovalUnitOfWork
         {
             using var authority = Writes.Enter(owner);
             try { return await operation(token); }
+            catch (DbUpdateException ex) when (owner == ApprovalWriteOwner.Engine &&
+                ApprovalDatabaseErrors.LogSequence(ex, db))
+            {
+                State.Failed = true;
+                throw new ApprovalException("流程已被他人更新，请刷新后重试", ex) { Code = ApprovalErrorCode.Conflict };
+            }
             catch { State.Failed = true; throw; }
         }, ct);
     internal async Task ExecuteCommandAsync(ApprovalWriteOwner owner, Func<CancellationToken, Task> operation, CancellationToken ct = default) =>
