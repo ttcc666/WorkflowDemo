@@ -61,6 +61,8 @@ FindHandleableTaskAsync 等其他读取路径不通过该写加载方法；现�
 
 原实现实际复现：CanHandle 两种结果及五种超时无操作场景均提前递增令牌；Resolver 的顶层字典非只读。真实审批冲突测试在原代码和修复后都通过。所有旧业务断言保留；既有授权次数16→13及每Key 2→1是针对明确重复检查缺陷的期望修正。
 
+跨 Provider 的陈旧审批测试用真实遗留提醒清理命令作为赢家：该写命令递增令牌但不生成日志，随后陈旧审批必须准确报 Conflict，且任务、日志和业务回调写入全部回滚。首个 Run 41753208870 中 MySQL / PostgreSQL 的两个同意命令竞争先触发日志序号唯一约束；因此调整测试竞争场景以独立验证令牌，没有放宽异常断言或改变生产并发机制。首个 Run 不作为最终验收。
+
 ## 验证记录
 
 本地阶段独立构建/执行：Concurrency + 原超时测试 Passed19 / Failed0 / Skipped0；Resolver + 扩展/组织/条件相关测试 Passed28 / Failed0 / Skipped0；Governance + 权限相关测试 Passed41 / Failed0 / Skipped0。TRX 已核对执行数与结果，位置 `output/backend-fixes/local/`。

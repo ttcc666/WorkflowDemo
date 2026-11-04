@@ -129,19 +129,33 @@ public sealed partial class DatabaseContractTests
         await using var host = await ReadOnlyHostAsync();
         var instance = await StartReadOnlyInstance(host);
         var taskId = Assert.Single(instance.Tasks).Id;
+        await using (var storage = fixture.CreateStorage())
+        {
+            var task = await storage.Set<ApprovalTask>().SingleAsync();
+            task.NextRemindAt = Timestamp;
+            await storage.SaveChangesAsync();
+        }
         await using var stale = host.CreateAsyncScope();
         var sp = stale.ServiceProvider;
         ((AtomicResolver)sp.GetRequiredService<IApprovalContextResolver>()).User = "bob";
         await sp.GetRequiredService<AtomicContractContext>().Set<ApprovalInstance>().Include(i => i.Tasks).SingleAsync();
-        await AtomicRun(host, "bob", async fresh => { await fresh.GetRequiredService<ApprovalEngine>().ApproveAsync(taskId, "bob"); return true; });
+        // 清理是实际写命令，但不追加日志。让失败审批确定检验实例令牌，避免 Provider 先检查日志序号唯一约束。
+        await using (var winner = host.CreateAsyncScope())
+        {
+            winner.ServiceProvider.GetRequiredService<ApprovalExecutionContext>().InitializeSystem("timeout", [ApprovalPermissions.TaskTimeout]);
+            Assert.False(await winner.ServiceProvider.GetRequiredService<ApprovalEngine>().HandleTimeoutAsync(taskId));
+        }
         var error = await Assert.ThrowsAsync<ApprovalException>(() => sp.GetRequiredService<ApprovalEngine>().ApproveAsync(taskId, "bob"));
         Assert.Equal(ApprovalErrorCode.Conflict, error.Code);
         await using var verify = fixture.CreateStorage();
-        var saved = await verify.Set<ApprovalInstance>().Include(i => i.Logs).SingleAsync();
+        var saved = await verify.Set<ApprovalInstance>().Include(i => i.Tasks).Include(i => i.Logs).SingleAsync();
         Assert.Equal(instance.ConcurrencyStamp + 1, saved.ConcurrencyStamp);
-        Assert.Equal(InstanceStatus.Approved, saved.Status);
-        Assert.Single(saved.Logs, l => l.Action == ApprovalAction.Approve);
+        Assert.Equal(InstanceStatus.Running, saved.Status);
+        Assert.Equal(ApprovalTaskStatus.Pending, Assert.Single(saved.Tasks).Status);
+        Assert.Null(Assert.Single(saved.Tasks).NextRemindAt);
+        Assert.Equal(instance.Logs.Count, saved.Logs.Count);
+        Assert.DoesNotContain(saved.Logs, l => l.Action == ApprovalAction.Approve);
         await using var businessScope = host.CreateAsyncScope();
-        Assert.Equal(1, await businessScope.ServiceProvider.GetRequiredService<AtomicContractContext>().Set<AtomicHostRecord>().CountAsync(r => r.Value == 10));
+        Assert.Equal(0, await businessScope.ServiceProvider.GetRequiredService<AtomicContractContext>().Set<AtomicHostRecord>().CountAsync(r => r.Value == 10));
     }
 }
