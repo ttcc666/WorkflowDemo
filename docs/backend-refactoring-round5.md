@@ -1,5 +1,7 @@
 # 后端重构第五轮：Definition、重复代码与性能
 
+> 历史记录：本文保留该轮次当时的实现和验证事实。旧构造器、消息/幂等兼容、JSON 缺省版本及初始化迁移的当前状态，以[开发期兼容清理报告](unreleased-compatibility-cleanup.md)为准；本文不构成保留旧软件接口的要求。
+
 本轮完成有实际代码依据的局部优化，没有增加程序集、NuGet、Repository 或 Handler 层。所有主题都独立编译 / 测试 / 审查 Diff；数据库专项继续由 GitHub CI 完成。
 
 ## 实际变化

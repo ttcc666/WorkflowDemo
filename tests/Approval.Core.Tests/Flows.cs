@@ -6,6 +6,7 @@ public static class Flows
     /// <summary>证书审核：部门审核 → 质量审核 →（特种证书）安全审核 → 负责人审批。</summary>
     public const string Certificate = """
     {
+      "schemaVersion":1,
       "startNodeId": "start",
       "nodes": {
         "start":   { "name": "提交", "type": "Start", "next": "dept" },
@@ -30,6 +31,7 @@ public static class Flows
     public static string SingleNode(string mode, string approverType = "Role", string value = "Reviewer",
         string emptyPolicy = "Error") => $$"""
     {
+      "schemaVersion":1,
       "startNodeId": "start",
       "nodes": {
         "start":  { "name": "提交", "type": "Start", "next": "review" },
@@ -42,6 +44,7 @@ public static class Flows
 
     public const string AmountCondition = """
     {
+      "schemaVersion":1,
       "startNodeId": "start",
       "nodes": {
         "start": { "name": "提交", "type": "Start", "next": "cond" },

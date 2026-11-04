@@ -67,11 +67,12 @@ try
             if (permissions is null || permissions.Permissions.Any(p => p is ApprovalPermissions.DefinitionValidate or ApprovalPermissions.FileUpload)) continue;
             var path = System.Text.RegularExpressions.Regex.Replace(endpoint.RoutePattern.RawText!, @"\{([^}:]+):[^}]+\}", "{$1}");
             foreach (var method in endpoint.Metadata.GetMetadata<HttpMethodMetadata>()!.HttpMethods.Where(m => m is "POST" or "PUT" or "DELETE"))
-                if (document["paths"]?[path]?[method.ToLowerInvariant()] is JsonObject operation) AddCommandHeader(operation, false);
+                if (document["paths"]?[path]?[method.ToLowerInvariant()] is JsonObject operation)
+                    AddCommandHeader(operation);
         }
         if (name == "certificate")
             foreach (var (path, method) in new[] { ("/api/certificates", "post"), ("/api/certificates/{id}", "put"), ("/api/certificates/{id}/revoke", "post") })
-                if (document["paths"]?[path]?[method] is JsonObject operation) AddCommandHeader(operation, true);
+                if (document["paths"]?[path]?[method] is JsonObject operation) AddCommandHeader(operation, uuid: true);
         await WriteJsonAsync(file, document);
     }
 }
@@ -88,7 +89,7 @@ var json = new JsonSerializerOptions(JsonSerializerDefaults.Web)
 var flowSchema = json.GetJsonSchemaAsNode(typeof(FlowDefinition));
 flowSchema["$schema"] = "https://json-schema.org/draft/2020-12/schema";
 flowSchema["$id"] = "urn:approval:flow:1";
-flowSchema["properties"]!["schemaVersion"] = new JsonObject { ["type"] = "integer", ["const"] = 1, ["default"] = 1 };
+flowSchema["properties"]!["schemaVersion"] = new JsonObject { ["type"] = "integer", ["const"] = 1 };
 flowSchema["properties"]!["form"] = new JsonObject { ["anyOf"] = new JsonArray(json.GetJsonSchemaAsNode(typeof(FormSchema)), new JsonObject { ["type"] = "null" }) };
 await WriteJsonAsync("flow.schema.json", flowSchema);
 var formSchema = json.GetJsonSchemaAsNode(typeof(FormSchema));
@@ -146,15 +147,15 @@ static JsonNode? Normalize(JsonNode? node) => node switch
     _ => node?.DeepClone()
 };
 
-static void AddCommandHeader(JsonObject operation, bool required)
+static void AddCommandHeader(JsonObject operation, bool uuid = false)
 {
     var parameters = operation["parameters"] as JsonArray ?? new JsonArray();
     if (operation["parameters"] is null) operation["parameters"] = parameters;
     parameters.Add(new JsonObject
     {
-        ["name"] = "Idempotency-Key", ["in"] = "header", ["required"] = required,
-        ["description"] = required ? "Stable non-empty UUID for one logical submission; retain it and the original body after network errors or CommitOutcomeUnknown."
-            : "Stable key for one logical command; required when ApprovalOptions.RequireOperationId is enabled. Same content replays the committed result; changed content returns 409. Retain the key after unknown outcomes.",
+        ["name"] = "Idempotency-Key", ["in"] = "header", ["required"] = true,
+        ["description"] = uuid ? "Stable non-empty UUID for one logical submission; retain it and the original body after network errors or CommitOutcomeUnknown."
+            : "Required stable key for one logical command. Same content replays the committed result; changed content returns 409. Retain the key and original content after unknown outcomes.",
         ["schema"] = new JsonObject { ["type"] = "string", ["minLength"] = 1, ["maxLength"] = 200 }
     });
 }

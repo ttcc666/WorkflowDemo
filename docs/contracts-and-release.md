@@ -10,8 +10,8 @@ npm tgz 在独立消费者安装，验证 dist 导出、版本、types、CSS 导
 
 运行 pnpm contracts:update 更新 OpenAPI、JSON schema、四个公共程序集 API 基线与 TypeScript；CI 用 contracts:check 拒绝漂移。前端 types 依赖生成契约，不能把旧生成内容当成当前协议。
 
-GitHub Actions 必须以实际远端运行结果验收。本地通过只提供本地证据；缺失 remote 或服务环境时在交付报告中保留未满足项。
+远端 GitHub Actions 的结果须来自实际运行；本地通过只提供本地证据，不能代替远端结果。
 
-第三轮只增加 Outbox.EnableDispatcher 与稳定 OperationId 的批量改派重载/HTTP Header 元数据；原方法签名、返回 JSON、Flow schemaVersion、channels 和字段权限保持兼容。公共 API/OpenAPI 基线变更须逐项审核，不能用 contracts:update 隐藏行为或删除旧契约。
+项目尚未发布，samples 只是一起演进的示例，没有其他已部署宿主。公共 API/OpenAPI 基线变更须逐项审核并验证实际行为；删除旧 API/消息/字段时同步消费者，不保留兼容桥。当前已删除旧公开构造器、墓碑与 Outbox Kind，外部流程 JSON 的 schemaVersion 必填。前端任务类型直接取完整生成响应，DirectoryUser.isActive 必填。具体删除和保留依据见[兼容清理报告](unreleased-compatibility-cleanup.md)。
 
 Core-only 消费者也逐包校验 deps.json 中的 sha512 与本次 feed 字节一致，并实际尝试直接修改 Task/Instance/Operation、删除日志和 bulk 操作；随后继续完成正常审批，证明保护没有阻止业务保存或引擎执行。

@@ -13,6 +13,7 @@ public sealed class FormFormulaTests
     /// <summary>采购：明细金额 = 数量 × 单价（合计），应付 = 合计 - 预付，折后 = round(应付 × 折扣, 2)；应付超过 1000 走经理审批。</summary>
     private const string PurchaseFlow = """
     {
+      "schemaVersion":1,
       "startNodeId": "start",
       "settings": { "startable": true, "titleTemplate": "采购（应付 {form.payable} 元）" },
       "form": { "fields": [

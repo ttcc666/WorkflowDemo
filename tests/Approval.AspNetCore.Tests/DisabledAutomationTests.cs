@@ -17,6 +17,7 @@ public sealed class DisabledAutomationTests
         });
         var json = System.Text.Json.JsonSerializer.Serialize(new
         {
+            schemaVersion = 1,
             startNodeId = "start",
             nodes = new Dictionary<string, object>
             {

@@ -67,18 +67,15 @@ public sealed partial class ApprovalEngine
     /// 离职交接：把某人的全部待办（指派给本人的任务，不含角色任务）改派给另一人，逐个流程提交。
     /// 不能改派的待办（对方是发起人且不允许自审、对方已是该节点审批人、并发冲突）跳过并在结果中说明。
     /// 每个实例使用独立事务与作用域；拒绝加入外层原子工作单元，不清空宿主跟踪器。
+    /// 必须提供稳定操作键，用于恢复候选清单、逐实例结果及最终汇总。
     /// </summary>
-    public Task<ReassignResult> ReassignUserAsync(string fromUserId, string toUserId, string operatorId, string? reason = null,
-        CancellationToken ct = default) => ReassignUserCommandAsync(fromUserId, toUserId, operatorId, reason, null, ct);
-
-    /// <summary>按稳定操作键恢复批量交接的候选清单、逐实例结果和最终汇总；仍逐实例提交。</summary>
     public Task<ReassignResult> ReassignUserAsync(string fromUserId, string toUserId, string operatorId, string? reason,
         string operationId, CancellationToken ct = default) => ReassignUserCommandAsync(fromUserId, toUserId, operatorId, reason, operationId, ct);
 
     private async Task<ReassignResult> ReassignUserCommandAsync(string fromUserId, string toUserId, string operatorId, string? reason,
-        string? operationId, CancellationToken ct)
+        string operationId, CancellationToken ct)
     {
-        if (operationId is null && _options.RequireOperationId)
+        if (string.IsNullOrWhiteSpace(operationId) || operationId.Length > 200 || operationId.Any(char.IsControl))
             throw new ApprovalException("批量改派需要稳定 OperationId") { Code = ApprovalErrorCode.OperationIdRequired };
         await _authorization.RequireAsync(Approval.Core.Abstractions.ApprovalPermissions.TaskReassignBulk, new() { TargetUserId = fromUserId }, operatorId, ct);
         toUserId = toUserId?.Trim() ?? "";
@@ -88,18 +85,14 @@ public sealed partial class ApprovalEngine
         if (_unit.IsActive || _db.Database.CurrentTransaction is not null || _db.ChangeTracker.HasChanges())
             throw new InvalidOperationException("批量改派逐实例提交，不能加入外层原子工作单元或带未提交修改的作用域");
         _unit.Writes.Validate();
-        var commands = _commands ?? throw new InvalidOperationException("批量改派需要 DI 注册的命令协调器");
+        var commands = _commands;
         var payload = new { fromUserId, toUserId, reason };
         var resource = new ApprovalResource { TargetUserId = fromUserId };
         var finalCommand = new ApprovalCommand("task.reassign-bulk.result", fromUserId, operationId, payload, ApprovalPermissions.TaskReassignBulk, resource);
-        if (operationId is not null)
-        {
-            var lookup = ApprovalCommandHash.Of(operatorId, finalCommand.Kind, finalCommand.Scope, operationId);
-            if (await _db.Set<ApprovalOperation>().AsNoTracking().AnyAsync(o => o.LookupHash == lookup, ct))
-                return await commands.ExecuteAsync<ReassignResult>(finalCommand, (_, _) => throw new InvalidOperationException("已提交汇总不能重新执行"), ct);
-        }
-        var instanceIds = operationId is null ? await ReassignCandidatesAsync(fromUserId, ct)
-            : await commands.ExecuteAsync(new("task.reassign-bulk.plan", fromUserId, operationId, payload, ApprovalPermissions.TaskReassignBulk, resource),
+        var lookup = ApprovalCommandHash.Of(operatorId, finalCommand.Kind, finalCommand.Scope, operationId);
+        if (await _db.Set<ApprovalOperation>().AsNoTracking().AnyAsync(o => o.LookupHash == lookup, ct))
+            return await commands.ExecuteAsync<ReassignResult>(finalCommand, (_, _) => throw new InvalidOperationException("已提交汇总不能重新执行"), ct);
+        var instanceIds = await commands.ExecuteAsync(new("task.reassign-bulk.plan", fromUserId, operationId, payload, ApprovalPermissions.TaskReassignBulk, resource),
                 (sp, token) => sp.GetRequiredService<ApprovalEngine>().ReassignCandidatesAsync(fromUserId, token), ct);
         var count = 0; var skipped = new List<ReassignSkip>();
         foreach (var instanceId in instanceIds)
@@ -108,8 +101,7 @@ public sealed partial class ApprovalEngine
             {
                 var result = await commands.ExecuteAsync(new("task.reassign-bulk.item", instanceId.ToString(), operationId,
                     payload, ApprovalPermissions.TaskReassignBulk,
-                    new() { InstanceId = instanceId, TargetUserId = fromUserId })
-                { AllowUnkeyed = operationId is null },
+                    new() { InstanceId = instanceId, TargetUserId = fromUserId }),
                     (sp, token) => sp.GetRequiredService<ApprovalEngine>().ReassignBatchInstanceAsync(instanceId, fromUserId, toUserId, operatorId, reason, token), ct);
                 count += result.Count; skipped.AddRange(result.Skipped);
             }
@@ -120,7 +112,7 @@ public sealed partial class ApprovalEngine
             }
         }
         var summary = new ReassignResult(count, skipped);
-        return operationId is null ? summary : await commands.ExecuteAsync(finalCommand, (_, _) => Task.FromResult(summary), ct);
+        return await commands.ExecuteAsync(finalCommand, (_, _) => Task.FromResult(summary), ct);
     }
 
     private async Task<List<Guid>> ReassignCandidatesAsync(string fromUserId, CancellationToken ct)

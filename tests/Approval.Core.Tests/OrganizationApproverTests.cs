@@ -37,6 +37,7 @@ public sealed class OrganizationApproverTests : IAsyncLifetime
     /// <summary>单节点流程：审批人为一条规则；可选表单（收款人 payee、多人字段 reviewers）。</summary>
     private static string Flow(string type, string value, string mode = "Any", string emptyPolicy = "Error", bool withForm = false) => $$"""
     {
+      "schemaVersion":1,
       "startNodeId": "start",
       {{(withForm ? FormJson : "")}}
       "nodes": {

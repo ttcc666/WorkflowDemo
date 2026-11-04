@@ -18,7 +18,7 @@ public sealed class CertificateMigrationTests
         var database = new CertificateDatabase(db);
         await database.InitializeAsync();
         var initial = (await db.Database.GetAppliedMigrationsAsync()).ToArray();
-        Assert.Equal(new[] { "20261103051646_InitialApproval" }, initial);
+        Assert.Equal(new[] { "20261104103442_InitialApproval" }, initial);
         var definition = new ApprovalDefinition { Id = Guid.NewGuid(), Key = "current", Name = "Current", Version = 1, DefinitionJson = "{}", Category = "分类", IsPublished = true };
         await using (var storage = new CertificateStorageContext(path))
         { storage.Add(definition); await storage.SaveChangesAsync(); }
@@ -35,7 +35,7 @@ public sealed class CertificateMigrationTests
         await using var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseSqlite($"Data Source={path};Pooling=False").Options);
         await db.Database.MigrateAsync();
         var migration = (await db.Database.GetAppliedMigrationsAsync()).ToArray();
-        Assert.Equal(new[] { "20261103051646_InitialApproval" }, migration);
+        Assert.Equal(new[] { "20261104103442_InitialApproval" }, migration);
         await db.GetService<IMigrator>().MigrateAsync(Migration.InitialDatabase);
         Assert.Empty(await db.Database.GetAppliedMigrationsAsync());
         await db.Database.MigrateAsync(); Assert.Equal(migration, (await db.Database.GetAppliedMigrationsAsync()).ToArray());

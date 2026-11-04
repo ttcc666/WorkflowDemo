@@ -141,10 +141,13 @@ public sealed class ApiHost : IAsyncDisposable
         return new ApiHost(app, connection, users);
     }
 
-    public Task<HttpResponseMessage> SendAsync(HttpMethod method, string url, string? user, object? body = null, string? rawJson = null)
+    public Task<HttpResponseMessage> SendAsync(HttpMethod method, string url, string? user, object? body = null, string? rawJson = null, bool withOperationId = true)
     {
         var request = new HttpRequestMessage(method, url);
         if (user is not null) request.Headers.Add(HeaderCurrentUser.Header, user);
+        // Each helper call is a new logical request. Replay tests construct their own request.
+        if (withOperationId && (method == HttpMethod.Post || method == HttpMethod.Put || method == HttpMethod.Delete))
+            request.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString("N"));
         if (rawJson is not null) request.Content = new StringContent(rawJson, System.Text.Encoding.UTF8, "application/json");
         else if (body is not null) request.Content = JsonContent.Create(body, options: Json);
         return Client.SendAsync(request);

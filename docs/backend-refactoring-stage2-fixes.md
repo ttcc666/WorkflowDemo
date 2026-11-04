@@ -1,5 +1,7 @@
 # 后端渐进式重构——第二阶段缺陷修复与收尾
 
+> 历史记录：本文保留该轮次当时的实现和验证事实。旧构造器、消息/幂等兼容、JSON 缺省版本及初始化迁移的当前状态，以[开发期兼容清理报告](unreleased-compatibility-cleanup.md)为准；本文不构成保留旧软件接口的要求。
+
 基线 `73559be`（最后代码提交 `f6342b9`）；分支 `codex/backend-progressive-refactoring`。本次仅修复两个 P1 和一个 P2。数据库专项通过 GitHub CLI / Actions 执行，本地不运行 `Approval.Database.Tests`，不启动 Docker。
 
 ## 根因与最小修复

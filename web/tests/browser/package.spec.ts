@@ -117,7 +117,7 @@ test('packaged endpoints reject anonymous access and unsupported protocol versio
   const api = process.env.APPROVAL_SMOKE_API!
   expect((await request.get(api + '/api/approval/todo')).status()).toBe(401)
   const invalid = await request.post(api + '/api/approval/definitions/unsupported.package', {
-    headers: { 'X-User-Id': 'admin' },
+    headers: { 'X-User-Id': 'admin', 'Idempotency-Key': 'unsupported-package-protocol' },
     data: { schemaVersion: 2, startNodeId: 'start', nodes: { start: { type: 'Start', next: 'end' }, end: { type: 'End' } } },
   })
   expect(invalid.status()).toBe(400)
@@ -140,7 +140,7 @@ test('packaged returned form can be edited and resubmitted and carbon copy read 
   test.setTimeout(120000)
   const api = process.env.APPROVAL_SMOKE_API!
   const key = `package.return.${Date.now()}`
-  const flow = { startNodeId: 'start', settings: { startable: true, titleTemplate: '打包退回重提' },
+  const flow = { schemaVersion: 1, startNodeId: 'start', settings: { startable: true, titleTemplate: '打包退回重提' },
     form: { fields: [{ key: 'memo', label: '说明', type: 'Text', required: true }] },
     nodes: { start: { type: 'Start', name: '申请', next: 'cc' },
       cc: { type: 'Cc', name: '抄送人事', approvers: [{ type: 'Role', value: 'HR' }], next: 'review' },
@@ -189,7 +189,7 @@ test('packaged returned form can be edited and resubmitted and carbon copy read 
 test('packaged definition categories are shown and filtered by server', async ({ page, request }) => {
   const api = process.env.APPROVAL_SMOKE_API!, prefix = `package.category.${Date.now()}`
   const category = `分类验收-${Date.now()}`
-  const flow = (value: string) => ({ settings: { category: value }, startNodeId: 's', nodes: { s: { type: 'Start', name: '申请', next: 'e' }, e: { type: 'End', name: '结束' } } })
+  const flow = (value: string) => ({ schemaVersion: 1, settings: { category: value }, startNodeId: 's', nodes: { s: { type: 'Start', name: '申请', next: 'e' }, e: { type: 'End', name: '结束' } } })
   for (const [suffix, value] of [['one', category], ['two', category + '-other']]) {
     const response = await request.post(api + `/api/approval/definitions/${prefix}.${suffix}?name=${suffix}`, { headers: { 'X-User-Id': 'admin', 'Idempotency-Key': `${prefix}.${suffix}` }, data: flow(value!) })
     expect(response.ok(), await response.text()).toBe(true)

@@ -10,7 +10,7 @@ public sealed class CarbonCopyEndpointTests
     {
         await using var host = await ApiHost.StartAsync();
         await host.PublishAsync("cc-center", """
-            {"startNodeId":"s","nodes":{"s":{"type":"Start","next":"cc"},
+            {"schemaVersion":1,"startNodeId":"s","nodes":{"s":{"type":"Start","next":"cc"},
               "cc":{"type":"Cc","approvers":[{"type":"Role","value":"HR"}],"next":"a"},
               "a":{"type":"Approval","approvers":[{"type":"User","value":"bob"}],"next":"e"},"e":{"type":"End"}}}
             """);

@@ -496,10 +496,6 @@ namespace Approval.Database.Tests.Migrations.PostgreSql
                     b.Property<Guid?>("InstanceId")
                         .HasColumnType("uuid");
 
-                    b.Property<bool>("IsTombstone")
-                        .IsConcurrencyToken()
-                        .HasColumnType("boolean");
-
                     b.Property<string>("Kind")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -565,11 +561,6 @@ namespace Approval.Database.Tests.Migrations.PostgreSql
 
                     b.Property<Guid?>("InstanceId")
                         .HasColumnType("uuid");
-
-                    b.Property<string>("Kind")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
 
                     b.Property<string>("LastError")
                         .HasMaxLength(2000)

@@ -38,6 +38,7 @@ public sealed class FileTests : IAsyncLifetime
     /// <summary>审核（dave，可修改发票）→ 抄送（carol，隐藏发票）→ 结束。</summary>
     private const string Flow = """
     {
+      "schemaVersion":1,
       "startNodeId": "start",
       "settings": { "startable": true },
       "form": { "fields": [

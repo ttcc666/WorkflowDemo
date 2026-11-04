@@ -121,7 +121,7 @@ public sealed class ReadOnlyConcurrencyTests
     }
 
     [Fact]
-    public async Task TimeoutWithoutPolicy_ClearsLegacyReminderAndChangesStamp()
+    public async Task TimeoutWithoutPolicy_ClearsInconsistentReminderAndChangesStamp()
     {
         await using var host = new TestHost();
         await host.PublishAsync("doc", Flow(null));

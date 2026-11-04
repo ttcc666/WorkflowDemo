@@ -1,5 +1,7 @@
 # 后端渐进式重构交付报告
 
+> 历史记录：本文保留该轮次当时的实现和验证事实。旧构造器、消息/幂等兼容、JSON 缺省版本及初始化迁移的当前状态，以[开发期兼容清理报告](unreleased-compatibility-cleanup.md)为准；本文不构成保留旧软件接口的要求。
+
 最新并发异常收尾已完成：仅在Engine写操作的既有UnitOfWork边界精确转换ApprovalLogs.InstanceId/Sequence唯一竞争，保留EF令牌及原业务规则；恢复原始陈旧审批并加入两个真实审批人的同步竞争与误报检查。生产修复56bc60e，最终代码/测试验收0134b9d，[Run41760607909](https://github.com/ttcc666/WorkflowDemo/actions/runs/41760607909)全部成功：MySQL/PostgreSQL/SQL Server/SQLite各51/0/0，Windows完整回归609/0/0，Release零警告/零错误、九项Model Drift及全部门禁通过。详见[并发日志异常交付报告](approval-log-concurrency-fix.md)。下文保留先前阶段的历史记录。
 
 代码起点：`ca6987815ce0b668bd1401a8b15e50da824ee81b`。按既定 P0 → P0 → P1 → P1 → P2 五轮顺序执行，每个主题均有独立编译、测试和 Diff 审查；数据库专项按用户追加要求转 GitHub CLI / Actions。本文保留五轮重构的历史验收；第二阶段三个缺陷的修复与本次提交验收见 [第二阶段收尾报告](backend-refactoring-stage2-fixes.md)，历史 CI 不替代本次验收。

@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
-namespace Approval.Database.Tests.Migrations.MySql
+namespace Approval.Database.Tests.Migrations.Sqlite
 {
     /// <inheritdoc />
     public partial class InitialApproval : Migration
@@ -11,86 +11,79 @@ namespace Approval.Database.Tests.Migrations.MySql
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AlterDatabase()
-                .Annotation("MySQL:Charset", "utf8mb4");
-
             migrationBuilder.CreateTable(
                 name: "ApprovalDefinitions",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "char(36)", nullable: false),
-                    Key = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: false),
-                    Version = table.Column<int>(type: "int", nullable: false),
-                    Name = table.Column<string>(type: "varchar(200)", maxLength: 200, nullable: false),
-                    DefinitionJson = table.Column<string>(type: "longtext", nullable: false),
-                    Category = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: true),
-                    IsPublished = table.Column<bool>(type: "tinyint(1)", nullable: false),
-                    CreatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: false)
+                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    Key = table.Column<string>(type: "TEXT", maxLength: 100, nullable: false),
+                    Version = table.Column<int>(type: "INTEGER", nullable: false),
+                    Name = table.Column<string>(type: "TEXT", maxLength: 200, nullable: false),
+                    DefinitionJson = table.Column<string>(type: "TEXT", nullable: false),
+                    Category = table.Column<string>(type: "TEXT", maxLength: 100, nullable: true),
+                    IsPublished = table.Column<bool>(type: "INTEGER", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "TEXT", nullable: false)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_ApprovalDefinitions", x => x.Id);
-                })
-                .Annotation("MySQL:Charset", "utf8mb4");
+                });
 
             migrationBuilder.CreateTable(
                 name: "ApprovalDrafts",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "char(36)", nullable: false),
-                    UserId = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: false),
-                    DefinitionKey = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: false),
-                    FormDataJson = table.Column<string>(type: "longtext", nullable: false),
-                    Comment = table.Column<string>(type: "varchar(500)", maxLength: 500, nullable: true),
-                    CreatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: false),
-                    UpdatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: false)
+                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    UserId = table.Column<string>(type: "TEXT", maxLength: 100, nullable: false),
+                    DefinitionKey = table.Column<string>(type: "TEXT", maxLength: 100, nullable: false),
+                    FormDataJson = table.Column<string>(type: "TEXT", nullable: false),
+                    Comment = table.Column<string>(type: "TEXT", maxLength: 500, nullable: true),
+                    CreatedAt = table.Column<DateTime>(type: "TEXT", nullable: false),
+                    UpdatedAt = table.Column<DateTime>(type: "TEXT", nullable: false)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_ApprovalDrafts", x => x.Id);
-                })
-                .Annotation("MySQL:Charset", "utf8mb4");
+                });
 
             migrationBuilder.CreateTable(
                 name: "ApprovalOperations",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "char(36)", nullable: false),
-                    LookupHash = table.Column<string>(type: "varchar(64)", maxLength: 64, nullable: false),
-                    ActorId = table.Column<string>(type: "varchar(256)", maxLength: 256, nullable: false),
-                    Kind = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: false),
-                    Scope = table.Column<string>(type: "varchar(2000)", maxLength: 2000, nullable: false),
-                    RequestKey = table.Column<string>(type: "varchar(200)", maxLength: 200, nullable: false),
-                    RequestHash = table.Column<string>(type: "varchar(64)", maxLength: 64, nullable: false),
-                    HashVersion = table.Column<int>(type: "int", nullable: false),
-                    ResultVersion = table.Column<int>(type: "int", nullable: false),
-                    ResultJson = table.Column<string>(type: "longtext", nullable: false),
-                    InstanceId = table.Column<Guid>(type: "char(36)", nullable: true),
-                    DefinitionId = table.Column<Guid>(type: "char(36)", nullable: true),
-                    CommittedAt = table.Column<DateTime>(type: "datetime(6)", nullable: false),
-                    IsTombstone = table.Column<bool>(type: "tinyint(1)", nullable: false)
+                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    LookupHash = table.Column<string>(type: "TEXT", maxLength: 64, nullable: false),
+                    ActorId = table.Column<string>(type: "TEXT", maxLength: 256, nullable: false),
+                    Kind = table.Column<string>(type: "TEXT", maxLength: 100, nullable: false),
+                    Scope = table.Column<string>(type: "TEXT", maxLength: 2000, nullable: false),
+                    RequestKey = table.Column<string>(type: "TEXT", maxLength: 200, nullable: false),
+                    RequestHash = table.Column<string>(type: "TEXT", maxLength: 64, nullable: false),
+                    HashVersion = table.Column<int>(type: "INTEGER", nullable: false),
+                    ResultVersion = table.Column<int>(type: "INTEGER", nullable: false),
+                    ResultJson = table.Column<string>(type: "TEXT", nullable: false),
+                    InstanceId = table.Column<Guid>(type: "TEXT", nullable: true),
+                    DefinitionId = table.Column<Guid>(type: "TEXT", nullable: true),
+                    CommittedAt = table.Column<DateTime>(type: "TEXT", nullable: false)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_ApprovalOperations", x => x.Id);
-                })
-                .Annotation("MySQL:Charset", "utf8mb4");
+                });
 
             migrationBuilder.CreateTable(
                 name: "ApprovalDefinitionAudits",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "char(36)", nullable: false),
-                    Key = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: false),
-                    Revision = table.Column<long>(type: "bigint", nullable: false),
-                    Action = table.Column<string>(type: "varchar(30)", maxLength: 30, nullable: false),
-                    ActorId = table.Column<string>(type: "varchar(256)", maxLength: 256, nullable: false),
-                    CreatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: false),
-                    DefinitionId = table.Column<Guid>(type: "char(36)", nullable: true),
-                    SourceDefinitionId = table.Column<Guid>(type: "char(36)", nullable: true),
-                    Version = table.Column<int>(type: "int", nullable: true),
-                    ChangeNote = table.Column<string>(type: "varchar(1000)", maxLength: 1000, nullable: true),
-                    DefinitionHash = table.Column<string>(type: "varchar(64)", maxLength: 64, nullable: true)
+                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    Key = table.Column<string>(type: "TEXT", maxLength: 100, nullable: false),
+                    Revision = table.Column<long>(type: "INTEGER", nullable: false),
+                    Action = table.Column<string>(type: "TEXT", maxLength: 30, nullable: false),
+                    ActorId = table.Column<string>(type: "TEXT", maxLength: 256, nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "TEXT", nullable: false),
+                    DefinitionId = table.Column<Guid>(type: "TEXT", nullable: true),
+                    SourceDefinitionId = table.Column<Guid>(type: "TEXT", nullable: true),
+                    Version = table.Column<int>(type: "INTEGER", nullable: true),
+                    ChangeNote = table.Column<string>(type: "TEXT", maxLength: 1000, nullable: true),
+                    DefinitionHash = table.Column<string>(type: "TEXT", maxLength: 64, nullable: true)
                 },
                 constraints: table =>
                 {
@@ -101,69 +94,67 @@ namespace Approval.Database.Tests.Migrations.MySql
                         principalTable: "ApprovalDefinitions",
                         principalColumn: "Id");
                     table.ForeignKey(
-                        name: "FK_ApprovalDefinitionAudits_ApprovalDefinitions_SourceDefinitio~",
+                        name: "FK_ApprovalDefinitionAudits_ApprovalDefinitions_SourceDefinitionId",
                         column: x => x.SourceDefinitionId,
                         principalTable: "ApprovalDefinitions",
                         principalColumn: "Id");
-                })
-                .Annotation("MySQL:Charset", "utf8mb4");
+                });
 
             migrationBuilder.CreateTable(
                 name: "ApprovalDefinitionManagement",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "char(36)", nullable: false),
-                    Key = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: false),
-                    Name = table.Column<string>(type: "varchar(200)", maxLength: 200, nullable: false),
-                    Category = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: true),
-                    DraftJson = table.Column<string>(type: "longtext", nullable: true),
-                    DraftSourceDefinitionId = table.Column<Guid>(type: "char(36)", nullable: true),
-                    Revision = table.Column<long>(type: "bigint", nullable: false),
-                    DraftRevision = table.Column<long>(type: "bigint", nullable: false),
-                    PublishedDraftRevision = table.Column<long>(type: "bigint", nullable: true),
-                    LastVersion = table.Column<int>(type: "int", nullable: false),
-                    IsEnabled = table.Column<bool>(type: "tinyint(1)", nullable: false),
-                    ActiveDefinitionId = table.Column<Guid>(type: "char(36)", nullable: true),
-                    UpdatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: false),
-                    UpdatedBy = table.Column<string>(type: "varchar(256)", maxLength: 256, nullable: false)
+                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    Key = table.Column<string>(type: "TEXT", maxLength: 100, nullable: false),
+                    Name = table.Column<string>(type: "TEXT", maxLength: 200, nullable: false),
+                    Category = table.Column<string>(type: "TEXT", maxLength: 100, nullable: true),
+                    DraftJson = table.Column<string>(type: "TEXT", nullable: true),
+                    DraftSourceDefinitionId = table.Column<Guid>(type: "TEXT", nullable: true),
+                    Revision = table.Column<long>(type: "INTEGER", nullable: false),
+                    DraftRevision = table.Column<long>(type: "INTEGER", nullable: false),
+                    PublishedDraftRevision = table.Column<long>(type: "INTEGER", nullable: true),
+                    LastVersion = table.Column<int>(type: "INTEGER", nullable: false),
+                    IsEnabled = table.Column<bool>(type: "INTEGER", nullable: false),
+                    ActiveDefinitionId = table.Column<Guid>(type: "TEXT", nullable: true),
+                    UpdatedAt = table.Column<DateTime>(type: "TEXT", nullable: false),
+                    UpdatedBy = table.Column<string>(type: "TEXT", maxLength: 256, nullable: false)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_ApprovalDefinitionManagement", x => x.Id);
                     table.ForeignKey(
-                        name: "FK_ApprovalDefinitionManagement_ApprovalDefinitions_ActiveDefin~",
+                        name: "FK_ApprovalDefinitionManagement_ApprovalDefinitions_ActiveDefinitionId",
                         column: x => x.ActiveDefinitionId,
                         principalTable: "ApprovalDefinitions",
                         principalColumn: "Id");
                     table.ForeignKey(
-                        name: "FK_ApprovalDefinitionManagement_ApprovalDefinitions_DraftSource~",
+                        name: "FK_ApprovalDefinitionManagement_ApprovalDefinitions_DraftSourceDefinitionId",
                         column: x => x.DraftSourceDefinitionId,
                         principalTable: "ApprovalDefinitions",
                         principalColumn: "Id");
-                })
-                .Annotation("MySQL:Charset", "utf8mb4");
+                });
 
             migrationBuilder.CreateTable(
                 name: "ApprovalInstances",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "char(36)", nullable: false),
-                    DefinitionId = table.Column<Guid>(type: "char(36)", nullable: false),
-                    DefinitionKey = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: false),
-                    DefinitionVersion = table.Column<int>(type: "int", nullable: false),
-                    BusinessType = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: false),
-                    BusinessKey = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: false),
-                    Title = table.Column<string>(type: "varchar(500)", maxLength: 500, nullable: true),
-                    InitiatorId = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: false),
-                    Status = table.Column<string>(type: "varchar(20)", maxLength: 20, nullable: false),
-                    CurrentNodeId = table.Column<string>(type: "varchar(500)", maxLength: 500, nullable: true),
-                    StateJson = table.Column<string>(type: "longtext", nullable: true),
-                    Round = table.Column<int>(type: "int", nullable: false),
-                    FormDataJson = table.Column<string>(type: "longtext", nullable: false),
-                    CreatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: false),
-                    CompletedAt = table.Column<DateTime>(type: "datetime(6)", nullable: true),
-                    ConcurrencyStamp = table.Column<long>(type: "bigint", nullable: false),
-                    LogSequence = table.Column<int>(type: "int", nullable: false)
+                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    DefinitionId = table.Column<Guid>(type: "TEXT", nullable: false),
+                    DefinitionKey = table.Column<string>(type: "TEXT", maxLength: 100, nullable: false),
+                    DefinitionVersion = table.Column<int>(type: "INTEGER", nullable: false),
+                    BusinessType = table.Column<string>(type: "TEXT", maxLength: 100, nullable: false),
+                    BusinessKey = table.Column<string>(type: "TEXT", maxLength: 100, nullable: false),
+                    Title = table.Column<string>(type: "TEXT", maxLength: 500, nullable: true),
+                    InitiatorId = table.Column<string>(type: "TEXT", maxLength: 100, nullable: false),
+                    Status = table.Column<string>(type: "TEXT", maxLength: 20, nullable: false),
+                    CurrentNodeId = table.Column<string>(type: "TEXT", maxLength: 500, nullable: true),
+                    StateJson = table.Column<string>(type: "TEXT", nullable: true),
+                    Round = table.Column<int>(type: "INTEGER", nullable: false),
+                    FormDataJson = table.Column<string>(type: "TEXT", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "TEXT", nullable: false),
+                    CompletedAt = table.Column<DateTime>(type: "TEXT", nullable: true),
+                    ConcurrencyStamp = table.Column<long>(type: "INTEGER", nullable: false),
+                    LogSequence = table.Column<int>(type: "INTEGER", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -173,18 +164,17 @@ namespace Approval.Database.Tests.Migrations.MySql
                         column: x => x.DefinitionId,
                         principalTable: "ApprovalDefinitions",
                         principalColumn: "Id");
-                })
-                .Annotation("MySQL:Charset", "utf8mb4");
+                });
 
             migrationBuilder.CreateTable(
                 name: "ApprovalBusinessSlots",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "char(36)", nullable: false),
-                    LookupHash = table.Column<string>(type: "varchar(64)", maxLength: 64, nullable: false),
-                    BusinessType = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: false),
-                    BusinessKey = table.Column<string>(type: "varchar(200)", maxLength: 200, nullable: false),
-                    InstanceId = table.Column<Guid>(type: "char(36)", nullable: false)
+                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    LookupHash = table.Column<string>(type: "TEXT", maxLength: 64, nullable: false),
+                    BusinessType = table.Column<string>(type: "TEXT", maxLength: 100, nullable: false),
+                    BusinessKey = table.Column<string>(type: "TEXT", maxLength: 200, nullable: false),
+                    InstanceId = table.Column<Guid>(type: "TEXT", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -194,20 +184,19 @@ namespace Approval.Database.Tests.Migrations.MySql
                         column: x => x.InstanceId,
                         principalTable: "ApprovalInstances",
                         principalColumn: "Id");
-                })
-                .Annotation("MySQL:Charset", "utf8mb4");
+                });
 
             migrationBuilder.CreateTable(
                 name: "ApprovalCarbonCopies",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "char(36)", nullable: false),
-                    InstanceId = table.Column<Guid>(type: "char(36)", nullable: false),
-                    NodeId = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: false),
-                    AssigneeKind = table.Column<string>(type: "varchar(20)", maxLength: 20, nullable: false),
-                    AssigneeValue = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: false),
-                    Round = table.Column<int>(type: "int", nullable: false),
-                    CreatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: false)
+                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    InstanceId = table.Column<Guid>(type: "TEXT", nullable: false),
+                    NodeId = table.Column<string>(type: "TEXT", maxLength: 100, nullable: false),
+                    AssigneeKind = table.Column<string>(type: "TEXT", maxLength: 20, nullable: false),
+                    AssigneeValue = table.Column<string>(type: "TEXT", maxLength: 100, nullable: false),
+                    Round = table.Column<int>(type: "INTEGER", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "TEXT", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -218,24 +207,23 @@ namespace Approval.Database.Tests.Migrations.MySql
                         principalTable: "ApprovalInstances",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
-                })
-                .Annotation("MySQL:Charset", "utf8mb4");
+                });
 
             migrationBuilder.CreateTable(
                 name: "ApprovalFiles",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "char(36)", nullable: false),
-                    FileName = table.Column<string>(type: "varchar(200)", maxLength: 200, nullable: false),
-                    ContentType = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: false),
-                    Size = table.Column<long>(type: "bigint", nullable: false),
-                    Sha256 = table.Column<string>(type: "varchar(64)", maxLength: 64, nullable: false),
-                    StorageKey = table.Column<string>(type: "varchar(200)", maxLength: 200, nullable: false),
-                    UploadedBy = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: false),
-                    UploadedAt = table.Column<DateTime>(type: "datetime(6)", nullable: false),
-                    InstanceId = table.Column<Guid>(type: "char(36)", nullable: true),
-                    DraftId = table.Column<Guid>(type: "char(36)", nullable: true),
-                    ConcurrencyStamp = table.Column<long>(type: "bigint", nullable: false)
+                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    FileName = table.Column<string>(type: "TEXT", maxLength: 200, nullable: false),
+                    ContentType = table.Column<string>(type: "TEXT", maxLength: 100, nullable: false),
+                    Size = table.Column<long>(type: "INTEGER", nullable: false),
+                    Sha256 = table.Column<string>(type: "TEXT", maxLength: 64, nullable: false),
+                    StorageKey = table.Column<string>(type: "TEXT", maxLength: 200, nullable: false),
+                    UploadedBy = table.Column<string>(type: "TEXT", maxLength: 100, nullable: false),
+                    UploadedAt = table.Column<DateTime>(type: "TEXT", nullable: false),
+                    InstanceId = table.Column<Guid>(type: "TEXT", nullable: true),
+                    DraftId = table.Column<Guid>(type: "TEXT", nullable: true),
+                    ConcurrencyStamp = table.Column<long>(type: "INTEGER", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -250,24 +238,23 @@ namespace Approval.Database.Tests.Migrations.MySql
                         column: x => x.InstanceId,
                         principalTable: "ApprovalInstances",
                         principalColumn: "Id");
-                })
-                .Annotation("MySQL:Charset", "utf8mb4");
+                });
 
             migrationBuilder.CreateTable(
                 name: "ApprovalLogs",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "char(36)", nullable: false),
-                    InstanceId = table.Column<Guid>(type: "char(36)", nullable: false),
-                    TaskId = table.Column<Guid>(type: "char(36)", nullable: true),
-                    Sequence = table.Column<int>(type: "int", nullable: false),
-                    NodeId = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: true),
-                    NodeName = table.Column<string>(type: "varchar(200)", maxLength: 200, nullable: true),
-                    Action = table.Column<string>(type: "varchar(20)", maxLength: 20, nullable: false),
-                    OperatorId = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: false),
-                    Comment = table.Column<string>(type: "longtext", nullable: true),
-                    Details = table.Column<string>(type: "longtext", nullable: true),
-                    CreatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: false)
+                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    InstanceId = table.Column<Guid>(type: "TEXT", nullable: false),
+                    TaskId = table.Column<Guid>(type: "TEXT", nullable: true),
+                    Sequence = table.Column<int>(type: "INTEGER", nullable: false),
+                    NodeId = table.Column<string>(type: "TEXT", maxLength: 100, nullable: true),
+                    NodeName = table.Column<string>(type: "TEXT", maxLength: 200, nullable: true),
+                    Action = table.Column<string>(type: "TEXT", maxLength: 20, nullable: false),
+                    OperatorId = table.Column<string>(type: "TEXT", maxLength: 100, nullable: false),
+                    Comment = table.Column<string>(type: "TEXT", nullable: true),
+                    Details = table.Column<string>(type: "TEXT", nullable: true),
+                    CreatedAt = table.Column<DateTime>(type: "TEXT", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -278,23 +265,22 @@ namespace Approval.Database.Tests.Migrations.MySql
                         principalTable: "ApprovalInstances",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
-                })
-                .Annotation("MySQL:Charset", "utf8mb4");
+                });
 
             migrationBuilder.CreateTable(
                 name: "ApprovalMessages",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "char(36)", nullable: false),
-                    UserId = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: false),
-                    Title = table.Column<string>(type: "varchar(200)", maxLength: 200, nullable: false),
-                    Content = table.Column<string>(type: "varchar(4000)", maxLength: 4000, nullable: false),
-                    Event = table.Column<string>(type: "varchar(20)", maxLength: 20, nullable: false),
-                    InstanceId = table.Column<Guid>(type: "char(36)", nullable: true),
-                    NodeId = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: true),
-                    IsRead = table.Column<bool>(type: "tinyint(1)", nullable: false),
-                    CreatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: false),
-                    ReadAt = table.Column<DateTime>(type: "datetime(6)", nullable: true)
+                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    UserId = table.Column<string>(type: "TEXT", maxLength: 100, nullable: false),
+                    Title = table.Column<string>(type: "TEXT", maxLength: 200, nullable: false),
+                    Content = table.Column<string>(type: "TEXT", maxLength: 4000, nullable: false),
+                    Event = table.Column<string>(type: "TEXT", maxLength: 20, nullable: false),
+                    InstanceId = table.Column<Guid>(type: "TEXT", nullable: true),
+                    NodeId = table.Column<string>(type: "TEXT", maxLength: 100, nullable: true),
+                    IsRead = table.Column<bool>(type: "INTEGER", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "TEXT", nullable: false),
+                    ReadAt = table.Column<DateTime>(type: "TEXT", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -304,28 +290,26 @@ namespace Approval.Database.Tests.Migrations.MySql
                         column: x => x.InstanceId,
                         principalTable: "ApprovalInstances",
                         principalColumn: "Id");
-                })
-                .Annotation("MySQL:Charset", "utf8mb4");
+                });
 
             migrationBuilder.CreateTable(
                 name: "ApprovalOutbox",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "char(36)", nullable: false),
-                    Kind = table.Column<string>(type: "varchar(20)", maxLength: 20, nullable: false),
-                    Target = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: false),
-                    InstanceId = table.Column<Guid>(type: "char(36)", nullable: true),
-                    NodeId = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: true),
-                    Description = table.Column<string>(type: "varchar(500)", maxLength: 500, nullable: true),
-                    PayloadJson = table.Column<string>(type: "longtext", nullable: false),
-                    Status = table.Column<string>(type: "varchar(20)", maxLength: 20, nullable: false),
-                    Attempts = table.Column<int>(type: "int", nullable: false),
-                    MaxAttempts = table.Column<int>(type: "int", nullable: false),
-                    NextAttemptAt = table.Column<DateTime>(type: "datetime(6)", nullable: false),
-                    LastError = table.Column<string>(type: "varchar(2000)", maxLength: 2000, nullable: true),
-                    CreatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: false),
-                    CompletedAt = table.Column<DateTime>(type: "datetime(6)", nullable: true),
-                    ConcurrencyStamp = table.Column<long>(type: "bigint", nullable: false)
+                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    Target = table.Column<string>(type: "TEXT", maxLength: 100, nullable: false),
+                    InstanceId = table.Column<Guid>(type: "TEXT", nullable: true),
+                    NodeId = table.Column<string>(type: "TEXT", maxLength: 100, nullable: true),
+                    Description = table.Column<string>(type: "TEXT", maxLength: 500, nullable: true),
+                    PayloadJson = table.Column<string>(type: "TEXT", nullable: false),
+                    Status = table.Column<string>(type: "TEXT", maxLength: 20, nullable: false),
+                    Attempts = table.Column<int>(type: "INTEGER", nullable: false),
+                    MaxAttempts = table.Column<int>(type: "INTEGER", nullable: false),
+                    NextAttemptAt = table.Column<DateTime>(type: "TEXT", nullable: false),
+                    LastError = table.Column<string>(type: "TEXT", maxLength: 2000, nullable: true),
+                    CreatedAt = table.Column<DateTime>(type: "TEXT", nullable: false),
+                    CompletedAt = table.Column<DateTime>(type: "TEXT", nullable: true),
+                    ConcurrencyStamp = table.Column<long>(type: "INTEGER", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -335,32 +319,31 @@ namespace Approval.Database.Tests.Migrations.MySql
                         column: x => x.InstanceId,
                         principalTable: "ApprovalInstances",
                         principalColumn: "Id");
-                })
-                .Annotation("MySQL:Charset", "utf8mb4");
+                });
 
             migrationBuilder.CreateTable(
                 name: "ApprovalTasks",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "char(36)", nullable: false),
-                    InstanceId = table.Column<Guid>(type: "char(36)", nullable: false),
-                    NodeId = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: false),
-                    NodeName = table.Column<string>(type: "varchar(200)", maxLength: 200, nullable: false),
-                    AssigneeKind = table.Column<string>(type: "varchar(20)", maxLength: 20, nullable: false),
-                    Kind = table.Column<string>(type: "varchar(20)", maxLength: 20, nullable: false),
-                    ParentTaskId = table.Column<Guid>(type: "char(36)", nullable: true),
-                    Round = table.Column<int>(type: "int", nullable: false),
-                    AssigneeValue = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: false),
-                    Status = table.Column<string>(type: "varchar(20)", maxLength: 20, nullable: false),
-                    Order = table.Column<int>(type: "int", nullable: false),
-                    HandledBy = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: true),
-                    Comment = table.Column<string>(type: "longtext", nullable: true),
-                    CreatedAt = table.Column<DateTime>(type: "datetime(6)", nullable: false),
-                    CompletedAt = table.Column<DateTime>(type: "datetime(6)", nullable: true),
-                    DueAt = table.Column<DateTime>(type: "datetime(6)", nullable: true),
-                    NextRemindAt = table.Column<DateTime>(type: "datetime(6)", nullable: true),
-                    RemindCount = table.Column<int>(type: "int", nullable: false),
-                    LastRemindedAt = table.Column<DateTime>(type: "datetime(6)", nullable: true)
+                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    InstanceId = table.Column<Guid>(type: "TEXT", nullable: false),
+                    NodeId = table.Column<string>(type: "TEXT", maxLength: 100, nullable: false),
+                    NodeName = table.Column<string>(type: "TEXT", maxLength: 200, nullable: false),
+                    AssigneeKind = table.Column<string>(type: "TEXT", maxLength: 20, nullable: false),
+                    Kind = table.Column<string>(type: "TEXT", maxLength: 20, nullable: false),
+                    ParentTaskId = table.Column<Guid>(type: "TEXT", nullable: true),
+                    Round = table.Column<int>(type: "INTEGER", nullable: false),
+                    AssigneeValue = table.Column<string>(type: "TEXT", maxLength: 100, nullable: false),
+                    Status = table.Column<string>(type: "TEXT", maxLength: 20, nullable: false),
+                    Order = table.Column<int>(type: "INTEGER", nullable: false),
+                    HandledBy = table.Column<string>(type: "TEXT", maxLength: 100, nullable: true),
+                    Comment = table.Column<string>(type: "TEXT", nullable: true),
+                    CreatedAt = table.Column<DateTime>(type: "TEXT", nullable: false),
+                    CompletedAt = table.Column<DateTime>(type: "TEXT", nullable: true),
+                    DueAt = table.Column<DateTime>(type: "TEXT", nullable: true),
+                    NextRemindAt = table.Column<DateTime>(type: "TEXT", nullable: true),
+                    RemindCount = table.Column<int>(type: "INTEGER", nullable: false),
+                    LastRemindedAt = table.Column<DateTime>(type: "TEXT", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -371,17 +354,16 @@ namespace Approval.Database.Tests.Migrations.MySql
                         principalTable: "ApprovalInstances",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
-                })
-                .Annotation("MySQL:Charset", "utf8mb4");
+                });
 
             migrationBuilder.CreateTable(
                 name: "ApprovalCarbonCopyReads",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "char(36)", nullable: false),
-                    CarbonCopyId = table.Column<Guid>(type: "char(36)", nullable: false),
-                    UserId = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: false),
-                    ReadAt = table.Column<DateTime>(type: "datetime(6)", nullable: false)
+                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    CarbonCopyId = table.Column<Guid>(type: "TEXT", nullable: false),
+                    UserId = table.Column<string>(type: "TEXT", maxLength: 100, nullable: false),
+                    ReadAt = table.Column<DateTime>(type: "TEXT", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -392,8 +374,7 @@ namespace Approval.Database.Tests.Migrations.MySql
                         principalTable: "ApprovalCarbonCopies",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
-                })
-                .Annotation("MySQL:Charset", "utf8mb4");
+                });
 
             migrationBuilder.CreateIndex(
                 name: "IX_ApprovalBusinessSlots_InstanceId",

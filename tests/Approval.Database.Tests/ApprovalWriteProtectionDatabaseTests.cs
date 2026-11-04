@@ -42,7 +42,7 @@ public sealed partial class DatabaseContractTests
     private async Task ExerciseProtection<TContext>() where TContext : ContractDbContext
     {
         const string flow = """
-            {"startNodeId":"start","nodes":{"start":{"type":"Start","next":"review"},
+            {"schemaVersion":1,"startNodeId":"start","nodes":{"start":{"type":"Start","next":"review"},
             "review":{"type":"Approval","approvers":[{"type":"User","value":"bob"}],"next":"end"},"end":{"type":"End"}}}
             """;
         var services = new ServiceCollection(); services.AddLogging(); services.AddDbContext<TContext>();
@@ -55,8 +55,10 @@ public sealed partial class DatabaseContractTests
         Guid instanceId;
         await using (var scope = provider.CreateAsyncScope())
         {
-            await scope.ServiceProvider.GetRequiredService<ApprovalDefinitionService>().PublishAsync("write-protection", "Write protection", flow);
-            instanceId = (await scope.ServiceProvider.GetRequiredService<ApprovalEngine>().StartAsync(new("write-protection", "business", "one", "alice"))).Id;
+            await scope.ServiceProvider.GetRequiredService<IApprovalCommandExecutor>().ExecuteAsync(
+                new("fixture.publish", "write-protection", "publish", flow, ApprovalPermissions.DefinitionPublish),
+                (sp, ct) => sp.GetRequiredService<ApprovalDefinitionService>().PublishAsync("write-protection", "Write protection", flow, ct));
+            instanceId = (await scope.ServiceProvider.GetRequiredService<ApprovalEngine>().StartAsync(new("write-protection", "business", "one", "alice") { OperationId = "start" })).Id;
         }
         foreach (var mode in new[] { "task", "instance", "log", "definition", "bulk-update", "bulk-delete", "raw" })
         {
@@ -89,7 +91,9 @@ public sealed partial class DatabaseContractTests
         {
             ((ProtectionActor)scope.ServiceProvider.GetRequiredService<IApprovalContextResolver>()).User = "bob";
             var taskId = await scope.ServiceProvider.GetRequiredService<TContext>().Set<ApprovalTask>().Select(t => t.Id).SingleAsync();
-            await scope.ServiceProvider.GetRequiredService<ApprovalEngine>().ApproveAsync(taskId, "bob", "approved");
+            await scope.ServiceProvider.GetRequiredService<IApprovalCommandExecutor>().ExecuteAsync(
+                new("fixture.approve", taskId.ToString(), "approve", null, ApprovalPermissions.TaskApprove, new() { TaskId = taskId }),
+                async (sp, ct) => { await sp.GetRequiredService<ApprovalEngine>().ApproveAsync(taskId, "bob", "approved", ct); return true; });
         }
         await using var verify = fixture.Create();
         Assert.Equal(InstanceStatus.Approved, (await verify.Set<ApprovalInstance>().SingleAsync(i => i.Id == instanceId)).Status);

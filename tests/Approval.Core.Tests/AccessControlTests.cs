@@ -22,6 +22,7 @@ public sealed class AccessControlTests : IAsyncLifetime
     /// <summary>提交 → 抄送（用户 c1 + 角色 Watcher）→ 审核（角色 Reviewer，或签）→ 终审（用户 boss）。</summary>
     private const string Flow = """
     {
+      "schemaVersion":1,
       "startNodeId": "start",
       "nodes": {
         "start":  { "name": "提交", "type": "Start", "next": "cc" },
@@ -152,6 +153,7 @@ public sealed class AccessControlTests : IAsyncLifetime
     {
         var flow = FlowDefinition.Parse("""
         {
+          "schemaVersion":1,
           "startNodeId": "start",
           "settings": { "startable": true, "initiatorRoles": ["HR"], "titleTemplate": "{申请人}" },
           "form": { "fields": [{ "key": "amount", "label": "金额", "type": "Money" }] },

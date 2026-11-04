@@ -36,7 +36,7 @@ const stats = useAsyncData(
       { from: localDayStart(range.value[0]), to: localDayStart(range.value[1], 1), definitionKey: definitionKey.value || undefined },
       signal,
     ),
-  { watch: [range, definitionKey] },
+  { watch: [range, definitionKey], resetOnReload: true },
 )
 
 const data = computed(() => stats.data.value)

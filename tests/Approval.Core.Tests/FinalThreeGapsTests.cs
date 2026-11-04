@@ -8,7 +8,7 @@ namespace Approval.Core.Tests;
 public sealed class FinalThreeGapsTests
 {
     private const string Flow = """
-        {"startNodeId":"s","nodes":{"s":{"type":"Start","next":"cc"},"cc":{"type":"Cc","approvers":[{"type":"Role","value":"Readers"}],"next":"a"},
+        {"schemaVersion":1,"startNodeId":"s","nodes":{"s":{"type":"Start","next":"cc"},"cc":{"type":"Cc","approvers":[{"type":"Role","value":"Readers"}],"next":"a"},
         "a":{"type":"Approval","approvers":[{"type":"User","value":"bob"}],"next":"e"},"e":{"type":"End"}}}
         """;
     private static string Categorized(string? category) => Flow.Replace("\"startNodeId\"", "\"settings\":{\"category\":" + JsonSerializer.Serialize(category) + "},\"startNodeId\"");

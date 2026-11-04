@@ -30,7 +30,7 @@ public sealed partial class ApprovalEngine
     private readonly Approval.Core.Authorization.IApprovalAuthorization _authorization;
     private readonly DbContext _db;
     private readonly ApprovalUnitOfWork _unit;
-    private readonly IApprovalCommandExecutor? _commands;
+    private readonly IApprovalCommandExecutor _commands;
     private readonly IApprovalIdentityProvider _identity;
     private readonly ApprovalAssigneeService _assignees;
     private readonly ApprovalEventWriter _events;
@@ -44,24 +44,6 @@ public sealed partial class ApprovalEngine
     internal IApprovalDefinitionExtension? DefinitionExtension { get; }
     internal IApprovalLifecycleHandler? Lifecycle { get; }
     internal IApprovalUserStatusProvider? UserStatus => _assignees.UserStatus;
-
-    public ApprovalEngine(
-        ApprovalDbContextAccessor accessor,
-        IApprovalIdentityProvider identity,
-        IEnumerable<IApproverResolver> resolvers,
-        IEnumerable<IApprovalBusinessHandler> handlers,
-        IEnumerable<ChannelInfo> channels,
-        IConditionEvaluator evaluator,
-        ApprovalOptions options,
-        ApprovalOutboxSignal outboxSignal,
-        TimeProvider clock,
-        ILogger<ApprovalEngine> logger,
-        IApprovalUserDirectory? directory = null)
-        : this(accessor, identity,
-            new ApprovalExtensionCatalog(() => resolvers, () => handlers, () => channels),
-            evaluator, options, outboxSignal, clock, logger, directory)
-    {
-    }
 
     internal ApprovalEngine(
         ApprovalDbContextAccessor accessor,

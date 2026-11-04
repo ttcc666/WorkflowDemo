@@ -6,9 +6,7 @@ namespace Approval.Core.Engine;
 /// <summary>合并节点的到达计数：并行节点激活时记录分支数，分支到达合并节点时累加，到齐后继续。</summary>
 public sealed class JoinState
 {
-    public Guid ActivationId { get; set; } = Guid.NewGuid();
     public int Expected { get; set; }
-    public int Arrived { get; set; }
     public HashSet<int> ArrivedBranches { get; set; } = [];
 }
 

@@ -18,8 +18,7 @@ internal sealed class ApprovalCommandExecutor<TContext>(IServiceScopeFactory sco
         if (string.IsNullOrWhiteSpace(command.Kind) || command.Kind.Length > 100 || command.Scope.Length > 2000)
             throw new ArgumentException("命令类型/范围无效", nameof(command));
         var key = command.OperationId;
-        if (key is null && options.RequireOperationId && !command.AllowUnkeyed) throw new ApprovalException("缺少稳定提交标识 Idempotency-Key") { Code = ApprovalErrorCode.OperationIdRequired };
-        if (key is not null && (string.IsNullOrWhiteSpace(key) || key.Length > 200 || key.Any(char.IsControl)))
+        if (string.IsNullOrWhiteSpace(key) || key.Length > 200 || key.Any(char.IsControl))
             throw new ApprovalException("提交标识必须为 1–200 个非控制字符") { Code = ApprovalErrorCode.OperationIdRequired };
         var identity = new ApprovalExecutionIdentity(actor.ActorId, actor.IsSystem);
         using var observation = Approval.Core.Diagnostics.ApprovalInstrumentation.Command(command.Kind, key);
@@ -27,8 +26,8 @@ internal sealed class ApprovalCommandExecutor<TContext>(IServiceScopeFactory sco
         if (identity.ActorId!.Length > 256) throw new InvalidOperationException("操作人标识超过 256 字符");
         var grants = actor is IApprovalSystemActorContext system ? system.AllowedPermissions.ToArray() : [];
         var hash = ApprovalCommandHash.Payload(command.Payload);
-        var lookup = key is null ? null : ApprovalCommandHash.Of(identity.ActorId, command.Kind, command.Scope, key);
-        var seed = ApprovalCommandHash.Of(lookup ?? Guid.NewGuid().ToString("N"));
+        var lookup = ApprovalCommandHash.Of(identity.ActorId, command.Kind, command.Scope, key);
+        var seed = ApprovalCommandHash.Of(lookup);
         var definitions = new Dictionary<string, Guid>(StringComparer.Ordinal);
 
         AsyncServiceScope CreateScope()
@@ -39,7 +38,6 @@ internal sealed class ApprovalCommandExecutor<TContext>(IServiceScopeFactory sco
         }
         async Task<ApprovalOperation?> FindAsync(CancellationToken token)
         {
-            if (lookup is null) return null;
             await using var scope = CreateScope();
             return await scope.ServiceProvider.GetRequiredService<TContext>().Set<ApprovalOperation>().AsNoTracking().SingleOrDefaultAsync(o => o.LookupHash == lookup, token);
         }
@@ -49,7 +47,6 @@ internal sealed class ApprovalCommandExecutor<TContext>(IServiceScopeFactory sco
                 || previous.RequestHash != hash || previous.HashVersion != 1 || previous.ResultVersion != 2)
                 throw new ApprovalException("同一提交标识不能用于不同内容或不支持的结果版本") { Code = ApprovalErrorCode.Conflict };
             await using var scope = CreateScope(); var sp = scope.ServiceProvider;
-            if (previous.IsTombstone) throw new ApprovalException("旧版本已清除原操作结果；原键仍防重，请按业务标识查询宿主历史记录") { Code = ApprovalErrorCode.ReplayExpired };
             var auth = sp.GetRequiredService<ApprovalAuthorizationService>();
             var stored = JsonSerializer.Deserialize<StoredResult<T>>(previous.ResultJson, Json)!;
             if (previous.InstanceId is { } id && !identity.IsSystem)
@@ -84,34 +81,29 @@ internal sealed class ApprovalCommandExecutor<TContext>(IServiceScopeFactory sco
                 {
                     return await unit.ExecuteAsync(async token =>
                     {
-                        ApprovalOperation? record = null;
-                        if (lookup is not null)
+                        var record = new ApprovalOperation
                         {
-                            record = new()
-                            {
-                                Id = Guid.NewGuid(),
-                                LookupHash = lookup,
-                                ActorId = identity.ActorId,
-                                Kind = command.Kind,
-                                Scope = command.Scope,
-                                RequestKey = key!,
-                                RequestHash = hash
-                            };
-                            using (unit.Writes.Enter(ApprovalWriteOwner.Operations))
-                            {
-                                db.Add(record);
-                                // Reserve before invoking host code; concurrent requests cannot both execute a committed command.
-                                await db.SaveChangesAsync(token);
-                            }
-                            ApprovalPersistence.State(db).KeyedCommand = true;
+                            Id = Guid.NewGuid(),
+                            LookupHash = lookup,
+                            ActorId = identity.ActorId,
+                            Kind = command.Kind,
+                            Scope = command.Scope,
+                            RequestKey = key,
+                            RequestHash = hash
+                        };
+                        using (unit.Writes.Enter(ApprovalWriteOwner.Operations))
+                        {
+                            db.Add(record);
+                            // Reserve before invoking host code; concurrent requests cannot both execute a committed command.
+                            await db.SaveChangesAsync(token);
                         }
+                        ApprovalPersistence.State(db).KeyedCommand = true;
                         var result = await operation(sp, token);
-                        if (record is not null)
+                        string resultJson;
+                        using (unit.Extension()) resultJson = JsonSerializer.Serialize(new StoredResult<T>(result, authorizedResource), Json);
+                        var committedAt = clock.GetUtcNow().UtcDateTime;
+                        using (unit.Writes.Enter(ApprovalWriteOwner.Operations))
                         {
-                            string resultJson;
-                            using (unit.Extension()) resultJson = JsonSerializer.Serialize(new StoredResult<T>(result, authorizedResource), Json);
-                            var committedAt = clock.GetUtcNow().UtcDateTime;
-                            using var authority = unit.Writes.Enter(ApprovalWriteOwner.Operations);
                             record.ResultJson = resultJson;
                             record.InstanceId = ApprovalPersistence.State(db).InstanceId; record.DefinitionId = ApprovalPersistence.State(db).DefinitionId;
                             record.CommittedAt = committedAt;
@@ -121,7 +113,7 @@ internal sealed class ApprovalCommandExecutor<TContext>(IServiceScopeFactory sco
                         return result;
                     }, ct);
                 }
-                catch (Exception ex) when (committing && lookup is not null && ex is not ApprovalException)
+                catch (Exception ex) when (committing && ex is not ApprovalException)
                 {
                     using var verification = new CancellationTokenSource(options.CommitVerificationTimeout);
                     try { if (await FindAsync(verification.Token) is { } committed) return await ReplayAsync(committed, verification.Token); }

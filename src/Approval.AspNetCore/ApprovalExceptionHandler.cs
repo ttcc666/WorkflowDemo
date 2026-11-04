@@ -16,7 +16,6 @@ public static class ApprovalProblems
         ApprovalErrorCode.Conflict => StatusCodes.Status409Conflict,
         ApprovalErrorCode.AuthorizationUnavailable => StatusCodes.Status503ServiceUnavailable,
         ApprovalErrorCode.CommitOutcomeUnknown => StatusCodes.Status503ServiceUnavailable,
-        ApprovalErrorCode.ReplayExpired => StatusCodes.Status410Gone,
         _ => StatusCodes.Status400BadRequest
     };
 

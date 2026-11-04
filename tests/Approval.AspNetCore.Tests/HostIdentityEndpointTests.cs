@@ -10,7 +10,7 @@ public sealed class HostIdentityEndpointTests
     {
         await using var host = await ApiHost.StartAsync();
         await host.PublishAsync("identity", """
-            {"startNodeId":"s","nodes":{"s":{"type":"Start","next":"a"},
+            {"schemaVersion":1,"startNodeId":"s","nodes":{"s":{"type":"Start","next":"a"},
             "a":{"type":"Approval","approvers":[{"type":"User","value":"bob"}],"next":"e"},"e":{"type":"End"}}}
             """);
         var instance = await host.RunAsync(sp => sp.GetRequiredService<ApprovalEngine>().StartAsync(new("identity", DocHandler.Type, "one", "alice")));

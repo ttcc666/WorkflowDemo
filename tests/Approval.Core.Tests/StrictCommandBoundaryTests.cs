@@ -7,14 +7,60 @@ namespace Approval.Core.Tests;
 
 public sealed class StrictCommandBoundaryTests
 {
+    [Theory]
+    [InlineData("missing")]
+    [InlineData("empty")]
+    [InlineData("whitespace")]
+    [InlineData("too-long")]
+    [InlineData("control")]
+    public async Task CommandExecutor_InvalidKeyRejectsBeforeDelegateAndPersistence(string caseId)
+    {
+        var key = caseId switch { "missing" => null, "empty" => "", "whitespace" => " ", "too-long" => new string('k', 201), _ => "key\n" };
+        await using var host = new TestHost();
+        var calls = 0;
+        Task<bool> Execute(IServiceProvider sp) => sp.GetRequiredService<IApprovalCommandExecutor>().ExecuteAsync(
+            new("strict.write", "one", key, null, ApprovalPermissions.InstanceStart),
+            (_, _) => { calls++; return Task.FromResult(true); });
+        var userError = await Assert.ThrowsAsync<ApprovalException>(() => host.RunAsAsync("alice", Execute));
+        var systemError = await Assert.ThrowsAsync<ApprovalException>(() => host.RunAsync(Execute));
+        Assert.Equal(ApprovalErrorCode.OperationIdRequired, userError.Code);
+        Assert.Equal(ApprovalErrorCode.OperationIdRequired, systemError.Code);
+        Assert.Equal(0, calls);
+        await host.RunAsync(async sp => {
+            var db = sp.GetRequiredService<TestDbContext>();
+            Assert.Empty(await db.Set<ApprovalOperation>().ToListAsync());
+            Assert.Empty(await db.Set<ApprovalInstance>().ToListAsync());
+            Assert.Empty(await db.Set<ApprovalTask>().ToListAsync());
+            Assert.Empty(await db.Set<ApprovalLog>().ToListAsync());
+            Assert.Empty(await db.Set<ApprovalOutboxMessage>().ToListAsync());
+        });
+    }
+
     private const string Flow = """
-        {"startNodeId":"start","nodes":{"start":{"type":"Start","next":"review"},
+        {"schemaVersion":1,"startNodeId":"start","nodes":{"start":{"type":"Start","next":"review"},
         "review":{"type":"Approval","approvers":[{"type":"User","value":"bob"}],"next":"end"},"end":{"type":"End"}}}
         """;
     [Fact]
+    public async Task DefaultPolicy_DirectStartRequiresKey_AndKeyedStartReplays()
+    {
+        await using var host = new TestHost();
+        await host.PublishAsync("strict", Flow);
+        var error = await Assert.ThrowsAsync<ApprovalException>(() => host.RunAsAsync("alice", sp =>
+            sp.GetRequiredService<ApprovalEngine>().StartAsync(new("strict", "business", "one", "alice"))));
+        Assert.Equal(ApprovalErrorCode.OperationIdRequired, error.Code);
+        Assert.Empty(await host.RunAsync(sp => sp.GetRequiredService<TestDbContext>().Set<ApprovalInstance>().ToListAsync()));
+        Task<ApprovalInstance> Start() => host.RunAsAsync("alice", sp => sp.GetRequiredService<ApprovalEngine>()
+            .StartAsync(new("strict", "business", "one", "alice") { OperationId = "start" }));
+        var first = await Start(); var replay = await Start();
+        Assert.Equal(first.Id, replay.Id);
+        Assert.Equal(Assert.Single(first.Tasks).Id, Assert.Single(replay.Tasks).Id);
+        Assert.Equal(1, await host.RunAsync(sp => sp.GetRequiredService<TestDbContext>().Set<ApprovalInstance>().CountAsync()));
+    }
+
+    [Fact]
     public async Task StrictMode_PublicUnitCannotReplaceAKeyedCommand()
     {
-        await using var host = new TestHost(o => o.RequireOperationId = true); await host.PublishAsync("strict", Flow);
+        await using var host = new TestHost(); await host.PublishAsync("strict", Flow);
         var instance = await host.RunAsAsync("alice", sp => sp.GetRequiredService<ApprovalEngine>().StartAsync(new("strict", "business", "one", "alice") { OperationId = "start" }));
         var taskId = Assert.Single(instance.Tasks).Id;
         var error = await Assert.ThrowsAsync<ApprovalException>(() => host.RunAsAsync("bob", sp =>
@@ -45,7 +91,7 @@ public sealed class StrictCommandBoundaryTests
     public async Task KeyedBulkReassign_ReplaysOriginalResult_AndResumesPartialCompletion(bool interrupt)
     {
         var permissions = new FailSecondItem();
-        await using var host = new TestHost(o => o.RequireOperationId = true, b => b.Services.AddSingleton<IApprovalPermissionProvider>(permissions));
+        await using var host = new TestHost(build: b => b.Services.AddSingleton<IApprovalPermissionProvider>(permissions));
         host.Identity.Add("admin", "Admin"); host.Identity.Add("alice"); host.Identity.Add("bob"); host.Identity.Add("carol");
         await host.PublishAsync("strict", Flow);
         foreach (var name in new[] { "one", "two" })
@@ -71,7 +117,7 @@ public sealed class StrictCommandBoundaryTests
             Assert.Equal(2, await db.Set<ApprovalOperation>().CountAsync(o => o.Kind == "task.reassign-bulk.item"));
             Assert.Equal(1, await db.Set<ApprovalOperation>().CountAsync(o => o.Kind == "task.reassign-bulk.result"));
         });
-        var missing = await Assert.ThrowsAsync<ApprovalException>(() => host.RunAsAsync("admin", sp => sp.GetRequiredService<ApprovalEngine>().ReassignUserAsync("carol", "bob", "admin")));
+        var missing = await Assert.ThrowsAsync<ApprovalException>(() => host.RunAsAsync("admin", sp => sp.GetRequiredService<ApprovalEngine>().ReassignUserAsync("carol", "bob", "admin", null, null!)));
         Assert.Equal(ApprovalErrorCode.OperationIdRequired, missing.Code);
     }
 }

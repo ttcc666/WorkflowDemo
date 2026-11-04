@@ -55,9 +55,6 @@ const msg = (r: unknown) => r as OutboxMessage
         </div>
       </template>
       <el-table :data="outbox.items.value" row-key="id" empty-text="暂无记录" size="small">
-        <el-table-column label="类型" width="90">
-          <template #default="{ row }">{{ msg(row).kind === 'Event' ? '宿主事件' : '通知' }}</template>
-        </el-table-column>
         <el-table-column prop="target" label="渠道 / 事件" width="110" />
         <el-table-column prop="description" label="说明" min-width="220" show-overflow-tooltip />
         <el-table-column label="状态" width="90">

@@ -16,9 +16,6 @@ public sealed class ApprovalOperation : IApprovalEntity
     public Guid? InstanceId { get; set; }
     public Guid? DefinitionId { get; set; }
     public DateTime CommittedAt { get; set; }
-
-    /// <summary>仅兼容旧版本已擦除的结果；新引擎不会产生此标记。</summary>
-    public bool IsTombstone { get; set; }
 }
 
 /// <summary>数据库唯一约束保证不同请求也不能同时占用同一业务；摘要使用原始、区分大小写的业务标识。</summary>

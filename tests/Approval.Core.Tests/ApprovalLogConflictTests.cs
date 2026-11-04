@@ -66,7 +66,7 @@ public sealed class ApprovalLogConflictTests
         host.Identity.Add("admin", "Admin");
         var propagated = await Assert.ThrowsAsync<ApprovalException>(() => host.RunAsAsync("admin", sp =>
             sp.GetRequiredService<IApprovalCommandExecutor>().ExecuteAsync<int>(
-                new("existing.conflict", "one", null, null, ApprovalPermissions.DefinitionReadSensitive),
+                new("existing.conflict", "one", "conflict", null, ApprovalPermissions.DefinitionReadSensitive),
                 (_, _) => Task.FromException<int>(failure))));
         Assert.Same(failure, propagated);
     }

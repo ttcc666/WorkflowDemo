@@ -8,7 +8,7 @@ namespace Approval.Core.Tests;
 public sealed class EmbeddedApprovalTests
 {
     private const string Flow = """
-        {"startNodeId":"start","nodes":{
+        {"schemaVersion":1,"startNodeId":"start","nodes":{
           "start":{"type":"Start","name":"提交","next":"cc"},
           "cc":{"type":"Cc","name":"抄送","approvers":[{"type":"Role","value":"Readers"}],"next":"review"},
           "review":{"type":"Approval","name":"审批","approvers":[{"type":"User","value":"bob"}],"next":"end","requireComment":true},

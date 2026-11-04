@@ -15,7 +15,7 @@ namespace Approval.AspNetCore.Tests;
 public sealed class RequestBodyRetryTests
 {
     private const string Flow = """
-        {"startNodeId":"start","nodes":{"start":{"type":"Start","name":"开始","next":"review"},
+        {"schemaVersion":1,"startNodeId":"start","nodes":{"start":{"type":"Start","name":"开始","next":"review"},
         "review":{"type":"Approval","name":"审核","approvers":[{"type":"User","value":"bob"}],"next":"end"},
         "end":{"type":"End","name":"结束"}}}
         """;
@@ -40,8 +40,7 @@ public sealed class RequestBodyRetryTests
         await using var host = await ApiHost.StartAsync(
             build: b => b.Services.ConfigureDbContext<ApiDbContext>(options => options
                 .ReplaceService<IExecutionStrategyFactory, PublicationRetryStrategyFactory>()
-                .AddInterceptors(fault)),
-            workflow: options => options.RequireOperationId = true);
+                .AddInterceptors(fault)));
 
         async Task<HttpResponseMessage> PublishAsync()
         {

@@ -1,5 +1,7 @@
 # 第二轮嵌入式审批引擎收敛报告
 
+> 历史记录：本文保留该轮次当时的实现和验证事实。旧构造器、消息/幂等兼容、JSON 缺省版本及初始化迁移的当前状态，以[开发期兼容清理报告](unreleased-compatibility-cleanup.md)为准；本文不构成保留旧软件接口的要求。
+
 日期：2026-11-03。版本：NuGet 四包与 `@approval/ui` 均为 0.3.0。
 开发分支：`codex/engineering-extensibility`，改造起点 `76631ca`。开始时工作区干净，历史 InitialApproval 迁移未修改。
 

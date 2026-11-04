@@ -6,6 +6,16 @@ import { useDirectory } from './useDirectory'
 
 const clients: ApprovalClient[] = []
 
+it('未解析用户明确不可用，后续目录返回当前状态时恢复可选', async () => {
+  const fetcher = vi.fn(async () => Response.json([]))
+  const client = createApprovalClient({ fetcher })
+  clients.push(client)
+  const directory = createApp({}).use(client).runWithContext(useDirectory)
+  expect(await directory.resolve(['missing'])).toEqual([{ id: 'missing', name: 'missing', roles: [], isActive: false }])
+  fetcher.mockImplementation(async () => Response.json([{ id: 'missing', name: 'Found', roles: ['Reviewer'], isActive: true }]))
+  expect(await directory.resolve(['missing'])).toEqual([{ id: 'missing', name: 'Found', roles: ['Reviewer'], isActive: true }])
+})
+
 it('权限使用服务端能力并在撤权和会话切换时立即清空', async () => {
   const session = shallowRef('a')
   let allowed = true

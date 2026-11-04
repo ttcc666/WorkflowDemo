@@ -493,10 +493,6 @@ namespace Approval.Database.Tests.Migrations.MySql
                     b.Property<Guid?>("InstanceId")
                         .HasColumnType("char(36)");
 
-                    b.Property<bool>("IsTombstone")
-                        .IsConcurrencyToken()
-                        .HasColumnType("tinyint(1)");
-
                     b.Property<string>("Kind")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -562,11 +558,6 @@ namespace Approval.Database.Tests.Migrations.MySql
 
                     b.Property<Guid?>("InstanceId")
                         .HasColumnType("char(36)");
-
-                    b.Property<string>("Kind")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("varchar(20)");
 
                     b.Property<string>("LastError")
                         .HasMaxLength(2000)

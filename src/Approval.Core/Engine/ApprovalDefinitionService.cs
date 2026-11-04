@@ -9,7 +9,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Approval.Core.Engine;
 
-/// <summary>设计器所需的元数据：已注册的审批人类型（含参数类型描述）、通知接收人类型、动作、渠道、模板变量。</summary>
+/// <summary>设计器所需的元数据：已注册的审批人类型（含参数类型描述）、通知接收人类型、渠道、模板变量。</summary>
 public sealed record ApprovalMetadata(
     IReadOnlyList<ApproverTypeDescriptor> ApproverTypes,
     IReadOnlyList<ApproverTypeDescriptor> RecipientTypes,
@@ -33,13 +33,7 @@ public sealed partial class ApprovalDefinitionService
     private readonly IReadOnlyDictionary<string, ApproverTypeDescriptor> _approverTypes;
     private readonly IReadOnlyList<ChannelInfo> _channels;
 
-    public ApprovalDefinitionService(ApprovalDbContextAccessor accessor, IEnumerable<IApproverResolver> resolvers,
-        IEnumerable<ChannelInfo> channels, TimeProvider clock, ApprovalOptions? options = null)
-        : this(accessor, new ApprovalExtensionCatalog(() => resolvers, () => [], () => channels), clock, options)
-    {
-    }
-
-    internal ApprovalDefinitionService(ApprovalDbContextAccessor accessor, ApprovalExtensionCatalog extensions, TimeProvider clock, ApprovalOptions? options = null,
+    internal ApprovalDefinitionService(ApprovalDbContextAccessor accessor, ApprovalExtensionCatalog extensions, TimeProvider clock,
         IApprovalDefinitionExtension? definitionExtension = null)
     {
         _db = accessor.Context;
@@ -67,12 +61,6 @@ public sealed partial class ApprovalDefinitionService
             return new(types, [.. NotificationDefaults.NotificationRecipientDescriptors, .. types],
                 _channels, TemplateVariables.Catalog, NotificationDefaults.Contents);
         }
-    }
-
-    public IReadOnlyList<string> Validate(FlowDefinition flow)
-    {
-        _authorization.RequireAsync(Approval.Core.Abstractions.ApprovalPermissions.DefinitionValidate).GetAwaiter().GetResult();
-        return ValidateCore(flow);
     }
 
     public async Task<IReadOnlyList<string>> ValidateAsync(FlowDefinition flow, CancellationToken ct = default)

@@ -1,4 +1,4 @@
-{
+{"schemaVersion":1,
   "name": "注册证登记（三级审核）",
   "startNodeId": "start",
   "notifications": [

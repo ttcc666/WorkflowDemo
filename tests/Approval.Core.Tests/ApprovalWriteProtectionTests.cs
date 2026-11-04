@@ -10,7 +10,7 @@ namespace Approval.Core.Tests;
 public sealed class ApprovalWriteProtectionTests
 {
     private const string Flow = """
-        {"startNodeId":"start","nodes":{"start":{"type":"Start","next":"review"},
+        {"schemaVersion":1,"startNodeId":"start","nodes":{"start":{"type":"Start","next":"review"},
         "review":{"type":"Approval","approvers":[{"type":"User","value":"bob"}],"next":"end"},"end":{"type":"End"}}}
         """;
 
@@ -253,7 +253,7 @@ public sealed class ApprovalWriteProtectionTests
         var store = new InMemoryFileStore();
         await using var host = new TestHost(build: b => { b.AddApprovalForms(); b.Services.AddSingleton<Approval.Forms.Attachments.IApprovalFileStore>(store); });
         const string form = """
-            {"startNodeId":"start","settings":{"startable":true},"form":{"fields":[]},"nodes":{
+            {"schemaVersion":1,"startNodeId":"start","settings":{"startable":true},"form":{"fields":[]},"nodes":{
             "start":{"type":"Start","next":"review"},"review":{"type":"Approval","approvers":[{"type":"User","value":"bob"}],"next":"end"},"end":{"type":"End"}}}
             """;
         await host.PublishAsync("form", form);

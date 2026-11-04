@@ -11,7 +11,7 @@ internal sealed class ApprovalTransactionState
     public bool Active, Failed;
     public bool DeferredRead;
     public bool Serializable;
-    public bool RequireOperationId, SystemActor;
+    public bool SystemActor;
     public bool KeyedCommand;
     public ApprovalWriteAuthorization? Writes;
     public int ExtensionDepth;
@@ -25,7 +25,7 @@ internal sealed class ApprovalTransactionState
     internal void ResetLease(DbContextId contextId)
     {
         Writes?.ResetLease(); ContextId = contextId;
-        Active = Failed = DeferredRead = Serializable = RequireOperationId = SystemActor = KeyedCommand = false;
+        Active = Failed = DeferredRead = Serializable = SystemActor = KeyedCommand = false;
         ExtensionDepth = ExtensionCommitDepth = 0; InstanceId = DefinitionId = null; OperationSeed = null;
         Definitions = new(StringComparer.Ordinal); IdCounters.Clear(); Callbacks.Clear();
     }
@@ -79,7 +79,7 @@ internal sealed class ApprovalUnitOfWork(DbContext db) : IApprovalUnitOfWork
 
     internal Task<T> ExecuteCommandAsync<T>(ApprovalWriteOwner owner, Func<CancellationToken, Task<T>> operation, CancellationToken ct = default)
     {
-        if (!State.KeyedCommand && State.RequireOperationId && !State.SystemActor)
+        if (!State.KeyedCommand && !State.SystemActor)
             throw new ApprovalException("写操作需要通过带稳定标识的命令协调器执行") { Code = ApprovalErrorCode.OperationIdRequired };
         return ExecuteOwnedAsync(owner, operation, ct);
     }

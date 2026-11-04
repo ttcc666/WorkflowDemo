@@ -17,6 +17,7 @@ public sealed class FieldPermissionTests : IAsyncLifetime
     /// </summary>
     private const string Flow = """
     {
+      "schemaVersion":1,
       "startNodeId": "start",
       "settings": { "startable": true, "titleTemplate": "{申请人}报销 {form.amount} 元" },
       "form": { "fields": [
@@ -307,5 +308,9 @@ public sealed class FieldPermissionTests : IAsyncLifetime
     }
 
     private static IReadOnlyList<string> Validate(FlowDefinition flow) =>
-        FormDefinitionValidator.Validate(flow, new HashSet<string>(["User", "Role", "Initiator", "FormField"], StringComparer.OrdinalIgnoreCase));
+        FlowDefinitionValidator.Validate(flow, new FlowValidationContext
+        {
+            ApproverTypes = new HashSet<string>(["User", "Role", "Initiator", "FormField"], StringComparer.OrdinalIgnoreCase),
+            Extension = new FormDefinitionValidator()
+        });
 }

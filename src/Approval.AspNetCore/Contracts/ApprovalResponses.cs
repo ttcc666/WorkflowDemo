@@ -88,7 +88,6 @@ public sealed record ApprovalMessageResponse(
 /// <summary>ApprovalOutboxMessage 的 HTTP 快照；保持既有 JSON 字段与 UTC 日期表示。</summary>
 public sealed record ApprovalOutboxMessageResponse(
     Guid Id,
-    OutboxKind Kind,
     string Target,
     Guid? InstanceId,
     string? NodeId,
@@ -104,7 +103,7 @@ public sealed record ApprovalOutboxMessageResponse(
     long ConcurrencyStamp)
 {
     public static ApprovalOutboxMessageResponse From(ApprovalOutboxMessage value) => new(
-        value.Id, value.Kind, value.Target, value.InstanceId, value.NodeId, value.Description, value.PayloadJson, value.Status, value.Attempts, value.MaxAttempts, value.NextAttemptAt, value.LastError, value.CreatedAt, value.CompletedAt, value.ConcurrencyStamp);
+        value.Id, value.Target, value.InstanceId, value.NodeId, value.Description, value.PayloadJson, value.Status, value.Attempts, value.MaxAttempts, value.NextAttemptAt, value.LastError, value.CreatedAt, value.CompletedAt, value.ConcurrencyStamp);
 }
 
 /// <summary>经过查看权限和字段权限过滤的审批详情。</summary>

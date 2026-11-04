@@ -51,7 +51,7 @@ public sealed class HostInitializationTests
         Assert.Equal(HttpStatusCode.OK, (await host.SendAsync(HttpMethod.Get, "/api/approval/me", "alice")).StatusCode);
         Assert.Empty(events.Delivered);
         const string flow = """
-            {"startNodeId":"start","nodes":{"start":{"type":"Start","next":"review"},
+            {"schemaVersion":1,"startNodeId":"start","nodes":{"start":{"type":"Start","next":"review"},
             "review":{"type":"Approval","approvers":[{"type":"User","value":"bob"}],"next":"end"},"end":{"type":"End"}}}
             """;
         await host.PublishAsync("startup", flow);

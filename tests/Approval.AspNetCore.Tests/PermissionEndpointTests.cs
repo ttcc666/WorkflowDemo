@@ -14,7 +14,7 @@ namespace Approval.AspNetCore.Tests;
 public sealed class PermissionEndpointTests
 {
     private const string Flow = """
-        {"startNodeId":"start","nodes":{"start":{"type":"Start","name":"Start","next":"review"},
+        {"schemaVersion":1,"startNodeId":"start","nodes":{"start":{"type":"Start","name":"Start","next":"review"},
         "review":{"type":"Approval","name":"Review","mode":"Any","approvers":[{"type":"User","value":"bob"}],"next":"end"},
         "end":{"type":"End","name":"End"}}}
         """;

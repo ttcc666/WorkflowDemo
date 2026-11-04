@@ -122,7 +122,7 @@ internal sealed class AtomicAction(AtomicContractContext db, AtomicFaults faults
 public sealed partial class DatabaseContractTests
 {
     private const string AtomicFlow = """
-        {"startNodeId":"start","nodes":{"start":{"type":"Start","name":"Start","next":"review"},
+        {"schemaVersion":1,"startNodeId":"start","nodes":{"start":{"type":"Start","name":"Start","next":"review"},
         "review":{"type":"Approval","name":"Review","approvers":[{"type":"User","value":"bob"}],"next":"end"},"end":{"type":"End","name":"End"}}}
         """;
     private async Task<ServiceProvider> AtomicHostAsync(AtomicFaults faults, bool initializeDatabase = true, Action<ApprovalOptions>? configure = null, Action<IServiceCollection>? configureServices = null)

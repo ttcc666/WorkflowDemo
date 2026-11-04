@@ -5,6 +5,23 @@ import { useAsyncData } from './useAsyncData'
 
 vi.mock('element-plus', () => ({ ElMessage: { error: vi.fn() } }))
 
+it('统计重新查询超限时清除上一次结果并展示错误', async () => {
+  const scope = effectScope()
+  const filter = ref('small')
+  const client = createApprovalClient()
+  const app = createApp({}).use(client)
+  const state = scope.run(() => app.runWithContext(() => useAsyncData(() => filter.value === 'small'
+    ? Promise.resolve({ total: 2 }) : Promise.reject(new Error('当前待办积压超过统计读取预算 2')),
+    { watch: [filter], resetOnReload: true, notifyError: false })))!
+  try {
+    await vi.waitFor(() => expect(state.data.value).toEqual({ total: 2 }))
+    filter.value = 'large'
+    await vi.waitFor(() => expect(state.error.value).toBe('当前待办积压超过统计读取预算 2'))
+    expect(state.data.value).toBeUndefined()
+    expect(state.loading.value).toBe(false)
+  } finally { scope.stop(); client.dispose() }
+})
+
 it('身份变化后清空旧数据，拒绝响应不会恢复前一个用户的内容', async () => {
   const scope = effectScope()
   const user = ref('alice')

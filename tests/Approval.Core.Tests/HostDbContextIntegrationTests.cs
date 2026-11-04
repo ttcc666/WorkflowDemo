@@ -16,7 +16,7 @@ namespace Approval.Core.Tests;
 public sealed class HostDbContextIntegrationTests
 {
     private const string Flow = """
-        {"startNodeId":"start","nodes":{"start":{"type":"Start","next":"review"},
+        {"schemaVersion":1,"startNodeId":"start","nodes":{"start":{"type":"Start","next":"review"},
         "review":{"type":"Approval","approvers":[{"type":"User","value":"bob"}],"next":"end"},"end":{"type":"End"}}}
         """;
 
@@ -92,7 +92,7 @@ public sealed class HostDbContextIntegrationTests
         services.AddSingleton<IApprovalPermissionProvider, Permissions>();
         var events = new HostEvents(); services.AddSingleton<IApprovalEventHandler>(events);
         var clock = new FakeTimeProvider(new DateTimeOffset(2026, 11, 3, 0, 0, 0, TimeSpan.Zero)); services.AddSingleton<TimeProvider>(clock);
-        services.AddApprovalWorkflow<TContext>(o => { o.EnableBackgroundServices = false; o.RequireOperationId = true; o.Outbox.BaseRetryDelay = TimeSpan.FromSeconds(1); });
+        services.AddApprovalWorkflow<TContext>(o => { o.EnableBackgroundServices = false; o.Outbox.BaseRetryDelay = TimeSpan.FromSeconds(1); });
         await using var provider = services.BuildServiceProvider();
 
         async Task<TResult> As<TResult>(string actor, Func<IServiceProvider, Task<TResult>> run)
@@ -178,7 +178,9 @@ public sealed class HostDbContextIntegrationTests
         await using var provider = services.BuildServiceProvider(); await using var scope = provider.CreateAsyncScope();
         scope.ServiceProvider.GetRequiredService<ApprovalExecutionContext>().InitializeTrusted(new("admin"), []);
         var db = scope.ServiceProvider.GetRequiredService<PlainContext>(); await db.Database.EnsureCreatedAsync();
-        var error = await Assert.ThrowsAsync<ApprovalException>(() => scope.ServiceProvider.GetRequiredService<ApprovalDefinitionService>().PublishAsync("denied", "Denied", Flow));
+        var error = await Assert.ThrowsAsync<ApprovalException>(() => scope.ServiceProvider.GetRequiredService<IApprovalCommandExecutor>().ExecuteAsync(
+            new("definition.publish", "denied", "denied-key", Flow, ApprovalPermissions.DefinitionPublish),
+            (sp, ct) => sp.GetRequiredService<ApprovalDefinitionService>().PublishAsync("denied", "Denied", Flow, ct)));
         Assert.Equal(ApprovalErrorCode.Forbidden, error.Code); Assert.Equal(0, await db.Set<ApprovalDefinition>().CountAsync()); Assert.Equal(0, await db.Set<ApprovalOutboxMessage>().CountAsync());
     }
 

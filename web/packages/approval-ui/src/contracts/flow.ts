@@ -61,8 +61,8 @@ export interface FlowNodeDef {
 }
 
 export interface FlowDefinition {
-  /** JSON 协议版本；旧定义缺省为 v1，与流程发布版本独立。 */
-  schemaVersion?: number
+  /** 必须显式声明当前 JSON 协议版本，与流程发布版本独立。 */
+  schemaVersion: number
   startNodeId: string
   /** 发起设置（发起中心、发起角色、标题模板） */
   settings?: FlowSettings

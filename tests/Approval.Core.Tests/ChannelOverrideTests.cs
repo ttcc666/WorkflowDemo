@@ -17,6 +17,7 @@ public sealed class ChannelOverrideTests
         });
         await host.PublishAsync("channel-override", """
         {
+          "schemaVersion":1,
           "startNodeId": "start",
           "nodes": {
             "start": { "type": "Start", "name": "提交", "next": "end" },

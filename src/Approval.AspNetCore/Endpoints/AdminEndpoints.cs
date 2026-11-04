@@ -1,3 +1,4 @@
+using Approval.Core;
 using Approval.Core.Engine;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -36,9 +37,8 @@ internal static class AdminEndpoints
 
         admin.MapPost("/users/{userId}/reassign", (string userId, ReassignRequest body, HttpContext http, ApprovalEngine e,
             CancellationToken ct) =>
-            ApprovalHttpCommands.OperationId(http) is { } key
-                ? e.ReassignUserAsync(userId, body.ToUserId, http.GetApprovalUserId(), body.Reason, key, ct)
-                : e.ReassignUserAsync(userId, body.ToUserId, http.GetApprovalUserId(), body.Reason, ct));
+            e.ReassignUserAsync(userId, body.ToUserId, http.GetApprovalUserId(), body.Reason,
+                ApprovalHttpCommands.OperationId(http) ?? throw new ApprovalException("批量改派需要稳定 Idempotency-Key") { Code = ApprovalErrorCode.OperationIdRequired }, ct));
 
         // 统计：默认最近 30 天
         admin.MapGet("/statistics", (DateTimeOffset? from, DateTimeOffset? to, string? definitionKey, ApprovalStatisticsService s,

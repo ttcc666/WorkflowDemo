@@ -42,7 +42,7 @@ describe('审批详情的撤回能力', () => {
     const approved: ApprovalTask = {
       id: 'task', instanceId: 'instance', nodeId: 'first', nodeName: '一审', assigneeKind: 'User', assigneeValue: 'bob',
       kind: 'Approval', parentTaskId: null, round: 0, status: 'Approved', order: 0, handledBy: 'bob', comment: null,
-      createdAt: '2026-11-01T00:00:00Z', completedAt: '2026-11-01T01:00:00Z', dueAt: null, remindCount: 0,
+      createdAt: '2026-11-01T00:00:00Z', completedAt: '2026-11-01T01:00:00Z', dueAt: null, remindCount: 0, nextRemindAt: null, lastRemindedAt: null, capabilities: {},
     }
     const response = instance(true, [approved])
     api.instance.mockResolvedValue(response)

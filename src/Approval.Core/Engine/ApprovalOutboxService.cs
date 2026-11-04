@@ -1,7 +1,5 @@
 using Approval.Core.Abstractions;
 using Approval.Core.Domain;
-using Approval.Core.Engine.Extensions;
-using Approval.Core.Notifications;
 using Approval.Core.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -50,22 +48,16 @@ public sealed class ApprovalOutboxService
     private readonly Approval.Core.Authorization.IApprovalAuthorization _authorization;
     private readonly DbContext _db;
     private readonly ApprovalUnitOfWork _unit;
-    private readonly IApprovalScopeFactory? _scopes;
+    private readonly IApprovalScopeFactory _scopes;
     private readonly ApprovalOptions _options;
     private readonly TimeProvider _clock;
     private readonly ILogger<ApprovalOutboxService> _logger;
     private readonly ApprovalOutboxSignal _signal;
     internal IApprovalEventHandler? EventHandler { get; }
 
-    public ApprovalOutboxService(ApprovalDbContextAccessor accessor, IEnumerable<ChannelInfo> channels,
-        ApprovalOptions options, TimeProvider clock, ILogger<ApprovalOutboxService> logger, IApprovalScopeFactory? scopes = null)
-        : this(accessor, new ApprovalExtensionCatalog(() => [], () => [], () => channels), options, clock, logger, scopes)
-    {
-    }
-
-    internal ApprovalOutboxService(ApprovalDbContextAccessor accessor, ApprovalExtensionCatalog extensions,
-        ApprovalOptions options, TimeProvider clock, ILogger<ApprovalOutboxService> logger, IApprovalScopeFactory? scopes = null,
-        ApprovalOutboxSignal? signal = null, IApprovalEventHandler? eventHandler = null)
+    internal ApprovalOutboxService(ApprovalDbContextAccessor accessor,
+        ApprovalOptions options, TimeProvider clock, ILogger<ApprovalOutboxService> logger, IApprovalScopeFactory scopes,
+        ApprovalOutboxSignal signal, IApprovalEventHandler? eventHandler)
     {
         _db = accessor.Context;
         _unit = accessor.UnitOfWork; _scopes = scopes;
@@ -73,7 +65,7 @@ public sealed class ApprovalOutboxService
         _options = options;
         _clock = ApprovalHostServices.Clock(_unit, clock);
         _logger = logger;
-        _signal = signal ?? new ApprovalOutboxSignal();
+        _signal = signal;
         EventHandler = eventHandler;
     }
 
@@ -108,7 +100,7 @@ public sealed class ApprovalOutboxService
     private sealed record Delivery(Guid Id, long Stamp);
     private async Task<T> RunWorkerAsync<T>(Func<ApprovalOutboxService, CancellationToken, Task<T>> operation, CancellationToken ct, bool deferredRead = false)
     {
-        var scopes = _scopes ?? throw new InvalidOperationException("后台投递需要注册 IApprovalScopeFactory");
+        var scopes = _scopes;
         await using var strategyScope = await scopes.CreateAsync(ct);
         var strategyDb = strategyScope.ServiceProvider.GetRequiredService<ApprovalDbContextAccessor>().Context;
         return await strategyDb.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
@@ -126,7 +118,7 @@ public sealed class ApprovalOutboxService
         catch (DbUpdateConcurrencyException) { _logger.LogWarning("Outbox 消息 {Id} 已被更新，投递结果未覆盖新状态", delivery.Id); }
         catch (Exception ex) when (!ct.IsCancellationRequested)
         {
-            // 投递事务已回滚，包含旧宿主动作自行 SaveChanges 的写入；失败记录使用新事务。
+            // 投递事务已回滚，包含宿主处理器自行 SaveChanges 的写入；失败记录使用新事务。
             try { await RunWorkerAsync((worker, token) => worker.FailPendingAsync(delivery, ex, token), ct); }
             catch (DbUpdateConcurrencyException) { _logger.LogInformation("Outbox 消息 {Id} 已被更新，未覆盖其失败状态", delivery.Id); }
         }
@@ -165,14 +157,14 @@ public sealed class ApprovalOutboxService
         {
             message.Status = OutboxStatus.Failed;
             message.CompletedAt = Now;
-            _logger.LogError(ex, "Outbox 消息 {Id}（{Kind} {Target}）重试 {Attempts} 次后仍失败", message.Id, message.Kind,
+            _logger.LogError(ex, "Outbox 消息 {Id}（{Target}）重试 {Attempts} 次后仍失败", message.Id,
                 message.Target, message.Attempts);
         }
         else
         {
             message.NextAttemptAt = Now + RetryDelay(message.Attempts);
-            _logger.LogWarning(ex, "Outbox 消息 {Id}（{Kind} {Target}）第 {Attempts} 次投递失败，{Next:u} 重试", message.Id,
-                message.Kind, message.Target, message.Attempts, message.NextAttemptAt);
+            _logger.LogWarning(ex, "Outbox 消息 {Id}（{Target}）第 {Attempts} 次投递失败，{Next:u} 重试", message.Id,
+                message.Target, message.Attempts, message.NextAttemptAt);
         }
     }
 
@@ -185,34 +177,20 @@ public sealed class ApprovalOutboxService
 
     private async Task DeliverAsync(ApprovalOutboxMessage message, CancellationToken ct)
     {
-        switch (message.Kind)
-        {
-            case OutboxKind.Event:
-                var approvalEvent = JsonSerializer.Deserialize<ApprovalEvent>(message.PayloadJson, OutboxJson.Options)
-                    ?? throw new InvalidOperationException("审批事件正文无效");
-                await (EventHandler ?? throw new InvalidOperationException("宿主未注册 IApprovalEventHandler"))
-                    .HandleAsync(approvalEvent, ct);
-                break;
-
-            case OutboxKind.Notification:
-                {
-                    // Upgrade existing pending notification rows through the same host event boundary.
-                    var payload = JsonSerializer.Deserialize<ApprovalNotificationRequest>(message.PayloadJson, OutboxJson.Options)
-                        ?? throw new InvalidOperationException("旧通知正文无效");
-                    var instance = message.InstanceId is { } id
-                        ? await _db.Set<ApprovalInstance>().SingleAsync(i => i.Id == id, ct) : null;
-                    await (EventHandler ?? throw new InvalidOperationException("宿主未注册 IApprovalEventHandler"))
-                        .HandleAsync(new ApprovalEvent(message.Id, "NotificationRequested", instance?.Id ?? Guid.Empty,
-                            instance?.DefinitionId ?? Guid.Empty, instance?.DefinitionVersion ?? 0, instance?.BusinessType ?? "",
-                            instance?.BusinessKey ?? "", instance?.Status ?? InstanceStatus.Running, message.NodeId, null, null,
-                            "approval-background", null, message.CreatedAt)
-                        { DeliveryTarget = message.Target, Notification = payload }, ct);
-                    break;
-                }
-
-            default:
-                throw new InvalidOperationException($"不支持的 Outbox 消息类型 '{message.Kind}'");
-        }
+        var approvalEvent = JsonSerializer.Deserialize<ApprovalEvent>(message.PayloadJson, OutboxJson.Options)
+            ?? throw new InvalidOperationException("审批事件正文无效");
+        if (approvalEvent.Id != message.Id || approvalEvent.InstanceId == Guid.Empty || approvalEvent.DefinitionId == Guid.Empty
+            || approvalEvent.DefinitionVersion <= 0 || string.IsNullOrWhiteSpace(approvalEvent.EventType)
+            || string.IsNullOrWhiteSpace(approvalEvent.BusinessType) || string.IsNullOrWhiteSpace(approvalEvent.BusinessKey)
+            || string.IsNullOrWhiteSpace(approvalEvent.OperatorId) || approvalEvent.OccurredAt == default
+            || !Enum.IsDefined(approvalEvent.Status)
+            || message.InstanceId is { } instanceId && approvalEvent.InstanceId != instanceId
+            || approvalEvent.EventType == "NotificationRequested" && (string.IsNullOrWhiteSpace(approvalEvent.DeliveryTarget)
+                || approvalEvent.Notification is not { } notification || notification.Id != message.Id
+                || notification.InstanceId != approvalEvent.InstanceId))
+            throw new InvalidOperationException("审批事件正文缺少必要字段或与 Outbox 记录不一致");
+        await (EventHandler ?? throw new InvalidOperationException("宿主未注册 IApprovalEventHandler"))
+            .HandleAsync(approvalEvent, ct);
     }
 
     /// <summary>投递记录，按创建时间倒序分页。</summary>

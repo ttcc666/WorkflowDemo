@@ -6,7 +6,7 @@ namespace Approval.Core.Tests;
 public sealed class ActionOverrideTests
 {
     private const string Flow = """
-        {"startNodeId":"start","nodes":{"start":{"type":"Start","name":"Start","next":"end"},"end":{"type":"End","name":"End"}}}
+        {"schemaVersion":1,"startNodeId":"start","nodes":{"start":{"type":"Start","name":"Start","next":"end"},"end":{"type":"End","name":"End"}}}
         """;
     private sealed class First : IApprovalLifecycleHandler
     {

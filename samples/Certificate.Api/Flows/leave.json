@@ -1,4 +1,4 @@
-{
+{"schemaVersion":1,
   "name": "请假申请",
   "startNodeId": "start",
   "settings": {

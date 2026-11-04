@@ -123,9 +123,9 @@ export interface paths {
         post: {
             parameters: {
                 query?: never;
-                header?: {
-                    /** @description Stable key for one logical command; required when ApprovalOptions.RequireOperationId is enabled. Same content replays the committed result; changed content returns 409. Retain the key after unknown outcomes. */
-                    "Idempotency-Key"?: string;
+                header: {
+                    /** @description Required stable key for one logical command. Same content replays the committed result; changed content returns 409. Retain the key and original content after unknown outcomes. */
+                    "Idempotency-Key": string;
                 };
                 path: {
                     id: string;
@@ -330,9 +330,9 @@ export interface paths {
         post: {
             parameters: {
                 query?: never;
-                header?: {
-                    /** @description Stable key for one logical command; required when ApprovalOptions.RequireOperationId is enabled. Same content replays the committed result; changed content returns 409. Retain the key after unknown outcomes. */
-                    "Idempotency-Key"?: string;
+                header: {
+                    /** @description Required stable key for one logical command. Same content replays the committed result; changed content returns 409. Retain the key and original content after unknown outcomes. */
+                    "Idempotency-Key": string;
                 };
                 path: {
                     id: string;
@@ -435,9 +435,9 @@ export interface paths {
         post: {
             parameters: {
                 query?: never;
-                header?: {
-                    /** @description Stable key for one logical command; required when ApprovalOptions.RequireOperationId is enabled. Same content replays the committed result; changed content returns 409. Retain the key after unknown outcomes. */
-                    "Idempotency-Key"?: string;
+                header: {
+                    /** @description Required stable key for one logical command. Same content replays the committed result; changed content returns 409. Retain the key and original content after unknown outcomes. */
+                    "Idempotency-Key": string;
                 };
                 path: {
                     userId: string;
@@ -857,9 +857,9 @@ export interface paths {
         post: {
             parameters: {
                 query?: never;
-                header?: {
-                    /** @description Stable key for one logical command; required when ApprovalOptions.RequireOperationId is enabled. Same content replays the committed result; changed content returns 409. Retain the key after unknown outcomes. */
-                    "Idempotency-Key"?: string;
+                header: {
+                    /** @description Required stable key for one logical command. Same content replays the committed result; changed content returns 409. Retain the key and original content after unknown outcomes. */
+                    "Idempotency-Key": string;
                 };
                 path: {
                     id: string;
@@ -1354,9 +1354,9 @@ export interface paths {
                 query?: {
                     name?: string;
                 };
-                header?: {
-                    /** @description Stable key for one logical command; required when ApprovalOptions.RequireOperationId is enabled. Same content replays the committed result; changed content returns 409. Retain the key after unknown outcomes. */
-                    "Idempotency-Key"?: string;
+                header: {
+                    /** @description Required stable key for one logical command. Same content replays the committed result; changed content returns 409. Retain the key and original content after unknown outcomes. */
+                    "Idempotency-Key": string;
                 };
                 path: {
                     key: string;
@@ -1564,9 +1564,9 @@ export interface paths {
         post: {
             parameters: {
                 query?: never;
-                header?: {
-                    /** @description Stable key for one logical command; required when ApprovalOptions.RequireOperationId is enabled. Same content replays the committed result; changed content returns 409. Retain the key after unknown outcomes. */
-                    "Idempotency-Key"?: string;
+                header: {
+                    /** @description Required stable key for one logical command. Same content replays the committed result; changed content returns 409. Retain the key and original content after unknown outcomes. */
+                    "Idempotency-Key": string;
                 };
                 path: {
                     key: string;
@@ -1670,9 +1670,9 @@ export interface paths {
         put: {
             parameters: {
                 query?: never;
-                header?: {
-                    /** @description Stable key for one logical command; required when ApprovalOptions.RequireOperationId is enabled. Same content replays the committed result; changed content returns 409. Retain the key after unknown outcomes. */
-                    "Idempotency-Key"?: string;
+                header: {
+                    /** @description Required stable key for one logical command. Same content replays the committed result; changed content returns 409. Retain the key and original content after unknown outcomes. */
+                    "Idempotency-Key": string;
                 };
                 path: {
                     key: string;
@@ -1778,9 +1778,9 @@ export interface paths {
         post: {
             parameters: {
                 query?: never;
-                header?: {
-                    /** @description Stable key for one logical command; required when ApprovalOptions.RequireOperationId is enabled. Same content replays the committed result; changed content returns 409. Retain the key after unknown outcomes. */
-                    "Idempotency-Key"?: string;
+                header: {
+                    /** @description Required stable key for one logical command. Same content replays the committed result; changed content returns 409. Retain the key and original content after unknown outcomes. */
+                    "Idempotency-Key": string;
                 };
                 path: {
                     key: string;
@@ -1983,9 +1983,9 @@ export interface paths {
         post: {
             parameters: {
                 query?: never;
-                header?: {
-                    /** @description Stable key for one logical command; required when ApprovalOptions.RequireOperationId is enabled. Same content replays the committed result; changed content returns 409. Retain the key after unknown outcomes. */
-                    "Idempotency-Key"?: string;
+                header: {
+                    /** @description Required stable key for one logical command. Same content replays the committed result; changed content returns 409. Retain the key and original content after unknown outcomes. */
+                    "Idempotency-Key": string;
                 };
                 path: {
                     key: string;
@@ -2090,9 +2090,9 @@ export interface paths {
         post: {
             parameters: {
                 query?: never;
-                header?: {
-                    /** @description Stable key for one logical command; required when ApprovalOptions.RequireOperationId is enabled. Same content replays the committed result; changed content returns 409. Retain the key after unknown outcomes. */
-                    "Idempotency-Key"?: string;
+                header: {
+                    /** @description Required stable key for one logical command. Same content replays the committed result; changed content returns 409. Retain the key and original content after unknown outcomes. */
+                    "Idempotency-Key": string;
                 };
                 path: {
                     key: string;
@@ -3516,9 +3516,9 @@ export interface paths {
         put: {
             parameters: {
                 query?: never;
-                header?: {
-                    /** @description Stable key for one logical command; required when ApprovalOptions.RequireOperationId is enabled. Same content replays the committed result; changed content returns 409. Retain the key after unknown outcomes. */
-                    "Idempotency-Key"?: string;
+                header: {
+                    /** @description Required stable key for one logical command. Same content replays the committed result; changed content returns 409. Retain the key and original content after unknown outcomes. */
+                    "Idempotency-Key": string;
                 };
                 path: {
                     key: string;
@@ -3624,9 +3624,9 @@ export interface paths {
         post: {
             parameters: {
                 query?: never;
-                header?: {
-                    /** @description Stable key for one logical command; required when ApprovalOptions.RequireOperationId is enabled. Same content replays the committed result; changed content returns 409. Retain the key after unknown outcomes. */
-                    "Idempotency-Key"?: string;
+                header: {
+                    /** @description Required stable key for one logical command. Same content replays the committed result; changed content returns 409. Retain the key and original content after unknown outcomes. */
+                    "Idempotency-Key": string;
                 };
                 path: {
                     key: string;
@@ -3914,9 +3914,9 @@ export interface paths {
         delete: {
             parameters: {
                 query?: never;
-                header?: {
-                    /** @description Stable key for one logical command; required when ApprovalOptions.RequireOperationId is enabled. Same content replays the committed result; changed content returns 409. Retain the key after unknown outcomes. */
-                    "Idempotency-Key"?: string;
+                header: {
+                    /** @description Required stable key for one logical command. Same content replays the committed result; changed content returns 409. Retain the key and original content after unknown outcomes. */
+                    "Idempotency-Key": string;
                 };
                 path: {
                     id: string;
@@ -4613,9 +4613,9 @@ export interface paths {
         post: {
             parameters: {
                 query?: never;
-                header?: {
-                    /** @description Stable key for one logical command; required when ApprovalOptions.RequireOperationId is enabled. Same content replays the committed result; changed content returns 409. Retain the key after unknown outcomes. */
-                    "Idempotency-Key"?: string;
+                header: {
+                    /** @description Required stable key for one logical command. Same content replays the committed result; changed content returns 409. Retain the key and original content after unknown outcomes. */
+                    "Idempotency-Key": string;
                 };
                 path: {
                     id: string;
@@ -4917,9 +4917,9 @@ export interface paths {
         post: {
             parameters: {
                 query?: never;
-                header?: {
-                    /** @description Stable key for one logical command; required when ApprovalOptions.RequireOperationId is enabled. Same content replays the committed result; changed content returns 409. Retain the key after unknown outcomes. */
-                    "Idempotency-Key"?: string;
+                header: {
+                    /** @description Required stable key for one logical command. Same content replays the committed result; changed content returns 409. Retain the key and original content after unknown outcomes. */
+                    "Idempotency-Key": string;
                 };
                 path: {
                     id: string;
@@ -5018,9 +5018,9 @@ export interface paths {
         post: {
             parameters: {
                 query?: never;
-                header?: {
-                    /** @description Stable key for one logical command; required when ApprovalOptions.RequireOperationId is enabled. Same content replays the committed result; changed content returns 409. Retain the key after unknown outcomes. */
-                    "Idempotency-Key"?: string;
+                header: {
+                    /** @description Required stable key for one logical command. Same content replays the committed result; changed content returns 409. Retain the key and original content after unknown outcomes. */
+                    "Idempotency-Key": string;
                 };
                 path?: never;
                 cookie?: never;
@@ -5418,9 +5418,9 @@ export interface paths {
         post: {
             parameters: {
                 query?: never;
-                header?: {
-                    /** @description Stable key for one logical command; required when ApprovalOptions.RequireOperationId is enabled. Same content replays the committed result; changed content returns 409. Retain the key after unknown outcomes. */
-                    "Idempotency-Key"?: string;
+                header: {
+                    /** @description Required stable key for one logical command. Same content replays the committed result; changed content returns 409. Retain the key and original content after unknown outcomes. */
+                    "Idempotency-Key": string;
                 };
                 path: {
                     id: string;
@@ -5630,9 +5630,9 @@ export interface paths {
         post: {
             parameters: {
                 query?: never;
-                header?: {
-                    /** @description Stable key for one logical command; required when ApprovalOptions.RequireOperationId is enabled. Same content replays the committed result; changed content returns 409. Retain the key after unknown outcomes. */
-                    "Idempotency-Key"?: string;
+                header: {
+                    /** @description Required stable key for one logical command. Same content replays the committed result; changed content returns 409. Retain the key and original content after unknown outcomes. */
+                    "Idempotency-Key": string;
                 };
                 path: {
                     id: string;
@@ -5735,9 +5735,9 @@ export interface paths {
         post: {
             parameters: {
                 query?: never;
-                header?: {
-                    /** @description Stable key for one logical command; required when ApprovalOptions.RequireOperationId is enabled. Same content replays the committed result; changed content returns 409. Retain the key after unknown outcomes. */
-                    "Idempotency-Key"?: string;
+                header: {
+                    /** @description Required stable key for one logical command. Same content replays the committed result; changed content returns 409. Retain the key and original content after unknown outcomes. */
+                    "Idempotency-Key": string;
                 };
                 path: {
                     id: string;
@@ -5940,9 +5940,9 @@ export interface paths {
         post: {
             parameters: {
                 query?: never;
-                header?: {
-                    /** @description Stable key for one logical command; required when ApprovalOptions.RequireOperationId is enabled. Same content replays the committed result; changed content returns 409. Retain the key after unknown outcomes. */
-                    "Idempotency-Key"?: string;
+                header: {
+                    /** @description Required stable key for one logical command. Same content replays the committed result; changed content returns 409. Retain the key and original content after unknown outcomes. */
+                    "Idempotency-Key": string;
                 };
                 path: {
                     id: string;
@@ -6045,9 +6045,9 @@ export interface paths {
         post: {
             parameters: {
                 query?: never;
-                header?: {
-                    /** @description Stable key for one logical command; required when ApprovalOptions.RequireOperationId is enabled. Same content replays the committed result; changed content returns 409. Retain the key after unknown outcomes. */
-                    "Idempotency-Key"?: string;
+                header: {
+                    /** @description Required stable key for one logical command. Same content replays the committed result; changed content returns 409. Retain the key and original content after unknown outcomes. */
+                    "Idempotency-Key": string;
                 };
                 path: {
                     id: string;
@@ -6250,9 +6250,9 @@ export interface paths {
         post: {
             parameters: {
                 query?: never;
-                header?: {
-                    /** @description Stable key for one logical command; required when ApprovalOptions.RequireOperationId is enabled. Same content replays the committed result; changed content returns 409. Retain the key after unknown outcomes. */
-                    "Idempotency-Key"?: string;
+                header: {
+                    /** @description Required stable key for one logical command. Same content replays the committed result; changed content returns 409. Retain the key and original content after unknown outcomes. */
+                    "Idempotency-Key": string;
                 };
                 path: {
                     id: string;
@@ -6764,7 +6764,6 @@ export interface components {
             id: string;
             /** Format: uuid */
             instanceId: null | string;
-            kind: components["schemas"]["OutboxKind"];
             lastError: null | string;
             /** Format: int32 */
             maxAttempts: number | string;
@@ -7047,7 +7046,7 @@ export interface components {
             };
             notifications?: components["schemas"]["NotificationRule"][];
             /** Format: int32 */
-            schemaVersion?: unknown;
+            schemaVersion: unknown;
             settings?: null | components["schemas"]["FlowSettings"];
             startNodeId?: string;
         };
@@ -7192,8 +7191,6 @@ export interface components {
         };
         /** @enum {unknown} */
         NotifyEvent: "Enter" | "Approved" | "Rejected" | "Transferred" | "Timeout" | "Completed" | "Returned" | "Resubmitted";
-        /** @enum {unknown} */
-        OutboxKind: "Notification" | "Event";
         /** @enum {unknown} */
         OutboxStatus: "Pending" | "Succeeded" | "Failed";
         PagedResultOfApprovalDefinitionAudit: {

@@ -210,10 +210,7 @@ public sealed partial class ApprovalDefinitionService
         return managed is null ? null : await DescribeAsync(managed, ct);
     }
 
-    public Task<List<DefinitionGovernanceSummary>> ListGovernanceAsync(CancellationToken ct = default) =>
-        ListGovernanceAsync(null, false, ct);
-
-    public async Task<List<DefinitionGovernanceSummary>> ListGovernanceAsync(string? category, bool uncategorized = false, CancellationToken ct = default)
+    public async Task<List<DefinitionGovernanceSummary>> ListGovernanceAsync(string? category = null, bool uncategorized = false, CancellationToken ct = default)
     {
         await _authorization.RequireAsync(ApprovalPermissions.DefinitionReadSensitive, ct: ct);
         category = string.IsNullOrWhiteSpace(category) ? null : category.Trim();
@@ -246,7 +243,7 @@ public sealed partial class ApprovalDefinitionService
     }
 
     public async Task<IReadOnlyList<string>> ListCategoriesAsync(CancellationToken ct = default) =>
-        (await ListGovernanceAsync(ct)).Where(d => d.Category is not null).Select(d => d.Category!).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
+        (await ListGovernanceAsync(ct: ct)).Where(d => d.Category is not null).Select(d => d.Category!).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
 
     public async Task<PagedResult<ApprovalDefinitionAudit>> ListAuditAsync(string key, PageRequest? page = null, CancellationToken ct = default)
     {

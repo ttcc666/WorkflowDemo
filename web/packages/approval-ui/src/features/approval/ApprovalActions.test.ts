@@ -9,7 +9,7 @@ import type { ApprovalTask } from '../../contracts/api'
 const task: ApprovalTask = {
   id: 'task', instanceId: 'instance', nodeId: 'review', nodeName: '审核', assigneeKind: 'User', assigneeValue: 'bob',
   kind: 'Approval', parentTaskId: null, round: 0, status: 'Pending', order: 0, handledBy: null, comment: null,
-  createdAt: '', completedAt: null, dueAt: null, remindCount: 0,
+  createdAt: '', completedAt: null, dueAt: null, remindCount: 0, nextRemindAt: null, lastRemindedAt: null, capabilities: {},
 }
 async function actions(capabilities: Record<string, boolean>, allowReturn = true) {
   const client = createApprovalClient({ fetcher: async () => Response.json({}) })

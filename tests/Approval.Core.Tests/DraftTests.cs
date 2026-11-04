@@ -10,6 +10,7 @@ public sealed class DraftTests : IAsyncLifetime
 {
     private const string LeaveFlow = """
     {
+      "schemaVersion":1,
       "startNodeId": "start",
       "settings": { "startable": true },
       "form": { "fields": [

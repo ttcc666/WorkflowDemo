@@ -419,7 +419,6 @@
     },
     "schemaVersion": {
       "const": 1,
-      "default": 1,
       "type": "integer"
     },
     "settings": {
@@ -464,6 +463,9 @@
       "type": "string"
     }
   },
+  "required": [
+    "schemaVersion"
+  ],
   "type": [
     "object",
     "null"

@@ -41,7 +41,8 @@ public sealed class FlowDefinition
 {
     public const int CurrentSchemaVersion = 1;
 
-    /// <summary>JSON 协议版本，与发布版本独立。旧定义缺省为 v1；发布新定义时显式写出。</summary>
+    /// <summary>JSON 协议版本，与发布版本独立。外部 JSON 必须显式声明当前版本。</summary>
+    [JsonRequired]
     [JsonConverter(typeof(FlowSchemaVersionConverter))]
     public int SchemaVersion { get; set; } = CurrentSchemaVersion;
 
@@ -75,6 +76,8 @@ public sealed class FlowDefinition
         try
         {
             using var document = JsonDocument.Parse(json);
+            if (document.RootElement.ValueKind != JsonValueKind.Object)
+                throw new JsonException("流程定义根节点必须是 JSON 对象");
             if (document.RootElement.TryGetProperty("nodes", out var nodeMap) && nodeMap.ValueKind == JsonValueKind.Object
                 && nodeMap.EnumerateObject().GroupBy(p => p.Name, StringComparer.Ordinal).Any(g => g.Count() > 1))
                 throw new ApprovalException("流程包含重复节点 ID") { Code = ApprovalErrorCode.InvalidDefinition };

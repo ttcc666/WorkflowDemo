@@ -8,6 +8,7 @@ public sealed class PagingTests : IAsyncLifetime
     /// <summary>提交 → 抄送（用户 c1 + 角色 Watcher）→ 审核（角色 Reviewer，或签，60 分钟时限）。</summary>
     private const string Flow = """
     {
+      "schemaVersion":1,
       "startNodeId": "start",
       "nodes": {
         "start":  { "name": "提交", "type": "Start", "next": "cc" },

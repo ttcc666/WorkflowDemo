@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
-namespace Approval.ReferenceHost.Migrations.Sqlite
+namespace Approval.Database.Tests.Migrations.PostgreSql
 {
     /// <inheritdoc />
     public partial class InitialApproval : Migration
@@ -15,14 +15,14 @@ namespace Approval.ReferenceHost.Migrations.Sqlite
                 name: "ApprovalDefinitions",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
-                    Key = table.Column<string>(type: "TEXT", maxLength: 100, nullable: false),
-                    Version = table.Column<int>(type: "INTEGER", nullable: false),
-                    Name = table.Column<string>(type: "TEXT", maxLength: 200, nullable: false),
-                    DefinitionJson = table.Column<string>(type: "TEXT", nullable: false),
-                    Category = table.Column<string>(type: "TEXT", maxLength: 100, nullable: true),
-                    IsPublished = table.Column<bool>(type: "INTEGER", nullable: false),
-                    CreatedAt = table.Column<DateTime>(type: "TEXT", nullable: false)
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    Key = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
+                    Version = table.Column<int>(type: "integer", nullable: false),
+                    Name = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
+                    DefinitionJson = table.Column<string>(type: "text", nullable: false),
+                    Category = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
+                    IsPublished = table.Column<bool>(type: "boolean", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -33,13 +33,13 @@ namespace Approval.ReferenceHost.Migrations.Sqlite
                 name: "ApprovalDrafts",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
-                    UserId = table.Column<string>(type: "TEXT", maxLength: 100, nullable: false),
-                    DefinitionKey = table.Column<string>(type: "TEXT", maxLength: 100, nullable: false),
-                    FormDataJson = table.Column<string>(type: "TEXT", nullable: false),
-                    Comment = table.Column<string>(type: "TEXT", maxLength: 500, nullable: true),
-                    CreatedAt = table.Column<DateTime>(type: "TEXT", nullable: false),
-                    UpdatedAt = table.Column<DateTime>(type: "TEXT", nullable: false)
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    UserId = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
+                    DefinitionKey = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
+                    FormDataJson = table.Column<string>(type: "text", nullable: false),
+                    Comment = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -50,20 +50,19 @@ namespace Approval.ReferenceHost.Migrations.Sqlite
                 name: "ApprovalOperations",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
-                    LookupHash = table.Column<string>(type: "TEXT", maxLength: 64, nullable: false),
-                    ActorId = table.Column<string>(type: "TEXT", maxLength: 256, nullable: false),
-                    Kind = table.Column<string>(type: "TEXT", maxLength: 100, nullable: false),
-                    Scope = table.Column<string>(type: "TEXT", maxLength: 2000, nullable: false),
-                    RequestKey = table.Column<string>(type: "TEXT", maxLength: 200, nullable: false),
-                    RequestHash = table.Column<string>(type: "TEXT", maxLength: 64, nullable: false),
-                    HashVersion = table.Column<int>(type: "INTEGER", nullable: false),
-                    ResultVersion = table.Column<int>(type: "INTEGER", nullable: false),
-                    ResultJson = table.Column<string>(type: "TEXT", nullable: false),
-                    InstanceId = table.Column<Guid>(type: "TEXT", nullable: true),
-                    DefinitionId = table.Column<Guid>(type: "TEXT", nullable: true),
-                    CommittedAt = table.Column<DateTime>(type: "TEXT", nullable: false),
-                    IsTombstone = table.Column<bool>(type: "INTEGER", nullable: false)
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    LookupHash = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
+                    ActorId = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: false),
+                    Kind = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
+                    Scope = table.Column<string>(type: "character varying(2000)", maxLength: 2000, nullable: false),
+                    RequestKey = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
+                    RequestHash = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
+                    HashVersion = table.Column<int>(type: "integer", nullable: false),
+                    ResultVersion = table.Column<int>(type: "integer", nullable: false),
+                    ResultJson = table.Column<string>(type: "text", nullable: false),
+                    InstanceId = table.Column<Guid>(type: "uuid", nullable: true),
+                    DefinitionId = table.Column<Guid>(type: "uuid", nullable: true),
+                    CommittedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -74,17 +73,17 @@ namespace Approval.ReferenceHost.Migrations.Sqlite
                 name: "ApprovalDefinitionAudits",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
-                    Key = table.Column<string>(type: "TEXT", maxLength: 100, nullable: false),
-                    Revision = table.Column<long>(type: "INTEGER", nullable: false),
-                    Action = table.Column<string>(type: "TEXT", maxLength: 30, nullable: false),
-                    ActorId = table.Column<string>(type: "TEXT", maxLength: 256, nullable: false),
-                    CreatedAt = table.Column<DateTime>(type: "TEXT", nullable: false),
-                    DefinitionId = table.Column<Guid>(type: "TEXT", nullable: true),
-                    SourceDefinitionId = table.Column<Guid>(type: "TEXT", nullable: true),
-                    Version = table.Column<int>(type: "INTEGER", nullable: true),
-                    ChangeNote = table.Column<string>(type: "TEXT", maxLength: 1000, nullable: true),
-                    DefinitionHash = table.Column<string>(type: "TEXT", maxLength: 64, nullable: true)
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    Key = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
+                    Revision = table.Column<long>(type: "bigint", nullable: false),
+                    Action = table.Column<string>(type: "character varying(30)", maxLength: 30, nullable: false),
+                    ActorId = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    DefinitionId = table.Column<Guid>(type: "uuid", nullable: true),
+                    SourceDefinitionId = table.Column<Guid>(type: "uuid", nullable: true),
+                    Version = table.Column<int>(type: "integer", nullable: true),
+                    ChangeNote = table.Column<string>(type: "character varying(1000)", maxLength: 1000, nullable: true),
+                    DefinitionHash = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: true)
                 },
                 constraints: table =>
                 {
@@ -95,7 +94,7 @@ namespace Approval.ReferenceHost.Migrations.Sqlite
                         principalTable: "ApprovalDefinitions",
                         principalColumn: "Id");
                     table.ForeignKey(
-                        name: "FK_ApprovalDefinitionAudits_ApprovalDefinitions_SourceDefinitionId",
+                        name: "FK_ApprovalDefinitionAudits_ApprovalDefinitions_SourceDefiniti~",
                         column: x => x.SourceDefinitionId,
                         principalTable: "ApprovalDefinitions",
                         principalColumn: "Id");
@@ -105,31 +104,31 @@ namespace Approval.ReferenceHost.Migrations.Sqlite
                 name: "ApprovalDefinitionManagement",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
-                    Key = table.Column<string>(type: "TEXT", maxLength: 100, nullable: false),
-                    Name = table.Column<string>(type: "TEXT", maxLength: 200, nullable: false),
-                    Category = table.Column<string>(type: "TEXT", maxLength: 100, nullable: true),
-                    DraftJson = table.Column<string>(type: "TEXT", nullable: true),
-                    DraftSourceDefinitionId = table.Column<Guid>(type: "TEXT", nullable: true),
-                    Revision = table.Column<long>(type: "INTEGER", nullable: false),
-                    DraftRevision = table.Column<long>(type: "INTEGER", nullable: false),
-                    PublishedDraftRevision = table.Column<long>(type: "INTEGER", nullable: true),
-                    LastVersion = table.Column<int>(type: "INTEGER", nullable: false),
-                    IsEnabled = table.Column<bool>(type: "INTEGER", nullable: false),
-                    ActiveDefinitionId = table.Column<Guid>(type: "TEXT", nullable: true),
-                    UpdatedAt = table.Column<DateTime>(type: "TEXT", nullable: false),
-                    UpdatedBy = table.Column<string>(type: "TEXT", maxLength: 256, nullable: false)
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    Key = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
+                    Name = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
+                    Category = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
+                    DraftJson = table.Column<string>(type: "text", nullable: true),
+                    DraftSourceDefinitionId = table.Column<Guid>(type: "uuid", nullable: true),
+                    Revision = table.Column<long>(type: "bigint", nullable: false),
+                    DraftRevision = table.Column<long>(type: "bigint", nullable: false),
+                    PublishedDraftRevision = table.Column<long>(type: "bigint", nullable: true),
+                    LastVersion = table.Column<int>(type: "integer", nullable: false),
+                    IsEnabled = table.Column<bool>(type: "boolean", nullable: false),
+                    ActiveDefinitionId = table.Column<Guid>(type: "uuid", nullable: true),
+                    UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    UpdatedBy = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: false)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_ApprovalDefinitionManagement", x => x.Id);
                     table.ForeignKey(
-                        name: "FK_ApprovalDefinitionManagement_ApprovalDefinitions_ActiveDefinitionId",
+                        name: "FK_ApprovalDefinitionManagement_ApprovalDefinitions_ActiveDefi~",
                         column: x => x.ActiveDefinitionId,
                         principalTable: "ApprovalDefinitions",
                         principalColumn: "Id");
                     table.ForeignKey(
-                        name: "FK_ApprovalDefinitionManagement_ApprovalDefinitions_DraftSourceDefinitionId",
+                        name: "FK_ApprovalDefinitionManagement_ApprovalDefinitions_DraftSourc~",
                         column: x => x.DraftSourceDefinitionId,
                         principalTable: "ApprovalDefinitions",
                         principalColumn: "Id");
@@ -139,23 +138,23 @@ namespace Approval.ReferenceHost.Migrations.Sqlite
                 name: "ApprovalInstances",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
-                    DefinitionId = table.Column<Guid>(type: "TEXT", nullable: false),
-                    DefinitionKey = table.Column<string>(type: "TEXT", maxLength: 100, nullable: false),
-                    DefinitionVersion = table.Column<int>(type: "INTEGER", nullable: false),
-                    BusinessType = table.Column<string>(type: "TEXT", maxLength: 100, nullable: false),
-                    BusinessKey = table.Column<string>(type: "TEXT", maxLength: 100, nullable: false),
-                    Title = table.Column<string>(type: "TEXT", maxLength: 500, nullable: true),
-                    InitiatorId = table.Column<string>(type: "TEXT", maxLength: 100, nullable: false),
-                    Status = table.Column<string>(type: "TEXT", maxLength: 20, nullable: false),
-                    CurrentNodeId = table.Column<string>(type: "TEXT", maxLength: 500, nullable: true),
-                    StateJson = table.Column<string>(type: "TEXT", nullable: true),
-                    Round = table.Column<int>(type: "INTEGER", nullable: false),
-                    FormDataJson = table.Column<string>(type: "TEXT", nullable: false),
-                    CreatedAt = table.Column<DateTime>(type: "TEXT", nullable: false),
-                    CompletedAt = table.Column<DateTime>(type: "TEXT", nullable: true),
-                    ConcurrencyStamp = table.Column<long>(type: "INTEGER", nullable: false),
-                    LogSequence = table.Column<int>(type: "INTEGER", nullable: false)
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    DefinitionId = table.Column<Guid>(type: "uuid", nullable: false),
+                    DefinitionKey = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
+                    DefinitionVersion = table.Column<int>(type: "integer", nullable: false),
+                    BusinessType = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
+                    BusinessKey = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
+                    Title = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
+                    InitiatorId = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
+                    Status = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false),
+                    CurrentNodeId = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
+                    StateJson = table.Column<string>(type: "text", nullable: true),
+                    Round = table.Column<int>(type: "integer", nullable: false),
+                    FormDataJson = table.Column<string>(type: "text", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    CompletedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    ConcurrencyStamp = table.Column<long>(type: "bigint", nullable: false),
+                    LogSequence = table.Column<int>(type: "integer", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -171,11 +170,11 @@ namespace Approval.ReferenceHost.Migrations.Sqlite
                 name: "ApprovalBusinessSlots",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
-                    LookupHash = table.Column<string>(type: "TEXT", maxLength: 64, nullable: false),
-                    BusinessType = table.Column<string>(type: "TEXT", maxLength: 100, nullable: false),
-                    BusinessKey = table.Column<string>(type: "TEXT", maxLength: 200, nullable: false),
-                    InstanceId = table.Column<Guid>(type: "TEXT", nullable: false)
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    LookupHash = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
+                    BusinessType = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
+                    BusinessKey = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
+                    InstanceId = table.Column<Guid>(type: "uuid", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -191,13 +190,13 @@ namespace Approval.ReferenceHost.Migrations.Sqlite
                 name: "ApprovalCarbonCopies",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
-                    InstanceId = table.Column<Guid>(type: "TEXT", nullable: false),
-                    NodeId = table.Column<string>(type: "TEXT", maxLength: 100, nullable: false),
-                    AssigneeKind = table.Column<string>(type: "TEXT", maxLength: 20, nullable: false),
-                    AssigneeValue = table.Column<string>(type: "TEXT", maxLength: 100, nullable: false),
-                    Round = table.Column<int>(type: "INTEGER", nullable: false),
-                    CreatedAt = table.Column<DateTime>(type: "TEXT", nullable: false)
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    InstanceId = table.Column<Guid>(type: "uuid", nullable: false),
+                    NodeId = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
+                    AssigneeKind = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false),
+                    AssigneeValue = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
+                    Round = table.Column<int>(type: "integer", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -214,17 +213,17 @@ namespace Approval.ReferenceHost.Migrations.Sqlite
                 name: "ApprovalFiles",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
-                    FileName = table.Column<string>(type: "TEXT", maxLength: 200, nullable: false),
-                    ContentType = table.Column<string>(type: "TEXT", maxLength: 100, nullable: false),
-                    Size = table.Column<long>(type: "INTEGER", nullable: false),
-                    Sha256 = table.Column<string>(type: "TEXT", maxLength: 64, nullable: false),
-                    StorageKey = table.Column<string>(type: "TEXT", maxLength: 200, nullable: false),
-                    UploadedBy = table.Column<string>(type: "TEXT", maxLength: 100, nullable: false),
-                    UploadedAt = table.Column<DateTime>(type: "TEXT", nullable: false),
-                    InstanceId = table.Column<Guid>(type: "TEXT", nullable: true),
-                    DraftId = table.Column<Guid>(type: "TEXT", nullable: true),
-                    ConcurrencyStamp = table.Column<long>(type: "INTEGER", nullable: false)
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    FileName = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
+                    ContentType = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
+                    Size = table.Column<long>(type: "bigint", nullable: false),
+                    Sha256 = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
+                    StorageKey = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
+                    UploadedBy = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
+                    UploadedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    InstanceId = table.Column<Guid>(type: "uuid", nullable: true),
+                    DraftId = table.Column<Guid>(type: "uuid", nullable: true),
+                    ConcurrencyStamp = table.Column<long>(type: "bigint", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -245,17 +244,17 @@ namespace Approval.ReferenceHost.Migrations.Sqlite
                 name: "ApprovalLogs",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
-                    InstanceId = table.Column<Guid>(type: "TEXT", nullable: false),
-                    TaskId = table.Column<Guid>(type: "TEXT", nullable: true),
-                    Sequence = table.Column<int>(type: "INTEGER", nullable: false),
-                    NodeId = table.Column<string>(type: "TEXT", maxLength: 100, nullable: true),
-                    NodeName = table.Column<string>(type: "TEXT", maxLength: 200, nullable: true),
-                    Action = table.Column<string>(type: "TEXT", maxLength: 20, nullable: false),
-                    OperatorId = table.Column<string>(type: "TEXT", maxLength: 100, nullable: false),
-                    Comment = table.Column<string>(type: "TEXT", nullable: true),
-                    Details = table.Column<string>(type: "TEXT", nullable: true),
-                    CreatedAt = table.Column<DateTime>(type: "TEXT", nullable: false)
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    InstanceId = table.Column<Guid>(type: "uuid", nullable: false),
+                    TaskId = table.Column<Guid>(type: "uuid", nullable: true),
+                    Sequence = table.Column<int>(type: "integer", nullable: false),
+                    NodeId = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
+                    NodeName = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: true),
+                    Action = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false),
+                    OperatorId = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
+                    Comment = table.Column<string>(type: "text", nullable: true),
+                    Details = table.Column<string>(type: "text", nullable: true),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -272,16 +271,16 @@ namespace Approval.ReferenceHost.Migrations.Sqlite
                 name: "ApprovalMessages",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
-                    UserId = table.Column<string>(type: "TEXT", maxLength: 100, nullable: false),
-                    Title = table.Column<string>(type: "TEXT", maxLength: 200, nullable: false),
-                    Content = table.Column<string>(type: "TEXT", maxLength: 4000, nullable: false),
-                    Event = table.Column<string>(type: "TEXT", maxLength: 20, nullable: false),
-                    InstanceId = table.Column<Guid>(type: "TEXT", nullable: true),
-                    NodeId = table.Column<string>(type: "TEXT", maxLength: 100, nullable: true),
-                    IsRead = table.Column<bool>(type: "INTEGER", nullable: false),
-                    CreatedAt = table.Column<DateTime>(type: "TEXT", nullable: false),
-                    ReadAt = table.Column<DateTime>(type: "TEXT", nullable: true)
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    UserId = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
+                    Title = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
+                    Content = table.Column<string>(type: "character varying(4000)", maxLength: 4000, nullable: false),
+                    Event = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false),
+                    InstanceId = table.Column<Guid>(type: "uuid", nullable: true),
+                    NodeId = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
+                    IsRead = table.Column<bool>(type: "boolean", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    ReadAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -297,21 +296,20 @@ namespace Approval.ReferenceHost.Migrations.Sqlite
                 name: "ApprovalOutbox",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
-                    Kind = table.Column<string>(type: "TEXT", maxLength: 20, nullable: false),
-                    Target = table.Column<string>(type: "TEXT", maxLength: 100, nullable: false),
-                    InstanceId = table.Column<Guid>(type: "TEXT", nullable: true),
-                    NodeId = table.Column<string>(type: "TEXT", maxLength: 100, nullable: true),
-                    Description = table.Column<string>(type: "TEXT", maxLength: 500, nullable: true),
-                    PayloadJson = table.Column<string>(type: "TEXT", nullable: false),
-                    Status = table.Column<string>(type: "TEXT", maxLength: 20, nullable: false),
-                    Attempts = table.Column<int>(type: "INTEGER", nullable: false),
-                    MaxAttempts = table.Column<int>(type: "INTEGER", nullable: false),
-                    NextAttemptAt = table.Column<DateTime>(type: "TEXT", nullable: false),
-                    LastError = table.Column<string>(type: "TEXT", maxLength: 2000, nullable: true),
-                    CreatedAt = table.Column<DateTime>(type: "TEXT", nullable: false),
-                    CompletedAt = table.Column<DateTime>(type: "TEXT", nullable: true),
-                    ConcurrencyStamp = table.Column<long>(type: "INTEGER", nullable: false)
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    Target = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
+                    InstanceId = table.Column<Guid>(type: "uuid", nullable: true),
+                    NodeId = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
+                    Description = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
+                    PayloadJson = table.Column<string>(type: "text", nullable: false),
+                    Status = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false),
+                    Attempts = table.Column<int>(type: "integer", nullable: false),
+                    MaxAttempts = table.Column<int>(type: "integer", nullable: false),
+                    NextAttemptAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    LastError = table.Column<string>(type: "character varying(2000)", maxLength: 2000, nullable: true),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    CompletedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    ConcurrencyStamp = table.Column<long>(type: "bigint", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -327,25 +325,25 @@ namespace Approval.ReferenceHost.Migrations.Sqlite
                 name: "ApprovalTasks",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
-                    InstanceId = table.Column<Guid>(type: "TEXT", nullable: false),
-                    NodeId = table.Column<string>(type: "TEXT", maxLength: 100, nullable: false),
-                    NodeName = table.Column<string>(type: "TEXT", maxLength: 200, nullable: false),
-                    AssigneeKind = table.Column<string>(type: "TEXT", maxLength: 20, nullable: false),
-                    Kind = table.Column<string>(type: "TEXT", maxLength: 20, nullable: false),
-                    ParentTaskId = table.Column<Guid>(type: "TEXT", nullable: true),
-                    Round = table.Column<int>(type: "INTEGER", nullable: false),
-                    AssigneeValue = table.Column<string>(type: "TEXT", maxLength: 100, nullable: false),
-                    Status = table.Column<string>(type: "TEXT", maxLength: 20, nullable: false),
-                    Order = table.Column<int>(type: "INTEGER", nullable: false),
-                    HandledBy = table.Column<string>(type: "TEXT", maxLength: 100, nullable: true),
-                    Comment = table.Column<string>(type: "TEXT", nullable: true),
-                    CreatedAt = table.Column<DateTime>(type: "TEXT", nullable: false),
-                    CompletedAt = table.Column<DateTime>(type: "TEXT", nullable: true),
-                    DueAt = table.Column<DateTime>(type: "TEXT", nullable: true),
-                    NextRemindAt = table.Column<DateTime>(type: "TEXT", nullable: true),
-                    RemindCount = table.Column<int>(type: "INTEGER", nullable: false),
-                    LastRemindedAt = table.Column<DateTime>(type: "TEXT", nullable: true)
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    InstanceId = table.Column<Guid>(type: "uuid", nullable: false),
+                    NodeId = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
+                    NodeName = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
+                    AssigneeKind = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false),
+                    Kind = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false),
+                    ParentTaskId = table.Column<Guid>(type: "uuid", nullable: true),
+                    Round = table.Column<int>(type: "integer", nullable: false),
+                    AssigneeValue = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
+                    Status = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false),
+                    Order = table.Column<int>(type: "integer", nullable: false),
+                    HandledBy = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
+                    Comment = table.Column<string>(type: "text", nullable: true),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    CompletedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    DueAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    NextRemindAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    RemindCount = table.Column<int>(type: "integer", nullable: false),
+                    LastRemindedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -362,10 +360,10 @@ namespace Approval.ReferenceHost.Migrations.Sqlite
                 name: "ApprovalCarbonCopyReads",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
-                    CarbonCopyId = table.Column<Guid>(type: "TEXT", nullable: false),
-                    UserId = table.Column<string>(type: "TEXT", maxLength: 100, nullable: false),
-                    ReadAt = table.Column<DateTime>(type: "TEXT", nullable: false)
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    CarbonCopyId = table.Column<Guid>(type: "uuid", nullable: false),
+                    UserId = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
+                    ReadAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>
                 {

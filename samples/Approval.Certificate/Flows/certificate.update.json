@@ -1,4 +1,4 @@
-{
+{"schemaVersion":1,
   "name": "证书变更",
   "startNodeId": "start",
   "notifications": [

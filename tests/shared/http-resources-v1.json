@@ -4,7 +4,7 @@
     "key": "contract.sign",
     "version": 3,
     "name": "合同",
-    "definitionJson": "{\"startNodeId\":\"start\",\"nodes\":{}}",
+    "definitionJson": "{\"schemaVersion\":1,\"startNodeId\":\"start\",\"nodes\":{}}",
     "isPublished": true,
     "createdAt": "2026-11-01T08:00:00Z"
   },
@@ -22,7 +22,6 @@
   },
   "outbox": {
     "id": "10000000-0000-0000-0000-000000000002",
-    "kind": "Notification",
     "target": "Webhook",
     "instanceId": "10000000-0000-0000-0000-000000000001",
     "nodeId": "review",

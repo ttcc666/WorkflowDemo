@@ -11,8 +11,41 @@ namespace Approval.AspNetCore.Tests;
 
 public sealed class DefinitionGovernanceEndpointTests
 {
+    [Theory]
+    [InlineData("missing", false)]
+    [InlineData("current", true)]
+    [InlineData("future", false)]
+    [InlineData("null-root", false)]
+    [InlineData("array-root", false)]
+    [InlineData("scalar-root", false)]
+    public async Task Publication_RequiresExplicitCurrentSchemaVersion_WithoutPartialWrites(string caseId, bool valid)
+    {
+        await using var host = await ApiHost.StartAsync();
+        var json = caseId switch {
+            "missing" => Flow.Replace("\"schemaVersion\":1,", ""),
+            "future" => Flow.Replace("\"schemaVersion\":1", "\"schemaVersion\":2"),
+            "null-root" => "null",
+            "array-root" => "[]",
+            "scalar-root" => "1",
+            _ => Flow
+        };
+        using var response = await host.SendAsync(HttpMethod.Post, "/api/approval/definitions/explicit", "admin", rawJson: json);
+        if (valid) Assert.True(response.IsSuccessStatusCode, await response.Content.ReadAsStringAsync());
+        else Assert.Equal("InvalidDefinition", (await response.ProblemAsync(400)).GetProperty("code").GetString());
+        await host.RunAsync(async sp => {
+            var db = sp.GetRequiredService<ApiDbContext>();
+            Assert.Equal(valid ? 1 : 0, await db.Set<ApprovalDefinition>().CountAsync());
+            Assert.Equal(valid ? 1 : 0, await db.Set<ApprovalDefinitionManagement>().CountAsync());
+            Assert.Equal(valid ? 1 : 0, await db.Set<ApprovalDefinitionAudit>().CountAsync());
+            Assert.Equal(valid ? 1 : 0, await db.Set<ApprovalOperation>().CountAsync());
+            Assert.Empty(await db.Set<ApprovalInstance>().ToListAsync());
+            Assert.Empty(await db.Set<ApprovalOutboxMessage>().ToListAsync());
+            return true;
+        });
+    }
+
     private const string Flow = """
-        {"startNodeId":"start","settings":{"startable":true},"nodes":{"start":{"type":"Start","name":"Start","next":"review"},
+        {"schemaVersion":1,"startNodeId":"start","settings":{"startable":true},"nodes":{"start":{"type":"Start","name":"Start","next":"review"},
         "review":{"type":"Approval","name":"Review","approvers":[{"type":"User","value":"bob"}],"next":"end"},"end":{"type":"End","name":"End"}}}
         """;
     private static async Task<JsonElement> Command(ApiHost host, HttpMethod method, string suffix, string key, object body)
@@ -26,7 +59,7 @@ public sealed class DefinitionGovernanceEndpointTests
     [Fact]
     public async Task DraftPublish_OriginalKeysReplayAndChangedRevisionReturns409_WithAtomicAudit()
     {
-        await using var host = await ApiHost.StartAsync(workflow: o => o.RequireOperationId = true);
+        await using var host = await ApiHost.StartAsync();
         var body = new { name = "Doc", definitionJson = Flow, expectedRevision = 0 };
         var saved = await Command(host, HttpMethod.Put, "draft", "draft-1", body);
         Assert.Equal(1, saved.GetProperty("revision").GetInt64());
@@ -35,7 +68,7 @@ public sealed class DefinitionGovernanceEndpointTests
         var result = await Command(host, HttpMethod.Post, "publish-draft", "publish-1", publish);
         Assert.Equal(1, result.GetProperty("version").GetInt32());
         Assert.Equal(result.GetProperty("id").GetGuid(), (await Command(host, HttpMethod.Post, "publish-draft", "publish-1", publish)).GetProperty("id").GetGuid());
-        var conflict = await host.SendAsync(HttpMethod.Put, "/api/approval/definitions/doc/draft", "admin", body);
+        var conflict = await host.SendAsync(HttpMethod.Put, "/api/approval/definitions/doc/draft", "admin", body, withOperationId: false);
         Assert.Equal(HttpStatusCode.BadRequest, conflict.StatusCode); // strict missing-key gate
         using var stale = new HttpRequestMessage(HttpMethod.Put, "/api/approval/definitions/doc/draft");
         stale.Headers.Add(HeaderCurrentUser.Header, "admin"); stale.Headers.Add("Idempotency-Key", "stale"); stale.Content = JsonContent.Create(body);

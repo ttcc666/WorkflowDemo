@@ -51,7 +51,6 @@ public static class ReferenceDatabase
             services.AddScoped<ReferenceDbContext>(sp => sp.GetRequiredService<T>());
             configure(services.AddApprovalWorkflow<T>(o =>
             {
-                o.RequireOperationId = true;
                 o.RequireBusinessHandler = true;
                 o.EnableBackgroundServices = config.GetValue("Approval:EnableBackgroundServices", true);
                 o.DisplayTimeZone = TimeZoneInfo.Utc;

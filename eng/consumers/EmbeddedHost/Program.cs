@@ -21,7 +21,7 @@ builder.Services.AddScoped<IApprovalUserStatusProvider, HostUsers>();
 builder.Services.AddSingleton<IApprovalPermissionProvider, HostPermissions>();
 builder.Services.AddSingleton<HostEvents>();
 builder.Services.AddSingleton<IApprovalEventHandler>(sp => sp.GetRequiredService<HostEvents>());
-builder.Services.AddApprovalWorkflow<InvoiceDbContext>(o => { o.RequireOperationId = true; o.EnableBackgroundServices = false; o.Outbox.BaseRetryDelay = TimeSpan.FromMilliseconds(1); });
+builder.Services.AddApprovalWorkflow<InvoiceDbContext>(o => { o.EnableBackgroundServices = false; o.Outbox.BaseRetryDelay = TimeSpan.FromMilliseconds(1); });
 builder.Services.AddApprovalAspNetCore();
 await using var app = builder.Build();
 var actor = app.Services.GetRequiredService<HostActor>();
@@ -54,11 +54,11 @@ await As("alice", async sp =>
     return true;
 });
 const string flow = """
-    {"startNodeId":"start","nodes":{"start":{"type":"Start","next":"review"},
+    {"schemaVersion":1,"startNodeId":"start","nodes":{"start":{"type":"Start","next":"review"},
     "review":{"type":"Approval","approvers":[{"type":"User","value":"bob"}],"next":"end"},"end":{"type":"End"}}}
     """;
 const string parallel = """
-    {"startNodeId":"start","nodes":{"start":{"type":"Start","next":"fork"},
+    {"schemaVersion":1,"startNodeId":"start","nodes":{"start":{"type":"Start","next":"fork"},
     "fork":{"type":"Parallel","branches":[{"next":"a"},{"next":"b"}]},
     "a":{"type":"Approval","approvers":[{"type":"User","value":"bob"}],"next":"join"},
     "b":{"type":"Approval","approvers":[{"type":"User","value":"carol"}],"next":"join"},

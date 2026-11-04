@@ -14,7 +14,7 @@ public sealed partial class DatabaseContractTests
     {
         var faults = new AtomicFaults(); await using var host = await AtomicHostAsync(faults);
         const string flow = """
-            {"startNodeId":"start","nodes":{"start":{"type":"Start","next":"fork"},
+            {"schemaVersion":1,"startNodeId":"start","nodes":{"start":{"type":"Start","next":"fork"},
               "fork":{"type":"Parallel","branches":[{"next":"a"},{"next":"b"}]},
               "a":{"type":"Approval","approvers":[{"type":"User","value":"bob"}],"next":"join"},
               "b":{"type":"Approval","approvers":[{"type":"User","value":"carol"}],"next":"join"},

@@ -2,6 +2,8 @@
 
 一个轻量、可嵌入 ASP.NET Core 业务系统的通用审批引擎，基于 .NET 10 / EF Core。当前开发版本 **0.3.0**，尚未正式发布。
 
+`samples/` 仅为示例，目前没有其他已部署宿主。代码、初始化迁移和契约共同按当前版本演进，不提供旧宿主、旧消息或旧数据库的兼容层。外部流程 JSON 必须显式包含 `"schemaVersion": 1`；服务通过 `AddApprovalWorkflow` 注册并从 DI 获取。清理范围见[开发期兼容清理报告](docs/unreleased-compatibility-cleanup.md)。
+
 支持流程定义与不可变版本、或签/会签/依次审批、条件与并行汇聚、转交/加签、退回与重新提交、撤回/终止、抄送及已读、审计、查询、事务幂等和 Outbox。用户、组织、认证、授权、业务数据、通知渠道和实际文件存储由宿主提供。
 
 ## 安装与接入
@@ -11,7 +13,7 @@
 ```csharp
 // AppDbContext 可以继承 DbContext、IdentityDbContext 或宿主已有基类。
 services.AddDbContext<AppDbContext>(o => o.UseSqlite(connectionString));
-services.AddApprovalWorkflow<AppDbContext>(o => o.RequireOperationId = true)
+services.AddApprovalWorkflow<AppDbContext>()
     .AddIdentityProvider<HostIdentityProvider>()
     .AddUserDirectory<HostUserDirectory>()
     .AddPermissionProvider<HostPermissionProvider>()
@@ -41,7 +43,11 @@ app.MapApprovalEndpoints().RequireAuthorization();
 
 通过 `IApprovalCommandExecutor` 执行完整业务委托：委托从新的 DI scope 获取同一个 AppDbContext 和 ApprovalEngine，写入业务数据并启动审批。命令执行器在数据库事务内预约稳定操作键、核验请求摘要并保存结果；数据库提交结果未知时用新上下文恢复已提交结果。
 
-`IApprovalUnitOfWork` 可将多个本地审批调用与同一上下文的业务数据组合提交。不支持裸外部事务或假设两个不同 DbContext 自动共享事务。严格模式要求稳定 OperationId / HTTP `Idempotency-Key`。
+`IApprovalUnitOfWork` 可在带键命令委托内将多个本地审批调用与同一上下文的业务数据组合提交。不支持裸外部事务或假设两个不同 DbContext 自动共享事务。受管理的业务写操作必须提供稳定 OperationId / HTTP `Idempotency-Key`。
+
+严格幂等是固定规则，不提供关闭开关；每次逻辑提交的重试必须复用原键和原内容。只读、定义校验、显式系统能力及文件上传保留各自边界。流程定义服务仅提供异步 `ValidateAsync`，调用时应 `await`，权限检查不再通过同步入口阻塞。
+
+统计最多选取最早的 100,000 个实例（按创建时间、ID 排序）；关联任务与当前积压分别受 `options.Statistics.MaxTaskRows`（默认 250,000）及 `MaxBacklogRows`（默认 100,000）限制。超过预算返回 HTTP 400 / `StatisticsLimitExceeded`，不返回部分任务指标。积压不受日期范围限制，需按流程筛选或使用宿主报表。这些限制约束应用读取量，不承诺消除数据库物理扫描。
 
 ## 可选 Forms
 

@@ -7,6 +7,7 @@ using Approval.Core.Abstractions;
 using Approval.Core.Definitions;
 using Approval.Core.Domain;
 using Approval.Core.Engine;
+using Approval.Core.Hosting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Storage;
@@ -88,7 +89,8 @@ public sealed partial class DatabaseContractTests
         {
             await using var scope = host.CreateAsyncScope();
             var sp = scope.ServiceProvider;
-            ((AtomicResolver)sp.GetRequiredService<IApprovalContextResolver>()).User = actor;
+            // Keep both stale graphs in their original contexts; keyed user races are covered by ParallelConcurrencyTests.
+            sp.GetRequiredService<ApprovalExecutionContext>().InitializeSystem(actor, [ApprovalPermissions.SessionRead, ApprovalPermissions.TaskRead, ApprovalPermissions.TaskApprove]);
             var db = sp.GetRequiredService<AtomicContractContext>();
             var engine = sp.GetRequiredService<ApprovalEngine>();
             Assert.True(await engine.CanHandleAsync(taskId, actor));
@@ -166,9 +168,10 @@ public sealed partial class DatabaseContractTests
         await using var host = await ReadOnlyHostAsync();
         var instance = await StartReadOnlyInstance(host); var taskId = Assert.Single(instance.Tasks).Id;
         await using var stale = host.CreateAsyncScope();
-        var sp = stale.ServiceProvider; ((AtomicResolver)sp.GetRequiredService<IApprovalContextResolver>()).User = "bob";
+        var sp = stale.ServiceProvider;
+        sp.GetRequiredService<ApprovalExecutionContext>().InitializeSystem("bob", [ApprovalPermissions.TaskApprove]);
         await sp.GetRequiredService<AtomicContractContext>().Set<ApprovalInstance>().Include(i => i.Tasks).SingleAsync();
-        await AtomicRun(host, "bob", async fresh => { await fresh.GetRequiredService<ApprovalEngine>().ApproveAsync(taskId, "bob"); return true; });
+        await ApproveReadOnlyInstance(host, taskId);
         ApprovalInstance winner; Guid[] outbox;
         await using (var storage = fixture.CreateStorage())
         {

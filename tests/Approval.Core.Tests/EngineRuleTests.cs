@@ -263,18 +263,19 @@ public sealed class EngineRuleTests : IAsyncLifetime
 
 public sealed class DefinitionValidatorTests
 {
-    private static readonly IReadOnlySet<string> Known = new HashSet<string> { "User", "Role" };
+    private static readonly FlowValidationContext Validation = new()
+    { ApproverTypes = new HashSet<string> { "User", "Role" }, Extension = new FormDefinitionValidator() };
 
     [Fact]
     public void Valid_definition_has_no_errors() =>
-        Assert.Empty(FormDefinitionValidator.Validate(FlowDefinition.Parse(Flows.SingleNode("Any")), Known));
+        Assert.Empty(FlowDefinitionValidator.Validate(FlowDefinition.Parse(Flows.SingleNode("Any")), Validation));
 
     [Fact]
     public void Detects_cycle()
     {
         var flow = FlowDefinition.Parse(Flows.SingleNode("Any"));
         flow.Nodes["review"].Next = "review";
-        Assert.Contains(FormDefinitionValidator.Validate(flow, Known), e => e.Contains("环路"));
+        Assert.Contains(FlowDefinitionValidator.Validate(flow, Validation), e => e.Contains("环路"));
     }
 
     [Fact]
@@ -285,7 +286,7 @@ public sealed class DefinitionValidatorTests
         flow.Nodes["big"].Approvers[0] = new ApproverRule("DeptLeader", "1");
         flow.Nodes["small"].Next = "missing";
 
-        var errors = FormDefinitionValidator.Validate(flow, Known);
+        var errors = FlowDefinitionValidator.Validate(flow, Validation);
         Assert.Contains(errors, e => e.Contains("默认分支"));
         Assert.Contains(errors, e => e.Contains("DeptLeader"));
         Assert.Contains(errors, e => e.Contains("missing"));

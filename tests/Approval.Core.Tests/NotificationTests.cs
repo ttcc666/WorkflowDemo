@@ -2,6 +2,9 @@ using Approval.Core.Definitions;
 using Approval.Core.Domain;
 using Microsoft.EntityFrameworkCore;
 using Approval.Core.Templates;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using Approval.Core.Abstractions;
 
 namespace Approval.Core.Tests;
 
@@ -13,6 +16,7 @@ public sealed class NotificationTests : IAsyncLifetime
     /// <summary>审核节点：到达时通知审批人（站内信 + 测试渠道），同意时通知申请人；结束节点：通知申请人。</summary>
     private const string NotifyFlow = """
     {
+      "schemaVersion":1,
       "startNodeId": "start",
       "notifications": [
         { "events": ["Rejected"], "recipients": [{ "type": "Initiator", "value": "" }], "channels": ["InApp"],
@@ -64,7 +68,7 @@ public sealed class NotificationTests : IAsyncLifetime
 
         // 外部渠道只写 Outbox，提交后由后台投递
         var outbox = Assert.Single(await _host.NotificationOutboxAsync());
-        Assert.Equal(OutboxKind.Event, outbox.Kind);
+        Assert.Contains("\"eventType\":\"NotificationRequested\"", outbox.PayloadJson);
         Assert.Equal("Host", outbox.Target);
         Assert.Equal(OutboxStatus.Pending, outbox.Status);
         Assert.Empty(_host.Channel.Sent);
@@ -219,14 +223,71 @@ public sealed class NotificationTests : IAsyncLifetime
         Assert.Empty(await _host.RunAsync(sp => sp.GetRequiredService<TestDbContext>().Set<ApprovalLog>().ToListAsync()));
     }
 
-    [Fact]
-    public async Task Unknown_outbox_kind_fails_instead_of_being_acknowledged()
+    [Theory]
+    [InlineData("invalid-json")]
+    [InlineData("null")]
+    [InlineData("empty-object")]
+    [InlineData("bare-notification")]
+    [InlineData("wrong-id")]
+    [InlineData("missing-event-type")]
+    [InlineData("missing-instance")]
+    [InlineData("missing-definition")]
+    [InlineData("invalid-version")]
+    [InlineData("missing-operator")]
+    [InlineData("missing-business-type")]
+    [InlineData("missing-business-key")]
+    [InlineData("missing-time")]
+    [InlineData("invalid-status")]
+    [InlineData("missing-notification")]
+    [InlineData("missing-target")]
+    [InlineData("wrong-notification-id")]
+    [InlineData("wrong-notification-instance")]
+    public async Task Invalid_event_payload_fails_without_acknowledging_or_calling_handler(string caseId)
     {
+        var id = Guid.NewGuid();
+        var payload = JsonSerializer.SerializeToNode(new ApprovalEvent(id, "Submit", Guid.NewGuid(), Guid.NewGuid(), 1,
+            "business", "one", InstanceStatus.Running, null, null, null, "alice", null, _host.Clock.GetUtcNow().UtcDateTime), JsonSerializerOptions.Web)!;
+        var json = caseId switch
+        {
+            "invalid-json" => "{",
+            "null" => "null",
+            "empty-object" => "{}",
+            "bare-notification" => JsonSerializer.Serialize(new { id, @event = "Enter", title = "Old", content = "Old", recipients = new[] { "alice" } }),
+            _ => null
+        };
+        if (json is null)
+        {
+            var (field, value) = caseId switch
+            {
+                "wrong-id" => ("id", JsonValue.Create(Guid.NewGuid()) as JsonNode),
+                "missing-event-type" => ("eventType", null),
+                "missing-instance" => ("instanceId", JsonValue.Create(Guid.Empty)),
+                "missing-definition" => ("definitionId", JsonValue.Create(Guid.Empty)),
+                "invalid-version" => ("definitionVersion", JsonValue.Create(0)),
+                "missing-operator" => ("operatorId", null),
+                "missing-business-type" => ("businessType", null),
+                "missing-business-key" => ("businessKey", null),
+                "missing-time" => ("occurredAt", JsonValue.Create(default(DateTime))),
+                _ => ("status", JsonValue.Create(999))
+            };
+            if (caseId.Contains("notification", StringComparison.Ordinal) || caseId == "missing-target")
+            {
+                payload["eventType"] = "NotificationRequested";
+                payload["deliveryTarget"] = caseId == "missing-target" ? null : JsonValue.Create("Test");
+                payload["notification"] = caseId == "missing-notification" ? null : JsonSerializer.SerializeToNode(new {
+                    id = caseId == "wrong-notification-id" ? Guid.NewGuid() : id,
+                    instanceId = caseId == "wrong-notification-instance" ? Guid.NewGuid() : payload["instanceId"]!.GetValue<Guid>(),
+                    @event = "Enter", title = "Notice", content = "Notice", recipients = new[] { "alice" }
+                });
+            }
+            else payload[field] = value;
+            json = payload.ToJsonString();
+        }
         await _host.SeedStorageAsync(async db =>
         {
             db.Add(new ApprovalOutboxMessage
             {
-                Id = Guid.NewGuid(), Kind = (OutboxKind)999, Target = "Unknown", PayloadJson = "{}",
+                Id = id, Target = "Host", PayloadJson = json,
                 Status = OutboxStatus.Pending, MaxAttempts = 1,
                 CreatedAt = _host.Clock.GetUtcNow().UtcDateTime, NextAttemptAt = _host.Clock.GetUtcNow().UtcDateTime
             });
@@ -236,8 +297,9 @@ public sealed class NotificationTests : IAsyncLifetime
         var message = Assert.Single(await _host.OutboxAsync());
         Assert.Equal(OutboxStatus.Failed, message.Status);
         Assert.Equal(1, message.Attempts);
-        Assert.Contains("不支持的 Outbox 消息类型", message.LastError);
+        Assert.False(string.IsNullOrWhiteSpace(message.LastError));
         Assert.Empty(_host.Channel.Sent);
+        Assert.Empty(_host.Events.All);
     }
 
     [Fact]
@@ -245,6 +307,7 @@ public sealed class NotificationTests : IAsyncLifetime
     {
         const string flow = """
         {
+          "schemaVersion":1,
           "startNodeId": "start",
           "nodes": {
             "start":  { "name": "提交", "type": "Start", "next": "review" },

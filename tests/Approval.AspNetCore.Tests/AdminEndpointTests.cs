@@ -9,6 +9,7 @@ public sealed class AdminEndpointTests
 {
     private const string Flow = """
     {
+      "schemaVersion":1,
       "startNodeId": "start",
       "nodes": {
         "start":  { "name": "提交", "type": "Start", "next": "review" },

@@ -11,15 +11,12 @@ public sealed partial class ApprovalEngine
     {
         if (request.OperationId is null)
         {
-            if (_options.RequireOperationId && !_unit.IsActive)
-                throw new ApprovalException("发起审批需要稳定 OperationId 或外层命令协调器") { Code = ApprovalErrorCode.OperationIdRequired };
             return await _unit.ExecuteCommandAsync(token => StartAsyncCore(request, token), ct);
         }
         if (_unit.IsActive || _db.ChangeTracker.HasChanges())
             throw new InvalidOperationException("带 OperationId 的发起必须在干净作用域调用；宿主业务准备请放入 IApprovalCommandExecutor 委托");
-        var commands = _commands ?? throw new InvalidOperationException("请通过 DI 注册的命令协调器使用 OperationId");
         var body = request with { OperationId = null };
-        var id = await commands.ExecuteAsync(new("instance.start", request.BusinessType + "/" + request.BusinessKey, request.OperationId,
+        var id = await _commands.ExecuteAsync(new("instance.start", request.BusinessType + "/" + request.BusinessKey, request.OperationId,
             body, ApprovalPermissions.InstanceStart, new()
             {
                 DefinitionKey = request.DefinitionKey,

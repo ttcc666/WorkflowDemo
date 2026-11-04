@@ -9,6 +9,7 @@ public sealed class FormEndpointTests
 {
     private const string LeaveFlow = """
     {
+      "schemaVersion":1,
       "startNodeId": "start",
       "settings": { "startable": true, "category": "人事", "titleTemplate": "{申请人}请假 {form.days} 天" },
       "form": { "fields": [

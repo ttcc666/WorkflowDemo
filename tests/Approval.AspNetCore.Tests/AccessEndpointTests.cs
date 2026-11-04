@@ -10,6 +10,7 @@ public sealed class AccessEndpointTests
     /// <summary>提交 → 脚本动作（参数含“密钥”）→ 审核（角色 Reviewer）。</summary>
     private const string Flow = """
     {
+      "schemaVersion":1,
       "startNodeId": "start",
       "nodes": {
         "start":  { "name": "提交", "type": "Start", "next": "review" },

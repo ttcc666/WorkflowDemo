@@ -19,6 +19,7 @@ import {
 
 // 与后端示例 certificate.update.json 结构一致（无坐标）
 const certificateFlow: FlowDefinition = {
+  schemaVersion: 1,
   startNodeId: 'start',
   nodes: {
     start: { id: 'start', name: '提交申请', type: 'Start', next: 'dept' },
@@ -145,6 +146,7 @@ describe('computeRunState', () => {
     completedAt: null,
     dueAt: null,
     remindCount: 0,
+    nextRemindAt: null, lastRemindedAt: null, capabilities: {},
   })
   const instance = (status: ApprovalInstance['status'], tasks: ApprovalTask[]): ApprovalInstance => ({
     id: 'i',
@@ -270,6 +272,7 @@ describe('notifications and timeout round-trip', () => {
 
 describe('parallel nodes', () => {
   const parallelFlow: FlowDefinition = {
+    schemaVersion: 1,
     startNodeId: 'start',
     nodes: {
       start: { id: 'start', name: '提交', type: 'Start', next: 'p' },
@@ -307,9 +310,9 @@ describe('parallel nodes', () => {
       initiatorId: 'alice', status: 'Running', currentNodeId: 'a,b', round: 0, formDataJson: '{}', createdAt: '', completedAt: null,
       tasks: [
         { id: '1', instanceId: 'i', nodeId: 'a', nodeName: 'A', assigneeKind: 'User', assigneeValue: 'u', kind: 'Approval', parentTaskId: null,
-          round: 0, status: 'Approved', order: 0, handledBy: 'u', comment: null, createdAt: '', completedAt: null, dueAt: null, remindCount: 0 },
+          round: 0, status: 'Approved', order: 0, handledBy: 'u', comment: null, createdAt: '', completedAt: null, dueAt: null, remindCount: 0, nextRemindAt: null, lastRemindedAt: null, capabilities: {} },
         { id: '2', instanceId: 'i', nodeId: 'b', nodeName: 'B', assigneeKind: 'User', assigneeValue: 'u', kind: 'Approval', parentTaskId: null,
-          round: 0, status: 'Pending', order: 0, handledBy: null, comment: null, createdAt: '', completedAt: null, dueAt: null, remindCount: 0 },
+          round: 0, status: 'Pending', order: 0, handledBy: null, comment: null, createdAt: '', completedAt: null, dueAt: null, remindCount: 0, nextRemindAt: null, lastRemindedAt: null, capabilities: {} },
       ],
       logs: [],
       access: 'Full',

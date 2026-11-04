@@ -62,8 +62,7 @@ namespace Approval.Certificate.Infrastructure.Migrations
                     ResultJson = table.Column<string>(type: "TEXT", nullable: false),
                     InstanceId = table.Column<Guid>(type: "TEXT", nullable: true),
                     DefinitionId = table.Column<Guid>(type: "TEXT", nullable: true),
-                    CommittedAt = table.Column<DateTime>(type: "TEXT", nullable: false),
-                    IsTombstone = table.Column<bool>(type: "INTEGER", nullable: false)
+                    CommittedAt = table.Column<DateTime>(type: "TEXT", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -320,7 +319,6 @@ namespace Approval.Certificate.Infrastructure.Migrations
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "TEXT", nullable: false),
-                    Kind = table.Column<string>(type: "TEXT", maxLength: 20, nullable: false),
                     Target = table.Column<string>(type: "TEXT", maxLength: 100, nullable: false),
                     InstanceId = table.Column<Guid>(type: "TEXT", nullable: true),
                     NodeId = table.Column<string>(type: "TEXT", maxLength: 100, nullable: true),

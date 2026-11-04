@@ -34,7 +34,7 @@ public sealed class ActionRollbackTests : IAsyncLifetime
     private readonly CallbackFaults _faults = new();
     private TestHost _host = null!;
     private const string Flow = """
-        {"startNodeId":"start","nodes":{"start":{"type":"Start","name":"提交","next":"review"},
+        {"schemaVersion":1,"startNodeId":"start","nodes":{"start":{"type":"Start","name":"提交","next":"review"},
         "review":{"type":"Approval","name":"审核","approvers":[{"type":"Role","value":"Reviewer"}],"next":"end"},"end":{"type":"End","name":"结束"}}}
         """;
     public Task InitializeAsync()

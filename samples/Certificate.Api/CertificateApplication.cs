@@ -70,13 +70,13 @@ public static class CertificateApplication
                 o.AllowSameUserMultipleNodes = false;
                 o.DisplayTimeZone = TimeZoneInfo.FindSystemTimeZoneById(certificateOptions.BusinessTimeZone);
                 o.RequireBusinessHandler = true;
-                o.RequireOperationId = approvalConfig.GetValue("RequireOperationId", false);
                 o.CommitVerificationTimeout = approvalConfig.GetValue("CommitVerificationTimeout", o.CommitVerificationTimeout);
                 o.EnableBackgroundServices = approvalConfig.GetValue("EnableBackgroundServices", true);
                 // 模板变量 {appBaseUrl}、{链接}
                 o.GlobalVariables["appBaseUrl"] = baseUrl;
                 o.InstanceUrlFormat = baseUrl + "/approvals/{0}";
                 approvalConfig.GetSection("Outbox").Bind(o.Outbox);
+                approvalConfig.GetSection("Statistics").Bind(o.Statistics);
                 // 附件：本地目录（相对于内容根目录，不在 wwwroot 下）、大小限制
                 approvalConfig.GetSection("Background").Bind(o.Background);
                 o.TimeoutScanInterval = approvalConfig.GetValue("TimeoutScanInterval", o.TimeoutScanInterval);

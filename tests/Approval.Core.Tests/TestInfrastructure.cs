@@ -193,10 +193,7 @@ public sealed class TestHost : IAsyncDisposable
         services.AddScoped<IApprovalEventHandler, FixtureEventHandler>();
         services.AddSingleton<ITestNotificationTarget>(Channel);
         services.AddSingleton<TimeProvider>(Clock);
-        var builder = services.AddApprovalWorkflow<TestDbContext>(o =>
-        {
-            configure?.Invoke(o);
-        });
+        var builder = services.AddApprovalWorkflow<TestDbContext>(configure);
         services.AddSingleton<Approval.Core.Abstractions.IApprovalDefinitionExtension, Approval.Forms.Schema.FormDefinitionValidator>();
         services.AddSingleton<Approval.Core.Abstractions.IApprovalDataProjection, Approval.Forms.Runtime.FormDataProjection>();
         build?.Invoke(builder);
@@ -219,7 +216,8 @@ public sealed class TestHost : IAsyncDisposable
         var scope = _provider.CreateAsyncScope();
         if (!authorize)
         {
-            scope.ServiceProvider.GetRequiredService<Approval.Core.Hosting.ApprovalExecutionContext>().InitializeTrusted(new("test-fixture"), []);
+            // Algorithm/storage fixtures use an explicit system scope; RunAsAsync exercises real user commands.
+            scope.ServiceProvider.GetRequiredService<Approval.Core.Hosting.ApprovalExecutionContext>().InitializeSystem("test-fixture", ApprovalPermissions.All.ToArray());
             scope.ServiceProvider.GetRequiredService<Approval.Core.Persistence.ApprovalDbContextAccessor>().Authorization = Approval.Tests.Infrastructure.FlowFixtureAuthorization.Instance;
         }
         return scope;
@@ -242,15 +240,7 @@ public sealed class TestHost : IAsyncDisposable
 
     public async Task PublishAsync(string key, string flowJson)
     {
-        if (!_provider.GetRequiredService<ApprovalOptions>().RequireOperationId)
-        {
-            await RunAsync(sp => sp.GetRequiredService<ApprovalDefinitionService>().PublishAsync(key, key, flowJson));
-            return;
-        }
-        Identity.Add("fixture-publisher", "Admin");
-        await RunAsAsync("fixture-publisher", sp => sp.GetRequiredService<IApprovalCommandExecutor>().ExecuteAsync(
-            new("fixture.publish", key, Guid.NewGuid().ToString("N"), flowJson, ApprovalPermissions.DefinitionPublish),
-            (attempt, ct) => attempt.GetRequiredService<ApprovalDefinitionService>().PublishAsync(key, key, flowJson, ct)));
+        await RunAsync(sp => sp.GetRequiredService<ApprovalDefinitionService>().PublishAsync(key, key, flowJson));
     }
 
     public Task<ApprovalInstance> StartAsync(string key, string businessKey, string initiator, object? form = null) =>
@@ -284,7 +274,7 @@ public sealed class TestHost : IAsyncDisposable
         RunAsync(sp => sp.GetRequiredService<TestDbContext>().Set<ApprovalOutboxMessage>().OrderBy(m => m.CreatedAt).ToListAsync());
 
     public async Task<List<ApprovalOutboxMessage>> NotificationOutboxAsync() => (await OutboxAsync())
-        .Where(m => m.Kind == OutboxKind.Notification || m.PayloadJson.Contains("\"eventType\":\"NotificationRequested\"", StringComparison.Ordinal)).ToList();
+        .Where(m => m.PayloadJson.Contains("\"eventType\":\"NotificationRequested\"", StringComparison.Ordinal)).ToList();
 
     public Task<List<ApprovalLog>> LogsAsync(Guid instanceId) =>
         RunAsync(sp => sp.GetRequiredService<TestDbContext>().Set<ApprovalLog>()

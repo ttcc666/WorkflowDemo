@@ -26,7 +26,9 @@ public enum ApprovalErrorCode
     AuthorizationUnavailable,
     OperationIdRequired,
     CommitOutcomeUnknown,
-    ReplayExpired
+
+    /// <summary>统计任务或当前积压超过读取预算，不返回部分统计。</summary>
+    StatisticsLimitExceeded
 }
 
 /// <summary>输入校验失败（如表单数据），<see cref="Errors"/> 为“字段 → 错误信息”。</summary>

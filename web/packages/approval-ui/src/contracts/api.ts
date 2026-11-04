@@ -1,4 +1,4 @@
-/** 从真实 HTTP 契约生成类型，保留现有前端名称。 */
+/** 从当前 HTTP 契约生成前端响应类型。 */
 import type { components } from './http.generated'
 import type { FlowSettings, FormSchema } from './forms'
 export type { FlowSettings, FormField, FormFieldOption, FormFieldType, FormSchema, FormValues } from './forms'
@@ -45,13 +45,9 @@ export type ApprovalMe = ResponseShape<Schemas['ApprovalMeResponse']>
 export type StartableFlow = ResponseShape<Schemas['StartableFlow']>
 export type DraftSummary = ResponseShape<Schemas['DraftSummary']>
 export type DraftDetail = ResponseShape<Schemas['DraftDetail']>
-export type DirectoryUser = Omit<ResponseShape<Schemas['ApprovalUser']>, 'isActive'> & { isActive?: boolean }
+export type DirectoryUser = ResponseShape<Schemas['ApprovalUser']>
 
-/** 保留旧调用方使用的任务投影；完整传输结构在 http.generated.ts 中。 */
-export type ApprovalTask = Pick<ResponseShape<Schemas['ApprovalTaskResponse']>,
-  'id' | 'instanceId' | 'nodeId' | 'nodeName' | 'assigneeKind' | 'assigneeValue' | 'kind' | 'parentTaskId' | 'round' | 'status' | 'order' | 'handledBy' | 'comment' | 'createdAt' | 'completedAt' | 'dueAt' | 'remindCount'> & {
-    capabilities?: Record<string, boolean>
-  }
+export type ApprovalTask = ResponseShape<Schemas['ApprovalTaskResponse']>
 export type ApprovalInstance = Omit<ResponseShape<Schemas['ApprovalInstanceResponse']>, 'tasks' | 'logs' | 'status'> & { status: InstanceStatus; tasks: ApprovalTask[]; logs: ApprovalLog[] }
 export type MyTaskResult = Omit<ResponseShape<Schemas['ApprovalMyTaskResponse']>, 'task'> & { task: ApprovalTask | null }
 export type PagedResult<T> = Omit<ResponseShape<Schemas['PagedResultOfTodoItem']>, 'items'> & { items: T[] }

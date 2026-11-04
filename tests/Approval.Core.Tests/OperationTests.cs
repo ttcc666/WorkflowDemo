@@ -21,7 +21,7 @@ public sealed class OperationTests
     }
 
     private const string Flow = """
-        {"startNodeId":"start","nodes":{"start":{"type":"Start","name":"Start","next":"review"},
+        {"schemaVersion":1,"startNodeId":"start","nodes":{"start":{"type":"Start","name":"Start","next":"review"},
         "review":{"type":"Approval","name":"Review","approvers":[{"type":"User","value":"bob"}],"next":"end"},
         "end":{"type":"End","name":"End"}}}
         """;
@@ -95,7 +95,7 @@ public sealed class OperationTests
         for (var i = 0; i < conditions; i++)
             nodes["c" + i] = new { type = "Condition", branches = new[] { new { next = i + 1 < conditions ? "c" + (i + 1) : "end" } } };
         await using var host = new TestHost();
-        await host.PublishAsync("long", JsonSerializer.Serialize(new { startNodeId = "start", nodes }));
+        await host.PublishAsync("long", JsonSerializer.Serialize(new { schemaVersion = 1, startNodeId = "start", nodes }));
         async Task Run() => await host.RunAsync(sp => sp.GetRequiredService<IApprovalUnitOfWork>().ExecuteAsync(async token =>
         {
             var engine = sp.GetRequiredService<ApprovalEngine>();
@@ -136,7 +136,7 @@ public sealed class OperationTests
         await using var host = new TestHost();
         host.Identity.Add("admin", "Admin");
         await host.PublishAsync("parallel", """
-            {"startNodeId":"start","nodes":{
+            {"schemaVersion":1,"startNodeId":"start","nodes":{
               "start":{"type":"Start","next":"fork"},
               "fork":{"type":"Parallel","branches":[{"next":"a"},{"next":"b"}]},
               "a":{"type":"Approval","approvers":[{"type":"User","value":"bob"}],"next":"join"},
@@ -147,7 +147,7 @@ public sealed class OperationTests
         Assert.Equal(2, instance.Tasks.Count);
         var originalTasks = instance.Tasks.ToDictionary(t => t.NodeId, t => t.Id);
         var stateBefore = instance.StateJson;
-        var result = await host.RunAsAsync("admin", sp => sp.GetRequiredService<ApprovalEngine>().ReassignUserAsync("bob", "carol", "admin", "handover"));
+        var result = await host.RunAsAsync("admin", sp => sp.GetRequiredService<ApprovalEngine>().ReassignUserAsync("bob", "carol", "admin", "handover", "handover"));
         Assert.Equal(2, result.Count);
         Assert.Empty(result.Skipped);
         var saved = await host.GetInstanceAsync(instance.Id);
@@ -248,7 +248,7 @@ public sealed class OperationTests
                 Assert.False(db.ChangeTracker.HasChanges()); await transaction.RollbackAsync();
             }
             await Assert.ThrowsAsync<InvalidOperationException>(() => sp.GetRequiredService<IApprovalUnitOfWork>().ExecuteAsync(
-                token => engine.ReassignUserAsync("bob", "charlie", "admin", "handover", token)));
+                token => engine.ReassignUserAsync("bob", "charlie", "admin", "handover", "handover", token)));
         });
         Assert.Empty(host.Events.TaskEvents);
     }
@@ -275,8 +275,8 @@ public sealed class OperationTests
     [Fact]
     public async Task StrictMode_RequiresClientKeyBeforeCreatingAnything()
     {
-        await using var host = new TestHost(o => o.RequireOperationId = true); await host.PublishAsync("doc", Flow);
-        var error = await Assert.ThrowsAsync<ApprovalException>(() => host.StartAsync("doc", "one", "alice")); Assert.Equal(ApprovalErrorCode.OperationIdRequired, error.Code);
+        await using var host = new TestHost(); await host.PublishAsync("doc", Flow);
+        var error = await Assert.ThrowsAsync<ApprovalException>(() => host.RunAsAsync("alice", sp => sp.GetRequiredService<ApprovalEngine>().StartAsync(new("doc", RecordingBusinessHandler.Type, "one", "alice")))); Assert.Equal(ApprovalErrorCode.OperationIdRequired, error.Code);
         var result = await host.RunAsAsync("alice", sp => sp.GetRequiredService<ApprovalEngine>().StartAsync(new("doc", RecordingBusinessHandler.Type, "one", "alice") { OperationId = "stable" }));
         Assert.Equal("one", result.BusinessKey);
     }

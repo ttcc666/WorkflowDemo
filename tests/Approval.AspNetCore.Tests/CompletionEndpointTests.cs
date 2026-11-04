@@ -7,7 +7,7 @@ namespace Approval.AspNetCore.Tests;
 public sealed class CompletionEndpointTests
 {
     private const string Flow = """
-        {"settings":{"category":"人事"},"startNodeId":"s","nodes":{"s":{"type":"Start","next":"cc"},
+        {"schemaVersion":1,"settings":{"category":"人事"},"startNodeId":"s","nodes":{"s":{"type":"Start","next":"cc"},
         "cc":{"type":"Cc","approvers":[{"type":"Role","value":"HR"}],"next":"a"},
         "a":{"type":"Approval","approvers":[{"type":"User","value":"bob"}],"next":"e"},"e":{"type":"End"}}}
         """;

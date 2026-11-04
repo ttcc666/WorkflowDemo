@@ -49,13 +49,13 @@ function createDirectory(client: ApprovalClient) {
       users => remember(users, expected), error => handleError(error, expected))
   }
 
-  async function resolve(ids: string[]) {
+  async function resolve(ids: string[]): Promise<DirectoryUser[]> {
     ensureIdentity()
     const expected = generation
     const missing = ids.filter(id => id && !names.has(id))
     if (missing.length > 0) await client.api.usersByIds(missing, controller.signal).then(
       users => remember(users, expected), error => handleError(error, expected))
-    return ids.map(id => (expected === generation ? names.get(id) : undefined) ?? { id, name: id, roles: [] })
+    return ids.map(id => (expected === generation ? names.get(id) : undefined) ?? { id, name: id, roles: [], isActive: false })
   }
 
   function loadRoles() {

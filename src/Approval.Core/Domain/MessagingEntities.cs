@@ -17,14 +17,6 @@ public class ApprovalMessage : IApprovalEntity
     public DateTime? ReadAt { get; set; }
 }
 
-public enum OutboxKind
-{
-    /// <summary>旧通知载荷的兼容类型，Target 是宿主声明的通知路由；发送由宿主事件处理器负责。</summary>
-    Notification,
-
-    Event
-}
-
 public enum OutboxStatus
 { Pending, Succeeded, Failed }
 
@@ -35,7 +27,6 @@ public enum OutboxStatus
 public class ApprovalOutboxMessage : IApprovalEntity
 {
     public Guid Id { get; set; }
-    public OutboxKind Kind { get; set; }
     public required string Target { get; set; }
     public Guid? InstanceId { get; set; }
     public string? NodeId { get; set; }

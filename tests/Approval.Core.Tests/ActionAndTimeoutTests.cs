@@ -25,7 +25,7 @@ public sealed class LifecyclePreparationTests
     {
         await using var host = new TestHost(build: b => b.AddLifecycleHandler<DiscountLifecycle>());
         const string flow = """
-        {"startNodeId":"s","nodes":{"s":{"type":"Start","next":"c"},
+        {"schemaVersion":1,"startNodeId":"s","nodes":{"s":{"type":"Start","next":"c"},
         "c":{"type":"Condition","branches":[{"priority":1,"expression":"discounted > 100","next":"big"},{"priority":2,"next":"small"}]},
         "big":{"type":"Approval","approvers":[{"type":"User","value":"boss"}],"next":"e"},
         "small":{"type":"Approval","approvers":[{"type":"User","value":"manager"}],"next":"e"},"e":{"type":"End"}}}
@@ -53,6 +53,7 @@ public sealed class TimeoutTests : IAsyncLifetime
 
     private static string TimeoutFlow(string timeoutJson, string mode = "Any") => $$"""
     {
+      "schemaVersion":1,
       "startNodeId": "start",
       "nodes": {
         "start":  { "name": "提交", "type": "Start", "next": "review" },
@@ -152,6 +153,7 @@ public sealed class TimeoutTests : IAsyncLifetime
     {
         const string flow = """
         {
+          "schemaVersion":1,
           "startNodeId": "start",
           "nodes": {
             "start": { "name": "提交", "type": "Start", "next": "cc", "timeout": { "minutes": 5 } },

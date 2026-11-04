@@ -24,6 +24,7 @@ public static class ApprovalServiceCollectionExtensions
     {
         var options = new ApprovalOptions();
         configure?.Invoke(options);
+        options.Statistics.Validate();
         services.AddSingleton(options);
         services.ConfigureDbContext<TContext>(o => o.UseApproval());
         if (options.Outbox.PollInterval <= TimeSpan.Zero || options.TimeoutScanInterval <= TimeSpan.Zero
@@ -34,7 +35,7 @@ public static class ApprovalServiceCollectionExtensions
             throw new InvalidOperationException("诊断扫描预算必须在 1–100 之间");
         if (options.PermissionTimeout <= TimeSpan.Zero || options.PermissionTimeout > TimeSpan.FromMinutes(1))
             throw new InvalidOperationException("权限超时须大于零且不超过一分钟");
-        RegisterPersistence<TContext>(services, options);
+        RegisterPersistence<TContext>(services);
         RegisterAuthorization<TContext>(services, options);
         RegisterRuntime(services, options);
         RegisterQuery(services);
@@ -42,7 +43,7 @@ public static class ApprovalServiceCollectionExtensions
         return new ApprovalBuilder(services);
     }
 
-    private static void RegisterPersistence<TContext>(IServiceCollection services, ApprovalOptions options)
+    private static void RegisterPersistence<TContext>(IServiceCollection services)
         where TContext : DbContext
     {
         services.AddScoped<IApprovalHostContext, ApprovalHostContext<TContext>>();
@@ -52,7 +53,6 @@ public static class ApprovalServiceCollectionExtensions
         {
             var db = sp.GetRequiredService<TContext>();
             ApprovalPersistence.EnsureInstalled(db);
-            ApprovalPersistence.State(db).RequireOperationId = options.RequireOperationId;
             ApprovalPersistence.State(db).SystemActor = sp.GetRequiredService<IApprovalActorContext>().IsSystem;
             return new ApprovalDbContextAccessor(db, sp.GetRequiredService<ApprovalAuthorizationService>(), sp.GetRequiredService<IApprovalCommandExecutor>(), sp.GetRequiredService<IApprovalActorContext>());
         });
@@ -93,7 +93,7 @@ public static class ApprovalServiceCollectionExtensions
             sp.GetService<IApprovalLifecycleHandler>(), sp.GetService<IApprovalUserStatusProvider>()));
         services.AddScoped(sp => new ApprovalDefinitionService(
             sp.GetRequiredService<ApprovalDbContextAccessor>(), sp.GetRequiredService<ApprovalExtensionCatalog>(),
-            sp.GetRequiredService<TimeProvider>(), sp.GetRequiredService<ApprovalOptions>(), sp.GetService<IApprovalDefinitionExtension>()));
+            sp.GetRequiredService<TimeProvider>(), sp.GetService<IApprovalDefinitionExtension>()));
     }
 
     private static void RegisterQuery(IServiceCollection services)
@@ -108,7 +108,7 @@ public static class ApprovalServiceCollectionExtensions
     private static void RegisterBackground(IServiceCollection services, ApprovalOptions options)
     {
         services.AddScoped(sp => new ApprovalOutboxService(
-            sp.GetRequiredService<ApprovalDbContextAccessor>(), sp.GetRequiredService<ApprovalExtensionCatalog>(),
+            sp.GetRequiredService<ApprovalDbContextAccessor>(),
             sp.GetRequiredService<ApprovalOptions>(), sp.GetRequiredService<TimeProvider>(), sp.GetRequiredService<ILogger<ApprovalOutboxService>>(),
             sp.GetRequiredService<IApprovalScopeFactory>(), sp.GetRequiredService<ApprovalOutboxSignal>(),
             options.Outbox.EnableDispatcher ? sp.GetRequiredService<IApprovalEventHandler>() : null));

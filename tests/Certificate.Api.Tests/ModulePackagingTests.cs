@@ -27,7 +27,7 @@ public sealed class ModulePackagingTests
     public void Module_contains_only_current_initial_migration_and_model()
     {
         using var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseSqlite("Data Source=:memory:").Options);
-        Assert.Equal(new[] { "20261103051646_InitialApproval" }, db.Database.GetMigrations());
+        Assert.Equal(new[] { "20261104103442_InitialApproval" }, db.Database.GetMigrations());
         Assert.False(db.Database.HasPendingModelChanges());
     }
 }

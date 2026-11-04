@@ -496,10 +496,6 @@ namespace Approval.Database.Tests.Migrations.SqlServer
                     b.Property<Guid?>("InstanceId")
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<bool>("IsTombstone")
-                        .IsConcurrencyToken()
-                        .HasColumnType("bit");
-
                     b.Property<string>("Kind")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -565,11 +561,6 @@ namespace Approval.Database.Tests.Migrations.SqlServer
 
                     b.Property<Guid?>("InstanceId")
                         .HasColumnType("uniqueidentifier");
-
-                    b.Property<string>("Kind")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("nvarchar(20)");
 
                     b.Property<string>("LastError")
                         .HasMaxLength(2000)

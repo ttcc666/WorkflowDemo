@@ -26,7 +26,7 @@ public sealed class ParallelReturnAddSignTests : IAsyncLifetime
         """;
 
     private static string Flow(params string[] nodes) => $$"""
-        { "startNodeId": "start", "nodes": {
+        { "schemaVersion":1, "startNodeId": "start", "nodes": {
             "start": { "name": "提交", "type": "Start", "next": "{{FirstNext(nodes)}}" },
             {{string.Join(",\n", nodes)}},
             "end": { "name": "结束", "type": "End" } } }
@@ -64,8 +64,8 @@ public sealed class ParallelReturnAddSignTests : IAsyncLifetime
         await Assert.ThrowsAsync<ApprovalException>(() => _host.ApproveAsync(branch, "u_b"));
         Assert.Empty(await _host.TodoAsync("u_fin"));
         var state = ExecutionState.Load(await Instance(instance.Id));
-        Assert.Equal(1, state.Joins["j"].Arrived); Assert.Single(state.Joins["j"].ArrivedBranches);
-        Assert.NotEqual(Guid.Empty, state.Joins["j"].ActivationId);
+        Assert.Equal(2, state.Joins["j"].Expected);
+        Assert.Equal(new[] { 1 }, state.Joins["j"].ArrivedBranches);
         var other = await TaskOf("u_a1");
         await Run(e => e.RejectAsync(other, "u_a1", "分支不通过"));
         var ended = await Instance(instance.Id);
@@ -129,7 +129,7 @@ public sealed class ParallelReturnAddSignTests : IAsyncLifetime
     public void Validator_rejects_unstructured_parallel(string branches, string error)
     {
         var flow = FlowDefinition.Parse($$"""
-        { "startNodeId": "start", "nodes": {
+        { "schemaVersion":1, "startNodeId": "start", "nodes": {
             "start": { "name": "提交", "type": "Start", "next": "p" },
             "p": { "name": "并行", "type": "Parallel", "branches": [ {{branches}} ] },
             "a": { "name": "A", "type": "Approval", "approvers": [{ "type": "User", "value": "u" }], "next": "x" },
@@ -137,7 +137,8 @@ public sealed class ParallelReturnAddSignTests : IAsyncLifetime
             "j": { "name": "合并", "type": "Join", "next": "end" },
             "end": { "name": "结束", "type": "End" } } }
         """);
-        var errors = FormDefinitionValidator.Validate(flow, new HashSet<string> { "User" });
+        var errors = FlowDefinitionValidator.Validate(flow, new FlowValidationContext
+        { ApproverTypes = new HashSet<string> { "User" }, Extension = new FormDefinitionValidator() });
         Assert.Contains(errors, e => e.Contains(error));
     }
 
@@ -145,7 +146,8 @@ public sealed class ParallelReturnAddSignTests : IAsyncLifetime
     public void Validator_rejects_join_without_parallel()
     {
         var flow = FlowDefinition.Parse(Flow(User("a", "A", "j"), """ "j": { "name": "合并", "type": "Join", "next": "end" } """));
-        Assert.Contains(FormDefinitionValidator.Validate(flow, new HashSet<string> { "User" }), e => e.Contains("没有对应的并行节点"));
+        Assert.Contains(FlowDefinitionValidator.Validate(flow, new FlowValidationContext
+        { ApproverTypes = new HashSet<string> { "User" }, Extension = new FormDefinitionValidator() }), e => e.Contains("没有对应的并行节点"));
     }
 
     // ───────────────────────── 退回 ─────────────────────────

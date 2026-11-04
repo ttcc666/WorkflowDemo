@@ -491,10 +491,6 @@ namespace Approval.Certificate.Infrastructure.Migrations
                     b.Property<Guid?>("InstanceId")
                         .HasColumnType("TEXT");
 
-                    b.Property<bool>("IsTombstone")
-                        .IsConcurrencyToken()
-                        .HasColumnType("INTEGER");
-
                     b.Property<string>("Kind")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -559,11 +555,6 @@ namespace Approval.Certificate.Infrastructure.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<Guid?>("InstanceId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Kind")
-                        .IsRequired()
-                        .HasMaxLength(20)
                         .HasColumnType("TEXT");
 
                     b.Property<string>("LastError")

@@ -76,7 +76,7 @@ public sealed partial class DatabaseContractTests
         var foreign = await AtomicStart(host, faults, "foreign", "foreign");
         var permissions = (AtomicPermissions)host.GetRequiredService<IApprovalPermissionProvider>();
         permissions.Rule = request => request.Permission != ApprovalPermissions.TaskReassign || request.Resource.InstanceId != blocked && request.Resource.InstanceId != foreign;
-        var result = await AtomicRun(host, "admin", sp => sp.GetRequiredService<ApprovalEngine>().ReassignUserAsync("bob", "charlie", "admin", "handover"));
+        var result = await AtomicRun(host, "admin", sp => sp.GetRequiredService<ApprovalEngine>().ReassignUserAsync("bob", "charlie", "admin", "handover", "handover"));
         Assert.Equal(1, result.Count); Assert.Equal(new[] { blocked, foreign }.Order(), result.Skipped.Select(s => s.InstanceId).Order());
         await AtomicRun(host, "admin", async sp =>
         {
@@ -92,6 +92,6 @@ public sealed partial class DatabaseContractTests
             Assert.Equal("bob", task.AssigneeValue); return true;
         });
         await Assert.ThrowsAsync<InvalidOperationException>(() => AtomicRun(host, "admin", sp => sp.GetRequiredService<IApprovalUnitOfWork>().ExecuteAsync(ct =>
-            sp.GetRequiredService<ApprovalEngine>().ReassignUserAsync("bob", "charlie", "admin", "handover", ct))));
+            sp.GetRequiredService<ApprovalEngine>().ReassignUserAsync("bob", "charlie", "admin", "handover", "nested-handover", ct))));
     }
 }

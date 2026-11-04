@@ -14,10 +14,6 @@ public sealed class ApprovalOutboxDispatcher(ApprovalBackgroundRunner sweeper)
     internal Func<CancellationToken, Task>? ValidateHost { get; init; }
     internal ApprovalOptions? Options { get; init; }
 
-    // 保留宿主原有显式构造方式；定时循环已统一由 ApprovalWorker 拥有。
-    public ApprovalOutboxDispatcher(ApprovalOutboxSignal signal, ApprovalOptions options,
-        ILogger<ApprovalOutboxDispatcher> logger, ApprovalBackgroundRunner sweeper) : this(sweeper) { }
-
     /// <summary>处理所有到期消息（测试与手动触发时可直接调用）。</summary>
     public async Task DispatchOnceAsync(CancellationToken ct = default)
     {
@@ -35,9 +31,6 @@ public sealed class ApprovalTimeoutScanner(
     ILogger<ApprovalTimeoutScanner> logger,
     ApprovalBackgroundRunner sweeper)
 {
-    public ApprovalTimeoutScanner(IApprovalScopeFactory scopes, ApprovalOptions options, TimeProvider clock,
-        ILogger<ApprovalTimeoutScanner> logger, ApprovalBackgroundRunner sweeper) : this(scopes, clock, logger, sweeper) { }
-
     private const int BatchSize = 100;
 
     /// <summary>扫描一次，返回处理的待办数（测试与手动触发时可直接调用）。</summary>

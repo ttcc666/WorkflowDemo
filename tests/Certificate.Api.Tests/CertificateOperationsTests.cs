@@ -15,6 +15,20 @@ namespace Certificate.Api.Tests;
 
 public sealed class CertificateOperationsTests
 {
+    [Fact]
+    public async Task HostBindsStatisticsBudgets()
+    {
+        await using var host = await CertificateHost.StartAsync(configuration: new Dictionary<string, string?> {
+            ["Approval:Statistics:MaxTaskRows"] = "3", ["Approval:Statistics:MaxBacklogRows"] = "7"
+        });
+        await host.RunAsync(sp => {
+            var options = sp.GetRequiredService<Approval.Core.ApprovalOptions>();
+            Assert.Equal(3, options.Statistics.MaxTaskRows);
+            Assert.Equal(7, options.Statistics.MaxBacklogRows);
+            return Task.FromResult(true);
+        });
+    }
+
     private sealed class ObserverPermissions : IApprovalPermissionProvider
     {
         public Task<bool> AuthorizeAsync(ApprovalPermissionRequest request, CancellationToken ct) => Task.FromResult(

@@ -13,7 +13,7 @@ public sealed class BackgroundRegistrationTests
         host.Identity.Add("alice"); host.Identity.Add("bob");
         host.Channel.FailTimes = 1;
         await host.PublishAsync("worker", """
-            {"startNodeId":"start","nodes":{
+            {"schemaVersion":1,"startNodeId":"start","nodes":{
               "start":{"type":"Start","next":"review"},
               "review":{"type":"Approval","approvers":[{"type":"User","value":"bob"}],"next":"end",
                 "timeout":{"minutes":1},"notifications":[{"events":["Enter"],"recipients":[{"type":"Assignees"}],"channels":["Test"]}]},

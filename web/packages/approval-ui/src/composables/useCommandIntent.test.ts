@@ -61,13 +61,3 @@ it('清理存储失败时，新提交不会误用已完成的键', async () => {
   await createCommandIntent(() => 'remove-failure:alice', options).run('start', {}, async (_, key) => { expect(key).toBe('remove-1') })
   await createCommandIntent(() => 'remove-failure:alice', options).run('start', {}, async (_, key) => { expect(key).toBe('remove-2') })
 })
-it('重放保留期结束仍保留原键，核对归档后才允许开始新操作', async () => {
-  const { intent } = setup()
-  await expect(intent.run('start', { amount: 1 }, async () => { throw new ApiError('expired', 410, 'ReplayExpired') })).rejects.toThrow('expired')
-  let sent = false
-  await expect(intent.run('start', { amount: 2 }, async () => { sent = true })).rejects.toThrow('尚未确认')
-  expect(sent).toBe(false)
-  await expect(intent.run('start', { amount: 1 }, async (_, key) => { expect(key).toBe('key-1'); throw new ApiError('expired', 410, 'ReplayExpired') })).rejects.toThrow('expired')
-  intent.reset('start')
-  await intent.run('start', { amount: 2 }, async (_, key) => { expect(key).toBe('key-2') })
-})

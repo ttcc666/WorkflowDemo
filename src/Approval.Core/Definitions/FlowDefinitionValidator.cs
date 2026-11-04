@@ -14,7 +14,7 @@ public sealed class FlowValidationContext
     /// <summary>审批人类型描述（参数类型、是否有序），用于校验规则参数与审批方式。</summary>
     public IReadOnlyDictionary<string, ApproverTypeDescriptor>? ApproverDescriptors { get; init; }
 
-    /// <summary>宿主声明的通知路由（含内置站内信 InApp）；名称保留以兼容现有契约。</summary>
+    /// <summary>宿主声明的通知路由（含内置站内信 InApp）。</summary>
     public IReadOnlySet<string>? Channels { get; init; }
 }
 
@@ -23,9 +23,6 @@ public static partial class FlowDefinitionValidator
 {
     [GeneratedRegex(@"^[A-Za-z_][A-Za-z0-9_]*$")]
     private static partial Regex Identifier();
-
-    public static IReadOnlyList<string> Validate(FlowDefinition definition, IReadOnlySet<string> knownApproverTypes) =>
-        Validate(definition, new FlowValidationContext { ApproverTypes = knownApproverTypes });
 
     public static IReadOnlyList<string> Validate(FlowDefinition definition, FlowValidationContext context)
     {

@@ -30,7 +30,7 @@ public sealed class RuntimeQueryOptimizationTests
         var directory = new Directory(includeSecond);
         await using var host = new TestHost(build: b => { b.AddApprovalForms(); b.Services.AddSingleton<IApprovalUserDirectory>(directory); });
         await host.PublishAsync("users", """
-            {"startNodeId":"start","settings":{"startable":true},"form":{"fields":[
+            {"schemaVersion":1,"startNodeId":"start","settings":{"startable":true},"form":{"fields":[
               {"key":"first","label":"First","type":"User"},{"key":"second","label":"Second","type":"Users"}]},
               "nodes":{"start":{"type":"Start","next":"review"},"review":{"type":"Approval",
                 "approvers":[{"type":"User","value":"bob"}],"next":"end"},"end":{"type":"End"}}}

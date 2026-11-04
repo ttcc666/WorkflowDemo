@@ -12,4 +12,4 @@ Core 的 FlowDefinition.Form 是可选模块拥有的 JSON 数据。Forms 通过
 
 Draft/File 写权限仅供 Forms 内部服务使用，与 Core 引擎、定义治理、消息已读权限分开。普通宿主不能通过共享 DbContext 或 bulk 修改元数据。附件绑定仍与草稿/审批事务一起保存；上传元数据保存失败会撤销跟踪，避免之后保存失去文件内容的残留记录。
 
-FlowNode.FieldPermissions、FieldAccess、FieldsWith 和 HiddenFields 继续作为已发布 C#/JSON 的兼容结构保留。校验、字段隐藏、编辑规则和附件可见性实际由 Forms 扩展实现；缺少模块时拒绝相关定义/投影，不丢弃旧配置。后续契约版本可通过模块 snapshot 的双读适配拆分，不能直接移除字段或修改历史实例绑定的版本。
+FlowNode.FieldPermissions、FieldAccess、FieldsWith 和 HiddenFields 是当前字段权限功能使用的数据结构。校验、字段隐藏、编辑规则和附件可见性由 Forms 扩展实现；缺少模块时拒绝相关定义/投影。它们没有旧版本适配分支，不因清理兼容层而删除。流程发布版本及实例绑定仍保持不可变；外部定义 JSON 必须显式声明 schemaVersion=1。

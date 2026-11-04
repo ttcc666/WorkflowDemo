@@ -4,7 +4,7 @@ using Approval.Core.Domain;
 
 namespace Approval.Tests.Infrastructure;
 
-// Only for legacy flow/validation fixture scopes with no authenticated caller.
+// Only for explicit system flow/validation fixture scopes.
 // HTTP requests and the permission suites use the mandatory production gate.
 internal sealed class FlowFixtureAuthorization : IApprovalAuthorization
 {

@@ -79,7 +79,7 @@ internal sealed class ApprovalEventWriter(
     internal void WriteEvent(ApprovalOperationContext operation, ApprovalInstance instance, string type, string? nodeId, string? nodeName, Guid? taskId,
         string operatorId, string? comment)
     {
-        AddOutbox(operation, OutboxKind.Event, "Host", instance, null, type,
+        AddOutbox(operation, "Host", instance, null, type,
             id => new ApprovalEvent(id, type, instance.Id, instance.DefinitionId, instance.DefinitionVersion,
                 instance.BusinessType, instance.BusinessKey, type switch
                 {
@@ -142,7 +142,7 @@ internal sealed class ApprovalEventWriter(
                 else if (_channels.Contains(channel))
                 {
                     var link = variables.GetValueOrDefault("link") as string;
-                    AddOutbox(operation, OutboxKind.Event, "Host", instance, node, title,
+                    AddOutbox(operation, "Host", instance, node, title,
                         id => new ApprovalEvent(id, "NotificationRequested", instance.Id, instance.DefinitionId, instance.DefinitionVersion,
                             instance.BusinessType, instance.BusinessKey, instance.Status, node?.Id, node?.Name, null,
                             info.OperatorId ?? SystemOperator, info.Comment, Now)
@@ -207,14 +207,13 @@ internal sealed class ApprovalEventWriter(
         });
 
     /// <summary>写入 Outbox：随本次操作一起提交，提交后由后台任务投递。payload 工厂接收消息 ID（幂等键）。</summary>
-    private void AddOutbox(ApprovalOperationContext operation, OutboxKind kind, string target, ApprovalInstance instance, FlowNode? node, string? description,
+    private void AddOutbox(ApprovalOperationContext operation, string target, ApprovalInstance instance, FlowNode? node, string? description,
         Func<Guid, object> payload)
     {
         var id = _unit.NewId("ApprovalEngine.Notifications");
         _db.Set<ApprovalOutboxMessage>().Add(new ApprovalOutboxMessage
         {
             Id = id,
-            Kind = kind,
             Target = target,
             InstanceId = instance.Id,
             NodeId = node?.Id,

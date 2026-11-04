@@ -48,6 +48,6 @@ const successors = (node: FlowNodeDef) =>
 /** 节点被退回后会重新生成任务，只看最近一轮 */
 function latestRound(tasks: ApprovalInstance['tasks']) {
   if (tasks.length === 0) return tasks
-  const round = Math.max(...tasks.map((t) => t.round ?? 0))
-  return tasks.filter((t) => (t.round ?? 0) === round)
+  const round = Math.max(...tasks.map((t) => t.round))
+  return tasks.filter((t) => t.round === round)
 }

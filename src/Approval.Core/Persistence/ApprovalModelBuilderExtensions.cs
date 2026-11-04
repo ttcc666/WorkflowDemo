@@ -110,7 +110,6 @@ public static class ApprovalModelBuilderExtensions
         {
             b.ToTable($"{tablePrefix}Outbox");
             b.HasKey(x => x.Id);
-            b.Property(x => x.Kind).HasConversion<string>().HasMaxLength(20);
             b.Property(x => x.Status).HasConversion<string>().HasMaxLength(20);
             b.Property(x => x.Target).HasMaxLength(100);
             b.Property(x => x.NodeId).HasMaxLength(100);
@@ -129,7 +128,6 @@ public static class ApprovalModelBuilderExtensions
             b.Property(o => o.ActorId).HasMaxLength(256); b.Property(o => o.Kind).HasMaxLength(100);
             b.Property(o => o.Scope).HasMaxLength(2000); b.Property(o => o.RequestKey).HasMaxLength(200);
             b.Property(o => o.RequestHash).HasMaxLength(64);
-            b.Property(o => o.IsTombstone).IsConcurrencyToken();
         });
         modelBuilder.Entity<ApprovalBusinessSlot>(b =>
         {

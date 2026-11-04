@@ -111,21 +111,6 @@ internal sealed class DefaultApprovalAuthorization(
     }
 }
 
-internal sealed class MissingApprovalAuthorization : IApprovalAuthorization
-{
-    public static readonly MissingApprovalAuthorization Instance = new();
-
-    private static Exception Missing() => new ApprovalException("请通过已注册的审批作用域取得服务及可信操作人上下文") { Code = ApprovalErrorCode.Unauthorized };
-
-    public Task RequireAsync(string permission, ApprovalResource? resource = null, string? userId = null, CancellationToken ct = default) => Task.FromException(Missing());
-
-    public Task<bool> CanAsync(string permission, ApprovalResource? resource = null, string? userId = null, CancellationToken ct = default) => Task.FromException<bool>(Missing());
-
-    public Task<ApprovalViewer> ViewerAsync(ApprovalViewer viewer, Guid? instanceId = null, CancellationToken ct = default) => Task.FromException<ApprovalViewer>(Missing());
-
-    public Task<IQueryable<ApprovalInstance>> ScopeAsync(IQueryable<ApprovalInstance> query, CancellationToken ct = default) => Task.FromException<IQueryable<ApprovalInstance>>(Missing());
-}
-
 public sealed class DefaultApprovalPermissionProvider : IApprovalPermissionProvider
 {
     public Task<bool> AuthorizeAsync(ApprovalPermissionRequest request, CancellationToken ct)

@@ -120,7 +120,7 @@ public sealed class ApprovalCarbonCopyService(ApprovalDbContextAccessor accessor
             .OrderBy(c => c.CreatedAt).ThenBy(c => c.Id).ToListAsync(ct);
     }
 
-    /// <summary>受权查询接收人员。角色来自宿主当前成员；旧抄送没有人员快照，不推断历史名单。</summary>
+    /// <summary>受权查询接收人员。角色来自宿主当前成员，不以当前目录推断发送时的历史名单。</summary>
     public async Task<CarbonCopyRecipients> GetRecipientsAsync(string userId, Guid id, PageRequest? page = null,
         CancellationToken ct = default, IApprovalUserDirectory? publicDirectory = null)
     {

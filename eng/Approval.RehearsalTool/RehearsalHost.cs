@@ -5,6 +5,8 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 using Approval.Core;
 using Approval.Core.Abstractions;
+using Approval.Core.Persistence;
+using Approval.Forms;
 using Approval.ReferenceHost;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Builder;
@@ -43,11 +45,7 @@ internal sealed class RehearsalHost : IAsyncDisposable
     {
         var authority = Required("AUTHORITY");
         if (!Uri.TryCreate(authority, UriKind.Absolute, out var uri) || !uri.IsLoopback || uri.Scheme != "https") throw new InvalidOperationException("Rehearsal authority must be explicit loopback HTTPS.");
-        var database = new System.Data.Common.DbConnectionStringBuilder { ConnectionString = connection };
-        var name = database.ContainsKey("Database") ? Convert.ToString(database["Database"]) : Convert.ToString(database["Initial Catalog"]);
-        if (name is null || !System.Text.RegularExpressions.Regex.IsMatch(name, "^approval_test_[a-f0-9]+(_restore)?$")) throw new InvalidOperationException("Only owned approval_test databases are allowed.");
-        var endpoint = Convert.ToString(database[database.ContainsKey("Host") ? "Host" : "Server"])!.Split(',')[0];
-        if (endpoint is not ("127.0.0.1" or "localhost")) throw new InvalidOperationException("Database rehearsal endpoints must be loopback.");
+        ValidateConnection(connection);
         var app = ReferenceApplication.Build(["--environment", "Production"], builder =>
         {
             builder.WebHost.UseTestServer(); builder.Logging.ClearProviders();
@@ -85,6 +83,28 @@ internal sealed class RehearsalHost : IAsyncDisposable
         var workflow = app.Services.GetRequiredService<ApprovalOptions>(); workflow.CommitVerificationTimeout = TimeSpan.FromSeconds(3);
         try { if (migrate) await ReferenceDatabase.MigrateAsync(app.Services); await app.StartAsync(); return new(app); }
         catch { await app.DisposeAsync(); throw; }
+    }
+
+    private static void ValidateConnection(string connection)
+    {
+        var database = new System.Data.Common.DbConnectionStringBuilder { ConnectionString = connection };
+        var name = database.ContainsKey("Database") ? Convert.ToString(database["Database"]) : Convert.ToString(database["Initial Catalog"]);
+        if (name is null || !System.Text.RegularExpressions.Regex.IsMatch(name, "^approval_test_[a-f0-9]+(_restore)?$")) throw new InvalidOperationException("Only owned approval_test databases are allowed.");
+        var endpoint = Convert.ToString(database[database.ContainsKey("Host") ? "Host" : "Server"])!.Split(',')[0];
+        if (endpoint is not ("127.0.0.1" or "localhost")) throw new InvalidOperationException("Database rehearsal endpoints must be loopback.");
+    }
+
+    // Offline fixture preparation only. HTTP/services always use the protected ReferenceDbContext.
+    internal static DbContext CreateSeedStorage(string connection)
+    {
+        ValidateConnection(connection);
+        var options = new DbContextOptionsBuilder<SeedStorageContext>();
+        ReferenceDatabase.Configure(options, Required("PROVIDER"), connection);
+        return new SeedStorageContext(options.Options);
+    }
+    private sealed class SeedStorageContext(DbContextOptions<SeedStorageContext> options) : DbContext(options)
+    {
+        protected override void OnModelCreating(ModelBuilder model) => model.ConfigureApproval().ConfigureApprovalForms();
     }
     public static async Task<string> Token(string user, string client = "approval-api", string? authority = null)
     {

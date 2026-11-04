@@ -1,11 +1,24 @@
 # Changelog
 
+## Unreleased — 2026-11-04（开发期兼容清理）
+
+- 删除幂等结果墓碑字段、ReplayExpired/HTTP 410 和前端专用分支；保留完整结果重放、权限复核和未知提交恢复。
+- Outbox 统一保存当前 ApprovalEvent，删除旧裸通知转换、OutboxKind/Kind 列及传输字段；非法事件在投递前拒绝并按原规则记录失败。
+- 删除 Engine、DefinitionService、OutboxService 的旧公开构造器和无用参数，统一经当前 DI 路径注入完整扩展与共享信号。
+- 遗漏复查补删 Dispatcher/TimeoutScanner 的旧构造重载；DbContextAccessor 的授权、命令与操作人依赖必填，删除空依赖占位及无用分支。
+- 深度复查合并治理列表旧重载，删除只接收类型集合的校验转发入口；并行运行态删除无消费者的 ActivationId 和重复 Arrived 计数，前端直接使用必填 round。
+- 非对象流程 JSON 明确返回 InvalidDefinition/HTTP 400；补充 null、数组、数值根节点及失败零残留的回归，修复原先返回 500 的问题。
+- 外部流程 JSON 必须显式 schemaVersion=1；同步示例、设计器、共享用例、契约与九套当前 InitialApproval，不提供旧库升级桥。
+- 前端任务使用完整生成响应类型；用户状态必填，未解析用户明确不可选。当前验证见 docs/unreleased-compatibility-cleanup.md；下方各轮次保留当时事实，不代表当前兼容承诺。
+
 ## Unreleased — 2026-11-03（RC 最终收尾）
 
 - 项目未发布且无生产历史数据：删除附件 ArchiveId／DeletionPending、旧维护访问分支及 Tenant 存储键兼容路径；真实附件授权规则保持。
 - 九套示例／测试迁移重建为当前模型的 InitialApproval，删除空边界迁移和旧维护表；物理 schema 与附件元数据往返纳入服务数据库必需测试。
 - TimeoutScanner 使用 scopes 命名；清理测试／演练中误导性的 Tenant 参数与测试名。
-- 完善生产 OperationId、HTTP／SDK／非 HTTP 与批量恢复文档；RequireOperationId 默认值不变。
+- 删除 RequireOperationId 开关与无键批量改派入口，受管理的业务写操作统一要求稳定键；HTTP／SDK 重试复用原键及原内容。
+- 删除阻塞异步授权的 ApprovalDefinitionService.Validate，同步调用迁移为 await ValidateAsync。
+- 统计任务按精确受限实例关联并流式聚合；任务与积压增加读取预算，超限返回 StatisticsLimitExceeded，不返回部分计数。
 - ApprovalActions 测试使用真实 Element Plus 插件及 SSR 注入，保留权限断言并验证零 warning。当前验收见 docs/rc-report.md。
 
 ## Unreleased — 2026-11-03（第三轮审批写边界与宿主可靠性）

@@ -2,10 +2,7 @@ namespace Approval.Core.Abstractions;
 
 /// <summary>由宿主定义稳定命令/资源范围。Payload 只用于摘要；Result 必须是可序列化的结果 DTO。</summary>
 public sealed record ApprovalCommand(string Kind, string Scope, string? OperationId, object? Payload,
-    string Permission, ApprovalResource? Resource = null)
-{
-    internal bool AllowUnkeyed { get; init; }
-}
+    string Permission, ApprovalResource? Resource = null);
 
 /// <summary>完整业务委托在新作用域内运行；失败重试不复用 DbContext。不要捕获原作用域的服务/实体。</summary>
 public interface IApprovalCommandExecutor

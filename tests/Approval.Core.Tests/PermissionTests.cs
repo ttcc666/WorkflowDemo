@@ -16,7 +16,7 @@ namespace Approval.Core.Tests;
 public sealed class PermissionTests
 {
     private const string Flow = """
-        {"startNodeId":"start","nodes":{"start":{"type":"Start","name":"Start","next":"review"},
+        {"schemaVersion":1,"startNodeId":"start","nodes":{"start":{"type":"Start","name":"Start","next":"review"},
         "review":{"type":"Approval","name":"Review","mode":"Any","approvers":[{"type":"User","value":"bob"}],"next":"end"},
         "end":{"type":"End","name":"End"}}}
         """;
@@ -60,6 +60,13 @@ public sealed class PermissionTests
     }
     private static Task As(TestHost host, string? user, Func<IServiceProvider, Task> action) =>
         As<object?>(host, user, async sp => { await action(sp); return null; });
+    private static Task<T> Command<T>(IServiceProvider sp, string permission, Func<IServiceProvider, Task<T>> action) =>
+        sp.GetRequiredService<IApprovalCommandExecutor>().ExecuteAsync(
+            new("permission.test", "test", Guid.NewGuid().ToString("N"), null, permission), (attempt, _) => action(attempt));
+    private static Task<T> AsCommand<T>(TestHost host, string? user, string permission, Func<IServiceProvider, Task<T>> action) =>
+        As(host, user, sp => Command(sp, permission, action));
+    private static Task AsCommand(TestHost host, string? user, string permission, Func<IServiceProvider, Task> action) =>
+        AsCommand<object?>(host, user, permission, async sp => { await action(sp); return null; });
     private static async Task Seed(TestHost host)
     {
         await host.PublishAsync("doc", Flow);
@@ -76,15 +83,15 @@ public sealed class PermissionTests
         var instance = Assert.Single(await host.TodoAsync("bob"));
         var outboxId = Guid.NewGuid();
         await host.SeedStorageAsync(async db => { db.Add(new ApprovalOutboxMessage { Id = outboxId, Target = "test", PayloadJson = "{}", Status = OutboxStatus.Failed }); await db.SaveChangesAsync(); });
-        await AssertCode(ApprovalErrorCode.Forbidden, () => As(host, "bob", sp => sp.GetRequiredService<ApprovalEngine>().TerminateAsync(instance.InstanceId, "bob", "stop")));
-        await AssertCode(ApprovalErrorCode.Forbidden, () => As(host, "bob", sp => sp.GetRequiredService<ApprovalEngine>().ReassignAsync(instance.TaskId, "bob", "other", "handover")));
-        await AssertCode(ApprovalErrorCode.Forbidden, () => As(host, "bob", sp => sp.GetRequiredService<ApprovalOutboxService>().RetryAsync(outboxId)));
-        await AssertCode(ApprovalErrorCode.Forbidden, () => As(host, "bob", sp => sp.GetRequiredService<ApprovalDefinitionService>().PublishAsync("new", "New", Flow)));
+        await AssertCode(ApprovalErrorCode.Forbidden, () => AsCommand(host, "bob", ApprovalPermissions.InstanceTerminate, sp => sp.GetRequiredService<ApprovalEngine>().TerminateAsync(instance.InstanceId, "bob", "stop")));
+        await AssertCode(ApprovalErrorCode.Forbidden, () => AsCommand(host, "bob", ApprovalPermissions.TaskReassign, sp => sp.GetRequiredService<ApprovalEngine>().ReassignAsync(instance.TaskId, "bob", "other", "handover")));
+        await AssertCode(ApprovalErrorCode.Forbidden, () => AsCommand(host, "bob", ApprovalPermissions.OutboxRetry, sp => sp.GetRequiredService<ApprovalOutboxService>().RetryAsync(outboxId)));
+        await AssertCode(ApprovalErrorCode.Forbidden, () => AsCommand(host, "bob", ApprovalPermissions.DefinitionPublish, sp => sp.GetRequiredService<ApprovalDefinitionService>().PublishAsync("new", "New", Flow)));
         await AssertCode(ApprovalErrorCode.Forbidden, () => As(host, "bob", sp => sp.GetRequiredService<ApprovalQueryService>().GetInstanceAsync(instance.InstanceId)));
         Assert.Equal(InstanceStatus.Running, (await host.GetInstanceAsync(instance.InstanceId)).Status);
         Assert.Equal("bob", Assert.Single(await host.TodoAsync("bob")).AssigneeValue);
         permissions.Decide = (r, _) => Task.FromResult(r.Permission == ApprovalPermissions.InstanceTerminate);
-        await As(host, "bob", sp => sp.GetRequiredService<ApprovalEngine>().TerminateAsync(instance.InstanceId, "bob", "stop"));
+        await AsCommand(host, "bob", ApprovalPermissions.InstanceTerminate, sp => sp.GetRequiredService<ApprovalEngine>().TerminateAsync(instance.InstanceId, "bob", "stop"));
         Assert.Equal(InstanceStatus.Terminated, (await host.GetInstanceAsync(instance.InstanceId)).Status);
     }
 
@@ -127,7 +134,11 @@ public sealed class PermissionTests
     {
         var permissions = new Permissions(); await using var host = Host(permissions); await Seed(host);
         var task = Assert.Single(await host.TodoAsync("bob")); permissions.Calls.Clear();
-        await AssertCode(ApprovalErrorCode.Forbidden, () => As(host, "alice", sp => sp.GetRequiredService<ApprovalEngine>().ApproveAsync(task.TaskId, "bob")));
+        await AssertCode(ApprovalErrorCode.Forbidden, () => AsCommand(host, "alice", ApprovalPermissions.TaskApprove, async sp =>
+        {
+            permissions.Calls.Clear(); // The command is authorized; the engine must reject the forged operator before another provider call.
+            await sp.GetRequiredService<ApprovalEngine>().ApproveAsync(task.TaskId, "bob");
+        }));
         await AssertCode(ApprovalErrorCode.Unauthorized, () => As(host, null, sp => sp.GetRequiredService<ApprovalQueryService>().GetTodoAsync("bob")));
         Assert.Empty(permissions.Calls);
         Assert.Equal(ApprovalTaskStatus.Pending, Assert.Single((await host.GetInstanceAsync(task.InstanceId)).Tasks).Status);
@@ -139,12 +150,12 @@ public sealed class PermissionTests
         var permissions = new Permissions { Decide = (_, _) => Task.FromResult(false) };
         await using var host = Host(permissions, withForms: true);
         using var json = JsonDocument.Parse("{}");
-        await AssertCode(ApprovalErrorCode.Forbidden, () => As(host, "bob", sp => sp.GetRequiredService<ApprovalFormService>().StartAsync("doc", "bob", json.RootElement)));
-        await AssertCode(ApprovalErrorCode.Forbidden, () => As(host, "bob", sp => sp.GetRequiredService<ApprovalFormService>().SaveDraftAsync("bob", "doc", null, json.RootElement, null)));
+        await AssertCode(ApprovalErrorCode.Forbidden, () => AsCommand(host, "bob", ApprovalPermissions.InstanceStart, sp => sp.GetRequiredService<ApprovalFormService>().StartAsync("doc", "bob", json.RootElement)));
+        await AssertCode(ApprovalErrorCode.Forbidden, () => AsCommand(host, "bob", ApprovalPermissions.DraftWrite, sp => sp.GetRequiredService<ApprovalFormService>().SaveDraftAsync("bob", "doc", null, json.RootElement, null)));
         using var content = new MemoryStream([1]);
         await AssertCode(ApprovalErrorCode.Forbidden, () => As(host, "bob", sp => sp.GetRequiredService<ApprovalFileService>().UploadAsync("bob", "test.txt", content)));
         Assert.Equal(0, content.Position);
-        await AssertCode(ApprovalErrorCode.Forbidden, () => As(host, "bob", sp => sp.GetRequiredService<ApprovalMessageService>().MarkAllReadAsync("bob")));
+        await AssertCode(ApprovalErrorCode.Forbidden, () => AsCommand(host, "bob", ApprovalPermissions.MessageWrite, sp => sp.GetRequiredService<ApprovalMessageService>().MarkAllReadAsync("bob")));
         await AssertCode(ApprovalErrorCode.Forbidden, () => As(host, "bob", sp => sp.GetRequiredService<ApprovalDefinitionService>().ValidateAsync(FlowDefinition.Parse(Flow))));
         await host.RunAsync(async sp =>
         {
@@ -180,13 +191,13 @@ public sealed class PermissionTests
         var permissions = new Permissions { Decide = (r, _) => Task.FromResult(r.Permission != ApprovalPermissions.InstanceReadAll) };
         await using var host = Host(permissions); await Seed(host);
         var task = Assert.Single(await host.TodoAsync("bob"));
-        await AssertCode(ApprovalErrorCode.Forbidden, () => As(host, "outsider", sp => sp.GetRequiredService<ApprovalEngine>().ApproveAsync(task.TaskId, "outsider")));
+        await AssertCode(ApprovalErrorCode.Forbidden, () => AsCommand(host, "outsider", ApprovalPermissions.TaskApprove, sp => sp.GetRequiredService<ApprovalEngine>().ApproveAsync(task.TaskId, "outsider")));
         var detail = await As(host, "outsider", sp => sp.GetRequiredService<ApprovalQueryService>().GetInstanceForViewerAsync(task.InstanceId, new("outsider", true)));
         Assert.Null(detail);
         Assert.Single(await host.TodoAsync("bob"));
         // Simulate an existing/legacy self-assigned task. New starts already exclude the initiator.
         await host.SeedStorageAsync(async db => { var row = await db.Set<ApprovalInstance>().SingleAsync(i => i.Id == task.InstanceId); row.InitiatorId = "bob"; await db.SaveChangesAsync(); });
-        await AssertCode(ApprovalErrorCode.Forbidden, () => As(host, "bob", sp => sp.GetRequiredService<ApprovalEngine>().ApproveAsync(task.TaskId, "bob")));
+        await AssertCode(ApprovalErrorCode.Forbidden, () => AsCommand(host, "bob", ApprovalPermissions.TaskApprove, sp => sp.GetRequiredService<ApprovalEngine>().ApproveAsync(task.TaskId, "bob")));
     }
 
     [Fact]
@@ -210,12 +221,12 @@ public sealed class PermissionTests
             Assert.Empty(await q.GetByBusinessAsync(RecordingBusinessHandler.Type, "hidden"));
             Assert.Empty(await sp.GetRequiredService<ApprovalMessageService>().ListAsync("bob"));
             Assert.Equal(0, await sp.GetRequiredService<ApprovalMessageService>().UnreadCountAsync("bob"));
-            Assert.Equal(0, await sp.GetRequiredService<ApprovalMessageService>().MarkAllReadAsync("bob"));
+            Assert.Equal(0, await Command(sp, ApprovalPermissions.MessageWrite, attempt => attempt.GetRequiredService<ApprovalMessageService>().MarkAllReadAsync("bob")));
             var visibleEvents = await sp.GetRequiredService<ApprovalOutboxService>().ListAsync(new());
             Assert.Equal(3, visibleEvents.Total);
             Assert.All(visibleEvents.Items, message => Assert.NotEqual(hidden.Id, message.InstanceId));
             await AssertCode(ApprovalErrorCode.NotFound, () => q.GetInstanceAsync(hidden.Id));
-            var result = await sp.GetRequiredService<ApprovalEngine>().ReassignUserAsync("bob", "charlie", "bob", "handover");
+            var result = await sp.GetRequiredService<ApprovalEngine>().ReassignUserAsync("bob", "charlie", "bob", "handover", "handover");
             Assert.Equal(1, result.Count);
         });
         Assert.Equal(hidden.Id, Assert.Single(await host.TodoAsync("bob")).InstanceId);
@@ -226,7 +237,7 @@ public sealed class PermissionTests
     {
         var permissions = new Permissions { Decide = (r, _) => Task.FromResult(r.Permission != ApprovalPermissions.TaskReassign) };
         await using var host = Host(permissions); await Seed(host);
-        var result = await As(host, "bob", sp => sp.GetRequiredService<ApprovalEngine>().ReassignUserAsync("bob", "charlie", "bob", "handover"));
+        var result = await As(host, "bob", sp => sp.GetRequiredService<ApprovalEngine>().ReassignUserAsync("bob", "charlie", "bob", "handover", "handover"));
         Assert.Equal(0, result.Count); Assert.Single(result.Skipped); Assert.Single(await host.TodoAsync("bob"));
     }
 
@@ -237,7 +248,7 @@ public sealed class PermissionTests
         var permissions = new Permissions { Decide = (_, ct) => timeout ? new TaskCompletionSource<bool>().Task.WaitAsync(ct) : Task.FromException<bool>(new HttpRequestException("offline")) };
         await using var host = Host(permissions); await Seed(host);
         var task = Assert.Single(await host.TodoAsync("bob"));
-        await AssertCode(ApprovalErrorCode.AuthorizationUnavailable, () => As(host, "bob", sp => sp.GetRequiredService<ApprovalEngine>().ApproveAsync(task.TaskId, "bob")));
+        await AssertCode(ApprovalErrorCode.AuthorizationUnavailable, () => AsCommand(host, "bob", ApprovalPermissions.TaskApprove, sp => sp.GetRequiredService<ApprovalEngine>().ApproveAsync(task.TaskId, "bob")));
         Assert.Single(await host.TodoAsync("bob"));
     }
 

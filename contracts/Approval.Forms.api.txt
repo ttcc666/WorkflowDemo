@@ -136,7 +136,6 @@ Approval.Forms.Schema.FormDataValidator
   Method System.String ValidateOrThrow(Approval.Forms.Schema.FormSchema, System.Text.Json.JsonElement) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull]
 Approval.Forms.Schema.FormDefinitionValidator
   Constructor Void .ctor() [args=]
-  Method System.Collections.Generic.IReadOnlyList`1[System.String] Validate(Approval.Core.Definitions.FlowDefinition, System.Collections.Generic.IReadOnlySet`1[System.String]) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull,NotNull/NotNull<NotNull/NotNull>]
   Method System.Collections.Generic.IReadOnlyList`1[System.String] Warnings(Approval.Core.Definitions.FlowDefinition) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull]
   Method System.Collections.Generic.IReadOnlySet`1[System.String] UserFields(Approval.Core.Definitions.FlowDefinition) [return=Nullable/Nullable<NotNull/NotNull>; args=NotNull/NotNull]
   Method Void Validate(Approval.Core.Definitions.FlowDefinition, System.Collections.Generic.List`1[System.String]) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull<NotNull/NotNull>]

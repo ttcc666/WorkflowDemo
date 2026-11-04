@@ -4,8 +4,7 @@ public sealed class ApprovalOptions
 {
     public ApprovalBackgroundOptions Background { get; } = new();
 
-    /// <summary>严格模式要求提交标识；默认 false 允许无键调用，不提供请求级防重保障。生产部署建议开启。</summary>
-    public bool RequireOperationId { get; set; }
+    public ApprovalStatisticsOptions Statistics { get; } = new();
 
     public TimeSpan CommitVerificationTimeout { get; set; } = TimeSpan.FromSeconds(10);
     public TimeSpan PermissionTimeout { get; set; } = TimeSpan.FromSeconds(5);
@@ -45,8 +44,21 @@ public sealed class ApprovalOptions
     /// <summary>超时扫描间隔。</summary>
     public TimeSpan TimeoutScanInterval { get; set; } = TimeSpan.FromMinutes(1);
 
-    /// <summary>旧定义的超时自动审批仅在宿主显式允许时执行；默认只提醒。</summary>
+    /// <summary>超时自动审批仅在宿主显式允许时执行；默认只提醒。</summary>
     public bool EnableAutomaticTimeoutDecisions { get; set; }
+}
+
+/// <summary>统计读取预算；超限时拒绝整次查询，避免返回不完整指标。</summary>
+public sealed class ApprovalStatisticsOptions
+{
+    public int MaxTaskRows { get; set; } = 250_000;
+    public int MaxBacklogRows { get; set; } = 100_000;
+
+    internal void Validate()
+    {
+        if (MaxTaskRows is <= 0 or int.MaxValue || MaxBacklogRows is <= 0 or int.MaxValue)
+            throw new InvalidOperationException("统计任务与积压读取预算必须大于零且小于 int.MaxValue");
+    }
 }
 
 public sealed class ApprovalOutboxOptions

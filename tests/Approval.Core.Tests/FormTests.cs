@@ -12,6 +12,7 @@ public sealed class FormTests
     /// <summary>请假：天数 &gt; 3 走负责人，否则直接结束；明细合计 &gt; 5000 时还需财务审批。</summary>
     private const string LeaveFlow = """
     {
+      "schemaVersion":1,
       "startNodeId": "start",
       "settings": { "startable": true, "category": "人事", "titleTemplate": "{申请人}请假 {form.days} 天" },
       "form": { "fields": [

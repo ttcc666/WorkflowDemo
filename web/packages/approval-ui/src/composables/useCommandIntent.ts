@@ -57,7 +57,7 @@ export function createCommandIntent(identity: () => string, options: { storage?:
         save(key); pending.value = null
         return result
       } catch (error) {
-        if (!intent.uncertain && error instanceof ApiError && error.status < 500 && error.code !== 'ReplayExpired') { save(key); pending.value = null }
+        if (!intent.uncertain && error instanceof ApiError && error.status < 500) { save(key); pending.value = null }
         else { intent.uncertain = true; save(key, intent) }
         throw error
       }

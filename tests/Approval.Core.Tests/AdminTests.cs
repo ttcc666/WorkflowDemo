@@ -7,6 +7,7 @@ public sealed class AdminTests : IAsyncLifetime
 {
     private const string ParallelFlow = """
     {
+      "schemaVersion":1,
       "startNodeId": "start",
       "nodes": {
         "start": { "name": "提交", "type": "Start", "next": "fork" },
@@ -22,6 +23,7 @@ public sealed class AdminTests : IAsyncLifetime
     /// <summary>单个审批节点，60 分钟时限。</summary>
     private static string TimedFlow(string approverType, string value, string mode = "Any") => $$"""
     {
+      "schemaVersion":1,
       "startNodeId": "start",
       "nodes": {
         "start":  { "name": "提交", "type": "Start", "next": "review" },
@@ -142,7 +144,7 @@ public sealed class AdminTests : IAsyncLifetime
 
         var preview = await _host.RunAsync(sp => sp.GetRequiredService<ApprovalQueryService>().GetOpenUserTasksAsync("dave"));
         _host.Identity.Add("admin", "Admin");
-        var result = await _host.RunAsAsync("admin", sp => sp.GetRequiredService<ApprovalEngine>().ReassignUserAsync("dave", "erin", "admin", "离职交接"));
+        var result = await _host.RunAsAsync("admin", sp => sp.GetRequiredService<ApprovalEngine>().ReassignUserAsync("dave", "erin", "admin", "离职交接", "handover"));
 
         Assert.Equal(3, preview.Total);
         Assert.Contains(preview.Items, t => t.Status == ApprovalTaskStatus.Waiting);

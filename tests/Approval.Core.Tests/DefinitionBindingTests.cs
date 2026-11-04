@@ -10,7 +10,7 @@ public sealed class DefinitionBindingTests
         await using var host = new TestHost();
         host.Identity.Add("reviewer");
         const string flow = """
-        { "startNodeId": "s", "nodes": {
+        { "schemaVersion":1, "startNodeId": "s", "nodes": {
           "s": { "name": "提交", "type": "Start", "next": "r" },
           "r": { "name": "旧版审核", "type": "Approval", "next": "e", "approvers": [{ "type": "User", "value": "reviewer" }] },
           "e": { "name": "结束", "type": "End" }

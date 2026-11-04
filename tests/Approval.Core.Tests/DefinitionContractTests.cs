@@ -13,7 +13,7 @@ public sealed class DefinitionContractTests
 
     [Theory]
     [MemberData(nameof(CaseNames))]
-    public void Shared_definition_contract_accepts_current_or_default_version_only(string name)
+    public void Shared_definition_contract_requires_explicit_current_version(string name)
     {
         var item = Cases().Single(item => item.Name == name);
         if (!item.Valid)
@@ -39,7 +39,25 @@ public sealed class DefinitionContractTests
     {
         var definition = FlowDefinition.Parse(Cases().First(item => item.Valid).Json);
         definition.SchemaVersion = 2;
-        Assert.Contains(FormDefinitionValidator.Validate(definition, new HashSet<string>()), error => error.Contains("协议版本 2"));
+        Assert.Contains(FlowDefinitionValidator.Validate(definition, new FlowValidationContext
+        { ApproverTypes = new HashSet<string>(), Extension = new FormDefinitionValidator() }), error => error.Contains("协议版本 2"));
         Assert.Throws<ApprovalException>(() => definition.ToJson());
+    }
+
+    [Theory]
+    [InlineData("null-root")]
+    [InlineData("array-root")]
+    [InlineData("scalar-root")]
+    public void Non_object_root_is_rejected_as_invalid_definition(string caseId)
+    {
+        var json = caseId switch
+        {
+            "null-root" => "null",
+            "array-root" => "[]",
+            "scalar-root" => "1",
+            _ => throw new ArgumentOutOfRangeException(nameof(caseId))
+        };
+        var error = Assert.Throws<ApprovalException>(() => FlowDefinition.Parse(json));
+        Assert.Equal(ApprovalErrorCode.InvalidDefinition, error.Code);
     }
 }

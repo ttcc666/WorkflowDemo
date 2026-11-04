@@ -65,8 +65,8 @@ internal sealed class ApprovalRuntimeNavigator(
                         if (branchScope.Count == 0 || operation.StructureOf(flow).JoinOf(branchScope[^1].ForkId) != node.Id)
                             throw new ApprovalException("并行汇聚来源无效") { Code = ApprovalErrorCode.InvalidDefinition };
                         if (!join.ArrivedBranches.Add(branchScope[^1].Branch)) return null;
-                        if (++join.Arrived < join.Expected) return null;
-                        if (join.Arrived > join.Expected) throw new ApprovalException("并行分支到达数无效") { Code = ApprovalErrorCode.InvalidDefinition };
+                        if (join.ArrivedBranches.Count < join.Expected) return null;
+                        if (join.ArrivedBranches.Count > join.Expected) throw new ApprovalException("并行分支到达数无效") { Code = ApprovalErrorCode.InvalidDefinition };
                         branchScope = branchScope.Take(branchScope.Count - 1).ToArray();
                         joins.Remove(node.Id);
                         nodeId = node.Next!;

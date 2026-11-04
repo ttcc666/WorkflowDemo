@@ -6,6 +6,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Approval.Core;
+using Approval.Core.Abstractions;
 using Approval.Core.Domain;
 using Approval.ReferenceHost;
 using Microsoft.EntityFrameworkCore;
@@ -69,21 +70,23 @@ internal static class Rehearsal
         await using var host = await RehearsalHost.Start(Source, Files, true);
         foreach (var credentialGroup in new[] { "alpha" }) await host.Api(HttpMethod.Post, "/definitions/shared?name=Recovery", credentialGroup + "-admin", "publish", raw: Flow);
         var running = await Start(host, "running"); var second = await Start(host, "second-running");
-        var expired = await Start(host, "expired"); await Complete(host, expired);
+        var retained = await Start(host, "retained"); await Complete(host, retained);
         var ended = await Start(host, "ended"); await Complete(host, ended);
         var bytes = Encoding.UTF8.GetBytes("附件恢复：审批材料😀\nversion=1\n");
         using var upload = new HttpRequestMessage(HttpMethod.Post, "/api/approval/files");
         upload.Headers.Authorization = new("Bearer", await RehearsalHost.Token("alpha-alice")); upload.Headers.Add("X-File-Name", "recovery.txt"); upload.Content = new ByteArrayContent(bytes);
         using var uploaded = await host.Client.SendAsync(upload); Check(uploaded.StatusCode == HttpStatusCode.OK, "AttachmentUploaded");
         var fileId = (await uploaded.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid(); var outboxId = Guid.NewGuid();
-        await using (var scope = await host.Scope())
+        await using (var db = RehearsalHost.CreateSeedStorage(Source))
         {
-            var db = scope.ServiceProvider.GetRequiredService<ReferenceDbContext>(); (await db.Set<ApprovalFile>().SingleAsync(f => f.Id == fileId)).InstanceId = running;
-            foreach (var row in await db.Set<ApprovalInstance>().Where(i => i.Id == expired || i.Id == ended).ToListAsync()) row.CompletedAt = new(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc);
-            var tombstone = await db.Set<ApprovalOperation>().SingleAsync(o => o.RequestKey == "expired"); tombstone.IsTombstone = true; tombstone.ResultJson = "";
-            db.Add(new ApprovalOutboxMessage { Id = outboxId, InstanceId = running, Kind = OutboxKind.Notification, Target = "RehearsalSink", PayloadJson = "{\"event\":\"recover\"}", Status = OutboxStatus.Pending, MaxAttempts = 3, CreatedAt = DateTime.UtcNow, NextAttemptAt = DateTime.UtcNow }); await db.SaveChangesAsync();
+            (await db.Set<ApprovalFile>().SingleAsync(f => f.Id == fileId)).InstanceId = running;
+            foreach (var row in await db.Set<ApprovalInstance>().Where(i => i.Id == retained || i.Id == ended).ToListAsync()) row.CompletedAt = new(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+            var instance = await db.Set<ApprovalInstance>().SingleAsync(i => i.Id == running);
+            var recoveryEvent = new ApprovalEvent(outboxId, "RecoveryRequested", running, instance.DefinitionId, instance.DefinitionVersion,
+                instance.BusinessType, instance.BusinessKey, instance.Status, null, null, null, "alpha-alice", null, DateTime.UtcNow);
+            db.Add(new ApprovalOutboxMessage { Id = outboxId, InstanceId = running, Target = "Host", PayloadJson = JsonSerializer.Serialize(recoveryEvent, RehearsalHost.Json), Status = OutboxStatus.Pending, MaxAttempts = 3, CreatedAt = DateTime.UtcNow, NextAttemptAt = DateTime.UtcNow }); await db.SaveChangesAsync();
         }
-        await System.IO.File.WriteAllTextAsync(File("seed-facts.json"), JsonSerializer.Serialize(new { running, second, expired, ended, fileId, outboxId, fileHash = Convert.ToHexStringLower(SHA256.HashData(bytes)) }, RehearsalHost.Json));
+        await System.IO.File.WriteAllTextAsync(File("seed-facts.json"), JsonSerializer.Serialize(new { running, second, retained, ended, fileId, outboxId, fileHash = Convert.ToHexStringLower(SHA256.HashData(bytes)) }, RehearsalHost.Json));
         await System.IO.File.WriteAllTextAsync(File("source-snapshot.json"), await Snapshot(host)); Check(running != second, "IndependentBusinessInstances");
         await using var versionScope = await host.Scope(); var versionDb = versionScope.ServiceProvider.GetRequiredService<ReferenceDbContext>();
         await versionDb.Database.OpenConnectionAsync();
@@ -115,13 +118,18 @@ internal static class Rehearsal
         var actual = await Snapshot(host); Check(await System.IO.File.ReadAllTextAsync(File("source-snapshot.json")) == actual, "NativeBackupRestoredEveryPersistentProperty"); await System.IO.File.WriteAllTextAsync(File("restored-snapshot.json"), actual);
         var facts = JsonDocument.Parse(await System.IO.File.ReadAllTextAsync(File("seed-facts.json"))).RootElement; var running = facts.GetProperty("running").GetGuid(); var second = facts.GetProperty("second").GetGuid();
         Check(await Start(host, "running") == running && await Start(host, "second-running") == second, "RestoredOriginalKeysReturnOriginalIds");
-        using var expired = await host.Send(HttpMethod.Post, "/forms/shared/start", key: "expired", body: Body); Check(expired.StatusCode == HttpStatusCode.Gone, "RestoredTombstoneReturns410");
+        var beforeReplay = await Snapshot(host);
+        Check(await Start(host, "retained") == facts.GetProperty("retained").GetGuid()
+            && beforeReplay == await Snapshot(host), "RestoredRetainedResultReplaysWithoutWrites");
         var fileId = facts.GetProperty("fileId").GetGuid(); using var download = await host.Send(HttpMethod.Get, "/files/" + fileId);
         Check(download.StatusCode == HttpStatusCode.OK && Convert.ToHexStringLower(SHA256.HashData(await download.Content.ReadAsByteArrayAsync())) == facts.GetProperty("fileHash").GetString(), "RestoredAttachmentBytesAndHash");
         using var foreignFile = await host.Send(HttpMethod.Get, "/files/" + fileId, "outsider"); Check(foreignFile.StatusCode == HttpStatusCode.Forbidden, "RestoredUnknownUserRejected");
         await Complete(host, running); await Complete(host, second);
         await using var scope = await host.Scope(); var db = scope.ServiceProvider.GetRequiredService<ReferenceDbContext>(); Check(await db.Set<ApprovalBusinessSlot>().CountAsync() == 0, "RestoredApprovalReleasesBusinessSlot");
-        var originalOutbox = await db.Set<ApprovalOutboxMessage>().SingleAsync(o => o.Id == facts.GetProperty("outboxId").GetGuid()); Check(originalOutbox.Status == OutboxStatus.Pending && originalOutbox.PayloadJson == "{\"event\":\"recover\"}", "RestoredOutboxKeepsOriginalIdAndPayload");
+        var originalOutbox = await db.Set<ApprovalOutboxMessage>().SingleAsync(o => o.Id == facts.GetProperty("outboxId").GetGuid());
+        var recoveryEvent = JsonSerializer.Deserialize<ApprovalEvent>(originalOutbox.PayloadJson, RehearsalHost.Json)!;
+        Check(originalOutbox.Status == OutboxStatus.Pending && recoveryEvent.Id == originalOutbox.Id
+            && recoveryEvent.InstanceId == running && recoveryEvent.EventType == "RecoveryRequested", "RestoredOutboxKeepsCurrentEventIdentityAndPayload");
     }
     private static async Task Authentication()
     {
