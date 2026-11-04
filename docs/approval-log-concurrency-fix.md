@@ -6,7 +6,7 @@
 
 `ApprovalEventWriter.AddLog` 使用 `++instance.LogSequence`。两个独立上下文读取相同旧实例后，都可能生成相同 `(InstanceId, Sequence)`。实体模型 `ConfigureApproval` 保留唯一索引 `IX_ApprovalLogs_InstanceId_Sequence`；原始 CI 的 MySQL1062 / PostgreSQL23505 明确指向该索引，调用栈由 EF ReaderModificationCommandBatch / SaveChanges 到 Flush。
 
-EF 不保证所有 Provider 都先执行实例并发令牌 UPDATE，再 INSERT 日志。如果日志 INSERT 先触发唯一索引，原 Flush 只 catch `DbUpdateConcurrencyException`，于是普通 `ApproveAsync` 等操作泄漏 `DbUpdateException`。协调器的通用 Unique 处理不能覆盖不经过协调器的 Engine 调用。
+不能仅根据语句先后顺序推断异常优先级。本次实际三个 Provider 的命令都在同一个批次中执行 DELETE BusinessSlots → UPDATE Instances → INSERT Logs；MySQL还带SELECT ROW_COUNT，SQL Server带OUTPUT 1。即使实例UPDATE在前，MySQL/PostgreSQL仍先暴露后续日志INSERT的唯一约束异常，早于EF对受影响行数完成并发判断；SQL Server本次走EF concurrency异常。原 Flush 只 catch `DbUpdateConcurrencyException`，因此普通 `ApproveAsync` 等操作泄漏 `DbUpdateException`。协调器的通用 Unique 处理不能覆盖不经过协调器的 Engine 调用。
 
 普通 Approve / Reject / Return / Transfer 等调用 `_unit.ExecuteCommandAsync`，经过 Engine 写所有者的 `ExecuteOwnedAsync`。带 OperationId 的 Start、HTTP/宿主显式协调命令经过 `IApprovalCommandExecutor`，它使用新的 Scope/DbContext 再调用同样的 Engine/UnitOfWork 路径。同步业务/生命周期回调**不能自行 SaveChanges**，仍由现有保存保护执行；异步事件处理器的既有保存边界不改。
 

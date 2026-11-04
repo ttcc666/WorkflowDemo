@@ -206,14 +206,15 @@ public sealed partial class DatabaseContractTests
         if (constraint == "business-slot") db.Add(new ApprovalBusinessSlot { Id = Guid.NewGuid(), InstanceId = first.Id,
             LookupHash = "duplicate", BusinessType = "Order", BusinessKey = "one" });
         await db.SaveChangesAsync(); db.ChangeTracker.Clear();
-        var target = constraint == "foreign-key" ? Guid.NewGuid() : first.Id;
+        var target = constraint == "foreign-key" ? Guid.NewGuid() : constraint == "business-slot" ? second.Id : first.Id;
         db.Add(new ApprovalLog { Id = constraint == "log-primary" ? logId : Guid.NewGuid(),
-            InstanceId = constraint == "business-slot" ? second.Id : target, Sequence = constraint == "log-primary" ? 2 : 1,
+            InstanceId = target, Sequence = constraint == "log-primary" ? 2 : 1,
             Action = ApprovalAction.Approve, OperatorId = "attempt", CreatedAt = Timestamp });
         if (constraint == "business-slot") db.Add(new ApprovalBusinessSlot { Id = Guid.NewGuid(), InstanceId = second.Id,
             LookupHash = "duplicate", BusinessType = "Order", BusinessKey = "two" });
         var error = await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
         Assert.Equal(expected, IsLogSequence(error, db, target));
+        Assert.Equal(expected, IsLogSequence(error, db, null)); // UnitOfWork 使用的实际实例归属推断路径。
         Assert.Equal(constraint != "foreign-key", IsUnique(error));
         Assert.NotNull(DescribeDatabaseError(error));
         await using var verify = fixture.CreateStorage();
@@ -258,7 +259,7 @@ public sealed partial class DatabaseContractTests
     }
 
     // 使用实际 Provider 异常验证内部识别器，不扩大 Core 的 friend/public API 边界。
-    private static bool IsLogSequence(DbUpdateException error, DbContext db, Guid instanceId) =>
+    private static bool IsLogSequence(DbUpdateException error, DbContext db, Guid? instanceId) =>
         (bool)typeof(ApprovalEngine).Assembly.GetType("Approval.Core.Persistence.ApprovalDatabaseErrors")!
             .GetMethod("LogSequence")!.Invoke(null, [error, db, instanceId])!;
     private static bool IsUnique(Exception error) =>
