@@ -48,7 +48,7 @@ public sealed class CertificateFlowTests : IAsyncLifetime
 
         Assert.Equal(
             [ApprovalAction.Submit, ApprovalAction.Approve, ApprovalAction.Approve, ApprovalAction.Approve, ApprovalAction.Cc, ApprovalAction.Complete],
-            done.Logs.Select(l => l.Action));
+            done.Logs.Where(l => l.Action != ApprovalAction.NodeEntered).Select(l => l.Action));
     }
 
     [Fact]
@@ -123,17 +123,19 @@ public sealed class CertificateFlowTests : IAsyncLifetime
     public async Task Notifications_are_sent_for_new_tasks_cc_and_completion()
     {
         await _host.StartAsync("certificate.update", "CERT-007", "alice", new { certType = "Normal" });
-        var created = Assert.Single(_host.Notifier.Notifications);
-        Assert.Equal(NotificationKind.TaskCreated, created.Kind);
+        await _host.DispatchOutboxAsync();
+        var created = Assert.Single(_host.Events.TaskEvents);
+        Assert.Equal("TaskCreated", created.EventType);
         Assert.Equal(new Assignee(AssigneeKind.Role, "DeptReviewer"), Assert.Single(created.Recipients));
 
         await _host.ApproveMyTaskAsync("dave");
         await _host.ApproveMyTaskAsync("quinn");
         await _host.ApproveMyTaskAsync("leo");
 
-        Assert.Contains(_host.Notifier.Notifications, n => n.Kind == NotificationKind.Cc);
-        var completed = _host.Notifier.Notifications[^1];
-        Assert.Equal(NotificationKind.Completed, completed.Kind);
+        await _host.DispatchOutboxAsync();
+        Assert.Contains(_host.Events.TaskEvents, n => n.EventType == "Cc");
+        var completed = _host.Events.TaskEvents.Single(e => e.EventType == "Completed");
+        Assert.Equal("Completed", completed.EventType);
         Assert.Equal(InstanceStatus.Approved, completed.Status);
     }
 }

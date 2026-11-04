@@ -1,54 +1,91 @@
-# 证书审核端到端冒烟测试。先启动示例：dotnet run --project samples/Certificate.Api --urls http://localhost:5199
-param([string]$Base = 'http://localhost:5199')
+# 注册证试点冒烟验收。仅针对显式指定的本机演示服务，使用独立证号和本次实例的待办。
+param([Parameter(Mandatory)][Uri]$Base)
 $ErrorActionPreference = 'Stop'
-
-function Call($method, $path, $user, $body) {
-    $a = @{ Method = $method; Uri = "$Base$path"; Headers = @{ 'X-User-Id' = $user }; ContentType = 'application/json; charset=utf-8'; NoProxy = $true }
-    if ($null -ne $body) { $a.Body = [Text.Encoding]::UTF8.GetBytes(($body | ConvertTo-Json -Depth 5)) }
-    try { Invoke-RestMethod @a } catch { "HTTP $($_.Exception.Response.StatusCode.value__): $((($_.ErrorDetails.Message) | ConvertFrom-Json).title)" }
+Set-StrictMode -Version Latest
+if (-not $Base.IsAbsoluteUri -or -not $Base.IsLoopback -or $Base.Scheme -notin @('http', 'https')) {
+    throw '只允许显式指定的本机 HTTP/HTTPS 试点地址。'
 }
-# Invoke-RestMethod 把 JSON 数组作为单个对象输出，这里展开成元素
-function Items($value) { @($value | ForEach-Object { $_ }) }
-function Approve($user, $comment) {
-    $t = (Items (Call GET '/api/approval/todo' $user))[0]
-    "  $user 审批 [$($t.nodeName)]"
-    Call POST "/api/approval/tasks/$($t.taskId)/approve" $user @{ comment = $comment } | Out-Null
+$baseUrl = $Base.AbsoluteUri.TrimEnd('/')
+$script:checks = 0
+
+function Assert-Equal($expected, $actual, [string]$because) {
+    if ($expected -cne $actual) { throw ('{0}：期望 {1}，实际 {2}' -f $because, $expected, $actual) }
+    $script:checks++
 }
-function With($table, $changes) { $copy = $table.Clone(); foreach ($k in $changes.Keys) { $copy[$k] = $changes[$k] }; $copy }
-$certData = @{ certNo = 'C-1001'; name = '压力容器操作证'; holder = '张三'; certType = 'Special'; issueDate = '2026-01-01'; expireDate = '2029-01-01' }
 
-"== 已发布流程"
-Items (Call GET '/api/approval/definitions' 'admin') | ForEach-Object { "  $($_.key) v$($_.version)" }
+function Invoke-Api {
+    param([string]$Method, [string]$Path, [AllowNull()][string]$User = 'alice',
+        $Body = $null, [int[]]$Expected = @(200), [string]$Key = '')
+    $headers = @{}
+    if ($User) { $headers['X-User-Id'] = $User }
+    if ($Method -ne 'GET') { $headers['Idempotency-Key'] = if ($Key) { $Key } else { [Guid]::NewGuid().ToString() } }
+    $arguments = @{ Method = $Method; Uri = $baseUrl + $Path; Headers = $headers; NoProxy = $true
+        SkipHttpErrorCheck = $true; MaximumRedirection = 0; ContentType = 'application/json; charset=utf-8' }
+    if ($null -ne $Body) { $arguments.Body = [Text.Encoding]::UTF8.GetBytes(($Body | ConvertTo-Json -Depth 20)) }
+    $response = Invoke-WebRequest @arguments
+    if ([int]$response.StatusCode -notin $Expected) {
+        throw ('HTTP {0} {1} {2}：{3}' -f $response.StatusCode, $Method, $Path, $response.Content)
+    }
+    $script:checks++
+    $json = if ($response.Content) { $response.Content | ConvertFrom-Json -Depth 30 } else { $null }
+    [PSCustomObject]@{ Status = [int]$response.StatusCode; Json = $json }
+}
 
-"== 1. alice 申请新增特种证书：部门 → 质量 → 安全 → 负责人"
-$r1 = Call POST '/api/certificates' 'alice' $certData
-"  审核前证书数: $((Items (Call GET '/api/certificates' 'alice')).Count)（应为 0）"
-"  dan 待办数: $((Items (Call GET '/api/approval/todo' 'dan')).Count)，dave 待办数: $((Items (Call GET '/api/approval/todo' 'dave')).Count)，quinn 待办数: $((Items (Call GET '/api/approval/todo' 'quinn')).Count)（应为 1, 1, 0）"
-$deptTask = (Items (Call GET '/api/approval/todo' 'dan'))[0]
-"  quinn 越权审批部门节点: $(Call POST "/api/approval/tasks/$($deptTask.taskId)/approve" 'quinn' @{ comment = 'x' })"
-"  alice 审批自己的申请: $(Call POST "/api/approval/tasks/$($deptTask.taskId)/approve" 'alice' @{ comment = 'x' })"
-Approve 'dan' '部门审核通过'; Approve 'quinn' '资质齐全'; Approve 'sam' '安全审核通过'; Approve 'leo' '同意'
-$cert = (Items (Call GET '/api/certificates' 'alice'))[0]
-"  审核后证书: $($cert.certNo) $($cert.name) 持有人=$($cert.holder) 状态=$($cert.status)"
+function Certificates([string]$number) {
+    $path = '/api/certificates?page=1&pageSize=100&keyword=' + [Uri]::EscapeDataString($number)
+    @((Invoke-Api -Method 'GET' -Path $path).Json.items | Where-Object { $_.certNo -ceq $number })
+}
 
-"== 2. alice 变更持有人（普通证书，跳过安全审核），quinn 驳回"
-$r2 = Call PUT "/api/certificates/$($cert.id)" 'alice' (With $certData @{ holder = '李四'; certType = 'Normal' })
-"  再次提交变更: $(Call PUT "/api/certificates/$($cert.id)" 'alice' $certData)"
-$detail = Call GET "/api/certificate-requests/$($r2.requestId)" 'dan'
-"  变更字段: " + ((Items $detail.changes | ForEach-Object { "$($_.field): $($_.before) -> $($_.after)" }) -join '；')
-Approve 'dave' 'OK'
-$t = (Items (Call GET '/api/approval/todo' 'quinn'))[0]
-Call POST "/api/approval/tasks/$($t.taskId)/reject" 'quinn' @{ comment = '缺少变更证明材料' } | Out-Null
-"  驳回后证书持有人: $((Call GET "/api/certificates/$($cert.id)" 'alice').holder)（应仍为 张三）"
-"  申请单状态: $((Call GET "/api/certificate-requests/$($r2.requestId)" 'alice').request.status)"
+function Approve-Stage([string]$instance, [string]$user, [string]$node) {
+    $task = (Invoke-Api -Method 'GET' -Path ('/api/approval/instances/{0}/my-task' -f $instance) -User $user).Json.task
+    if ($null -eq $task) { throw ('{0} 没有本次申请的待办' -f $user) }
+    Assert-Equal $node $task.nodeId '审核顺序'
+    $null = Invoke-Api -Method 'POST' -Path ('/api/approval/tasks/{0}/approve' -f $task.id) -User $user -Body @{ comment = '本地试点验收通过' } -Expected @(204)
+}
 
-"== 3. alice 注销证书：质量审核 → 负责人会签（leo + lily）"
-$r3 = Call POST "/api/certificates/$($cert.id)/revoke" 'alice' @{ reason = '人员离职' }
-Approve 'quinn' 'OK'; Approve 'leo' '同意'
-"  一位负责人同意后证书状态: $((Call GET "/api/certificates/$($cert.id)" 'alice').status)（应仍为 Active）"
-Approve 'lily' '同意'
-"  两位负责人同意后证书状态: $((Call GET "/api/certificates/$($cert.id)" 'alice').status)（应为 Revoked）"
+$runId = [Guid]::NewGuid().ToString('N')
+$number = 'REG-PILOT-' + $runId
+$zone = [TimeZoneInfo]::FindSystemTimeZoneById('Asia/Shanghai')
+$today = [TimeZoneInfo]::ConvertTime([DateTimeOffset]::UtcNow, $zone).Date
+$data = @{ certNo = $number; name = '注册证试点资料'; holder = '本地模拟企业'; certType = 'Normal'
+    issueDate = $today.ToString('yyyy-MM-dd'); expireDate = $today.AddYears(3).ToString('yyyy-MM-dd') }
+$null = Invoke-Api -Method 'GET' -Path '/api/demo/users'
+$null = Invoke-Api -Method 'GET' -Path '/api/certificates' -User $null -Expected @(401)
 
-"== 注销申请的审批轨迹"
-Items (Call GET "/api/certificate-requests/$($r3.requestId)" 'alice').approval.logs |
-    ForEach-Object { "  [$($_.sequence)] $($_.action) $($_.nodeName) by $($_.operatorId) $($_.comment)" }
+$key = [Guid]::NewGuid().ToString()
+$request = (Invoke-Api -Method 'POST' -Path '/api/certificates' -Body $data -Expected @(202) -Key $key).Json.requestId
+$replay = (Invoke-Api -Method 'POST' -Path '/api/certificates' -Body $data -Expected @(202) -Key $key).Json.requestId
+Assert-Equal $request $replay '重复提交必须返回同一申请'
+$detail = (Invoke-Api -Method 'GET' -Path ('/api/certificate-requests/{0}' -f $request)).Json
+$instance = $detail.approval.id
+$null = Invoke-Api -Method 'GET' -Path ('/api/certificate-requests/{0}' -f $request) -User 'bob' -Expected @(404)
+Assert-Equal 0 @(Certificates $number).Count '审核前不能生成正式证书'
+
+Approve-Stage $instance 'dave' 'dept'
+Approve-Stage $instance 'quinn' 'quality'
+Assert-Equal 0 @(Certificates $number).Count '复审后不能提前生效'
+Approve-Stage $instance 'leo' 'leader'
+$certificates = @(Certificates $number)
+Assert-Equal 1 $certificates.Count '终审后恰好生成一份正式证书'
+$certificate = $certificates[0]
+Assert-Equal $data.holder $certificate.holder '正式证书必须使用提交快照'
+Assert-Equal 'Active' $certificate.status '正式证书状态'
+Assert-Equal 'Valid' $certificate.effectiveStatus '注册证有效期状态'
+
+$updated = $data.Clone()
+$updated.name = '注册证试点资料-版本二'
+$updateRequest = (Invoke-Api -Method 'PUT' -Path ('/api/certificates/{0}' -f $certificate.id) -Body $updated -Expected @(202)).Json.requestId
+$updateDetail = (Invoke-Api -Method 'GET' -Path ('/api/certificate-requests/{0}' -f $updateRequest)).Json
+$updateInstance = $updateDetail.approval.id
+Assert-Equal $data.name $updateDetail.request.beforeSnapshot.name '提交前快照'
+Approve-Stage $updateInstance 'dave' 'dept'
+Approve-Stage $updateInstance 'quinn' 'quality'
+Approve-Stage $updateInstance 'leo' 'leader'
+$history = (Invoke-Api -Method 'GET' -Path ('/api/certificate-requests/{0}' -f $updateRequest)).Json
+$nameChange = @($history.changes | Where-Object field -eq 'Name')
+Assert-Equal 1 $nameChange.Count '生效后仍需保留历史差异'
+Assert-Equal $data.name $nameChange[0].before '历史提交前值'
+Assert-Equal $updated.name $nameChange[0].after '历史提交后值'
+
+[PSCustomObject]@{ runId = $runId; requestId = $request; certificateId = $certificate.id; updateRequestId = $updateRequest
+    checks = $script:checks; result = 'Passed' } | ConvertTo-Json

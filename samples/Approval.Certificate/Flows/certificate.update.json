@@ -1,0 +1,173 @@
+{
+  "name": "证书变更",
+  "startNodeId": "start",
+  "notifications": [
+    {
+      "events": [
+        "Enter"
+      ],
+      "recipients": [
+        {
+          "type": "Assignees",
+          "value": ""
+        }
+      ],
+      "channels": [
+        "InApp"
+      ],
+      "title": "待审批：{标题}",
+      "content": "【待审批】{标题}，申请人 {申请人}，当前环节：{节点}"
+    },
+    {
+      "events": [
+        "Completed"
+      ],
+      "recipients": [
+        {
+          "type": "Initiator",
+          "value": ""
+        }
+      ],
+      "channels": [
+        "InApp",
+        "Webhook"
+      ],
+      "title": "审批{结果}：{标题}",
+      "content": "【{结果}】{标题}"
+    },
+    {
+      "events": [
+        "Rejected"
+      ],
+      "recipients": [
+        {
+          "type": "Initiator",
+          "value": ""
+        }
+      ],
+      "channels": [
+        "InApp"
+      ],
+      "content": "【已驳回】{标题}，{操作人} 在 {节点} 驳回：{意见}"
+    }
+  ],
+  "nodes": {
+    "start": {
+      "name": "提交申请",
+      "type": "Start",
+      "next": "dept"
+    },
+    "dept": {
+      "name": "部门审核",
+      "type": "Approval",
+      "mode": "Any",
+      "approvers": [
+        {
+          "type": "Role",
+          "value": "DeptReviewer"
+        }
+      ],
+      "next": "quality",
+      "timeout": {
+        "minutes": 1440,
+        "action": "Remind",
+        "repeatMinutes": 240,
+        "maxReminders": 3
+      },
+      "allowReturn": false,
+      "allowAddSign": false,
+      "allowTransfer": false,
+      "requireQualifiedAssignee": true,
+      "emptyApproverPolicy": "Error"
+    },
+    "quality": {
+      "name": "质量审核",
+      "type": "Approval",
+      "mode": "Any",
+      "approvers": [
+        {
+          "type": "Role",
+          "value": "QualityManager"
+        }
+      ],
+      "next": "cond",
+      "allowReturn": false,
+      "allowAddSign": false,
+      "allowTransfer": false,
+      "requireQualifiedAssignee": true,
+      "emptyApproverPolicy": "Error",
+      "timeout": {
+        "minutes": 1440,
+        "action": "Remind",
+        "repeatMinutes": 240,
+        "maxReminders": 3
+      }
+    },
+    "cond": {
+      "name": "证书类型判断",
+      "type": "Condition",
+      "branches": [
+        {
+          "priority": 1,
+          "expression": "certType == \"Special\"",
+          "next": "safety"
+        },
+        {
+          "priority": 99,
+          "expression": null,
+          "next": "leader"
+        }
+      ]
+    },
+    "safety": {
+      "name": "安全审核",
+      "type": "Approval",
+      "mode": "Any",
+      "approvers": [
+        {
+          "type": "Role",
+          "value": "SafetyOfficer"
+        }
+      ],
+      "next": "leader",
+      "allowReturn": false,
+      "allowAddSign": false,
+      "allowTransfer": false,
+      "requireQualifiedAssignee": true,
+      "emptyApproverPolicy": "Error",
+      "timeout": {
+        "minutes": 1440,
+        "action": "Remind",
+        "repeatMinutes": 240,
+        "maxReminders": 3
+      }
+    },
+    "leader": {
+      "name": "负责人审批",
+      "type": "Approval",
+      "mode": "Any",
+      "approvers": [
+        {
+          "type": "Role",
+          "value": "Leader"
+        }
+      ],
+      "next": "end",
+      "allowReturn": false,
+      "allowAddSign": false,
+      "allowTransfer": false,
+      "requireQualifiedAssignee": true,
+      "emptyApproverPolicy": "Error",
+      "timeout": {
+        "minutes": 1440,
+        "action": "Remind",
+        "repeatMinutes": 240,
+        "maxReminders": 3
+      }
+    },
+    "end": {
+      "name": "结束",
+      "type": "End"
+    }
+  }
+}

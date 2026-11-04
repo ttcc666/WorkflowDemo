@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using System.Dynamic;
 using System.Text.Encodings.Web;
 using System.Text.Json;
@@ -19,6 +20,22 @@ public static class FormData
         foreach (var property in document.RootElement.EnumerateObject())
             result[property.Name] = Convert(property.Value);
         return result;
+    }
+
+    /// <summary>Resolver 的顶层只读快照；递归复制 Parse 的动态对象与数组，保留原读取类型。</summary>
+    internal static IReadOnlyDictionary<string, object?> Snapshot(IReadOnlyDictionary<string, object?> form) =>
+        new ReadOnlyDictionary<string, object?>(form.ToDictionary(p => p.Key, p => Copy(p.Value), StringComparer.OrdinalIgnoreCase));
+
+    private static object? Copy(object? value)
+    {
+        if (value is ExpandoObject members)
+        {
+            var copy = new ExpandoObject();
+            var dictionary = (IDictionary<string, object?>)copy;
+            foreach (var member in members) dictionary[member.Key] = Copy(member.Value);
+            return copy;
+        }
+        return value is object?[] items ? items.Select(Copy).ToArray() : value;
     }
 
     /// <summary>表单序列化选项：camelCase，中文等非 ASCII 字符不转义，便于在数据库中直接阅读。</summary>

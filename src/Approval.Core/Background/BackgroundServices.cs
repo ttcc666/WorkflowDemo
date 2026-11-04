@@ -1,71 +1,53 @@
 using Approval.Core.Domain;
 using Approval.Core.Engine;
 using Approval.Core.Persistence;
+using Approval.Core.Abstractions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
 namespace Approval.Core.Background;
 
 /// <summary>后台投递 Outbox：被审批操作唤醒或按轮询间隔执行，每次在新的 DI 作用域中处理到期消息。</summary>
-public sealed class ApprovalOutboxDispatcher(
-    IServiceScopeFactory scopeFactory,
-    ApprovalOutboxSignal signal,
-    ApprovalOptions options,
-    ILogger<ApprovalOutboxDispatcher> logger) : BackgroundService
+public sealed class ApprovalOutboxDispatcher(ApprovalBackgroundRunner sweeper)
 {
+    internal Func<CancellationToken, Task>? ValidateHost { get; init; }
+    internal ApprovalOptions? Options { get; init; }
+    // 保留宿主原有显式构造方式；定时循环已统一由 ApprovalWorker 拥有。
+    public ApprovalOutboxDispatcher(ApprovalOutboxSignal signal, ApprovalOptions options,
+        ILogger<ApprovalOutboxDispatcher> logger, ApprovalBackgroundRunner sweeper) : this(sweeper) { }
     /// <summary>处理所有到期消息（测试与手动触发时可直接调用）。</summary>
     public async Task DispatchOnceAsync(CancellationToken ct = default)
     {
-        int processed;
-        do
-        {
-            await using var scope = scopeFactory.CreateAsyncScope();
-            processed = await scope.ServiceProvider.GetRequiredService<ApprovalOutboxService>().ProcessDueAsync(ct);
-        } while (processed >= options.Outbox.BatchSize && !ct.IsCancellationRequested);
+        ct.ThrowIfCancellationRequested();
+        if (Options?.Outbox.EnableDispatcher == false) return;
+        if (ValidateHost is not null) await ValidateHost(ct);
+        await sweeper.RunAsync("outbox", (sp, token) => sp.GetRequiredService<ApprovalOutboxService>().ProcessDueAsync(token), ct);
     }
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-    {
-        while (!stoppingToken.IsCancellationRequested)
-        {
-            try
-            {
-                await DispatchOnceAsync(stoppingToken);
-            }
-            catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
-            {
-                // 数据库暂时不可用等：记录后等待下一轮，不让后台任务退出
-                logger.LogError(ex, "Outbox 投递任务出错");
-            }
-
-            try
-            {
-                await signal.WaitAsync(options.Outbox.PollInterval, stoppingToken);
-            }
-            catch (OperationCanceledException)
-            {
-                break;
-            }
-        }
-    }
 }
 
 /// <summary>定时扫描超过时限的待办，逐条交给 <see cref="ApprovalEngine.HandleTimeoutAsync"/> 处理（每条一个作用域，互不影响）。</summary>
 public sealed class ApprovalTimeoutScanner(
-    IServiceScopeFactory scopeFactory,
-    ApprovalOptions options,
+    IApprovalScopeFactory scopes,
     TimeProvider clock,
-    ILogger<ApprovalTimeoutScanner> logger) : BackgroundService
+    ILogger<ApprovalTimeoutScanner> logger,
+    ApprovalBackgroundRunner sweeper)
 {
+    public ApprovalTimeoutScanner(IApprovalScopeFactory scopes, ApprovalOptions options, TimeProvider clock,
+        ILogger<ApprovalTimeoutScanner> logger, ApprovalBackgroundRunner sweeper) : this(scopes, clock, logger, sweeper) { }
     private const int BatchSize = 100;
 
     /// <summary>扫描一次，返回处理的待办数（测试与手动触发时可直接调用）。</summary>
     public async Task<int> ScanOnceAsync(CancellationToken ct = default)
     {
+        return await sweeper.RunAsync("timeouts", (sp, token) => ScanHostAsync(token), ct);
+    }
+
+    private async Task<int> ScanHostAsync(CancellationToken ct)
+    {
         List<Guid> taskIds;
-        await using (var scope = scopeFactory.CreateAsyncScope())
+        await using (var scope = await scopes.CreateAsync(ct))
         {
             var db = scope.ServiceProvider.GetRequiredService<ApprovalDbContextAccessor>().Context;
             var now = clock.GetUtcNow().UtcDateTime;
@@ -85,7 +67,7 @@ public sealed class ApprovalTimeoutScanner(
         {
             try
             {
-                await using var scope = scopeFactory.CreateAsyncScope();
+                await using var scope = await scopes.CreateAsync(ct);
                 if (await scope.ServiceProvider.GetRequiredService<ApprovalEngine>().HandleTimeoutAsync(taskId, ct)) handled++;
             }
             catch (ApprovalException ex) when (ex.Code == ApprovalErrorCode.Conflict)
@@ -101,31 +83,4 @@ public sealed class ApprovalTimeoutScanner(
         return handled;
     }
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-    {
-        using var timer = new PeriodicTimer(options.TimeoutScanInterval, clock);
-        do
-        {
-            try
-            {
-                await ScanOnceAsync(stoppingToken);
-            }
-            catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
-            {
-                logger.LogError(ex, "超时扫描出错");
-            }
-        } while (await WaitAsync(timer, stoppingToken));
-    }
-
-    private static async Task<bool> WaitAsync(PeriodicTimer timer, CancellationToken ct)
-    {
-        try
-        {
-            return await timer.WaitForNextTickAsync(ct);
-        }
-        catch (OperationCanceledException)
-        {
-            return false;
-        }
-    }
 }

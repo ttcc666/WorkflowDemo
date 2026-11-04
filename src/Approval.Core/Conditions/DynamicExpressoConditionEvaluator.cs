@@ -9,6 +9,27 @@ namespace Approval.Core.Conditions;
 /// </summary>
 public sealed class DynamicExpressoConditionEvaluator : IConditionEvaluator
 {
+    public static string? ValidateSyntax(string expression)
+    {
+        try
+        {
+            var interpreter = new Interpreter(InterpreterOptions.PrimitiveTypes | InterpreterOptions.SystemKeywords);
+            foreach (var identifier in interpreter.DetectIdentifiers(expression).UnknownIdentifiers)
+            {
+                var escaped = System.Text.RegularExpressions.Regex.Escape(identifier);
+                object sample = System.Text.RegularExpressions.Regex.IsMatch(expression, escaped + "\\s*(?:==|!=)\\s*\\\"|\\\"[^\\\"]*\\\"\\s*(?:==|!=)\\s*" + escaped)
+                    ? "" : System.Text.RegularExpressions.Regex.IsMatch(expression, "(?:!\\s*" + escaped + "\\b|\\b" + escaped + "\\s*(?:&&|\\|\\||$))")
+                    || System.Text.RegularExpressions.Regex.IsMatch(expression, escaped + "\\s*(?:==|!=)\\s*(?:true|false)\\b|\\b(?:true|false)\\s*(?:==|!=)\\s*" + escaped)
+                    ? false : 0m;
+                if (System.Text.RegularExpressions.Regex.IsMatch(expression, "\\b" + escaped + "\\s*\\.")) sample = new System.Dynamic.ExpandoObject();
+                interpreter.SetVariable(identifier, sample);
+            }
+            var parsed = interpreter.Parse(expression);
+            if (parsed.ReturnType != typeof(bool) && parsed.ReturnType != typeof(object)) return "条件表达式必须返回布尔值";
+            return null;
+        }
+        catch (Exception ex) { return ex.Message; }
+    }
     public bool Evaluate(string expression, IReadOnlyDictionary<string, object?> variables)
     {
         var interpreter = new Interpreter(InterpreterOptions.PrimitiveTypes | InterpreterOptions.SystemKeywords);

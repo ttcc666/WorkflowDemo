@@ -9,7 +9,10 @@ TestResults/
 
 # 前端
 node_modules/
+web/packages/*/dist/
 samples/Certificate.Api/wwwroot/
+# 演示附件存储目录
+App_Data/
 
 # 本地测试产物
 output/

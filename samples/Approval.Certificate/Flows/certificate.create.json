@@ -1,0 +1,118 @@
+{
+  "name": "注册证登记（三级审核）",
+  "startNodeId": "start",
+  "notifications": [
+    {
+      "events": [
+        "Enter"
+      ],
+      "recipients": [
+        {
+          "type": "Assignees",
+          "value": ""
+        }
+      ],
+      "channels": [
+        "InApp"
+      ],
+      "title": "注册证待审核：{标题}",
+      "content": "申请人 {申请人}，注册证 {form.certNo}，当前环节：{节点}。"
+    },
+    {
+      "events": [
+        "Completed"
+      ],
+      "recipients": [
+        {
+          "type": "Initiator",
+          "value": ""
+        }
+      ],
+      "channels": [
+        "InApp"
+      ],
+      "title": "注册证审核{结果}：{标题}",
+      "content": "注册证 {form.certNo} 的审核结果：{结果}。{意见}"
+    }
+  ],
+  "nodes": {
+    "start": {
+      "name": "提交注册证资料",
+      "type": "Start",
+      "next": "dept"
+    },
+    "dept": {
+      "name": "部门负责人初审",
+      "type": "Approval",
+      "mode": "Any",
+      "approvers": [
+        {
+          "type": "DeptLeader",
+          "value": "1"
+        }
+      ],
+      "next": "quality",
+      "allowReturn": false,
+      "allowAddSign": false,
+      "allowTransfer": false,
+      "requireQualifiedAssignee": true,
+      "emptyApproverPolicy": "Error",
+      "timeout": {
+        "minutes": 1440,
+        "action": "Remind",
+        "repeatMinutes": 240,
+        "maxReminders": 3
+      }
+    },
+    "quality": {
+      "name": "质量/法规复审",
+      "type": "Approval",
+      "mode": "Any",
+      "approvers": [
+        {
+          "type": "Role",
+          "value": "QualityManager"
+        }
+      ],
+      "next": "leader",
+      "allowReturn": false,
+      "allowAddSign": false,
+      "allowTransfer": false,
+      "requireQualifiedAssignee": true,
+      "emptyApproverPolicy": "Error",
+      "timeout": {
+        "minutes": 1440,
+        "action": "Remind",
+        "repeatMinutes": 240,
+        "maxReminders": 3
+      }
+    },
+    "leader": {
+      "name": "负责人终审",
+      "type": "Approval",
+      "mode": "Any",
+      "approvers": [
+        {
+          "type": "Role",
+          "value": "Leader"
+        }
+      ],
+      "next": "end",
+      "allowReturn": false,
+      "allowAddSign": false,
+      "allowTransfer": false,
+      "requireQualifiedAssignee": true,
+      "emptyApproverPolicy": "Error",
+      "timeout": {
+        "minutes": 1440,
+        "action": "Remind",
+        "repeatMinutes": 240,
+        "maxReminders": 3
+      }
+    },
+    "end": {
+      "name": "正式台账生效",
+      "type": "End"
+    }
+  }
+}

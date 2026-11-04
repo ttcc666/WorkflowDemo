@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="Microsoft.AspNetCore.TestHost" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+    <Compile Include="../shared/FlowFixtureAuthorization.cs" Link="Infrastructure/FlowFixtureAuthorization.cs" />
+    <Compile Include="../shared/ReferenceHostScenario.cs" Link="Infrastructure/ReferenceHostScenario.cs" />
+    <None Include="../../samples/Approval.ReferenceHost/appsettings.json" Link="ReferenceHostConfiguration.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Approval.AspNetCore\Approval.AspNetCore.csproj" />
+    <None Include="../shared/http-*.json" Link="ContractFixtures/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\samples\Approval.ReferenceHost\Approval.ReferenceHost.csproj" />
+  </ItemGroup>
+
+  <ItemGroup><ProjectReference Include="../../src/Approval.Forms.AspNetCore/Approval.Forms.AspNetCore.csproj" /></ItemGroup>
+</Project>

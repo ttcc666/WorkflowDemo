@@ -1,0 +1,58 @@
+{
+  "id": "10000000-0000-0000-0000-000000000001",
+  "definitionId": "10000000-0000-0000-0000-000000000003",
+  "definitionKey": "contract.sign",
+  "definitionVersion": 3,
+  "businessType": "Contract",
+  "businessKey": "C-1",
+  "title": "合同 \"A\"",
+  "initiatorId": "alice",
+  "status": "Running",
+  "currentNodeId": "review",
+  "round": 2,
+  "formDataJson": "{\"amount\":12}",
+  "createdAt": "2026-11-01T08:00:00Z",
+  "completedAt": "2026-11-01T09:00:00Z",
+  "tasks": [
+    {
+      "id": "10000000-0000-0000-0000-000000000002",
+      "instanceId": "10000000-0000-0000-0000-000000000001",
+      "nodeId": "review",
+      "nodeName": "复审",
+      "assigneeKind": "Role",
+      "kind": "AddSignAfter",
+      "parentTaskId": "10000000-0000-0000-0000-000000000003",
+      "round": 2,
+      "assigneeValue": "Reviewer",
+      "status": "Pending",
+      "order": 2,
+      "handledBy": "bob",
+      "comment": "说明\n第二行",
+      "createdAt": "2026-11-01T08:00:00Z",
+      "completedAt": "2026-11-01T09:00:00Z",
+      "dueAt": "2026-11-02T08:00:00Z",
+      "nextRemindAt": "2026-11-02T08:10:00Z",
+      "remindCount": 3,
+      "lastRemindedAt": "2026-11-01T08:30:00Z"
+    }
+  ],
+  "logs": [
+    {
+      "id": "10000000-0000-0000-0000-000000000003",
+      "instanceId": "10000000-0000-0000-0000-000000000001",
+      "sequence": 7,
+      "nodeId": "review",
+      "nodeName": "复审",
+      "action": "Transfer",
+      "operatorId": "bob",
+      "comment": "转交",
+      "details": "{\"field\":\"amount\"}",
+      "createdAt": "2026-11-01T08:00:00Z"
+    }
+  ],
+  "access": "Full",
+  "hiddenFields": [
+    "private"
+  ],
+  "canWithdraw": true
+}

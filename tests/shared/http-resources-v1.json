@@ -1,0 +1,40 @@
+{
+  "definition": {
+    "id": "10000000-0000-0000-0000-000000000003",
+    "key": "contract.sign",
+    "version": 3,
+    "name": "合同",
+    "definitionJson": "{\"startNodeId\":\"start\",\"nodes\":{}}",
+    "isPublished": true,
+    "createdAt": "2026-11-01T08:00:00Z"
+  },
+  "message": {
+    "id": "10000000-0000-0000-0000-000000000002",
+    "userId": "alice",
+    "title": "待审",
+    "content": "合同待审",
+    "event": "Enter",
+    "instanceId": "10000000-0000-0000-0000-000000000001",
+    "nodeId": "review",
+    "isRead": true,
+    "createdAt": "2026-11-01T08:00:00Z",
+    "readAt": "2026-11-01T09:00:00Z"
+  },
+  "outbox": {
+    "id": "10000000-0000-0000-0000-000000000002",
+    "kind": "Notification",
+    "target": "Webhook",
+    "instanceId": "10000000-0000-0000-0000-000000000001",
+    "nodeId": "review",
+    "description": "通知",
+    "payloadJson": "{\"id\":\"one\"}",
+    "status": "Failed",
+    "attempts": 3,
+    "maxAttempts": 5,
+    "nextAttemptAt": "2026-11-02T08:00:00Z",
+    "lastError": "timeout",
+    "createdAt": "2026-11-01T08:00:00Z",
+    "completedAt": "2026-11-01T09:00:00Z",
+    "concurrencyStamp": 9
+  }
+}

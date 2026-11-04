@@ -1,0 +1,16 @@
+/* @approval/ui 依赖的全局样式 */
+
+/* 列表行可点击（工作台、流程定义） */
+.el-table__row {
+  cursor: pointer;
+}
+
+/* Vue Flow 连线标签 */
+.vue-flow__edge-textbg {
+  fill: #fff;
+}
+
+.vue-flow__edge-text {
+  font-size: 12px;
+  fill: #13a8a8;
+}

@@ -1,11 +1,23 @@
 <Solution>
+  <Folder Name="/eng/">
+    <Project Path="eng/Approval.RehearsalTool/Approval.RehearsalTool.csproj" />
+    <Project Path="eng/Approval.ContractTool/Approval.ContractTool.csproj" />
+  </Folder>
   <Folder Name="/samples/">
+    <Project Path="samples/Approval.ReferenceHost/Approval.ReferenceHost.csproj" />
+    <Project Path="samples/Approval.Certificate/Approval.Certificate.csproj" />
     <Project Path="samples/Certificate.Api/Certificate.Api.csproj" />
   </Folder>
   <Folder Name="/src/">
+    <Project Path="src/Approval.AspNetCore/Approval.AspNetCore.csproj" />
     <Project Path="src/Approval.Core/Approval.Core.csproj" />
+    <Project Path="src/Approval.Forms/Approval.Forms.csproj" />
+    <Project Path="src/Approval.Forms.AspNetCore/Approval.Forms.AspNetCore.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/Approval.AspNetCore.Tests/Approval.AspNetCore.Tests.csproj" />
     <Project Path="tests/Approval.Core.Tests/Approval.Core.Tests.csproj" />
+    <Project Path="tests/Approval.Database.Tests/Approval.Database.Tests.csproj" />
+    <Project Path="tests/Certificate.Api.Tests/Certificate.Api.Tests.csproj" />
   </Folder>
 </Solution>

@@ -1,18 +1,23 @@
 using System.Text.RegularExpressions;
-using Approval.Core.Actions;
+using Approval.Core.Abstractions;
 using Approval.Core.Notifications;
+using Approval.Core.Resolvers;
+using Approval.Core.Templates;
 
 namespace Approval.Core.Definitions;
 
 /// <summary>校验所需的已注册扩展。为 null 的集合不做对应检查。</summary>
 public sealed class FlowValidationContext
 {
+    public IApprovalDefinitionExtension? Extension { get; init; }
     public required IReadOnlySet<string> ApproverTypes { get; init; }
 
-    /// <summary>可用的通知渠道（含站内信 InApp）。</summary>
+    /// <summary>审批人类型描述（参数类型、是否有序），用于校验规则参数与审批方式。</summary>
+    public IReadOnlyDictionary<string, ApproverTypeDescriptor>? ApproverDescriptors { get; init; }
+
+    /// <summary>宿主声明的通知路由（含内置站内信 InApp）；名称保留以兼容现有契约。</summary>
     public IReadOnlySet<string>? Channels { get; init; }
 
-    public IReadOnlyDictionary<string, IApprovalActionHandler>? Actions { get; init; }
 }
 
 /// <summary>发布前对流程定义做结构校验，避免运行时才发现配置错误。</summary>
@@ -26,6 +31,8 @@ public static partial class FlowDefinitionValidator
 
     public static IReadOnlyList<string> Validate(FlowDefinition definition, FlowValidationContext context)
     {
+        if (definition.SchemaVersion != FlowDefinition.CurrentSchemaVersion)
+            return [$"不支持流程协议版本 {definition.SchemaVersion}，当前支持 v{FlowDefinition.CurrentSchemaVersion}"];
         var errors = new List<string>();
         var nodes = definition.Nodes;
 
@@ -42,10 +49,18 @@ public static partial class FlowDefinitionValidator
         if (!nodes.Values.Any(n => n.Type == NodeType.End))
             errors.Add("流程至少需要一个 End 节点");
 
-        ValidateNotifications(errors, "流程级通知", definition.Notifications, null, context);
+        var userFields = context.Extension?.UserFields(definition);
+        ValidateNotifications(errors, "流程级通知", definition.Notifications, null, context, userFields);
+        if (context.Extension is { } extension) extension.Validate(definition, errors);
+        else if (definition.Form is not null || nodes.Values.Any(n => n.FieldPermissions.Count > 0))
+            errors.Add("此定义包含模块快照或字段权限，请注册拥有它的可选模块");
 
         foreach (var (key, node) in nodes)
         {
+            if (string.IsNullOrWhiteSpace(key) || key.Length > 100 || node.Name.Length > 200)
+                errors.Add($"节点 '{key}' 的标识或名称长度无效");
+            if (!Enum.IsDefined(node.Type) || !Enum.IsDefined(node.Mode) || !Enum.IsDefined(node.EmptyApproverPolicy))
+                errors.Add($"节点 '{key}' 包含未知节点类型或审批策略");
             if (node.Id != key)
                 errors.Add($"节点 key '{key}' 与其 Id '{node.Id}' 不一致");
 
@@ -56,6 +71,9 @@ public static partial class FlowDefinitionValidator
                     break;
 
                 case NodeType.Condition:
+                    foreach (var branch in node.Branches.Where(b => !string.IsNullOrWhiteSpace(b.Expression)))
+                        if (Conditions.DynamicExpressoConditionEvaluator.ValidateSyntax(branch.Expression!) is { } syntax)
+                            errors.Add($"条件节点 '{key}' 的表达式无效：{syntax}");
                     if (node.Branches.Count == 0) errors.Add($"条件节点 '{key}' 没有分支");
                     if (node.Branches.Count(b => string.IsNullOrWhiteSpace(b.Expression)) > 1)
                         errors.Add($"条件节点 '{key}' 只能有一个默认分支");
@@ -65,37 +83,73 @@ public static partial class FlowDefinitionValidator
                         errors.Add($"条件节点 '{key}' 的分支指向不存在的节点 '{branch.Next}'");
                     break;
 
+                case NodeType.Parallel:
+                    if (node.Next is not null) errors.Add($"并行节点 '{key}' 的后续节点应配置在分支中");
+                    if (node.Branches.Count < 2) errors.Add($"并行节点 '{key}' 至少需要两个分支");
+                    if (node.Branches.Select(b => b.Next).Distinct().Count() != node.Branches.Count)
+                        errors.Add($"并行节点 '{key}' 有重复的分支");
+                    foreach (var branch in node.Branches.Where(b => !nodes.ContainsKey(b.Next)))
+                        errors.Add($"并行节点 '{key}' 的分支指向不存在的节点 '{branch.Next}'");
+                    break;
+
                 case NodeType.Approval or NodeType.Cc:
-                    if (node.Approvers.Count == 0)
-                        errors.Add($"节点 '{key}' 未配置{(node.Type == NodeType.Cc ? "抄送人" : "审批人")}");
-                    foreach (var rule in node.Approvers.Where(r => !context.ApproverTypes.Contains(r.Type)))
-                        errors.Add($"节点 '{key}' 使用了未注册的审批人类型 '{rule.Type}'");
-                    goto default;
+                    {
+                        var noun = node.Type == NodeType.Cc ? "抄送人" : "审批人";
+                        if (node.Approvers.Count == 0)
+                            errors.Add($"节点 '{key}' 未配置{noun}");
+                        foreach (var rule in node.Approvers.Where(r => !context.ApproverTypes.Contains(r.Type)))
+                            errors.Add($"节点 '{key}' 使用了未注册的审批人类型 '{rule.Type}'");
+                        foreach (var rule in node.Approvers) ValidateRuleValue(errors, $"节点 '{key}' 的{noun}", rule, context, userFields);
 
-                case NodeType.Action:
-                    if (node.Actions.Count == 0) errors.Add($"动作节点 '{key}' 未配置任何动作");
-                    for (var i = 0; i < node.Actions.Count; i++)
-                        ValidateAction(errors, $"动作节点 '{key}' 的第 {i + 1} 个动作", node.Actions[i], context);
-                    goto default;
-
+                        // 逐级审批等有序审批人按顺序生成任务，只有依次审批才有意义
+                        var ordered = node.Approvers.Select(r => context.ApproverDescriptors?.GetValueOrDefault(r.Type)).FirstOrDefault(d => d?.Ordered == true);
+                        if (node.Type == NodeType.Approval && ordered is not null && node.Mode != ApproveMode.Sequential)
+                            errors.Add($"节点 '{key}' 的审批人「{ordered.DisplayName}」需按顺序审批，审批方式请改为依次审批");
+                        goto default;
+                    }
                 default:
                     if (node.Next is null) errors.Add($"节点 '{key}' 缺少 Next");
                     else if (!nodes.ContainsKey(node.Next)) errors.Add($"节点 '{key}' 的 Next 指向不存在的节点 '{node.Next}'");
                     break;
             }
 
-            if (node.Type != NodeType.Action && node.Actions.Count > 0)
-                errors.Add($"节点 '{key}' 不是动作节点，不能配置动作");
-            ValidateNotifications(errors, $"节点 '{key}'", node.Notifications, node.Type, context);
+            ValidateNotifications(errors, $"节点 '{key}'", node.Notifications, node.Type, context, userFields);
             if (node.Timeout is { } timeout) ValidateTimeout(errors, key, node, timeout);
+            if (node.RequireQualifiedAssignee && (node.Type != NodeType.Approval
+                || node.EmptyApproverPolicy == EmptyApproverPolicy.AutoApprove || node.Timeout?.Action == TimeoutAction.AutoApprove))
+                errors.Add($"节点 '{key}' 的岗位资格要求只能用于人工审批，不能设置自动通过");
         }
 
         if (errors.Count == 0) CheckReachabilityAndCycles(definition, errors);
+        if (errors.Count == 0) errors.AddRange(FlowStructure.Analyze(definition).Errors);
         return errors;
     }
 
+    /// <summary>按审批人类型描述校验参数：用户 / 角色不能为空，级数为 1–10，<c>@字段</c> 须为表单人员字段。</summary>
+    private static void ValidateRuleValue(List<string> errors, string owner, ApproverRule rule, FlowValidationContext context,
+        IReadOnlySet<string>? userFields)
+    {
+        if (context.ApproverDescriptors?.GetValueOrDefault(rule.Type) is not { } descriptor) return;
+
+        var name = $"{owner}「{descriptor.DisplayName}」";
+        switch (descriptor.ValueKind)
+        {
+            case ApproverValueKind.User or ApproverValueKind.Role when string.IsNullOrWhiteSpace(rule.Value):
+            case ApproverValueKind.FormUserField when string.IsNullOrWhiteSpace(rule.Value) && userFields is null:
+                errors.Add($"{name}未设置");
+                break;
+
+            case ApproverValueKind.Level:
+                if (!ApproverLevel.TryParse(rule.Value, out var level))
+                    errors.Add($"{name}的级数 '{rule.Value}' 无效：应为 1–{ApproverLevel.Max} 的整数，可写 N@表单人员字段");
+                else if (level.Field is { } field && userFields is not null && !userFields.Contains(field))
+                    errors.Add($"{name}以表单字段 '{field}' 为基准，但表单中没有该人员字段（User / Users）");
+                break;
+        }
+    }
+
     private static void ValidateNotifications(List<string> errors, string owner, List<NotificationRule> rules, NodeType? nodeType,
-        FlowValidationContext context)
+        FlowValidationContext context, IReadOnlySet<string>? userFields)
     {
         var allowedEvents = NotificationDefaults.AllowedEvents(nodeType);
         for (var i = 0; i < rules.Count; i++)
@@ -117,6 +171,7 @@ public static partial class FlowDefinitionValidator
                          !context.ApproverTypes.Contains(r.Type) &&
                          !NotificationDefaults.NotificationRecipientTypes.Contains(r.Type, StringComparer.OrdinalIgnoreCase)))
                 errors.Add($"{name}使用了未注册的接收人类型 '{recipient.Type}'");
+            foreach (var recipient in rule.Recipients) ValidateRuleValue(errors, $"{name}的接收人", recipient, context, userFields);
 
             if (rule.Channels.Count == 0) errors.Add($"{name}未选择发送渠道");
             if (context.Channels is not null)
@@ -135,39 +190,6 @@ public static partial class FlowDefinitionValidator
         if (timeout.MaxReminders < 1) errors.Add($"节点 '{key}' 的最多提醒次数至少为 1");
     }
 
-    private static void ValidateAction(List<string> errors, string name, ActionStep step, FlowValidationContext context)
-    {
-        if (string.IsNullOrWhiteSpace(step.Type))
-        {
-            errors.Add($"{name}未选择动作类型");
-            return;
-        }
-        if (!string.IsNullOrWhiteSpace(step.OutputVariable))
-        {
-            if (step.Mode == ActionMode.Async) errors.Add($"{name}是异步动作，不能设置输出变量");
-            if (!Identifier().IsMatch(step.OutputVariable)) errors.Add($"{name}的输出变量名 '{step.OutputVariable}' 只能包含字母、数字和下划线");
-        }
-
-        if (context.Actions is null) return;
-        if (!context.Actions.TryGetValue(step.Type, out var handler))
-        {
-            errors.Add($"{name}使用了未注册的动作类型 '{step.Type}'");
-            return;
-        }
-
-        var descriptor = handler.Descriptor;
-        if (step.Mode == ActionMode.Async && !descriptor.SupportsAsync) errors.Add($"{name}（{descriptor.DisplayName}）不支持异步执行");
-        if (step.Mode == ActionMode.Sync && !descriptor.SupportsSync) errors.Add($"{name}（{descriptor.DisplayName}）不支持同步执行");
-
-        var parameters = new Dictionary<string, string>(step.Parameters, StringComparer.OrdinalIgnoreCase);
-        foreach (var parameter in descriptor.Parameters.Where(p => p.Required && p.DefaultValue is null))
-        {
-            if (!parameters.TryGetValue(parameter.Name, out var value) || string.IsNullOrWhiteSpace(value))
-                errors.Add($"{name}缺少必填参数「{parameter.Label}」");
-        }
-        errors.AddRange(handler.ValidateParameters(parameters).Select(e => $"{name}：{e}"));
-    }
-
     private static void CheckReachabilityAndCycles(FlowDefinition definition, List<string> errors)
     {
         // 0 = 未访问, 1 = 访问中, 2 = 已完成；DFS 中遇到“访问中”的节点即存在环
@@ -182,7 +204,7 @@ public static partial class FlowDefinitionValidator
                 return false;
             }
             state[id] = 1;
-            if (Successors(definition.Nodes[id]).Any(next => !Visit(next))) return false;
+            if (FlowStructure.Successors(definition.Nodes[id]).Any(next => !Visit(next))) return false;
             state[id] = 2;
             return true;
         }
@@ -193,8 +215,4 @@ public static partial class FlowDefinitionValidator
             errors.Add($"节点 '{unreachable}' 从开始节点不可达");
     }
 
-    private static IEnumerable<string> Successors(FlowNode node) =>
-        node.Type == NodeType.Condition
-            ? node.Branches.Select(b => b.Next).Distinct()
-            : node.Next is null ? [] : [node.Next];
 }

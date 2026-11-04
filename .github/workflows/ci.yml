@@ -1,0 +1,63 @@
+name: approval-pilot
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  databases:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        provider: [MySql, SqlServer, PostgreSql]
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - run: ./eng/verify-databases.ps1 -Provider '${{ matrix.provider }}'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: database-${{ matrix.provider }}
+          path: output/database-tests/
+  verify:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: web/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - run: ./eng/verify.ps1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: approval-validation
+          path: |
+            output/packages/**/release-manifest.json
+            output/engineering/consumer-*/browser/results.json
+            output/engineering/consumer-*/browser/**/*.png
+            output/engineering/consumer-*/browser/**/*.zip
+            output/engineering/consumer-*/embedded-host/verification.json
+            output/reference-host/**/smoke.json

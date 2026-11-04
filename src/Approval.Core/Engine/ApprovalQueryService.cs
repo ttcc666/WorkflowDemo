@@ -1,6 +1,8 @@
 using Approval.Core.Abstractions;
+using Approval.Core.Definitions;
 using Approval.Core.Domain;
 using Approval.Core.Persistence;
+using Approval.Core.Engine.Query;
 using Microsoft.EntityFrameworkCore;
 
 namespace Approval.Core.Engine;
@@ -8,6 +10,8 @@ namespace Approval.Core.Engine;
 public sealed record TodoItem(
     Guid TaskId,
     Guid InstanceId,
+    string DefinitionKey,
+    string DefinitionName,
     string BusinessType,
     string BusinessKey,
     string? Title,
@@ -16,64 +20,260 @@ public sealed record TodoItem(
     AssigneeKind AssigneeKind,
     string AssigneeValue,
     DateTime CreatedAt,
-    DateTime? DueAt);
+    DateTime? DueAt,
+    ApprovalTaskKind Kind,
+    ApprovalTaskStatus Status);
 
-/// <summary>只读查询：待办、已办、我发起的、审批详情。</summary>
+/// <summary>流程列表项（我已处理、我发起的、抄送我的、管理员监控）：不含任务与轨迹，带流程名称。</summary>
+public sealed record InstanceListItem(
+    Guid Id,
+    string DefinitionKey,
+    string DefinitionName,
+    int DefinitionVersion,
+    string BusinessType,
+    string BusinessKey,
+    string? Title,
+    string InitiatorId,
+    InstanceStatus Status,
+    string? CurrentNodeId,
+    DateTime CreatedAt,
+    DateTime? CompletedAt);
+
+/// <summary>
+/// 审批详情（按查看者过滤，接口返回）：实例、任务、轨迹与查看者的访问级别，不含运行时状态、并发令牌等内部字段。
+/// 参与人看不到的字段（<see cref="HiddenFields"/>，见 <see cref="FlowNode.FieldPermissions"/>）已从表单数据与修改轨迹中去掉。
+/// </summary>
+public sealed record InstanceDetail(
+    Guid Id,
+    Guid DefinitionId,
+    string DefinitionKey,
+    int DefinitionVersion,
+    string BusinessType,
+    string BusinessKey,
+    string? Title,
+    string InitiatorId,
+    InstanceStatus Status,
+    string? CurrentNodeId,
+    int Round,
+    string FormDataJson,
+    DateTime CreatedAt,
+    DateTime? CompletedAt,
+    IReadOnlyList<ApprovalTaskContext> Tasks,
+    IReadOnlyList<ApprovalLogContext> Logs,
+    ApprovalAccessLevel Access,
+    IReadOnlyList<string> HiddenFields)
+{
+    /// <summary>当前查看者是否可以撤回；仅供界面显示，提交操作时引擎会再次校验。</summary>
+    public bool CanWithdraw { get; init; }
+}
+
+/// <summary>待办筛选：关键字（标题 / 申请人）、流程标识、只看已超时。</summary>
+public enum ApprovalSort { Newest, Oldest, Title }
+public sealed record TodoQuery(string? Keyword = null, string? DefinitionKey = null, bool OverdueOnly = false,
+    string? BusinessType = null, string? BusinessKey = null, string? InitiatorId = null, string? ApproverId = null,
+    DateTime? From = null, DateTime? To = null, InstanceStatus? Status = null, ApprovalSort Sort = ApprovalSort.Oldest);
+
+/// <summary>流程列表筛选：关键字（标题 / 申请人）、状态、流程标识、发起时间区间 [From, To)（UTC）、发起人（管理员监控）。</summary>
+public sealed record InstanceQuery(
+    string? Keyword = null,
+    InstanceStatus? Status = null,
+    string? DefinitionKey = null,
+    DateTime? From = null,
+    DateTime? To = null,
+    string? InitiatorId = null, string? BusinessType = null, string? BusinessKey = null, string? ApproverId = null,
+    ApprovalSort Sort = ApprovalSort.Newest);
+
+/// <summary>只读查询：待办、已办、我发起的、抄送我的、全部实例（管理员）、审批详情。列表均分页，按时间排序。</summary>
 public sealed class ApprovalQueryService(
     ApprovalDbContextAccessor accessor,
     IApprovalIdentityProvider identity,
-    ApprovalOptions options)
+    IApprovalAccessPolicy accessPolicy,
+    ApprovalOptions options,
+    TimeProvider clock, IApprovalDataProjection? projection = null)
 {
+    private readonly Approval.Core.Authorization.IApprovalAuthorization _authorization = accessor.Authorization;
     private readonly DbContext _db = accessor.Context;
+    private readonly ApprovalInstanceReader _reader = new(accessor, accessPolicy, options, projection);
 
-    /// <summary>我的待办：分配给我本人的任务 + 分配给我所在角色的任务。</summary>
-    public async Task<List<TodoItem>> GetTodoAsync(string userId, CancellationToken ct = default)
+    /// <summary>我的待办：分配给我本人的任务 + 分配给我所在角色的任务，按到达时间排序。</summary>
+    public async Task<PagedResult<TodoItem>> GetTodoAsync(string userId, TodoQuery? query = null, PageRequest? page = null,
+        CancellationToken ct = default)
     {
+        await _authorization.RequireAsync(Approval.Core.Abstractions.ApprovalPermissions.TaskRead, new(), userId, ct);
+        var scopedInstances = await _authorization.ScopeAsync(_db.Set<ApprovalInstance>().AsNoTracking(), ct);
+        query ??= new TodoQuery();
+        scopedInstances = await ApplyFiltersAsync(scopedInstances, new(query.Keyword, query.Status, query.DefinitionKey,
+            query.From, query.To, query.InitiatorId, query.BusinessType, query.BusinessKey, query.ApproverId, query.Sort), ct);
         var roles = (await identity.GetRolesAsync(userId, ct)).ToList();
-        var excludeOwn = !options.AllowInitiatorApprove;
+        var keyword = Trim(query.Keyword);
+        var definitionKey = Trim(query.DefinitionKey);
+        var overdueOnly = query.OverdueOnly;
+        var now = clock.GetUtcNow().UtcDateTime;
 
-        var query =
-            from t in _db.Set<ApprovalTask>().AsNoTracking()
-            join i in _db.Set<ApprovalInstance>().AsNoTracking() on t.InstanceId equals i.Id
-            where t.Status == ApprovalTaskStatus.Pending && i.Status == InstanceStatus.Running
-                  && ((t.AssigneeKind == AssigneeKind.User && t.AssigneeValue == userId)
-                      || (t.AssigneeKind == AssigneeKind.Role && roles.Contains(t.AssigneeValue)))
-                  // 职责分离：不允许审批自己的申请时，自己发起的申请不出现在待办中
-                  && (!excludeOwn || i.InitiatorId != userId)
-            orderby t.CreatedAt
-            select new TodoItem(t.Id, i.Id, i.BusinessType, i.BusinessKey, i.Title, i.InitiatorId,
-                t.NodeName, t.AssigneeKind, t.AssigneeValue, t.CreatedAt, t.DueAt);
+        var items =
+            from t in TodoTasks(userId, roles)
+            join i in scopedInstances on t.InstanceId equals i.Id
+            join d in _db.Set<ApprovalDefinition>().AsNoTracking() on i.DefinitionId equals d.Id
+            where !overdueOnly || (t.DueAt != null && t.DueAt < now)
+            select new { Task = t, Instance = i, Definition = d };
 
-        return await query.ToListAsync(ct);
+        var sorted = query.Sort switch
+        {
+            ApprovalSort.Newest => items.OrderByDescending(t => t.Task.CreatedAt).ThenByDescending(t => t.Task.Id),
+            ApprovalSort.Title => items.OrderBy(t => t.Instance.Title).ThenBy(t => t.Task.Id),
+            _ => items.OrderBy(t => t.Task.CreatedAt).ThenBy(t => t.Task.Id)
+        };
+        return await sorted.Select(x => new TodoItem(x.Task.Id, x.Instance.Id, x.Instance.DefinitionKey, x.Definition.Name,
+            x.Instance.BusinessType, x.Instance.BusinessKey, x.Instance.Title, x.Instance.InitiatorId, x.Task.NodeName,
+            x.Task.AssigneeKind, x.Task.AssigneeValue, x.Task.CreatedAt, x.Task.DueAt, x.Task.Kind, x.Task.Status))
+            .ToPagedAsync(page ?? new PageRequest(), ct);
+    }
+
+    /// <summary>
+    /// 指派给某人（用户任务，不含角色任务）的未完成任务：待处理、尚未轮到、等待加签，流程进行中，不含退回发起人的申请。
+    /// 用于离职交接前预览（管理员，接口层校验权限）。
+    /// </summary>
+    public async Task<PagedResult<TodoItem>> GetOpenUserTasksAsync(string userId, PageRequest? page = null, CancellationToken ct = default)
+    {
+        await _authorization.RequireAsync(Approval.Core.Abstractions.ApprovalPermissions.TaskReassignBulk, new() { TargetUserId = userId }, null, ct);
+        var scopedInstances = await _authorization.ScopeAsync(_db.Set<ApprovalInstance>().AsNoTracking(), ct);
+        return await (from t in _db.Set<ApprovalTask>().AsNoTracking()
+         join i in scopedInstances on t.InstanceId equals i.Id
+         join d in _db.Set<ApprovalDefinition>().AsNoTracking() on i.DefinitionId equals d.Id
+         where t.AssigneeKind == AssigneeKind.User && t.AssigneeValue == userId && t.Kind != ApprovalTaskKind.Resubmit
+               && (t.Status == ApprovalTaskStatus.Pending || t.Status == ApprovalTaskStatus.Waiting || t.Status == ApprovalTaskStatus.Suspended)
+               && (i.Status == InstanceStatus.Running || i.Status == InstanceStatus.Returned)
+         orderby t.CreatedAt, t.Id
+         select new TodoItem(t.Id, i.Id, i.DefinitionKey, d.Name, i.BusinessType, i.BusinessKey, i.Title, i.InitiatorId,
+             t.NodeName, t.AssigneeKind, t.AssigneeValue, t.CreatedAt, t.DueAt, t.Kind, t.Status))
+        .ToPagedAsync(page ?? new PageRequest(), ct);
+    }
+
+    /// <summary>待办数量（工作台角标）。</summary>
+    public async Task<int> GetTodoCountAsync(string userId, CancellationToken ct = default)
+    {
+        await _authorization.RequireAsync(Approval.Core.Abstractions.ApprovalPermissions.TaskRead, new(), userId, ct);
+        var visible = await _authorization.ScopeAsync(_db.Set<ApprovalInstance>(), ct);
+        return await TodoTasks(userId, (await identity.GetRolesAsync(userId, ct)).ToList()).CountAsync(t => visible.Select(i => i.Id).Contains(t.InstanceId), ct);
     }
 
     /// <summary>我处理过的流程。</summary>
-    public Task<List<ApprovalInstance>> GetDoneAsync(string userId, CancellationToken ct = default) =>
-        _db.Set<ApprovalInstance>().AsNoTracking()
-            .Where(i => i.Tasks.Any(t => t.HandledBy == userId))
-            .OrderByDescending(i => i.CreatedAt)
-            .ToListAsync(ct);
+    public async Task<PagedResult<InstanceListItem>> GetDoneAsync(string userId, InstanceQuery? query = null, PageRequest? page = null,
+        CancellationToken ct = default)
+    {
+        await _authorization.RequireAsync(Approval.Core.Abstractions.ApprovalPermissions.InstanceRead, new(), userId, ct);
+        return await ToListItemsAsync(_db.Set<ApprovalInstance>().Where(i => i.Tasks.Any(t => t.HandledBy == userId)), query, page, ct);
+    }
 
-    public Task<List<ApprovalInstance>> GetStartedByAsync(string userId, CancellationToken ct = default) =>
-        _db.Set<ApprovalInstance>().AsNoTracking()
-            .Where(i => i.InitiatorId == userId)
-            .OrderByDescending(i => i.CreatedAt)
-            .ToListAsync(ct);
+    /// <summary>我发起的流程。</summary>
+    public async Task<PagedResult<InstanceListItem>> GetStartedByAsync(string userId, InstanceQuery? query = null, PageRequest? page = null,
+        CancellationToken ct = default)
+    {
+        await _authorization.RequireAsync(Approval.Core.Abstractions.ApprovalPermissions.InstanceRead, new(), userId, ct);
+        return await ToListItemsAsync(_db.Set<ApprovalInstance>().Where(i => i.InitiatorId == userId), query, page, ct);
+    }
 
-    /// <summary>审批详情（含任务与轨迹）。</summary>
-    public Task<ApprovalInstance?> GetInstanceAsync(Guid instanceId, CancellationToken ct = default) =>
-        WithDetails().FirstOrDefaultAsync(i => i.Id == instanceId, ct);
+    /// <summary>抄送我的：抄送给本人或所在角色的流程（多次抄送只列一次）。</summary>
+    public async Task<PagedResult<InstanceListItem>> GetCarbonCopiedAsync(string userId, InstanceQuery? query = null, PageRequest? page = null,
+        CancellationToken ct = default)
+    {
+        await _authorization.RequireAsync(Approval.Core.Abstractions.ApprovalPermissions.InstanceRead, new(), userId, ct);
+        var roles = (await identity.GetRolesAsync(userId, ct)).ToList();
+        var copies = _db.Set<ApprovalCarbonCopy>().Where(c =>
+            (c.AssigneeKind == AssigneeKind.User && c.AssigneeValue == userId)
+            || (c.AssigneeKind == AssigneeKind.Role && roles.Contains(c.AssigneeValue)));
+        return await ToListItemsAsync(_db.Set<ApprovalInstance>().Where(i => copies.Any(c => c.InstanceId == i.Id)), query, page, ct);
+    }
 
-    /// <summary>某业务单据的全部审批记录（驳回后重新发起会有多条）。</summary>
-    public Task<List<ApprovalInstance>> GetByBusinessAsync(string businessType, string businessKey, CancellationToken ct = default) =>
-        WithDetails()
-            .Where(i => i.BusinessType == businessType && i.BusinessKey == businessKey)
-            .OrderByDescending(i => i.CreatedAt)
-            .ToListAsync(ct);
+    /// <summary>全部流程（管理员监控）。需要实例监控权限，并在分页前应用宿主查询范围。</summary>
+    public async Task<PagedResult<InstanceListItem>> SearchInstancesAsync(InstanceQuery? query = null, PageRequest? page = null,
+        CancellationToken ct = default)
+    {
+        await _authorization.RequireAsync(Approval.Core.Abstractions.ApprovalPermissions.InstanceReadAll, new(), null, ct);
+        return await ToListItemsAsync(_db.Set<ApprovalInstance>(), query, page, ct);
+    }
 
-    private IQueryable<ApprovalInstance> WithDetails() =>
-        _db.Set<ApprovalInstance>().AsNoTracking()
-            .Include(i => i.Tasks.OrderBy(t => t.CreatedAt).ThenBy(t => t.Order))
-            .Include(i => i.Logs.OrderBy(l => l.Sequence))
-            .AsSplitQuery();
+    /// <summary>审批详情（含任务与轨迹）。需要敏感数据读取权限，供宿主后台使用；接口请用 <see cref="GetInstanceForViewerAsync"/>。</summary>
+    public Task<InstanceDetail?> GetInstanceAsync(Guid instanceId, CancellationToken ct = default) =>
+        _reader.GetInstanceAsync(instanceId, ct);
+
+    /// <summary>某业务单据的全部审批记录（驳回后重新发起会有多条）。需要敏感数据读取权限，并应用宿主查询范围。</summary>
+    public Task<List<InstanceDetail>> GetByBusinessAsync(string businessType, string businessKey, CancellationToken ct = default) =>
+        _reader.GetByBusinessAsync(businessType, businessKey, ct);
+
+    /// <summary>按查看者权限返回审批详情；不存在或无权查看时返回 null（接口统一返回 404）。</summary>
+    public Task<InstanceDetail?> GetInstanceForViewerAsync(Guid instanceId, ApprovalViewer viewer, CancellationToken ct = default) =>
+        _reader.GetInstanceForViewerAsync(instanceId, viewer, ct);
+
+    /// <summary>某业务单据的审批记录，只返回查看者有权查看的。</summary>
+    public Task<List<InstanceDetail>> GetByBusinessForViewerAsync(string businessType, string businessKey, ApprovalViewer viewer,
+        CancellationToken ct = default) =>
+        _reader.GetByBusinessForViewerAsync(businessType, businessKey, viewer, ct);
+
+    /// <summary>实例绑定版本的流程定义公开视图（见 <see cref="FlowDefinition.ToPublicView"/>）；无权查看实例时返回 null。</summary>
+    public Task<ApprovalDefinitionSnapshot?> GetPublicDefinitionAsync(Guid instanceId, ApprovalViewer viewer, CancellationToken ct = default) =>
+        _reader.GetPublicDefinitionAsync(instanceId, viewer, ct);
+
+    /// <summary>用户可处理的待办任务：分配给本人或所在角色、流程进行中；不允许自审时排除自己发起的（重新提交任务除外）。</summary>
+    private IQueryable<ApprovalTask> TodoTasks(string userId, List<string> roles)
+    {
+        var excludeOwn = !options.AllowInitiatorApprove;
+        return _db.Set<ApprovalTask>().AsNoTracking().Where(t =>
+            t.Status == ApprovalTaskStatus.Pending
+            && ((t.AssigneeKind == AssigneeKind.User && t.AssigneeValue == userId)
+                || (t.AssigneeKind == AssigneeKind.Role && roles.Contains(t.AssigneeValue)))
+            && _db.Set<ApprovalInstance>().Any(i => i.Id == t.InstanceId && (i.Status == InstanceStatus.Running || i.Status == InstanceStatus.Returned)
+                // 职责分离：不允许审批自己的申请时，自己发起的申请不出现在待办中
+                && (!excludeOwn || i.InitiatorId != userId || t.Kind == ApprovalTaskKind.Resubmit)));
+    }
+
+    /// <summary>按筛选条件分页，发起时间倒序（Id 作为第二排序保证翻页稳定）。</summary>
+    private async Task<PagedResult<InstanceListItem>> ToListItemsAsync(IQueryable<ApprovalInstance> instances, InstanceQuery? query,
+        PageRequest? page, CancellationToken ct)
+    {
+        instances = await _authorization.ScopeAsync(instances, ct);
+        query ??= new InstanceQuery();
+        instances = await ApplyFiltersAsync(instances, query, ct);
+
+        var ordered = query.Sort switch
+        {
+            ApprovalSort.Oldest => instances.OrderBy(i => i.CreatedAt).ThenBy(i => i.Id),
+            ApprovalSort.Title => instances.OrderBy(i => i.Title).ThenBy(i => i.Id),
+            _ => instances.OrderByDescending(i => i.CreatedAt).ThenByDescending(i => i.Id)
+        };
+        return await (from i in ordered.AsNoTracking()
+                join d in _db.Set<ApprovalDefinition>().AsNoTracking() on i.DefinitionId equals d.Id
+                select new InstanceListItem(i.Id, i.DefinitionKey, d.Name, i.DefinitionVersion, i.BusinessType, i.BusinessKey, i.Title,
+                    i.InitiatorId, i.Status, i.CurrentNodeId, i.CreatedAt, i.CompletedAt))
+            .ToPagedAsync(page ?? new PageRequest(), ct);
+    }
+
+    internal async Task<IQueryable<ApprovalInstance>> ApplyFiltersAsync(IQueryable<ApprovalInstance> instances, InstanceQuery query, CancellationToken ct)
+    {
+        if (!Enum.IsDefined(query.Sort)) throw new ApprovalException("不支持的排序方式");
+        if (query.From is { } begin && query.To is { } end && begin >= end) throw new ApprovalException("时间范围无效");
+        if (Trim(query.Keyword) is { } keyword)
+        {
+            var isId = Guid.TryParse(keyword, out var id);
+            instances = instances.Where(i => (i.Title != null && i.Title.Contains(keyword)) || i.InitiatorId.Contains(keyword)
+                || i.BusinessKey.Contains(keyword) || isId && i.Id == id);
+        }
+        if (query.Status is { } status) instances = instances.Where(i => i.Status == status);
+        if (Trim(query.DefinitionKey) is { } definitionKey) instances = instances.Where(i => i.DefinitionKey == definitionKey);
+        if (query.From is { } from) instances = instances.Where(i => i.CreatedAt >= from);
+        if (query.To is { } to) instances = instances.Where(i => i.CreatedAt < to);
+        if (Trim(query.InitiatorId) is { } initiator) instances = instances.Where(i => i.InitiatorId == initiator);
+        if (Trim(query.BusinessType) is { } type) instances = instances.Where(i => i.BusinessType == type);
+        if (Trim(query.BusinessKey) is { } key) instances = instances.Where(i => i.BusinessKey.Contains(key));
+        if (Trim(query.ApproverId) is { } approver)
+        {
+            var roles = (await identity.GetRolesAsync(approver, ct)).ToList();
+            instances = instances.Where(i => i.Tasks.Any(t => t.HandledBy == approver
+                || t.AssigneeKind == AssigneeKind.User && t.AssigneeValue == approver
+                || t.AssigneeKind == AssigneeKind.Role && roles.Contains(t.AssigneeValue)));
+        }
+        return instances;
+    }
+
+    private static string? Trim(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }

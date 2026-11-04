@@ -5,7 +5,7 @@ namespace Approval.Core.Templates;
 
 public sealed record TemplateVariableInfo(string Name, string Alias, string Description);
 
-/// <summary>消息模板与动作参数可用的变量。中文名与英文名等价，如 <c>{标题}</c> 与 <c>{title}</c>。</summary>
+/// <summary>消息模板可用的变量。中文名与英文名等价，如 <c>{标题}</c> 与 <c>{title}</c>。</summary>
 public static class TemplateVariables
 {
     public static IReadOnlyList<TemplateVariableInfo> Catalog { get; } =
@@ -19,6 +19,7 @@ public static class TemplateVariables
         new("当前审批人", "assignees", "当前节点的审批人"),
         new("转交给", "transferTo", "转交对象"),
         new("截止时间", "dueAt", "待办处理截止时间"),
+        new("退回到", "returnTo", "驳回时退回到的节点（驳回结束时为空）"),
         new("发起时间", "createdAt", "流程发起时间"),
         new("流程", "flow", "流程标识"),
         new("业务类型", "businessType", "业务类型"),
@@ -36,13 +37,15 @@ public static class TemplateVariables
         public IReadOnlyList<string> Assignees { get; init; } = [];
         public string? TransferTo { get; init; }
         public DateTime? DueAt { get; init; }
+        public string? ReturnTo { get; init; }
     }
 
     public static Dictionary<string, object?> Build(ApprovalInstance instance, IReadOnlyDictionary<string, object?> form,
-        FlowNode? node, ApprovalOptions options, EventValues? values = null)
+        FlowNode? node, ApprovalOptions options, EventValues? values = null, Approval.Core.Abstractions.ApprovalDisplaySettings? settings = null)
     {
         var result = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
         foreach (var (key, value) in options.GlobalVariables) result[key] = value;
+        foreach (var (key, value) in settings?.GlobalVariables ?? options.GlobalVariables) result[key] = value;
 
         void Add(string name, string alias, object? value)
         {
@@ -59,12 +62,14 @@ public static class TemplateVariables
         Add("当前审批人", "assignees", values?.Assignees ?? []);
         Add("转交给", "transferTo", values?.TransferTo ?? "");
         Add("截止时间", "dueAt", values?.DueAt);
+        Add("退回到", "returnTo", values?.ReturnTo ?? "");
         Add("发起时间", "createdAt", instance.CreatedAt);
         Add("流程", "flow", instance.DefinitionKey);
         Add("业务类型", "businessType", instance.BusinessType);
         Add("业务单号", "businessKey", instance.BusinessKey);
         Add("实例ID", "instanceId", instance.Id.ToString());
-        Add("链接", "link", options.InstanceUrlFormat is null ? "" : string.Format(options.InstanceUrlFormat, instance.Id));
+        var url = settings is null ? options.InstanceUrlFormat : settings.InstanceUrlFormat;
+        Add("链接", "link", url is null ? "" : string.Format(url, instance.Id));
         Add("表单", "form", form);
         return result;
     }

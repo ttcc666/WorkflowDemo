@@ -1,0 +1,6 @@
+{
+  "Keycloak": "quay.io/keycloak/keycloak@sha256:9409c59bdfb65dbffa20b11e6f18b8abb9281d480c7ca402f51ed3d5977e6007",
+  "ToxiproxyVersion": "2.12.0",
+  "ToxiproxyWindowsSha256": "e32f4cb58e62e844d4b5d47613525a5bdeea15c39fa22c9f413c756275ac0ba8",
+  "ToxiproxyLinuxSha256": "556d891134a3c582dc1e1a3f7335fd55142e5965769855a00b944e13e48302fc"
+}
