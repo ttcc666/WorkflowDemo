@@ -44,6 +44,7 @@ public sealed class ApproverResolveContext
 {
     public required ApprovalInstanceContext Instance { get; init; }
     public required ApprovalNodeContext Node { get; init; }
+    /// <summary>引擎为每次 Resolver 调用创建独立快照。顶层字典只读；嵌套动态对象与数组可在本次快照内修改，不影响其他调用或实例表单。</summary>
     public required IReadOnlyDictionary<string, object?> FormData { get; init; }
 }
 

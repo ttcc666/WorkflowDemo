@@ -192,7 +192,6 @@ public sealed partial class ApprovalDefinitionService
         foreach (var state in management)
         {
             if (!await _authorization.CanAsync(ApprovalPermissions.DefinitionReadSensitive, new() { DefinitionKey = state.Key }, ct: ct)) continue;
-            await _authorization.RequireAsync(ApprovalPermissions.DefinitionReadSensitive, new() { DefinitionKey = state.Key }, ct: ct);
             result.Add(new(state.Key, state.Name, state.Revision, state.LastVersion, state.IsEnabled, state.ActiveDefinitionId,
                 state.HasDraftChanges, state.UpdatedAt, await GovernanceCapabilitiesAsync(state.Key, ct)) { Category = state.Category });
         }

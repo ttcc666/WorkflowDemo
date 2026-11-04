@@ -1,6 +1,6 @@
 # 后端渐进式重构交付报告
 
-代码起点：`ca6987815ce0b668bd1401a8b15e50da824ee81b`。按既定 P0 → P0 → P1 → P1 → P2 五轮顺序执行，每个主题均有独立编译、测试和 Diff 审查；数据库专项按用户追加要求转 GitHub CLI / Actions。五轮已完成，最终代码的 CI 验收编号和结果见末尾。
+代码起点：`ca6987815ce0b668bd1401a8b15e50da824ee81b`。按既定 P0 → P0 → P1 → P1 → P2 五轮顺序执行，每个主题均有独立编译、测试和 Diff 审查；数据库专项按用户追加要求转 GitHub CLI / Actions。本文保留五轮重构的历史验收；第二阶段三个缺陷的修复与本次提交验收见 [第二阶段收尾报告](backend-refactoring-stage2-fixes.md)，历史 CI 不替代本次验收。
 
 ## 架构变化
 
@@ -88,7 +88,7 @@ Core 文件简写以 `src/Approval.Core/` 为前缀，Forms 文件简写以 `src
 
 ## 性能及其限度
 
-已量化：三份治理摘要 Management 查询从逐 Key 重读变为1；两个版本业务历史的定义内容读取为1；多个 User字段的目录校验为1。实际权限 / capability 调用数量保持，并有断言。
+已量化：三份治理摘要 Management 查询从逐 Key 重读变为1；两个版本业务历史的定义内容读取为1；多个 User字段的目录校验为1。第二阶段移除已允许资源的重复敏感读取授权，三份摘要的授权调用从16降为13；全局1次、每个资源1次、每个允许资源3项 capability，均有精确断言。
 
 Backlog 保留内存从任务行集合变为不同审批人的计数字典，不承诺降低数据库传输行数。没有生产规模压力测试，不宣称吞吐或延迟提升百分比。不建立全局 Flow / JSON / ACL cache。
 
@@ -123,7 +123,7 @@ Engine 公共命令方式、状态机、Parallel / Join、Any / All / Sequential
 
 可维护性：操作、导航、任务、事件、读取与资源归属有实际独立权威实现。可扩展性：宿主 Context / Preparation 边界明确，原扩展与后台投递能力保持。低冗余：重复状态、查询、转换有实质减少。低耦合：EF跟踪图与模块 internal 知识收敛，未用新程序集或接口堆叠换取形式上的分层。
 
-## 最终 GitHub CI 验收
+## 五轮重构 GitHub CI 验收（历史记录）
 
 代码验收提交：`f6342b91569ed3ac66f01a42ea7ac09903e55108`，分支 `codex/backend-progressive-refactoring`。[GitHub Run 41674494343](https://github.com/ttcc666/WorkflowDemo/actions/runs/41674494343)。报告后续的文档提交仅补验收记录；代码与测试以该 SHA 的结果为准。
 

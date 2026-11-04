@@ -29,7 +29,9 @@ public sealed partial class DatabaseContractTests
                 });
             await db.SaveChangesAsync();
         }
-        ((AtomicPermissions)host.GetRequiredService<IApprovalPermissionProvider>()).Rule = r => r.Resource.DefinitionKey != "hidden";
+        var requests = new List<ApprovalPermissionRequest>();
+        ((AtomicPermissions)host.GetRequiredService<IApprovalPermissionProvider>()).Rule = r =>
+        { requests.Add(r); return r.Resource.DefinitionKey != "hidden"; };
         var values = await AtomicRun(host, "alice", sp =>
             sp.GetRequiredService<ApprovalDefinitionService>().ListGovernanceAsync("team"));
         Assert.Equal(new[] { "absent", "changed", "equal", "unpublished" }, values.Select(v => v.Key));
@@ -41,6 +43,11 @@ public sealed partial class DatabaseContractTests
             foreach (var code in new[] { ApprovalPermissions.DefinitionDesign, ApprovalPermissions.DefinitionPublish, ApprovalPermissions.DefinitionDisable })
                 Assert.True(v.Capabilities[code]);
         });
+        Assert.Equal(18, requests.Count);
+        Assert.Single(requests, r => r.Permission == ApprovalPermissions.DefinitionReadSensitive && r.Resource.DefinitionKey is null);
+        foreach (var key in new[] { "absent", "changed", "equal", "hidden", "unpublished" })
+            Assert.Single(requests, r => r.Permission == ApprovalPermissions.DefinitionReadSensitive && r.Resource.DefinitionKey == key);
+        Assert.DoesNotContain(requests, r => r.Resource.DefinitionKey == "hidden" && r.Permission != ApprovalPermissions.DefinitionReadSensitive);
         var uncategorized = await AtomicRun(host, "alice", sp =>
             sp.GetRequiredService<ApprovalDefinitionService>().ListGovernanceAsync(null, uncategorized: true));
         Assert.Equal("doc", Assert.Single(uncategorized).Key);

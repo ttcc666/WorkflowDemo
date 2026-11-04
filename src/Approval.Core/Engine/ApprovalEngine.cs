@@ -312,7 +312,7 @@ public sealed partial class ApprovalEngine
         try
         {
             await _authorization.RequireAsync(ApprovalPermissions.TaskRead, new() { TaskId = taskId }, userId, ct);
-            var (instance, task, _) = await LoadTaskAsync(operation, taskId, ct);
+            var (instance, task, _) = await LoadTaskAsync(operation, taskId, ct, write: false);
             await EnsureCanHandleAsync(operation, instance, task, userId, ct);
             return true;
         }

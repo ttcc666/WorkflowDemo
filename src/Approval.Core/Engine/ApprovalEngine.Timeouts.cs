@@ -20,11 +20,13 @@ public sealed partial class ApprovalEngine
     {
         var operation = new ApprovalOperationContext();
         await _authorization.RequireAsync(Approval.Core.Abstractions.ApprovalPermissions.TaskTimeout, new() { TaskId = taskId }, null, ct);
-        var (instance, task, flow) = await LoadTaskAsync(operation, taskId, ct);
+        var (instance, task, flow) = await LoadTaskAsync(operation, taskId, ct, write: false);
         if (instance.Status != InstanceStatus.Running || task.Status != ApprovalTaskStatus.Pending
             || task.NextRemindAt is not { } due || due > Now)
             return false;
 
+        // 已确认需要写入：提醒清理和正常超时处理都必须参与实例乐观并发检查。
+        Touch(instance);
         var node = flow.GetNode(task.NodeId);
         if (node.Timeout is not { } policy)
         {

@@ -26,6 +26,8 @@ IApprovalResourceResolver 已使用 ApprovalResource，保持接口。IApprovalQ
 
 实例快照提供实例 / 定义标识、业务类型和键、标题、发起人、状态、节点、Round、业务 JSON 和时间。需要更多业务数据时通过宿主业务 DbContext 读取；resolver 规则值仍由 ResolveAsync 参数提供。
 
+`ApproverResolveContext.FormData` 由引擎在每次 Resolver 调用前创建独立深拷贝，顶层 `ReadOnlyDictionary` 即使转为 `IDictionary` 也不能增删改。嵌套对象保持 `ExpandoObject` 动态读取，数组保持 `object?[]`，数值保持 decimal / double；嵌套值允许在本次快照内修改，但不会影响其他 Resolver、条件表达式使用的数据或实例保存的 `FormDataJson`。此契约也适用于同一 Resolver 的重复调用和通知收件人解析；`FormData.Parse` 的既有解析行为不变。
+
 业务、准备、权限和规则回调仍运行在原事务和安全边界内。宿主可修改自己的业务实体，不能修改 Core 审批实体、提前保存或自行提交事务。快照保持调用时的数据，不随引擎继续推进而改变。
 
 ## 开始准备
