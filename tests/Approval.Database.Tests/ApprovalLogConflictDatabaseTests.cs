@@ -129,7 +129,11 @@ public sealed partial class DatabaseContractTests
         var saved = await verify.Set<ApprovalInstance>().Include(i => i.Tasks).Include(i => i.Logs).SingleAsync();
         Assert.Equal(InstanceStatus.Approved, saved.Status);
         Assert.Equal(instance.ConcurrencyStamp + 1, saved.ConcurrencyStamp);
-        Assert.Equal(instance.LogSequence + 2, saved.LogSequence);
+        Assert.Equal(instance.LogSequence + 3, saved.LogSequence);
+        var decisionLogs = saved.Logs.Where(l => l.Sequence > instance.LogSequence).OrderBy(l => l.Sequence).ToList();
+        Assert.Equal(new[] { ApprovalAction.Approve, ApprovalAction.NodeEntered, ApprovalAction.Complete }, decisionLogs.Select(l => l.Action));
+        Assert.Equal(new[] { instance.LogSequence + 1, instance.LogSequence + 2, instance.LogSequence + 3 }, decisionLogs.Select(l => l.Sequence));
+        Assert.Equal("end", decisionLogs[1].NodeId);
         var task = Assert.Single(saved.Tasks);
         Assert.Equal(ApprovalTaskStatus.Approved, task.Status); Assert.Equal(winner.Actor, task.HandledBy);
         Assert.Single(saved.Logs, l => l.Action == ApprovalAction.Approve);

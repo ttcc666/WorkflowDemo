@@ -55,7 +55,7 @@ flowchart TD
 
 SQLite 普通事务在 BEGIN 保留写锁，会自然串行化两个写事务；因此旧状态读取/共同校验放在事务前。三个服务端 Provider 不假定相同 INSERT/UPDATE 排序，每个上下文的真实 EF 命令顺序写入验收 JSON。
 
-必须满足的数据库结果：一成功、一精确 ApprovalException/Conflict；stamp只增加1、日志计数器只增加2（Approve/Complete）；一个 Approved 任务、一个业务回调记录、一个成功操作标记、一个提交回调；失败操作标记不存在；一个站内审批通知和五条唯一决策 Outbox（Approve / Complete / NodeEntered / Completed / Decision notice）；不存在重复 Sequence、重复业务决策或失败事务残留。
+必须满足的数据库结果：一成功、一精确 ApprovalException/Conflict；stamp只增加1、日志计数器只增加3（Approve → NodeEntered/end → Complete），三个序号连续；一个 Approved 任务、一个业务回调记录、一个成功操作标记、一个提交回调；失败操作标记不存在；一个站内审批通知和五条唯一决策 Outbox（Approve / Complete / NodeEntered / Completed / Decision notice）；不存在重复 Sequence、重复业务决策或失败事务残留。
 
 原始陈旧审批场景：两个上下文先加载同一个 Pending 任务；第一个真实同意提交，第二个旧实体同意必须报 Conflict，赢家日志/Outbox/状态/业务记录保持完整。原提醒清理竞争令牌测试未改未删。
 
