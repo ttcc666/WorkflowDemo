@@ -2,6 +2,8 @@
 
 代码起点：`ca6987815ce0b668bd1401a8b15e50da824ee81b`。按既定 P0 → P0 → P1 → P1 → P2 五轮顺序执行，每个主题均有独立编译、测试和 Diff 审查；数据库专项按用户追加要求转 GitHub CLI / Actions。本文保留五轮重构的历史验收；第二阶段三个缺陷的修复与本次提交验收见 [第二阶段收尾报告](backend-refactoring-stage2-fixes.md)，历史 CI 不替代本次验收。
 
+第二阶段已完成：只读操作/超时无操作不再递增ConcurrencyStamp，Resolver每调用独立深快照，治理资源授权去重。生产修复 `c10113d74fdecfbda8349c5c32c8a42ae9088890`；最终代码/测试验收 `553a1e8968d865fb35a1e2f5d57c72e9b8214bfe`，[Run 41753786611](https://github.com/ttcc666/WorkflowDemo/actions/runs/41753786611) completed / success。MySQL、PostgreSQL、SQL Server各Passed43 / Failed0 / Skipped0；Windows完整回归Passed598 / Failed0 / Skipped0、Release零警告/零错误，所有契约/漂移/宿主/消费者/前端/浏览器门禁通过。详细新增测试与核验证据见第二阶段报告。
+
 ## 架构变化
 
 ```mermaid

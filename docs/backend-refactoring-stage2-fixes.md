@@ -67,9 +67,29 @@ FindHandleableTaskAsync 等其他读取路径不通过该写加载方法；现�
 
 本地阶段独立构建/执行：Concurrency + 原超时测试 Passed19 / Failed0 / Skipped0；Resolver + 扩展/组织/条件相关测试 Passed28 / Failed0 / Skipped0；Governance + 权限相关测试 Passed41 / Failed0 / Skipped0。TRX 已核对执行数与结果，位置 `output/backend-fixes/local/`。
 
-完整 Release Solution Build 已实际执行：0 warnings / 0 errors。本地三个业务测试项目共 Passed555 / Failed0 / Skipped0（Core416、AspNetCore81、Certificate58），各项目 TRX 的执行数与结果已核对。Contracts 已通过，所有已提交 HTTP / C# / TypeScript 基线匹配；前端 Boundary（95源文件）、7项 Boundary 测试、Typecheck、180项UI测试、6项Demo测试、库和Demo Build 全通过。本次提交远端 CI 的最终证据将在验收完成后补充。
+完整 Release Solution Build 已实际执行：0 warnings / 0 errors。本地三个业务测试项目共 Passed555 / Failed0 / Skipped0（Core416、AspNetCore81、Certificate58），各项目 TRX 的执行数与结果已核对。Contracts 已通过，所有已提交 HTTP / C# / TypeScript 基线匹配；前端 Boundary（95源文件）、7项 Boundary 测试、Typecheck、180项UI测试、6项Demo测试、库和Demo Build 全通过。GitHub CI 的最终证据如下，本地业务测试与远端数据库实际执行明确区分。
 
-数据库专项当前在本地仅编译。ReferenceHost、Core-only、Migration Model Drift、消费者和 Browser Smoke 的最终验收通过同一修复提交的 GitHub Actions verify 作业取得。
+数据库专项在本地仅编译，实际测试在 GitHub 执行。最终测试提交 `553a1e8968d865fb35a1e2f5d57c72e9b8214bfe`，生产修复提交 `c10113d74fdecfbda8349c5c32c8a42ae9088890`；[GitHub Run 41753786611](https://github.com/ttcc666/WorkflowDemo/actions/runs/41753786611)。
+
+| Provider | Passed | Failed | Skipped | 核验 |
+| --- | --- | --- | --- | --- |
+| MySql | 43 | 0 | 0 | HEAD一致、validated=true、testExitCode=0、3份artifact SHA256一致 |
+| PostgreSql | 43 | 0 | 0 | 同上 |
+| SqlServer | 43 | 0 | 0 | 同上 |
+
+三个 Provider 每个43项均实际执行，包括10项新增用例；TRX准确用例数与状态、manifest和哈希已核对。证据目录 `output/backend-fixes/ci/41753786611`，汇总 `database-evidence.json`。
+
+整个 Run 已 completed / success，四个作业全部 success，HEAD精确匹配553a1e8。Windows verify 实际执行 `./eng/verify.ps1`，最后输出 `Verification succeeded: All`：
+
+- Release Solution Build 0 warnings / 0 errors；后端 Passed598 / Failed0 / Skipped0（Core416、AspNetCore81、Certificate58、SQLite数据库专项43）。所有旧测试与新增回归均保留通过；SQLite专项也仅在 GitHub 执行。
+- 九项 EF Migration Model Drift 检查全部通过；HTTP/C#/TypeScript Contracts、前端 Boundary/Typecheck/Tests/Build 全通过。
+- 独立 NuGet / npm、Certificate / ReferenceHost / Core-only 消费者通过，release-manifest.Commit匹配验收SHA。
+- Core-only verification.json 为passed=true，18个真实检查；两个ReferenceHost smoke.json各passed=true / checks=27。
+- Browser results.json为expected=5 / unexpected=0 / skipped=0 / flaky=0 / errors=0，metadata.ci.commitHash匹配验收SHA。
+
+完整Windows日志 `output/backend-fixes/ci/41753786611/windows.log`，状态 `run.json`，产物核验汇总 `windows-evidence.json`。验收期间没有本地运行数据库专项或 Docker；仅本地编译的数据库测试最终均有本次修复提交的实际 CI 结果。CI中的既有Actions Node20提示和前端chunk提示不属于C#编译警告。
+
+最终报告文档提交只记录上述实际验收，代码/测试以553a1e8为准。本阶段无未完成验收事项；未创建新分支、合并main、重写历史或强制推送。
 
 ## 最终审查与边界
 
@@ -92,4 +112,5 @@ dotnet test 'tests/Certificate.Api.Tests/Certificate.Api.Tests.csproj' --configu
 pnpm --dir 'web' 'contracts:check' --no-build
 pwsh -NoProfile -File 'eng/verify.ps1' -Scope 'Frontend' -SkipRestore
 gh run list --repo 'ttcc666/WorkflowDemo' --branch 'codex/backend-progressive-refactoring' --limit 5
+gh run view '41753786611' --repo 'ttcc666/WorkflowDemo' --json 'headSha,status,conclusion,jobs,url'
 ```
