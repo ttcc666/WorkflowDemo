@@ -44,6 +44,27 @@ public sealed class DefinitionContractTests
         Assert.Throws<ApprovalException>(() => definition.ToJson());
     }
 
+    [Fact]
+    public void LongNodeChainCanBeValidatedAndCyclesStillFail()
+    {
+        const int length = 20_000;
+        var flow = new FlowDefinition { StartNodeId = "n0" };
+        for (var index = 0; index < length; index++)
+        {
+            var id = $"n{index}";
+            flow.Nodes[id] = new FlowNode { Id = id, Type = index == 0 ? NodeType.Start : NodeType.Cc,
+                Next = $"n{index + 1}", Approvers = [new("User", "bob")] };
+        }
+        var end = $"n{length}";
+        flow.Nodes[end] = new FlowNode { Id = end, Type = NodeType.End };
+        var context = new FlowValidationContext { ApproverTypes = new HashSet<string> { "User" } };
+        Assert.Empty(FlowDefinitionValidator.Validate(flow, context));
+        Assert.True(FlowStructure.Analyze(flow).CanReach(flow.StartNodeId, end));
+
+        flow.Nodes[$"n{length - 1}"].Next = "n1";
+        Assert.Contains("流程存在环路", Assert.Single(FlowDefinitionValidator.Validate(flow, context)));
+    }
+
     [Theory]
     [InlineData("null-root")]
     [InlineData("array-root")]

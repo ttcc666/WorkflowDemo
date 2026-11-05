@@ -1,6 +1,8 @@
 using Approval.Core;
 using Approval.Core.Abstractions;
 using Approval.Core.Conditions;
+using Approval.Core.Definitions;
+using Approval.Core.Domain;
 using Approval.Core.Engine;
 using Approval.Core.Persistence;
 using Approval.Forms.Runtime;
@@ -104,12 +106,39 @@ public sealed class ApprovalFileService(
         if (file.UploadedBy == viewer.UserId) return true;
         if (file.InstanceId is not { } instanceId) return false;
 
-        // 按查看者过滤后的详情（已去掉隐藏字段）：文件须出现在可见的表单数据或修改记录中
         if (await query.GetInstanceForViewerAsync(instanceId, viewer, ct) is not { } detail) return false;
         if (detail.HiddenFields.Count == 0) return true;
-        var id = file.Id.ToString();
-        return detail.FormDataJson.Contains(id, StringComparison.OrdinalIgnoreCase)
-               || detail.Logs.Any(l => l.Details?.Contains(id, StringComparison.OrdinalIgnoreCase) == true);
+        var definition = await _db.Set<ApprovalDefinition>().AsNoTracking().Where(d => d.Id == detail.DefinitionId)
+            .Select(d => d.DefinitionJson).SingleAsync(ct);
+        return FlowDefinition.Parse(definition).GetForm() is { } schema && VisibleFileIds(schema, detail).Contains(file.Id);
+    }
+
+    private static HashSet<Guid> VisibleFileIds(FormSchema schema, InstanceDetail detail)
+    {
+        var hidden = detail.HiddenFields.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var keys = schema.Fields.Where(f => f.Type == FormFieldType.File && !hidden.Contains(f.Key))
+            .Select(f => f.Key).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var form = JsonNode.Parse(detail.FormDataJson) as JsonObject;
+        var ids = keys.SelectMany(key => FileIds(form?[key])).ToHashSet();
+        foreach (var log in detail.Logs)
+        {
+            if (log.Action != ApprovalAction.FormEdit || log.Details is null || JsonNode.Parse(log.Details) is not JsonArray changes) continue;
+            foreach (var change in changes.OfType<JsonObject>())
+            {
+                if (change["field"] is not JsonValue value || !value.TryGetValue<string>(out var key) || !keys.Contains(key)) continue;
+                ids.UnionWith(FileIds(change["before"]));
+                ids.UnionWith(FileIds(change["after"]));
+            }
+        }
+        return ids;
+    }
+
+    private static IEnumerable<Guid> FileIds(JsonNode? value)
+    {
+        if (value is not JsonArray files) yield break;
+        foreach (var item in files.OfType<JsonObject>())
+            if (item["id"] is JsonValue id && id.TryGetValue<string>(out var text) && Guid.TryParse(text, out var fileId))
+                yield return fileId;
     }
 
     /// <summary>
@@ -119,15 +148,28 @@ public sealed class ApprovalFileService(
     /// 返回规范化后的数据与引用的文件（已跟踪，可修改绑定）。
     /// </summary>
     internal async Task<(string Json, List<ApprovalFile> Files)> ResolveAsync(FormSchema schema, string json, string userId,
-        Guid? instanceId, Guid? draftId, bool lenient, CancellationToken ct)
+        Guid? instanceId, Guid? draftId, bool lenient, CancellationToken ct, string? previousFormJson = null)
     {
         var fields = schema.Fields.Where(f => f.Type == FormFieldType.File).ToList();
         if (fields.Count == 0 || JsonNode.Parse(json) is not JsonObject form) return (json, []);
 
-        var ids = fields.SelectMany(f => form[f.Key] as JsonArray ?? [])
-            .Select(i => Guid.TryParse(i?["id"]?.GetValue<string>(), out var id) ? id : Guid.Empty)
+        var ids = fields.SelectMany(f => FileIds(form[f.Key]))
             .Where(id => id != Guid.Empty).Distinct().ToList();
         var found = ids.Count == 0 ? [] : await _db.Set<ApprovalFile>().Where(f => ids.Contains(f.Id)).ToDictionaryAsync(f => f.Id, ct);
+        var inaccessible = new HashSet<Guid>();
+        if (instanceId is { } current && previousFormJson is not null)
+        {
+            // An unchanged field retains its existing attachment. Copying a bound attachment into
+            // another field requires visibility of that attachment to the current reviewer.
+            var before = JsonNode.Parse(previousFormJson) as JsonObject;
+            inaccessible.UnionWith(fields.SelectMany(f => FileIds(form[f.Key]).Except(FileIds(before?[f.Key])))
+                .Where(id => found.TryGetValue(id, out var file) && file.InstanceId == current && file.UploadedBy != userId));
+            if (inaccessible.Count > 0 && await query.GetInstanceForViewerAsync(current, new(userId, false), ct) is { } detail)
+            {
+                if (detail.HiddenFields.Count == 0) inaccessible.Clear();
+                else inaccessible.ExceptWith(VisibleFileIds(schema, detail));
+            }
+        }
 
         var errors = new Dictionary<string, string[]>();
         var used = new List<ApprovalFile>();
@@ -138,8 +180,8 @@ public sealed class ApprovalFileService(
             foreach (var item in form[field.Key] as JsonArray ?? [])
             {
                 var id = Guid.TryParse(item?["id"]?.GetValue<string>(), out var g) ? g : Guid.Empty;
-                var problem = !found.TryGetValue(id, out var file) ? "附件不存在"
-                    : !Usable(file, userId, instanceId, draftId) ? $"附件「{file.FileName}」不可用"
+                var problem = !found.TryGetValue(id, out var file) || !Usable(file, userId, instanceId, draftId) || inaccessible.Contains(id)
+                    ? "附件不存在或不可用"
                     : !Accepts(field, file.FileName) ? $"附件「{file.FileName}」的类型不在允许范围（{string.Join("、", field.Accept)}）"
                     : null;
                 if (problem is not null)
@@ -195,6 +237,7 @@ public sealed class ApprovalFileService(
         if (name.Length > MaxFileNameLength)
         {
             var extension = Path.GetExtension(name);
+            if (extension.Length >= MaxFileNameLength) throw new ApprovalException("文件扩展名过长");
             name = name[..(MaxFileNameLength - extension.Length)] + extension;
         }
         return name.Length == 0 ? "file" : name;

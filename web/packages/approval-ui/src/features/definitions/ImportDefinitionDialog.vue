@@ -15,28 +15,35 @@ const intent = useCommandIntent('import-definition')
 const file = shallowRef<Awaited<ReturnType<typeof readDefinitionFile>>>()
 const targetKey = shallowRef('')
 const busy = shallowRef(false)
+const validating = shallowRef(false)
 const valid = shallowRef(false)
 const error = shallowRef('')
 const canValidate = computed(() => file.value && /^[A-Za-z0-9._-]{1,100}$/.test(targetKey.value))
 let generation = 0
+let previewGeneration = 0
+
+function invalidatePreview() {
+  previewGeneration++
+  validating.value = false
+  valid.value = false
+  error.value = ''
+}
 
 watch([visible, userKey], () => {
   generation++
   file.value = undefined
   targetKey.value = ''
   busy.value = false
-  error.value = ''
-  valid.value = false
+  invalidatePreview()
 }, { flush: 'sync' })
-watch(targetKey, () => { valid.value = false; error.value = '' })
+watch(targetKey, invalidatePreview, { flush: 'sync' })
 
 async function choose(event: Event) {
   const input = event.target as HTMLInputElement
   const selected = input.files?.[0]
   input.value = ''
   file.value = undefined
-  valid.value = false
-  error.value = ''
+  invalidatePreview()
   if (!selected) return
   const current = ++generation
   busy.value = true
@@ -49,17 +56,19 @@ async function choose(event: Event) {
 }
 
 async function validate() {
-  if (!file.value || !canValidate.value || busy.value) return
-  const current = generation
-  busy.value = true
+  if (!file.value || !canValidate.value || busy.value || validating.value) return
+  const key = targetKey.value
+  const current = previewGeneration
+  const isCurrent = () => current === previewGeneration && key === targetKey.value
+  validating.value = true
   error.value = ''
   valid.value = false
   try {
-    await api.validateDefinitionImport(targetKey.value, file.value.packageBase64)
-    if (current === generation) valid.value = true
+    await api.validateDefinitionImport(key, file.value.packageBase64)
+    if (isCurrent()) valid.value = true
   } catch (cause) {
-    if (current === generation) error.value = errorMessage(cause)
-  } finally { if (current === generation) busy.value = false }
+    if (isCurrent()) error.value = errorMessage(cause)
+  } finally { if (isCurrent()) validating.value = false }
 }
 
 function finish(result: unknown) {
@@ -70,7 +79,7 @@ function finish(result: unknown) {
 }
 
 async function submit() {
-  if (!file.value || !canValidate.value || busy.value) return
+  if (!file.value || !canValidate.value || busy.value || validating.value) return
   const current = generation
   const key = targetKey.value
   const packageBase64 = file.value.packageBase64
@@ -103,8 +112,8 @@ async function submit() {
     <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon />
     <el-alert v-else-if="valid" title="预检通过，可以创建未发布草稿" type="success" :closable="false" show-icon />
     <template #footer>
-      <el-button :disabled="!canValidate || busy" @click="validate">检查文件和宿主依赖</el-button>
-      <el-button type="primary" :loading="busy" :disabled="!canValidate || (!valid && !intent.hasPending(targetKey))" @click="submit">导入为草稿</el-button>
+      <el-button :loading="validating" :disabled="!canValidate || busy" @click="validate">检查文件和宿主依赖</el-button>
+      <el-button type="primary" :loading="busy" :disabled="!canValidate || validating || (!valid && !intent.hasPending(targetKey))" @click="submit">导入为草稿</el-button>
     </template>
   </el-dialog>
 </template>

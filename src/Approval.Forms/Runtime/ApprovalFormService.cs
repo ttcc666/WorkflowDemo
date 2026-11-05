@@ -183,7 +183,8 @@ public sealed partial class ApprovalFormService(
         var normalized = await NormalizeAsync(schema, JsonSerializer.SerializeToElement(merged), ct,
             editable.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase));
         // 附件：保留本实例已有的，新上传的须为审批人本人上传
-        var (resolved, attachments) = await files.ResolveAsync(schema, normalized, userId, instance.Id, null, false, ct);
+        var (resolved, attachments) = await files.ResolveAsync(schema, normalized, userId, instance.Id, null, false, ct,
+            previousFormJson: instance.FormDataJson);
         var json = KeepNonFormVariables(instance.FormDataJson, resolved);
         var changes = FieldVisibility.Diff(schema, instance.FormDataJson, json);
         if (changes.Count == 0) return null;

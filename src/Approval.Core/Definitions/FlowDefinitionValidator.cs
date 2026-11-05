@@ -37,7 +37,7 @@ public static partial class FlowDefinitionValidator
             return errors;
         }
 
-        if (!nodes.TryGetValue(definition.StartNodeId, out var start) || start.Type != NodeType.Start)
+        if (string.IsNullOrWhiteSpace(definition.StartNodeId) || !nodes.TryGetValue(definition.StartNodeId, out var start) || start.Type != NodeType.Start)
             errors.Add($"StartNodeId '{definition.StartNodeId}' 必须指向 Start 类型节点");
         if (nodes.Values.Count(n => n.Type == NodeType.Start) != 1)
             errors.Add("流程必须有且仅有一个 Start 节点");
@@ -143,14 +143,24 @@ public static partial class FlowDefinitionValidator
         }
     }
 
-    private static void ValidateNotifications(List<string> errors, string owner, List<NotificationRule> rules, NodeType? nodeType,
+    private static void ValidateNotifications(List<string> errors, string owner, List<NotificationRule>? rules, NodeType? nodeType,
         FlowValidationContext context, IReadOnlySet<string>? userFields)
     {
+        if (rules is null)
+        {
+            errors.Add($"{owner}的通知规则必须为数组");
+            return;
+        }
         var allowedEvents = NotificationDefaults.AllowedEvents(nodeType);
         for (var i = 0; i < rules.Count; i++)
         {
             var rule = rules[i];
             var name = $"{owner}的第 {i + 1} 条通知";
+            if (rule?.Events is null || rule.Channels is null || rule.Recipients is null || rule.Recipients.Any(r => string.IsNullOrWhiteSpace(r?.Type)))
+            {
+                errors.Add($"{name}包含空规则、事件、接收人或渠道配置");
+                continue;
+            }
 
             if (allowedEvents.Count == 0)
             {
@@ -190,21 +200,26 @@ public static partial class FlowDefinitionValidator
         // 0 = 未访问, 1 = 访问中, 2 = 已完成；DFS 中遇到“访问中”的节点即存在环
         var state = new Dictionary<string, int>();
 
-        bool Visit(string id)
+        var pending = new Stack<(string Id, bool Leaving)>();
+        pending.Push((definition.StartNodeId, false));
+        while (pending.TryPop(out var frame))
         {
+            var (id, leaving) = frame;
+            if (leaving)
+            {
+                state[id] = 2;
+                continue;
+            }
             if (state.TryGetValue(id, out var s))
             {
-                if (s == 2) return true;
+                if (s == 2) continue;
                 errors.Add($"流程存在环路（回到节点 '{id}'）");
-                return false;
+                return;
             }
             state[id] = 1;
-            if (FlowStructure.Successors(definition.Nodes[id]).Any(next => !Visit(next))) return false;
-            state[id] = 2;
-            return true;
+            pending.Push((id, true));
+            foreach (var next in FlowStructure.Successors(definition.Nodes[id]).Reverse()) pending.Push((next, false));
         }
-
-        if (!Visit(definition.StartNodeId)) return;
 
         foreach (var unreachable in definition.Nodes.Keys.Where(k => !state.ContainsKey(k)))
             errors.Add($"节点 '{unreachable}' 从开始节点不可达");

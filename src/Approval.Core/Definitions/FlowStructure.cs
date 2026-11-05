@@ -18,7 +18,9 @@ public sealed class FlowStructure
     private FlowStructure(FlowDefinition flow)
     {
         _flow = flow;
-        Visit(flow.StartNodeId, []);
+        var pending = new Stack<(string Id, IReadOnlyList<ParallelScope> Scope)>();
+        pending.Push((flow.StartNodeId, []));
+        while (pending.TryPop(out var frame)) Visit(frame.Id, frame.Scope, pending);
         foreach (var fork in flow.Nodes.Values.Where(n => n.Type == NodeType.Parallel && _scopes.ContainsKey(n.Id)))
         {
             if (!_joinOfFork.ContainsKey(fork.Id)) _errors.Add($"并行节点 '{fork.Id}' 的分支没有汇聚到合并节点");
@@ -65,13 +67,13 @@ public sealed class FlowStructure
             ? node.Branches.Select(b => b.Next).Distinct()
             : node.Next is null ? [] : [node.Next];
 
-    private void Visit(string id, IReadOnlyList<ParallelScope> scope)
+    private void Visit(string id, IReadOnlyList<ParallelScope> scope, Stack<(string Id, IReadOnlyList<ParallelScope> Scope)> pending)
     {
         if (!_flow.Nodes.TryGetValue(id, out var node)) return;
 
         if (node.Type == NodeType.Join)
         {
-            VisitJoin(node, scope);
+            VisitJoin(node, scope, pending);
             return;
         }
 
@@ -93,17 +95,17 @@ public sealed class FlowStructure
         switch (node.Type)
         {
             case NodeType.Parallel:
-                for (var i = 0; i < node.Branches.Count; i++)
-                    Visit(node.Branches[i].Next, [.. scope, new ParallelScope(id, i)]);
+                for (var i = node.Branches.Count - 1; i >= 0; i--)
+                    pending.Push((node.Branches[i].Next, [.. scope, new ParallelScope(id, i)]));
                 break;
 
             default:
-                foreach (var next in Successors(node)) Visit(next, scope);
+                foreach (var next in Successors(node).Reverse()) pending.Push((next, scope));
                 break;
         }
     }
 
-    private void VisitJoin(FlowNode join, IReadOnlyList<ParallelScope> scope)
+    private void VisitJoin(FlowNode join, IReadOnlyList<ParallelScope> scope, Stack<(string Id, IReadOnlyList<ParallelScope> Scope)> pending)
     {
         if (scope.Count == 0)
         {
@@ -126,6 +128,6 @@ public sealed class FlowStructure
             return;
         }
         _scopes[join.Id] = outer;
-        if (join.Next is not null) Visit(join.Next, outer);
+        if (join.Next is not null) pending.Push((join.Next, outer));
     }
 }

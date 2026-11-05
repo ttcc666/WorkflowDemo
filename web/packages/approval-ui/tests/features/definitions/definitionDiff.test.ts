@@ -32,7 +32,7 @@ describe('compareDefinitionVersions', () => {
     const target = version(2, flow())
     target.definitionJson = JSON.stringify(JSON.parse(target.definitionJson), (_, value) =>
       value && typeof value === 'object' && !Array.isArray(value) ? Object.fromEntries(Object.entries(value).reverse()) : value, 2)
-    expect(compareDefinitionVersions(base, target)).toMatchObject({ changes: [], nodes: { added: 0, removed: 0, modified: 0 } })
+    expect(compareDefinitionVersions(base, target)).toMatchObject({ changes: [], nodes: { added: 0, removed: 0, modified: 0, moved: 0 } })
   })
 
   it('reports deterministic node, rule, route and form changes with before and after values', () => {
@@ -53,7 +53,7 @@ describe('compareDefinitionVersions', () => {
     const target = version(2, after)
     target.name = 'Operations Expenses'
     const result = compareDefinitionVersions(base, target)
-    expect(result.nodes).toEqual({ added: 1, removed: 1, modified: 4 })
+    expect(result.nodes).toEqual({ added: 1, removed: 1, modified: 4, moved: 0 })
     expect(result.changes.map(({ path }) => path)).toEqual([
       '/name', '/settings/category', '/form/fields/amount/required', '/nodes/extra', '/nodes/join/next',
       '/nodes/review/approvers/1/value', '/nodes/review/approvers/2/value', '/nodes/review/fieldPermissions',
@@ -62,7 +62,27 @@ describe('compareDefinitionVersions', () => {
     ])
     expect(result.changes).toContainEqual({ kind: 'modified', area: 'rule', nodeId: 'review', path: '/nodes/review/mode', before: 'Sequential', after: 'All' })
     expect(compareDefinitionVersions(base, target).changes).toEqual(result.changes)
-    expect(compareDefinitionVersions(target, base).nodes).toEqual({ added: 1, removed: 1, modified: 4 })
+    expect(compareDefinitionVersions(target, base).nodes).toEqual({ added: 1, removed: 1, modified: 4, moved: 0 })
+  })
+
+  it.each([
+    { name: 'layout only', moved: true, modified: false },
+    { name: 'business only', moved: false, modified: true },
+    { name: 'layout and business', moved: true, modified: true },
+  ])('counts $name changes once per node in each category', ({ moved, modified }) => {
+    const before = flow()
+    before.nodes.review!.position = { x: 10, y: 20 }
+    const after = structuredClone(before)
+    if (moved) after.nodes.review!.position = { x: 30, y: 40 }
+    if (modified) after.nodes.review!.mode = 'All'
+
+    const result = compareDefinitionVersions(version(1, before), version(2, after))
+    expect(result.nodes).toEqual({ added: 0, removed: 0, modified: Number(modified), moved: Number(moved) })
+    expect(result.changes.map(({ area, nodeId, path }) => ({ area, nodeId, path }))).toEqual([
+      ...(modified ? [{ area: 'rule', nodeId: 'review', path: '/nodes/review/mode' }] : []),
+      ...(moved ? [{ area: 'layout', nodeId: 'review', path: '/nodes/review/position/x' },
+        { area: 'layout', nodeId: 'review', path: '/nodes/review/position/y' }] : []),
+    ])
   })
 
   it('distinguishes branch additions, removals and reordering', () => {

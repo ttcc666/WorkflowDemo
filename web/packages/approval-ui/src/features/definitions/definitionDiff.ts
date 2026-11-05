@@ -120,7 +120,7 @@ export function compareDefinitionVersions(base: ApprovalDefinition, target: Appr
   assertSupportedFlowVersion(after)
 
   const changes: DefinitionChange[] = []
-  const nodes = { added: 0, removed: 0, modified: 0 }
+  const nodes = { added: 0, removed: 0, modified: 0, moved: 0 }
   const record = (area: DefinitionChange['area'], nodeId?: string): Changes => (path, before, after) => {
     changes.push({ area, nodeId, path, before, after, kind: before === undefined ? 'added' : after === undefined ? 'removed' : 'modified' })
   }
@@ -143,11 +143,14 @@ export function compareDefinitionVersions(base: ApprovalDefinition, target: Appr
     const start = changes.length
     compareBranches(`${path}/branches`, left.branches ?? [], right.branches ?? [], record('route', id))
     for (const key of keys(left, right) as (keyof typeof left)[]) {
-      if (key === 'branches' || key === 'id') continue
-      const area = key === 'position' ? 'layout' : key === 'next' ? 'route' : key === 'fieldPermissions' ? 'form' : ruleFields.has(key) ? 'rule' : 'node'
+      if (key === 'branches' || key === 'id' || key === 'position') continue
+      const area = key === 'next' ? 'route' : key === 'fieldPermissions' ? 'form' : ruleFields.has(key) ? 'rule' : 'node'
       compare(pathFor(path, key), left[key], right[key], record(area, id))
     }
     if (changes.length !== start) nodes.modified++
+    const beforeLayout = changes.length
+    compare(`${path}/position`, left.position ?? null, right.position ?? null, record('layout', id))
+    if (changes.length !== beforeLayout) nodes.moved++
   }
   return { before, after, changes, nodes }
 }

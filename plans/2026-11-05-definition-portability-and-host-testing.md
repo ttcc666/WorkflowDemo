@@ -1,6 +1,25 @@
 # WorkflowDemo 阶段二产品化实施计划
 
-日期 2026-11-05。勘察基线 `main` / `df1739f2e0eb171bfd91208b9ab2e82f01d76fd3`，开始时工作区干净。本文件记录待实施范围与验收标准。按仓库高风险变更约定，在新会话依次实施 P1、P2、P3，每包通过对应门禁后再进入下一包。
+日期 2026-11-05。勘察基线 `main` / `df1739f2e0eb171bfd91208b9ab2e82f01d76fd3`，开始时工作区干净。P1、P2、P3 已随 `480143de63ee91139ffbc6d5880e0221ac488a97` 实施。下文保留原始实施清单，实际交付与验收以本节记录为准。
+
+## 最终验收记录
+
+| 工作包 | 已实现 | 已验证 |
+|---|---|---|
+| P1 版本对比 | 已发布快照的结构化差异、筛选、交换及只读画布定位 | `definitionDiff.test.ts` 验证格式、字段、规则和路由差异。`ReadVersionSnapshots_ForComparison_LeavesGovernanceAndRuntimeUnchanged` 验证读取无写入。包浏览器验证交换、筛选和定位 |
+| P2 导入导出 | 单个 JSON 包、只读预检、目标新 Key 草稿、原键恢复 | `DefinitionTransferEndpointTests` 验证权限、格式与大小、Forms、回滚和提交结果未知。`ConcurrentImportsWithDifferentKeys_CommitExactlyOneUnpublishedDraft` 验证并发。包浏览器验证导出、缺少 Resolver、丢失响应恢复 |
+| P3 宿主测试工具包 | 独立 `Approval.Testing` NuGet、`TestingHost`、测试替身与公开契约 | `TestingHost` 22 项、`EmbeddedHost` 18 项通过。`verify-packages.ps1` 核对依赖图、实际还原的包哈希与场景结果，Certificate、ReferenceHost 和 npm 独立消费者通过 |
+
+| `480143d` 的 CI 检查 | 通过 | 失败 | 跳过 |
+|---|---:|---:|---:|
+| Windows .NET Core / HTTP / SQLite / Certificate | 613 / 135 / 82 / 59 | 0 | 0 |
+| MySQL / PostgreSQL / SQL Server | 各 82 | 0 | 0 |
+| UI / Demo Vitest | 252 / 6 | 0 | 0 |
+| Playwright 包浏览器 | 9 | 0 | 0 |
+
+Windows `./eng/verify.ps1` 完成 Release 构建、模型漂移检查、ReferenceHost、契约和独立包验收。服务数据库执行各自的 `./eng/verify-databases.ps1 -Provider <Provider>`。以上数量来自对应作业日志。 [基准提交的 GitHub Actions](https://github.com/ttcc666/WorkflowDemo/actions/runs/42065839666)
+
+生产加固审查另行跟踪布局统计、导入预检乱序，以及单实例部署的运行边界。上述基线结果只对应 `480143d`。 [生产准备审查](2026-11-production-readiness.md)
 
 ## 范围与不变量
 

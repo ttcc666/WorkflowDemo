@@ -75,6 +75,9 @@ public sealed class DefinitionTransferEndpointTests
     [InlineData("schema", "协议版本")]
     [InlineData("duplicates", "UTF-8 JSON")]
     [InlineData("nodes", "missing")]
+    [InlineData("null-start", "StartNodeId")]
+    [InlineData("null-notifications", "通知规则必须为数组")]
+    [InlineData("null-notification-member", "空规则、事件、接收人或渠道")]
     [InlineData("resolver", "MissingResolver")]
     [InlineData("channel", "MissingChannel")]
     [InlineData("forms", "可选模块")]
@@ -89,6 +92,9 @@ public sealed class DefinitionTransferEndpointTests
             "schema" => Package(Flow.Replace("\"schemaVersion\":1", "\"schemaVersion\":2")),
             "duplicates" => Package(Flow.Replace("\"schemaVersion\":1", "\"schemaVersion\":1,\"schemaVersion\":1")),
             "nodes" => Package(Flow.Replace("\"next\":\"end\"", "\"next\":\"missing\"")),
+            "null-start" => Package(Flow.Replace("\"startNodeId\":\"start\"", "\"startNodeId\":null")),
+            "null-notifications" => Package(Flow.Replace("\"nodes\":", "\"notifications\":null,\"nodes\":")),
+            "null-notification-member" => Package(Flow.Replace("\"approvers\":", "\"notifications\":[{\"events\":null}],\"approvers\":")),
             "resolver" => Package(Flow.Replace("\"type\":\"User\"", "\"type\":\"MissingResolver\"")),
             "channel" => Package(Flow.Replace("\"approvers\":", "\"notifications\":[{\"events\":[\"Enter\"],\"recipients\":[{\"type\":\"User\",\"value\":\"bob\"}],\"channels\":[\"MissingChannel\"]}],\"approvers\":")),
             "forms" => Package(Flow.Replace("\"nodes\":", "\"form\":{\"fields\":[{\"key\":\"quantity\",\"type\":\"Number\",\"label\":\"数量\"}]},\"nodes\":")),

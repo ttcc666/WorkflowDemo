@@ -127,6 +127,67 @@ test('packaged definition download imports as a draft and recovers a lost respon
   expect(audit.items).toHaveLength(1)
 })
 
+test('definition import ignores out-of-order preflights after changing the target and reopening', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('approval-demo-user', 'admin'))
+  await page.goto('/definitions')
+  const open = page.getByRole('button', { name: '导入流程定义', exact: true })
+  await open.click()
+  const dialog = page.getByRole('dialog', { name: '导入流程定义', exact: true })
+  const check = dialog.getByRole('button', { name: '检查文件和宿主依赖' })
+  const submit = dialog.getByRole('button', { name: '导入为草稿' })
+  const target = dialog.getByRole('textbox')
+  const success = dialog.getByText('预检通过，可以创建未发布草稿')
+  const source = { key: 'source', name: '原流程', version: 1, publishedAt: '2026-01-01T00:00:00Z' }
+  const file = { name: 'source.approval.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify({
+    packageVersion: 1, kind: 'approval-definition', source,
+  })) }
+  const old = Promise.withResolvers<void>()
+  const closed = Promise.withResolvers<void>()
+  await page.route('**/definitions/*/import/validate', async route => {
+    const key = new URL(route.request().url()).pathname.split('/').at(-3)
+    if (key === 'old') await old.promise
+    if (key === 'closed') await closed.promise
+    if (key === 'occupied') {
+      await route.fulfill({ status: 409, json: { code: 'Conflict', title: '目标标识已占用' } })
+    } else await route.fulfill({ json: source })
+  })
+
+  async function preview(key: string) {
+    await target.fill(key)
+    const started = page.waitForRequest(`**/definitions/${key}/import/validate`)
+    await check.click()
+    await started
+  }
+  async function finish(key: string, release: () => void) {
+    const completed = page.waitForResponse(`**/definitions/${key}/import/validate`)
+    release()
+    expect(await (await completed).finished()).toBeNull()
+    await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))))
+  }
+
+  try {
+    await dialog.locator('input[type=file]').setInputFiles(file)
+    await preview('old')
+    await preview('occupied')
+    await expect(dialog.getByText('目标标识已占用')).toBeVisible()
+    await finish('old', old.resolve)
+    await expect(target).toHaveValue('occupied')
+    await expect(submit).toBeDisabled()
+
+    await preview('closed')
+    await dialog.locator('.el-dialog__headerbtn').click()
+    await open.click()
+    await dialog.locator('input[type=file]').setInputFiles(file)
+    await target.fill('unvalidated')
+    await finish('closed', closed.resolve)
+    await expect(success).toHaveCount(0)
+    await expect(submit).toBeDisabled()
+  } finally {
+    old.resolve()
+    closed.resolve()
+  }
+})
+
 test('packaged designer publishes a workflow and three approvals activate the certificate', async ({ page, request }, info) => {
   test.setTimeout(120000)
   const errors: string[] = []

@@ -78,7 +78,7 @@ function locate(id: string) {
     </div>
     <el-alert v-if="error" type="error" :closable="false" :title="error" />
     <template v-if="result">
-      <p aria-live="polite">新增节点 {{ result.nodes.added }} · 删除节点 {{ result.nodes.removed }} · 修改节点 {{ result.nodes.modified }} · 规则变化 {{ rulesChanged }}</p>
+      <p aria-live="polite">新增节点 {{ result.nodes.added }} · 删除节点 {{ result.nodes.removed }} · 业务修改节点 {{ result.nodes.modified }} · 布局变化节点 {{ result.nodes.moved }} · 规则变化 {{ rulesChanged }}</p>
       <el-empty v-if="!result.changes.length" description="两个版本的配置一致" :image-size="72" />
       <template v-else>
         <div class="comparison__toolbar">

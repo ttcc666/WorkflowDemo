@@ -78,9 +78,11 @@ internal sealed class AtomicStrategyFactory(ExecutionStrategyDependencies depend
 internal sealed class AtomicFaults : DbTransactionInterceptor
 {
     public int BeforeCommit, AfterCommit, BusinessCalls, ActionCalls;
+    public int FailActionCommit;
     public bool BlockVerification, FailVerificationAfterCommit, FailCallback, AsyncSaveThenFail, IgnoreActionCancellation;
     public readonly ConcurrentBag<Guid> Contexts = [];
     public readonly ConcurrentBag<Guid> OutboxIds = [];
+    public readonly ConcurrentBag<Guid> DeliveredEventIds = [];
     public TaskCompletionSource? Entered, Release;
     public override ValueTask<InterceptionResult> TransactionCommittingAsync(DbTransaction transaction, TransactionEventData eventData, InterceptionResult result, CancellationToken ct = default)
     {
@@ -114,6 +116,7 @@ internal sealed class AtomicAction(AtomicContractContext db, AtomicFaults faults
     public async Task HandleAsync(ApprovalEvent approvalEvent, CancellationToken ct)
     {
         if (approvalEvent.EventType != "Submit") return;
+        faults.DeliveredEventIds.Add(approvalEvent.Id);
         var number = Interlocked.Increment(ref faults.ActionCalls);
         if (number == 1 && faults.Entered is not null)
         {
@@ -124,6 +127,11 @@ internal sealed class AtomicAction(AtomicContractContext db, AtomicFaults faults
         db.Add(new AtomicHostRecord { Id = Guid.NewGuid(), Value = 20 });
         await db.SaveChangesAsync(ct);
         if (faults.AsyncSaveThenFail) throw new InvalidOperationException("async action failed after saving");
+        switch (Interlocked.Exchange(ref faults.FailActionCommit, 0))
+        {
+            case 1: Interlocked.Exchange(ref faults.BeforeCommit, 1); break;
+            case 2: Interlocked.Exchange(ref faults.AfterCommit, 1); break;
+        }
     }
 }
 
@@ -272,6 +280,45 @@ public sealed partial class DatabaseContractTests
     }
 
     [Fact]
+    public async Task ConcurrentDraftPublicationsCreateOneVersionAndPreserveHistory()
+    {
+        var faults = new AtomicFaults();
+        await using var first = await AtomicHostAsync(faults);
+        await using var second = await AtomicHostAsync(faults, initializeDatabase: false);
+        const string key = "doc";
+        var resource = new ApprovalResource { DefinitionKey = key };
+        var draft = await AtomicRun(first, "admin", sp => sp.GetRequiredService<IApprovalCommandExecutor>().ExecuteAsync(
+            new("definition.save", key, "draft", AtomicFlow, ApprovalPermissions.DefinitionDesign, resource),
+            (fresh, ct) => fresh.GetRequiredService<ApprovalDefinitionService>().SaveDesignDraftAsync(key, "Draft", AtomicFlow, 0, ct: ct)));
+        var start = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        async Task<(int? Version, ApprovalErrorCode? Error)> Publish(ServiceProvider host, string operationId)
+        {
+            await start.Task;
+            try
+            {
+                return (await AtomicRun(host, "admin", sp => sp.GetRequiredService<IApprovalCommandExecutor>().ExecuteAsync(
+                    new("definition.publish", key, operationId, draft.Revision, ApprovalPermissions.DefinitionPublish, resource),
+                    async (fresh, ct) => (await fresh.GetRequiredService<ApprovalDefinitionService>().PublishDesignDraftAsync(key, draft.Revision, ct: ct)).Version)), null);
+            }
+            catch (ApprovalException ex) { return (null, ex.Code); }
+        }
+
+        var publications = new[] { Publish(first, "first"), Publish(second, "second") };
+        start.SetResult();
+        var outcomes = await Task.WhenAll(publications);
+        Assert.Equal(2, Assert.Single(outcomes, outcome => outcome.Version is not null).Version);
+        Assert.Equal(ApprovalErrorCode.Conflict, Assert.Single(outcomes, outcome => outcome.Error is not null).Error);
+        await using var db = fixture.CreateStorage();
+        var versions = await db.Set<ApprovalDefinition>().Where(d => d.Key == key).OrderBy(d => d.Version).ToListAsync();
+        Assert.Equal(new[] { 1, 2 }, versions.Select(d => d.Version));
+        Assert.Equal(AtomicFlow, versions[0].DefinitionJson);
+        Assert.Equal(versions[1].Id, (await db.Set<ApprovalDefinitionManagement>().SingleAsync(d => d.Key == key)).ActiveDefinitionId);
+        Assert.Equal(1, await db.Set<ApprovalDefinitionAudit>().CountAsync(a => a.Action == DefinitionAuditAction.Published));
+        Assert.Equal(1, await db.Set<ApprovalOperation>().CountAsync(o => o.Kind == "definition.publish"));
+    }
+
+    [Fact]
     public async Task AtomicCommands_ReplayStillRequiresCurrentReadAuthorization()
     {
         var faults = new AtomicFaults(); await using var host = await AtomicHostAsync(faults);
@@ -378,6 +425,81 @@ public sealed partial class DatabaseContractTests
     {
         await using var scope = await host.GetRequiredService<IApprovalScopeFactory>().CreateAsync();
         await scope.ServiceProvider.GetRequiredService<ApprovalOutboxService>().ProcessDueAsync(ct);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task OutboxDatabaseConfirmationFaultPreservesDeliveryIdentityAndOneLocalEffect(bool alreadyCommitted)
+    {
+        var faults = new AtomicFaults();
+        await using var host = await AtomicHostAsync(faults);
+        await AtomicStart(host, faults, "start");
+        var eventId = Assert.Single(faults.OutboxIds);
+        faults.FailActionCommit = alreadyCommitted ? 2 : 1;
+
+        await DispatchAtomic(host);
+
+        Assert.Equal(alreadyCommitted ? 1 : 2, faults.ActionCalls);
+        Assert.All(faults.DeliveredEventIds, id => Assert.Equal(eventId, id));
+        await AtomicRun(host, "alice", async sp =>
+        {
+            var db = sp.GetRequiredService<AtomicContractContext>();
+            var message = await db.Set<ApprovalOutboxMessage>().SingleAsync(m => m.Id == eventId);
+            Assert.Equal(OutboxStatus.Succeeded, message.Status);
+            Assert.Equal(1, message.Attempts);
+            Assert.Equal(1, await db.Set<AtomicHostRecord>().CountAsync(row => row.Value == 20));
+            return true;
+        });
+    }
+
+    [Fact]
+    public async Task OverlappingDispatchDoesNotOverwriteTheActiveHeartbeatAndCancellationCanRecover()
+    {
+        var faults = new AtomicFaults
+        {
+            Entered = new(TaskCreationOptions.RunContinuationsAsynchronously),
+            Release = new(TaskCreationOptions.RunContinuationsAsynchronously),
+            IgnoreActionCancellation = true
+        };
+        await using var host = await AtomicHostAsync(faults);
+        await AtomicStart(host, faults, "start");
+        var dispatcher = host.GetRequiredService<Approval.Core.Background.ApprovalOutboxDispatcher>();
+        var state = host.GetRequiredService<Approval.Core.Diagnostics.ApprovalBackgroundState>();
+        using var stop = new CancellationTokenSource();
+        var active = dispatcher.DispatchOnceAsync(stop.Token);
+        try
+        {
+            await faults.Entered.Task.WaitAsync(TimeSpan.FromSeconds(30));
+            var running = Assert.Single(state.Snapshot());
+            Assert.Null(running.CompletedAt);
+            stop.Cancel();
+            await dispatcher.DispatchOnceAsync();
+            Assert.Equal(running, Assert.Single(state.Snapshot()));
+            Assert.Equal(1, faults.ActionCalls);
+        }
+        finally
+        {
+            stop.Cancel();
+            faults.Release.TrySetResult();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => active);
+        }
+        var canceled = Assert.Single(state.Snapshot());
+        Assert.False(canceled.Succeeded);
+        Assert.NotNull(canceled.CompletedAt);
+
+        await dispatcher.DispatchOnceAsync();
+        Assert.True(Assert.Single(state.Snapshot()).Succeeded);
+        Assert.Equal(2, faults.ActionCalls);
+        await AtomicRun(host, "alice", async sp =>
+        {
+            var db = sp.GetRequiredService<AtomicContractContext>();
+            var message = await db.Set<ApprovalOutboxMessage>().SingleAsync(m => m.Description == "Submit");
+            Assert.Equal(OutboxStatus.Succeeded, message.Status);
+            Assert.Equal(1, message.Attempts);
+            Assert.Equal(2, await db.Set<AtomicHostRecord>().CountAsync());
+            return true;
+        });
     }
     [Fact]
     public async Task AtomicOutbox_SaveThenFail_RollsBackActionEvenWithRetryStrategy()
