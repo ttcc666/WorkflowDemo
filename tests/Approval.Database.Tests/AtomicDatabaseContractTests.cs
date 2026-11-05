@@ -17,6 +17,7 @@ public sealed class AtomicHostRecord
 {
     public Guid Id { get; set; }
     public int Value { get; set; }
+    public Guid? ParentId { get; set; }
 }
 public sealed class AtomicContractContext(DbContextOptions<AtomicContractContext> options) : DbContext(options)
 {
@@ -26,8 +27,14 @@ public sealed class AtomicContractContext(DbContextOptions<AtomicContractContext
     protected override void OnModelCreating(ModelBuilder model)
     {
         model.ConfigureApproval().ConfigureApprovalForms();
-        model.Entity<AtomicHostRecord>(b => { b.ToTable("AtomicHostRecords"); b.HasKey(r => r.Id); b.Property(r => r.Id).HasConversion<string>().HasMaxLength(36).IsUnicode(false);
-            });
+        model.Entity<AtomicHostRecord>(b =>
+        {
+            b.ToTable("AtomicHostRecords");
+            b.HasKey(r => r.Id);
+            b.Property(r => r.Id).HasConversion<string>().HasMaxLength(36).IsUnicode(false);
+            b.Property(r => r.ParentId).HasConversion<string>().HasMaxLength(36).IsUnicode(false);
+            b.HasOne<AtomicHostRecord>().WithMany().HasForeignKey(r => r.ParentId).OnDelete(DeleteBehavior.NoAction);
+        });
     }
 }
 internal sealed class AtomicResolver : IApprovalContextResolver
@@ -135,7 +142,8 @@ public sealed partial class DatabaseContractTests
                 await schema.Database.OpenConnectionAsync(); await using var command = schema.Database.GetDbConnection().CreateCommand();
                 var q = fixture.Provider == "MySql" ? '`' : '"';
                 var table = $"{q}AtomicHostRecords{q}";
-                var create = $"CREATE TABLE {table} ({q}Id{q} varchar(36) NOT NULL PRIMARY KEY, {q}Value{q} integer NOT NULL)";
+                var create = $"CREATE TABLE {table} ({q}Id{q} varchar(36) NOT NULL PRIMARY KEY, {q}Value{q} integer NOT NULL, " +
+                    $"{q}ParentId{q} varchar(36) NULL, CONSTRAINT {q}FK_AtomicHostRecords_Parent{q} FOREIGN KEY ({q}ParentId{q}) REFERENCES {table} ({q}Id{q}))";
                 command.CommandText = fixture.Provider == "SqlServer" ? $"IF OBJECT_ID('AtomicHostRecords', 'U') IS NULL {create}" : create.Replace("CREATE TABLE", "CREATE TABLE IF NOT EXISTS");
                 await command.ExecuteNonQueryAsync(); command.CommandText = $"DELETE FROM {table}"; await command.ExecuteNonQueryAsync();
                 if (fixture.Provider == "Sqlite") { command.CommandText = "PRAGMA journal_mode=WAL"; await command.ExecuteScalarAsync(); }

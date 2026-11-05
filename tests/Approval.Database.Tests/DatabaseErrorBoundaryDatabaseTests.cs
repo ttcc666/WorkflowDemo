@@ -3,9 +3,13 @@ using Approval.Core;
 using Approval.Core.Abstractions;
 using Approval.Core.Domain;
 using Approval.Core.Engine;
+using Microsoft.Data.SqlClient;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
+using MySql.Data.MySqlClient;
+using Npgsql;
 
 namespace Approval.Database.Tests;
 
@@ -64,12 +68,18 @@ public sealed partial class DatabaseContractTests
     [InlineData("definition-version", "GovernanceConflict")]
     [InlineData("management", "GovernanceConflict")]
     [InlineData("audit", "GovernanceConflict")]
+    [InlineData("carbon-copy-read", "CarbonCopyReadConflict")]
+    [InlineData("carbon-copy-read-primary", "CarbonCopyReadConflict")]
     [InlineData("log-primary", "none")]
     public async Task RealProviderUniqueConstraints_ClassifyOnlyOwnedBusinessIndexes(string kind, string expected)
     {
         await ClearDataAsync(); await using var db = fixture.CreateStorage();
         var definition = Definition("doc"); var first = Instance(); var second = Instance();
         first.DefinitionId = second.DefinitionId = definition.Id;
+        var carbonCopy = new ApprovalCarbonCopy
+        {
+            Id = Guid.NewGuid(), InstanceId = first.Id, NodeId = "copy", AssigneeKind = AssigneeKind.Role, AssigneeValue = "Reviewers"
+        };
         var existingId = Guid.NewGuid();
         object Row(bool duplicate) => kind switch
         {
@@ -81,21 +91,30 @@ public sealed partial class DatabaseContractTests
             "definition-version" => Definition("same-version"),
             "management" => new ApprovalDefinitionManagement { Id = Guid.NewGuid(), Key = "doc", Name = "Doc", UpdatedBy = "alice" },
             "audit" => new ApprovalDefinitionAudit { Id = Guid.NewGuid(), Key = "doc", Revision = 1, ActorId = "alice" },
+            "carbon-copy-read" or "carbon-copy-read-primary" => new ApprovalCarbonCopyRead
+            {
+                Id = kind == "carbon-copy-read-primary" ? existingId : Guid.NewGuid(),
+                CarbonCopyId = carbonCopy.Id,
+                UserId = kind == "carbon-copy-read-primary" && duplicate ? "carol" : "bob"
+            },
             _ => new ApprovalLog { Id = existingId, InstanceId = first.Id, Sequence = duplicate ? 2 : 1, OperatorId = "alice" }
         };
-        db.AddRange(definition, first, second, Row(false)); await db.SaveChangesAsync(); db.ChangeTracker.Clear();
+        db.AddRange(definition, first, second, carbonCopy, Row(false)); await db.SaveChangesAsync(); db.ChangeTracker.Clear();
         var before = await ErrorBoundaryCounts(db);
         db.Add(Row(true));
         var error = await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
+        Assert.IsAssignableFrom<DbException>(error.InnerException);
+        Assert.True(IsUnique(error));
+        await WriteConflictEvidence("owned-" + kind, new { provider = fixture.Provider, kind, expected,
+            error = DescribeDatabaseError(error), entries = error.Entries.Select(e => e.Metadata.ClrType.Name) });
         foreach (var name in new[] { "OperationConflict", "BusinessSlotConflict", "GovernanceConflict", "CarbonCopyReadConflict" })
             Assert.Equal(name == expected, OwnedConflict(name, error, db));
         await using var verify = fixture.CreateStorage(); Assert.Equal(before, await ErrorBoundaryCounts(verify));
-        await WriteConflictEvidence("owned-" + kind, new { provider = fixture.Provider, kind, expected,
-            error = DescribeDatabaseError(error), entries = error.Entries.Select(e => e.Metadata.ClrType.Name) });
     }
 
     [Theory]
     [InlineData("unique")]
+    [InlineData("foreign-key")]
     [InlineData("sql")]
     public async Task Executor_RealProviderHostErrorPreservesOriginalAndRollsBack(string kind)
     {
@@ -116,16 +135,25 @@ public sealed partial class DatabaseContractTests
                     await fresh.GetRequiredService<ApprovalEngine>().StartAsync(new("doc", "Atomic", "failed", "alice"), ct);
                     try
                     {
-                        db.Add(new AtomicHostRecord { Id = kind == "unique" ? originalId : Guid.NewGuid(), Value = 9 });
+                        db.Add(new AtomicHostRecord { Id = kind == "unique" ? originalId : Guid.NewGuid(), Value = 9,
+                            ParentId = kind == "foreign-key" ? Guid.NewGuid() : null });
                         await db.SaveChangesAsync(ct);
-                        if (kind == "sql") await db.Database.ExecuteSqlRawAsync("SELECT MissingHostColumn FROM AtomicHostRecords", ct);
+                        if (kind == "sql")
+                        {
+                            var sql = fixture.Provider == "MySql" ? "SELECT MissingHostColumn FROM `AtomicHostRecords`"
+                                : "SELECT MissingHostColumn FROM \"AtomicHostRecords\"";
+                            await db.Database.ExecuteSqlRawAsync(sql, ct);
+                        }
                     }
                     catch (Exception failure) when (failure is DbUpdateException or DbException)
                     { original = failure; throw; }
                     return true;
                 })));
         Assert.NotNull(original); Assert.Same(original, error);
-        if (kind == "unique") Assert.IsType<DbUpdateException>(error); else Assert.IsAssignableFrom<DbException>(error);
+        var native = kind == "sql" ? Assert.IsAssignableFrom<DbException>(error)
+            : Assert.IsAssignableFrom<DbException>(Assert.IsType<DbUpdateException>(error).InnerException);
+        AssertNativeHostError(kind, native);
+        await WriteConflictEvidence("host-" + kind, new { provider = fixture.Provider, kind, error = DescribeDatabaseError(error) });
         await AtomicRun(host, "alice", async sp =>
         {
             var db = sp.GetRequiredService<AtomicContractContext>();
@@ -137,6 +165,25 @@ public sealed partial class DatabaseContractTests
         });
     }
 
+    private void AssertNativeHostError(string kind, DbException error)
+    {
+        switch (fixture.Provider)
+        {
+            case "SqlServer":
+                Assert.Equal(kind switch { "unique" => 2627, "foreign-key" => 547, _ => 207 }, Assert.IsType<SqlException>(error).Number);
+                break;
+            case "PostgreSql":
+                Assert.Equal(kind switch { "unique" => "23505", "foreign-key" => "23503", _ => "42703" }, Assert.IsType<PostgresException>(error).SqlState);
+                break;
+            case "MySql":
+                Assert.Equal(kind switch { "unique" => 1062, "foreign-key" => 1452, _ => 1054 }, Assert.IsType<MySqlException>(error).Number);
+                break;
+            default:
+                Assert.Equal(kind switch { "unique" => 1555, "foreign-key" => 787, _ => 1 }, Assert.IsType<SqliteException>(error).SqliteExtendedErrorCode);
+                break;
+        }
+    }
+
     private static bool OwnedConflict(string name, DbUpdateException error, DbContext db) =>
         (bool)typeof(ApprovalEngine).Assembly.GetType("Approval.Core.Persistence.ApprovalDatabaseErrors")!
             .GetMethod(name)!.Invoke(null, [error, db])!;
@@ -144,5 +191,6 @@ public sealed partial class DatabaseContractTests
     private static async Task<int[]> ErrorBoundaryCounts(DbContext db) =>
         [await db.Set<ApprovalOperation>().CountAsync(), await db.Set<ApprovalBusinessSlot>().CountAsync(),
             await db.Set<ApprovalDefinition>().CountAsync(), await db.Set<ApprovalDefinitionManagement>().CountAsync(),
-            await db.Set<ApprovalDefinitionAudit>().CountAsync(), await db.Set<ApprovalLog>().CountAsync()];
+            await db.Set<ApprovalDefinitionAudit>().CountAsync(), await db.Set<ApprovalLog>().CountAsync(),
+            await db.Set<ApprovalCarbonCopyRead>().CountAsync()];
 }
