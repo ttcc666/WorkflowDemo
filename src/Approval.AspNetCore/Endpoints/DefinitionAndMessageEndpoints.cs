@@ -124,11 +124,10 @@ internal static class MessageEndpoints
             return new PagedResult<ApprovalOutboxMessageResponse>(pageResult.Items.Select(ApprovalOutboxMessageResponse.From).ToArray(), pageResult.Total, pageResult.Page, pageResult.PageSize);
         });
 
-        group.MapPost("/outbox/{id:guid}/retry", async (Guid id, HttpContext http, ApprovalOutboxService o, ApprovalOutboxSignal signal,
+        group.MapPost("/outbox/{id:guid}/retry", async (Guid id, HttpContext http, ApprovalOutboxService o,
             CancellationToken ct) =>
         {
             await o.RetryAsync(id, ct);
-            signal.Notify();
             return TypedResults.NoContent();
         });
     }
