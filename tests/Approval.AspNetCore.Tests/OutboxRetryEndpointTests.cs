@@ -61,10 +61,13 @@ public sealed class OutboxRetryEndpointTests
         barrier.Enabled = true;
         var pending = RetryAsync();
         bool signaledBeforeCommit;
+        Task<bool>? committedWakeup = null;
         try
         {
             await barrier.Entered.Task.WaitAsync(TimeSpan.FromSeconds(15));
             signaledBeforeCommit = await signal.WaitAsync(TimeSpan.Zero, CancellationToken.None);
+            // A waiter consumes the first post-commit Notify; a duplicate Notify would remain queued.
+            if (!failCommit) committedWakeup = signal.WaitAsync(TimeSpan.FromSeconds(15), CancellationToken.None);
         }
         finally
         {
@@ -105,7 +108,7 @@ public sealed class OutboxRetryEndpointTests
             Assert.Equal("admin", operation.ActorId);
             return true;
         });
-        Assert.True(await signal.WaitAsync(TimeSpan.Zero, CancellationToken.None));
+        Assert.True(committedWakeup is null ? await signal.WaitAsync(TimeSpan.Zero, CancellationToken.None) : await committedWakeup);
         Assert.False(await signal.WaitAsync(TimeSpan.Zero, CancellationToken.None));
         Assert.Equal(originalDeliveries, events.Calls);
 

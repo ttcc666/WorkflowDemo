@@ -83,7 +83,13 @@ public sealed partial class DatabaseContractTests
         };
         Task<ReassignResult> Run() => AtomicRun(host, "admin", sp => sp.GetRequiredService<ApprovalEngine>()
             .ReassignUserAsync("bob", "charlie", "admin", "handover", "conflict-batch"));
-        var result = await Run(); var replay = await Run();
+        var result = await Run();
+        if (hide)
+        {
+            Assert.Equal(Approval.Core.ApprovalErrorCode.NotFound, (await Assert.ThrowsAsync<Approval.Core.ApprovalException>(() => Run())).Code);
+            visibility.Hidden = Guid.Empty;
+        }
+        var replay = await Run();
         Assert.True(conflict.Failed); Assert.Equal(1, result.Count); Assert.Equal(result.Count, replay.Count);
         Assert.Equal(!hide && afterConflict is InstanceStatus.Running or InstanceStatus.Returned ? expected.Order() : Enumerable.Empty<Guid>(), result.Skipped.Select(s => s.TaskId).Order());
         Assert.Equal(result.Skipped, replay.Skipped);

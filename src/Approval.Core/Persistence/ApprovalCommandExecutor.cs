@@ -57,7 +57,14 @@ internal sealed class ApprovalCommandExecutor<TContext>(IServiceScopeFactory sco
                 if (!(await sp.GetRequiredService<IApprovalAccessPolicy>().GetAccessAsync(new(identity.ActorId, false), ApprovalContextSnapshots.Instance(instance), token)).CanView)
                     throw new ApprovalException("无权读取原操作结果") { Code = ApprovalErrorCode.NotFound };
             }
-            else await auth.Inner.RequireRecordedAsync(command.Permission, stored.Resource, token);
+            else
+            {
+                // An unbound operation can still reference a live instance (e.g. Outbox Retry).
+                // Reapply its current QueryScope; recorded ACLs alone cannot authorize that resource.
+                var resource = stored.Resource.InstanceId is not null
+                    ? await auth.Inner.ResolveResourceAsync(stored.Resource, token) : stored.Resource;
+                await auth.Inner.RequireRecordedAsync(command.Permission, resource, token);
+            }
             return stored.Value;
         }
         await using var strategyScope = CreateScope();

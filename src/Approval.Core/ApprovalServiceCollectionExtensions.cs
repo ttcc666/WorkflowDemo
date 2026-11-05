@@ -89,7 +89,7 @@ public static class ApprovalServiceCollectionExtensions
             sp.GetRequiredService<ApprovalExtensionCatalog>(), sp.GetRequiredService<IConditionEvaluator>(),
             sp.GetRequiredService<ApprovalOptions>(), sp.GetRequiredService<ApprovalOutboxSignal>(),
             sp.GetRequiredService<TimeProvider>(), sp.GetRequiredService<ILogger<ApprovalEngine>>(),
-            sp.GetService<IApprovalUserDirectory>(), sp.GetService<IApprovalDefinitionExtension>(),
+            sp.GetService<IApprovalUserDirectory>(), () => sp.GetRequiredService<IApprovalAccessPolicy>(), sp.GetService<IApprovalDefinitionExtension>(),
             sp.GetService<IApprovalLifecycleHandler>(), sp.GetService<IApprovalUserStatusProvider>()));
         services.AddScoped(sp => new ApprovalSimulationService(
             sp.GetRequiredService<ApprovalDbContextAccessor>(), sp.GetRequiredService<ApprovalDefinitionService>(),

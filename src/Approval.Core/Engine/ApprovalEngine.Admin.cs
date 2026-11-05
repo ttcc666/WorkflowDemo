@@ -91,7 +91,22 @@ public sealed partial class ApprovalEngine
         var finalCommand = new ApprovalCommand("task.reassign-bulk.result", fromUserId, operationId, payload, ApprovalPermissions.TaskReassignBulk, resource);
         var lookup = ApprovalCommandHash.Of(operatorId, finalCommand.Kind, finalCommand.Scope, operationId);
         if (await _db.Set<ApprovalOperation>().AsNoTracking().AnyAsync(o => o.LookupHash == lookup, ct))
-            return await commands.ExecuteAsync<ReassignResult>(finalCommand, (_, _) => throw new InvalidOperationException("已提交汇总不能重新执行"), ct);
+        {
+            var result = await commands.ExecuteAsync<ReassignResult>(finalCommand, (_, _) => throw new InvalidOperationException("已提交汇总不能重新执行"), ct);
+            var candidates = await commands.ExecuteAsync<List<Guid>>(new("task.reassign-bulk.plan", fromUserId, operationId, payload,
+                ApprovalPermissions.TaskReassignBulk, resource), (_, _) => throw new InvalidOperationException("已提交汇总必须有原候选计划"), ct);
+            if (!_contextAccessor.IsSystem)
+                foreach (var id in candidates)
+                {
+                    // The summary contains resource IDs and skipped task details. Apply the same current
+                    // read/scope/access checks as an individual committed item, without rerunning any item.
+                    await _authorization.RequireAsync(ApprovalPermissions.InstanceRead, new() { InstanceId = id }, operatorId, ct);
+                    var instance = await _db.Set<ApprovalInstance>().AsNoTracking().SingleAsync(i => i.Id == id, ct);
+                    if (!(await _accessPolicy().GetAccessAsync(new(operatorId, false), ApprovalContextSnapshots.Instance(instance), ct)).CanView)
+                        throw new ApprovalException("无权读取原操作结果") { Code = ApprovalErrorCode.NotFound };
+                }
+            return result;
+        }
         var instanceIds = await commands.ExecuteAsync(new("task.reassign-bulk.plan", fromUserId, operationId, payload, ApprovalPermissions.TaskReassignBulk, resource),
                 (sp, token) => sp.GetRequiredService<ApprovalEngine>().ReassignCandidatesAsync(fromUserId, token), ct);
         var count = 0; var skipped = new List<ReassignSkip>();

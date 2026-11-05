@@ -31,6 +31,8 @@ public sealed partial class ApprovalEngine
     private readonly DbContext _db;
     private readonly ApprovalUnitOfWork _unit;
     private readonly IApprovalCommandExecutor _commands;
+    private readonly Func<IApprovalAccessPolicy> _accessPolicy;
+    private readonly ApprovalDbContextAccessor _contextAccessor;
     private readonly IApprovalIdentityProvider _identity;
     private readonly ApprovalAssigneeService _assignees;
     private readonly ApprovalEventWriter _events;
@@ -55,6 +57,7 @@ public sealed partial class ApprovalEngine
         TimeProvider clock,
         ILogger<ApprovalEngine> logger,
         IApprovalUserDirectory? directory,
+        Func<IApprovalAccessPolicy> accessPolicy,
         IApprovalDefinitionExtension? definitionExtension = null,
         IApprovalLifecycleHandler? lifecycle = null,
         IApprovalUserStatusProvider? userStatus = null)
@@ -62,6 +65,8 @@ public sealed partial class ApprovalEngine
         _db = accessor.Context;
         _unit = accessor.UnitOfWork;
         _commands = accessor.Commands;
+        _accessPolicy = accessPolicy;
+        _contextAccessor = accessor;
         _authorization = accessor.Authorization;
         _identity = ApprovalHostServices.Identity(_unit, identity);
         _assignees = new(_identity, extensions.Resolvers, options, ApprovalHostServices.Directory(_unit, directory), _unit);
