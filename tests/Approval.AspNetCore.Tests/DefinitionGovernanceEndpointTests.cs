@@ -51,6 +51,30 @@ public sealed class DefinitionGovernanceEndpointTests
         "review":{"type":"Approval","name":"Review","approvers":[{"type":"User","value":"bob"}],"next":"end"},"end":{"type":"End","name":"End"}}}
         """;
 
+    [Fact]
+    public async Task ReadVersionSnapshots_ForComparison_LeavesGovernanceAndRuntimeUnchanged()
+    {
+        await using var host = await ApiHost.StartAsync();
+        await host.PublishAsync("compare", Flow);
+        await host.PublishAsync("compare", Flow.Replace("Review", "Updated review"));
+        var before = await Snapshot();
+        var versions = await host.GetJsonAsync("/api/approval/definitions/compare/versions", "admin");
+        Assert.Equal(2, versions.GetArrayLength());
+        Assert.Contains("Updated review", versions[0].GetProperty("definitionJson").GetString());
+        Assert.Contains("\"name\":\"Review\"", versions[1].GetProperty("definitionJson").GetString());
+        Assert.Equal(before, await Snapshot());
+
+        Task<(Guid? Active, long Revision, int Versions, int Audits, int Operations, int Instances, int Outbox)> Snapshot() =>
+            host.RunAsync(async sp =>
+            {
+                var db = sp.GetRequiredService<ApiDbContext>();
+                var governance = await db.Set<ApprovalDefinitionManagement>().SingleAsync();
+                return (governance.ActiveDefinitionId, governance.Revision, await db.Set<ApprovalDefinition>().CountAsync(),
+                    await db.Set<ApprovalDefinitionAudit>().CountAsync(), await db.Set<ApprovalOperation>().CountAsync(),
+                    await db.Set<ApprovalInstance>().CountAsync(), await db.Set<ApprovalOutboxMessage>().CountAsync());
+            });
+    }
+
     private sealed class ValidationWarnings(ApiDbContext db, bool save) : IApprovalDefinitionExtension
     {
         public IReadOnlySet<string>? UserFields(FlowDefinition definition) => null;

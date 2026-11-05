@@ -13,6 +13,7 @@
     <Project Path="src/Approval.Core/Approval.Core.csproj" />
     <Project Path="src/Approval.Forms/Approval.Forms.csproj" />
     <Project Path="src/Approval.Forms.AspNetCore/Approval.Forms.AspNetCore.csproj" />
+    <Project Path="src/Approval.Testing/Approval.Testing.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Approval.AspNetCore.Tests/Approval.AspNetCore.Tests.csproj" />

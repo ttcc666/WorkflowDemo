@@ -52,6 +52,13 @@ public sealed class FlowDefinition
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
 
+    private static readonly JsonSerializerOptions ImportJsonOptions = new(JsonOptions)
+    {
+        PropertyNameCaseInsensitive = false,
+        UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
+        AllowDuplicateProperties = false
+    };
+
     public string StartNodeId { get; set; } = "";
 
     /// <summary>发起设置（发起中心、发起角色、标题模板），可选。</summary>
@@ -70,7 +77,11 @@ public sealed class FlowDefinition
             ? node
             : throw new ApprovalException($"流程定义中不存在节点 '{id}'");
 
-    public static FlowDefinition Parse(string json)
+    public static FlowDefinition Parse(string json) => Parse(json, JsonOptions);
+
+    internal static FlowDefinition ParseImported(string json) => Parse(json, ImportJsonOptions);
+
+    private static FlowDefinition Parse(string json, JsonSerializerOptions options)
     {
         FlowDefinition definition;
         try
@@ -81,7 +92,7 @@ public sealed class FlowDefinition
             if (document.RootElement.TryGetProperty("nodes", out var nodeMap) && nodeMap.ValueKind == JsonValueKind.Object
                 && nodeMap.EnumerateObject().GroupBy(p => p.Name, StringComparer.Ordinal).Any(g => g.Count() > 1))
                 throw new ApprovalException("流程包含重复节点 ID") { Code = ApprovalErrorCode.InvalidDefinition };
-            definition = JsonSerializer.Deserialize<FlowDefinition>(json, JsonOptions)
+            definition = JsonSerializer.Deserialize<FlowDefinition>(json, options)
                          ?? throw new ApprovalException("流程定义为空");
         }
         catch (JsonException ex)

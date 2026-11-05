@@ -12,6 +12,8 @@
 
 只需要业务审批时安装 `Approval.Core`、`Approval.AspNetCore`。动态表单额外安装 `Approval.Forms`、`Approval.Forms.AspNetCore`。
 
+宿主测试项目可使用 `Approval.Testing` 配置测试身份、权限、事件记录和时间。流程设计支持版本对比和将已发布配置导入为新草稿。 [测试工具包](docs/testing-toolkit.md) · [版本对比](docs/definition-version-diff.md) · [导入和导出](docs/definition-import-export.md)
+
 ```csharp
 // AppDbContext 可以继承 DbContext、IdentityDbContext 或宿主已有基类。
 services.AddDbContext<AppDbContext>(o => o.UseSqlite(connectionString));

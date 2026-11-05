@@ -5,6 +5,7 @@ import { resolveApprovalUIOptions } from '@ui/config'
 
 const writes: [string, (api: ApprovalApiClient, key: string) => unknown][] = [
   ['copyDefinition', (a, k) => a.copyDefinition('flow', { targetKey: 'copy', name: 'Copy' }, k)],
+  ['importDefinitionDraft', (a, k) => a.importDefinitionDraft('copy', 'e30=', k)],
   ['submitForm', (a, k) => a.submitForm('flow', {}, '', undefined, k)],
   ['saveDraft', (a, k) => a.saveDraft('flow', null, {}, '', k)],
   ['deleteDraft', (a, k) => a.deleteDraft('draft', k)],

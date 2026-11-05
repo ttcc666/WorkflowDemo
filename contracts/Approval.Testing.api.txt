@@ -1,0 +1,35 @@
+Approval.Testing.ApprovalTestActor
+  Constructor Void .ctor() [args=]
+  Method Approval.Core.Abstractions.ApprovalExecutionIdentity Resolve() [return=NotNull/NotNull; args=]
+  Method System.IDisposable Use(System.String) [return=NotNull/NotNull; args=NotNull/NotNull]
+Approval.Testing.ApprovalTestEvents
+  Constructor Void .ctor() [args=]
+  Method System.Collections.Generic.IReadOnlyList`1[Approval.Core.Abstractions.ApprovalEvent] Snapshot() [return=NotNull/NotNull<NotNull/NotNull>; args=]
+  Method System.Threading.Tasks.Task HandleAsync(Approval.Core.Abstractions.ApprovalEvent, System.Threading.CancellationToken) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull]
+  Method Void FailNext(System.String, Int32) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull default=1]
+Approval.Testing.ApprovalTestPermissions
+  Constructor Void .ctor() [args=]
+  Method System.Threading.Tasks.Task`1[System.Boolean] AuthorizeAsync(Approval.Core.Abstractions.ApprovalPermissionRequest, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull,NotNull/NotNull]
+  Method Void Grant(System.String, System.String, System.Func`2[Approval.Core.Abstractions.ApprovalResource,System.Boolean]) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull,Nullable/Nullable<NotNull/NotNull,NotNull/NotNull> default=null]
+  Method Void Revoke(System.String, System.String) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull]
+  Property System.Exception Failure [Nullable/Nullable]
+Approval.Testing.ApprovalTestUsers
+  Constructor Void .ctor() [args=]
+  Method System.Threading.Tasks.Task`1[System.Boolean] IsActiveAsync(System.String, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull,NotNull/NotNull]
+  Method System.Threading.Tasks.Task`1[System.Boolean] IsInRoleAsync(System.String, System.String, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull]
+  Method System.Threading.Tasks.Task`1[System.Collections.Generic.IReadOnlyList`1[Approval.Core.Abstractions.ApprovalUser]] GetUsersAsync(System.Collections.Generic.IReadOnlyCollection`1[System.String], System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull<NotNull/NotNull>>; args=NotNull/NotNull<NotNull/NotNull>,NotNull/NotNull]
+  Method System.Threading.Tasks.Task`1[System.Collections.Generic.IReadOnlyList`1[Approval.Core.Abstractions.ApprovalUser]] SearchUsersAsync(System.String, Int32, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull<NotNull/NotNull>>; args=Nullable/Nullable,NotNull/NotNull,NotNull/NotNull]
+  Method System.Threading.Tasks.Task`1[System.Collections.Generic.IReadOnlyList`1[System.String]] GetRolesAsync(System.String, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull<NotNull/NotNull>>; args=NotNull/NotNull,NotNull/NotNull]
+  Method System.Threading.Tasks.Task`1[System.Collections.Generic.IReadOnlyList`1[System.String]] GetUserIdsInRoleAsync(System.String, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull<NotNull/NotNull>>; args=NotNull/NotNull,NotNull/NotNull]
+  Method System.Threading.Tasks.Task`1[System.Collections.Generic.IReadOnlyList`1[System.String]] ListRolesAsync(System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull<NotNull/NotNull>>; args=NotNull/NotNull]
+  Method Void SetActive(System.String, Boolean) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull]
+  Method Void SetUser(System.String, System.String, System.Collections.Generic.IEnumerable`1[System.String], Boolean) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull,Nullable/Nullable<NotNull/NotNull> default=null,NotNull/NotNull default=true]
+Approval.Testing.ApprovalTestingExtensions
+  Method Approval.Core.ApprovalBuilder AddApprovalTesting(Approval.Core.ApprovalBuilder, System.Action`1[Approval.Testing.ApprovalTestingOptions]) [return=NotNull/NotNull; args=NotNull/NotNull,Nullable/Nullable<NotNull/NotNull> default=null]
+Approval.Testing.ApprovalTestingOptions
+  Constructor Void .ctor() [args=]
+  Property Boolean UseTestActor [NotNull/NotNull]
+  Property Boolean UseTestEvents [NotNull/NotNull]
+  Property Boolean UseTestPermissions [NotNull/NotNull]
+  Property Boolean UseTestUsers [NotNull/NotNull]
+  Property System.Nullable`1[System.DateTimeOffset] InitialUtcTime [Nullable/Nullable]

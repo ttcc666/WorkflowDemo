@@ -1,6 +1,7 @@
 using Approval.Forms;
 using System.Collections.Concurrent;
 using System.Data.Common;
+using System.Text.Json;
 using Approval.Core;
 using Approval.Core.Abstractions;
 using Approval.Core.Domain;
@@ -223,6 +224,51 @@ public sealed partial class DatabaseContractTests
         var winner = outcomes[0].Id is not null ? "first" : "second";
         var changed = await Assert.ThrowsAsync<ApprovalException>(() => AtomicStart(host, faults, winner, amount: 2)); Assert.Equal(ApprovalErrorCode.Conflict, changed.Code);
         await AtomicRun(host, "alice", async sp => { var db = sp.GetRequiredService<AtomicContractContext>(); Assert.Equal(1, await db.Set<AtomicHostRecord>().CountAsync()); Assert.Equal(1, await db.Set<ApprovalOperation>().CountAsync()); return true; });
+    }
+
+    [Fact]
+    public async Task ConcurrentImportsWithDifferentKeys_CommitExactlyOneUnpublishedDraft()
+    {
+        var faults = new AtomicFaults();
+        await using var first = await AtomicHostAsync(faults);
+        await using var second = await AtomicHostAsync(faults, initializeDatabase: false);
+        const string target = "imported";
+        var file = JsonSerializer.SerializeToUtf8Bytes(new
+        {
+            packageVersion = 1, kind = "approval-definition",
+            source = new { key = "external", name = "External", version = 3, publishedAt = Timestamp },
+            definition = JsonSerializer.Deserialize<JsonElement>(AtomicFlow)
+        });
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        async Task<(DefinitionImportReceipt? Draft, ApprovalErrorCode? Error)> Import(ServiceProvider host, string operationId)
+        {
+            await gate.Task;
+            try
+            {
+                return (await AtomicRun(host, "admin", sp => sp.GetRequiredService<IApprovalCommandExecutor>().ExecuteAsync(
+                    new("definition.import", target, operationId, file, ApprovalPermissions.DefinitionDesign, new() { DefinitionKey = target }),
+                    (fresh, ct) => fresh.GetRequiredService<ApprovalDefinitionService>().ImportDraftAsync(target, file, ct))), null);
+            }
+            catch (ApprovalException ex) { return (null, ex.Code); }
+        }
+
+        var attempts = new[] { Import(first, "first"), Import(second, "second") };
+        gate.SetResult();
+        var outcomes = await Task.WhenAll(attempts);
+        var committed = Assert.Single(outcomes, result => result.Draft is not null).Draft!;
+        Assert.Equal(new DefinitionImportReceipt(target, 1), committed);
+        Assert.Equal(ApprovalErrorCode.Conflict, Assert.Single(outcomes, result => result.Error is not null).Error);
+        await using var db = fixture.CreateStorage();
+        var draft = await db.Set<ApprovalDefinitionManagement>().SingleAsync(d => d.Key == target);
+        Assert.NotNull(draft.DraftJson);
+        Assert.Equal(committed.DraftRevision, draft.DraftRevision);
+        Assert.Equal(0, draft.LastVersion);
+        Assert.Null(draft.ActiveDefinitionId);
+        Assert.False(await db.Set<ApprovalDefinition>().AnyAsync(d => d.Key == target));
+        Assert.Equal(DefinitionAuditAction.DraftSaved, (await db.Set<ApprovalDefinitionAudit>().SingleAsync(a => a.Key == target)).Action);
+        Assert.Equal(1, await db.Set<ApprovalOperation>().CountAsync(o => o.Kind == "definition.import"));
+        Assert.False(await db.Set<ApprovalOutboxMessage>().AnyAsync());
     }
 
     [Fact]

@@ -10,6 +10,7 @@ import DefinitionTable from '@ui/features/definitions/DefinitionTable.vue'
 import DefinitionVersionsDrawer from '@ui/features/definitions/DefinitionVersionsDrawer.vue'
 import NewDefinitionDialog from '@ui/features/definitions/NewDefinitionDialog.vue'
 import DefinitionCategoryFilter from '@ui/features/definitions/DefinitionCategoryFilter.vue'
+import ImportDefinitionDialog from '@ui/features/definitions/ImportDefinitionDialog.vue'
 
 const { api: approvalApi, userKey } = useApprovalClient()
 
@@ -29,9 +30,10 @@ async function refresh() { await Promise.all([reload(), categories.reload()]) }
 
 const existingKeys = computed(() => (definitions.value ?? []).map((d) => d.key))
 const newVisible = shallowRef(false)
+const importVisible = shallowRef(false)
 const versionsOf = shallowRef<DefinitionGovernanceSummary | null>(null)
 const versionsVisible = shallowRef(false)
-watch(userKey, () => { categorySelection.value = ''; definitions.value = []; categories.data.value = []; newVisible.value = false; versionsOf.value = null; versionsVisible.value = false }, { flush: 'sync' })
+watch(userKey, () => { categorySelection.value = ''; definitions.value = []; categories.data.value = []; newVisible.value = false; importVisible.value = false; versionsOf.value = null; versionsVisible.value = false }, { flush: 'sync' })
 
 function design(key: string, query: Record<string, string> = {}) {
   void router.push({ name: approvalRouteNames.designer, params: { key }, query })
@@ -51,6 +53,7 @@ function showVersions(definition: DefinitionGovernanceSummary) {
         <span>流程定义</span>
         <div>
           <el-button text type="primary" @click="refresh">刷新</el-button>
+          <el-button v-if="can('approval.definition.design')" @click="importVisible = true">导入流程定义</el-button>
           <el-button v-if="can('approval.definition.design')" type="primary" @click="newVisible = true">新建流程</el-button>
         </div>
       </div>
@@ -60,6 +63,7 @@ function showVersions(definition: DefinitionGovernanceSummary) {
   </el-card>
 
   <NewDefinitionDialog v-model:visible="newVisible" :existing-keys="existingKeys" @create="(key, name) => design(key, { name })" />
+  <ImportDefinitionDialog v-model:visible="importVisible" @imported="(key) => design(key)" />
   <DefinitionVersionsDrawer v-if="versionsOf && versionsVisible" v-model:visible="versionsVisible" :flow-key="versionsOf.key"
     :can-design="can('approval.definition.design')"
     @changed="refresh"

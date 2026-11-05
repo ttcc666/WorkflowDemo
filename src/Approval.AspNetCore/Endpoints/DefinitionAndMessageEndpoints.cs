@@ -23,6 +23,7 @@ internal static class DefinitionEndpoints
 
     public static void Map(RouteGroupBuilder group)
     {
+        DefinitionTransferEndpoints.Map(group);
         group.MapGet("/definitions/governance", (string? category, bool? uncategorized, ApprovalDefinitionService d, CancellationToken ct) => d.ListGovernanceAsync(category, uncategorized ?? false, ct));
         group.MapGet("/definitions/categories", (ApprovalDefinitionService d, CancellationToken ct) => d.ListCategoriesAsync(ct));
         group.MapGet("/definitions/{key}/governance", async (string key, ApprovalDefinitionService d, CancellationToken ct) =>

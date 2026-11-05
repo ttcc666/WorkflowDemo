@@ -1,4 +1,5 @@
 using Approval.Core;
+using Approval.AspNetCore.Endpoints;
 using Approval.Core.Abstractions;
 using Approval.Core.Authorization;
 using Microsoft.AspNetCore.Http;
@@ -24,7 +25,8 @@ internal static class ApprovalHttpCommands
 
     internal static bool Managed(HttpContext http, ApprovalPermissionMetadata metadata) =>
         HttpMethods.IsPost(http.Request.Method) || HttpMethods.IsPut(http.Request.Method) || HttpMethods.IsDelete(http.Request.Method)
-            ? !metadata.Permissions.Any(p => p is ApprovalPermissions.DefinitionValidate or ApprovalPermissions.DefinitionSimulate or ApprovalPermissions.FileUpload or ApprovalPermissions.TaskReassignBulk)
+            ? metadata.Operation != "POST " + DefinitionTransferEndpoints.ValidateRoute
+                && !metadata.Permissions.Any(p => p is ApprovalPermissions.DefinitionValidate or ApprovalPermissions.DefinitionSimulate or ApprovalPermissions.FileUpload or ApprovalPermissions.TaskReassignBulk)
             : false;
 
     public static void Add(RouteGroupBuilder group)

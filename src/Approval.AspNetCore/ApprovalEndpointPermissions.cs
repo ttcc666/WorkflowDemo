@@ -1,4 +1,5 @@
 using Approval.Core.Abstractions;
+using Approval.AspNetCore.Endpoints;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
@@ -33,14 +34,14 @@ internal static class ApprovalEndpointPermissions
             ("GET", "/diagnostics") => ApprovalPermissions.DiagnosticsRead,
             ("GET", "/directory/users" or "/directory/roles") => ApprovalPermissions.DirectoryRead,
             ("GET", "/meta" or "/flows") => ApprovalPermissions.DefinitionRead,
-            ("GET", "/definitions" or "/definitions/{key}" or "/definitions/{key}/versions" or "/definitions/by-id/{id:guid}") => ApprovalPermissions.DefinitionReadSensitive,
+            ("GET", "/definitions" or "/definitions/{key}" or "/definitions/{key}/versions" or "/definitions/by-id/{id:guid}" or DefinitionTransferEndpoints.ExportRoute) => ApprovalPermissions.DefinitionReadSensitive,
             ("POST", "/definitions/simulate") => ApprovalPermissions.DefinitionSimulate,
             ("POST", "/definitions/validate") => ApprovalPermissions.DefinitionValidate,
             ("POST", "/definitions/{key}") => ApprovalPermissions.DefinitionPublish,
             ("GET", "/definitions/governance" or "/definitions/{key}/governance" or "/definitions/{key}/audit") => ApprovalPermissions.DefinitionReadSensitive,
             ("GET", "/definitions/categories") => ApprovalPermissions.DefinitionReadSensitive,
             ("PUT", "/definitions/{key}/draft") => ApprovalPermissions.DefinitionDesign,
-            ("POST", "/definitions/{key}/copy") => ApprovalPermissions.DefinitionDesign,
+            ("POST", "/definitions/{key}/copy" or DefinitionTransferEndpoints.ImportRoute or DefinitionTransferEndpoints.ValidateRoute) => ApprovalPermissions.DefinitionDesign,
             ("POST", "/definitions/{key}/publish-draft" or "/definitions/{key}/select-version") => ApprovalPermissions.DefinitionPublish,
             ("POST", "/definitions/{key}/enabled") => ApprovalPermissions.DefinitionDisable,
             ("GET", "/todo" or "/todo/count" or "/instances/{id:guid}/my-task" or "/tasks/{id:guid}/can-handle") => ApprovalPermissions.TaskRead,
@@ -76,7 +77,7 @@ internal static class ApprovalEndpointPermissions
         };
         string? kind = path switch
         {
-            "/definitions/by-id/{id:guid}" => "definition",
+            "/definitions/by-id/{id:guid}" or DefinitionTransferEndpoints.ExportRoute => "definition",
             _ when path.Contains("/tasks/{id:guid}", StringComparison.Ordinal) => "task",
             _ when path.Contains("/instances/{id:guid}", StringComparison.Ordinal) => "instance",
             "/files/{id:guid}" => "file",

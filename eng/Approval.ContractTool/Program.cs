@@ -64,7 +64,8 @@ try
         foreach (var endpoint in ((IEndpointRouteBuilder)app).DataSources.SelectMany(s => s.Endpoints).OfType<RouteEndpoint>())
         {
             var permissions = endpoint.Metadata.GetMetadata<ApprovalPermissionMetadata>();
-            if (permissions is null || permissions.Permissions.Any(p => p is ApprovalPermissions.DefinitionValidate or ApprovalPermissions.DefinitionSimulate or ApprovalPermissions.FileUpload)) continue;
+            if (permissions is null || permissions.Operation == "POST /definitions/{key}/import/validate"
+                || permissions.Permissions.Any(p => p is ApprovalPermissions.DefinitionValidate or ApprovalPermissions.DefinitionSimulate or ApprovalPermissions.FileUpload)) continue;
             var path = System.Text.RegularExpressions.Regex.Replace(endpoint.RoutePattern.RawText!, @"\{([^}:]+):[^}]+\}", "{$1}");
             foreach (var method in endpoint.Metadata.GetMetadata<HttpMethodMetadata>()!.HttpMethods.Where(m => m is "POST" or "PUT" or "DELETE"))
                 if (document["paths"]?[path]?[method.ToLowerInvariant()] is JsonObject operation)
@@ -92,6 +93,24 @@ flowSchema["$id"] = "urn:approval:flow:1";
 flowSchema["properties"]!["schemaVersion"] = new JsonObject { ["type"] = "integer", ["const"] = 1 };
 flowSchema["properties"]!["form"] = new JsonObject { ["anyOf"] = new JsonArray(json.GetJsonSchemaAsNode(typeof(FormSchema)), new JsonObject { ["type"] = "null" }) };
 await WriteJsonAsync("flow.schema.json", flowSchema);
+var packageSchema = new JsonSerializerOptions(json) { RespectRequiredConstructorParameters = true, NumberHandling = JsonNumberHandling.Strict }
+    .GetJsonSchemaAsNode(typeof(DefinitionTransferPackage));
+packageSchema["$schema"] = "https://json-schema.org/draft/2020-12/schema";
+packageSchema["$id"] = "urn:approval:definition-package:1";
+packageSchema["type"] = "object";
+packageSchema["additionalProperties"] = false;
+var packageProperties = packageSchema["properties"]!;
+packageProperties["packageVersion"] = new JsonObject { ["type"] = "integer", ["const"] = DefinitionTransferPackage.CurrentPackageVersion };
+packageProperties["kind"] = new JsonObject { ["type"] = "string", ["const"] = DefinitionTransferPackage.DefinitionKind };
+packageProperties["definition"] = new JsonObject { ["$ref"] = "urn:approval:flow:1" };
+var sourceSchema = packageProperties["source"]!;
+sourceSchema["additionalProperties"] = false;
+sourceSchema["properties"]!["key"]!["minLength"] = 1;
+sourceSchema["properties"]!["key"]!["maxLength"] = 100;
+sourceSchema["properties"]!["name"]!["minLength"] = 1;
+sourceSchema["properties"]!["name"]!["maxLength"] = 200;
+sourceSchema["properties"]!["version"]!["minimum"] = 1;
+await WriteJsonAsync("definition-package.schema.json", packageSchema);
 var formSchema = json.GetJsonSchemaAsNode(typeof(FormSchema));
 formSchema["$schema"] = "https://json-schema.org/draft/2020-12/schema";
 formSchema["$id"] = "urn:approval:form:1";
@@ -103,6 +122,7 @@ foreach (var (assembly, directory) in new[]
     (typeof(ApprovalAspNetCoreOptions).Assembly, output),
     (typeof(Approval.Forms.Runtime.ApprovalFormOptions).Assembly, output),
     (typeof(ApprovalFormsAspNetCoreExtensions).Assembly, output),
+    (typeof(Approval.Testing.ApprovalTestingExtensions).Assembly, output),
     (typeof(CertificateService).Assembly, sampleOutput)
 })
 {

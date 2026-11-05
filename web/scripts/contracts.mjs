@@ -14,7 +14,7 @@ const run = spawnSync('dotnet', args, { cwd: root, stdio: 'inherit' })
 if (run.error) throw run.error
 if (run.status !== 0) process.exit(run.status ?? 1)
 
-const files = ['approval.openapi.json', 'flow.schema.json', 'form.schema.json', 'Approval.Core.api.txt', 'Approval.AspNetCore.api.txt', 'Approval.Forms.api.txt', 'Approval.Forms.AspNetCore.api.txt']
+const files = ['approval.openapi.json', 'flow.schema.json', 'form.schema.json', 'definition-package.schema.json', 'Approval.Core.api.txt', 'Approval.AspNetCore.api.txt', 'Approval.Forms.api.txt', 'Approval.Forms.AspNetCore.api.txt', 'Approval.Testing.api.txt']
 const sampleDirectory = 'samples/Approval.Certificate/contracts'
 const sampleFiles = ['certificate.openapi.json', 'Approval.Certificate.api.txt']
 const doc = JSON.parse(await readFile(join(generated, files[0]), 'utf8'))

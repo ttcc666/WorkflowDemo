@@ -8,6 +8,8 @@ import type {
   DefinitionGovernance,
   DefinitionGovernanceSummary,
   DefinitionAudit,
+  DefinitionImportReceipt,
+  DefinitionTransferSource,
   ApprovalDiagnosticReport,
   ApprovalInstance,
   ApprovalMe,
@@ -144,6 +146,11 @@ export function createApprovalApi(
     definitionAudit: (key: string, page = 1, signal?: AbortSignal) => http.get<PagedResult<DefinitionAudit>>(api(`/definitions/${enc(key)}/audit?page=${page}`), signal),
     latestDefinition: (key: string) => http.get<ApprovalDefinition>(api(`/definitions/${enc(key)}`)),
     definitionById: (id: string, signal?: AbortSignal) => http.get<ApprovalDefinition>(api(`/definitions/by-id/${id}`), signal),
+    exportDefinition: (id: string) => http.blob(api(`/definitions/by-id/${enc(id)}/export`)),
+    validateDefinitionImport: (key: string, packageBase64: string) =>
+      http.post<DefinitionTransferSource>(api(`/definitions/${enc(key)}/import/validate`), { packageBase64 }),
+    importDefinitionDraft: (key: string, packageBase64: string, operationId: string) =>
+      http.post<DefinitionImportReceipt>(api(`/definitions/${enc(key)}/import`), { packageBase64 }, commandHeaders(operationId)),
     versions: (key: string, signal?: AbortSignal) => http.get<ApprovalDefinition[]>(api(`/definitions/${enc(key)}/versions`), signal),
     simulate: (definitionJson: string, formData: Record<string, unknown>, nodeId?: string, ruleIndex?: number) =>
       http.post<ApprovalSimulationResult>(api('/definitions/simulate'), { definitionJson, formData, nodeId, ruleIndex }),

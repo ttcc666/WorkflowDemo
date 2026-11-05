@@ -29,6 +29,8 @@ HTTP 宿主可通过 `AddApprovalAspNetCore()` 和 `MapApprovalEndpoints().Requi
 
 ## 在同一事务提交业务数据与审批
 
+测试宿主可通过 `Approval.Testing` 安装可选的身份、目录、权限、事件和时间替身，同时保留实际 DbContext、审批命令和 Outbox。 [宿主测试工具包](testing-toolkit.md)
+
 假设已发布 `invoice` 流程，且 `commands` 是当前可信请求作用域中的 `IApprovalCommandExecutor`。
 
 ```csharp

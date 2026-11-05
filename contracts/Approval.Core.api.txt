@@ -542,6 +542,33 @@ Approval.Core.Definitions.ConditionBranch
   Property Int32 Priority [NotNull/NotNull]
   Property System.String Expression [Nullable/Nullable]
   Property System.String Next [NotNull/NotNull]
+Approval.Core.Definitions.DefinitionTransferPackage
+  Constructor Void .ctor(Int32, System.String, Approval.Core.Definitions.DefinitionTransferSource, System.Text.Json.JsonElement) [args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull]
+  Field Int32 CurrentPackageVersion [NotNull/NotNull] value=1
+  Field Int32 MaxFileBytes [NotNull/NotNull] value=1048576
+  Field System.String DefinitionKind [NotNull/NotNull] value="approval-definition"
+  Method Approval.Core.Definitions.DefinitionTransferPackage <Clone>$() [return=NotNull/NotNull; args=]
+  Method Boolean Equals(Approval.Core.Definitions.DefinitionTransferPackage) [return=NotNull/NotNull; args=Nullable/Nullable]
+  Method Boolean Equals(System.Object) [return=NotNull/NotNull; args=Nullable/Nullable]
+  Method Int32 GetHashCode() [return=NotNull/NotNull; args=]
+  Method System.String ToString() [return=NotNull/NotNull; args=]
+  Method Void Deconstruct(Int32 ByRef, System.String ByRef, Approval.Core.Definitions.DefinitionTransferSource ByRef, System.Text.Json.JsonElement ByRef) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull]
+  Property Approval.Core.Definitions.DefinitionTransferSource Source [NotNull/NotNull]
+  Property Int32 PackageVersion [NotNull/NotNull]
+  Property System.String Kind [NotNull/NotNull]
+  Property System.Text.Json.JsonElement Definition [NotNull/NotNull]
+Approval.Core.Definitions.DefinitionTransferSource
+  Constructor Void .ctor(System.String, System.String, Int32, System.DateTime) [args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull]
+  Method Approval.Core.Definitions.DefinitionTransferSource <Clone>$() [return=NotNull/NotNull; args=]
+  Method Boolean Equals(Approval.Core.Definitions.DefinitionTransferSource) [return=NotNull/NotNull; args=Nullable/Nullable]
+  Method Boolean Equals(System.Object) [return=NotNull/NotNull; args=Nullable/Nullable]
+  Method Int32 GetHashCode() [return=NotNull/NotNull; args=]
+  Method System.String ToString() [return=NotNull/NotNull; args=]
+  Method Void Deconstruct(System.String ByRef, System.String ByRef, Int32 ByRef, System.DateTime ByRef) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull]
+  Property Int32 Version [NotNull/NotNull]
+  Property System.DateTime PublishedAt [NotNull/NotNull]
+  Property System.String Key [NotNull/NotNull]
+  Property System.String Name [NotNull/NotNull]
 Approval.Core.Definitions.EmptyApproverPolicy
   Error = 0
   AutoApprove = 1
@@ -969,6 +996,7 @@ Approval.Core.Engine.ApprovalDataEdit
   Property System.String Title [Nullable/Nullable]
 Approval.Core.Engine.ApprovalDefinitionService
   Method System.Collections.Generic.IReadOnlyList`1[System.String] Warnings(Approval.Core.Definitions.FlowDefinition) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull]
+  Method System.Threading.Tasks.Task`1[Approval.Core.Definitions.DefinitionTransferSource] ValidateImportAsync(System.String, System.ReadOnlyMemory`1[System.Byte], System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull,NotNull/NotNull<NotNull/NotNull>,NotNull/NotNull default=null]
   Method System.Threading.Tasks.Task`1[Approval.Core.Domain.ApprovalDefinition] GetByIdAsync(System.Guid, System.Threading.CancellationToken) [return=NotNull/NotNull<Nullable/Nullable>; args=NotNull/NotNull,NotNull/NotNull default=null]
   Method System.Threading.Tasks.Task`1[Approval.Core.Domain.ApprovalDefinition] GetLatestAsync(System.String, System.Threading.CancellationToken) [return=NotNull/NotNull<Nullable/Nullable>; args=NotNull/NotNull,NotNull/NotNull default=null]
   Method System.Threading.Tasks.Task`1[Approval.Core.Domain.ApprovalDefinition] PublishAsync(System.String, System.String, Approval.Core.Definitions.FlowDefinition, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull default=null]
@@ -979,6 +1007,7 @@ Approval.Core.Engine.ApprovalDefinitionService
   Method System.Threading.Tasks.Task`1[Approval.Core.Engine.DefinitionGovernance] SaveDesignDraftAsync(System.String, System.String, System.String, Int64, System.Nullable`1[System.Guid], System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,Nullable/Nullable default=null,NotNull/NotNull default=null]
   Method System.Threading.Tasks.Task`1[Approval.Core.Engine.DefinitionGovernance] SelectVersionAsync(System.String, System.Guid, Int64, System.String, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,Nullable/Nullable default=null,NotNull/NotNull default=null]
   Method System.Threading.Tasks.Task`1[Approval.Core.Engine.DefinitionGovernance] SetEnabledAsync(System.String, Boolean, Int64, System.String, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,Nullable/Nullable default=null,NotNull/NotNull default=null]
+  Method System.Threading.Tasks.Task`1[Approval.Core.Engine.DefinitionImportReceipt] ImportDraftAsync(System.String, System.ReadOnlyMemory`1[System.Byte], System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull,NotNull/NotNull<NotNull/NotNull>,NotNull/NotNull default=null]
   Method System.Threading.Tasks.Task`1[Approval.Core.Engine.PagedResult`1[Approval.Core.Domain.ApprovalDefinitionAudit]] ListAuditAsync(System.String, Approval.Core.Engine.PageRequest, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull<NotNull/NotNull>>; args=NotNull/NotNull,Nullable/Nullable default=null,NotNull/NotNull default=null]
   Method System.Threading.Tasks.Task`1[System.Collections.Generic.IReadOnlyList`1[System.String]] ListCategoriesAsync(System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull<NotNull/NotNull>>; args=NotNull/NotNull default=null]
   Method System.Threading.Tasks.Task`1[System.Collections.Generic.IReadOnlyList`1[System.String]] ValidateAsync(Approval.Core.Definitions.FlowDefinition, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull<NotNull/NotNull>>; args=NotNull/NotNull,NotNull/NotNull default=null]
@@ -1258,6 +1287,16 @@ Approval.Core.Engine.DefinitionGovernanceSummary
   Property System.String Category [Nullable/Nullable]
   Property System.String Key [NotNull/NotNull]
   Property System.String Name [NotNull/NotNull]
+Approval.Core.Engine.DefinitionImportReceipt
+  Constructor Void .ctor(System.String, Int64) [args=NotNull/NotNull,NotNull/NotNull]
+  Method Approval.Core.Engine.DefinitionImportReceipt <Clone>$() [return=NotNull/NotNull; args=]
+  Method Boolean Equals(Approval.Core.Engine.DefinitionImportReceipt) [return=NotNull/NotNull; args=Nullable/Nullable]
+  Method Boolean Equals(System.Object) [return=NotNull/NotNull; args=Nullable/Nullable]
+  Method Int32 GetHashCode() [return=NotNull/NotNull; args=]
+  Method System.String ToString() [return=NotNull/NotNull; args=]
+  Method Void Deconstruct(System.String ByRef, Int64 ByRef) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull]
+  Property Int64 DraftRevision [NotNull/NotNull]
+  Property System.String Key [NotNull/NotNull]
 Approval.Core.Engine.ExecutionState
   Constructor Void .ctor() [args=]
   Method Approval.Core.Engine.ExecutionState Load(Approval.Core.Domain.ApprovalInstance) [return=NotNull/NotNull; args=NotNull/NotNull]

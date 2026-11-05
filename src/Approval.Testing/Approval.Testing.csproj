@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <PackageId>Approval.Testing</PackageId>
+    <Version>$(ApprovalVersion)</Version>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <Description>Host integration test doubles for Approval Workflow. Use your own database and test runner.</Description>
+    <PackageTags>approval;workflow;testing</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Approval.Core/Approval.Core.csproj" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
+    <None Include="../../docs/testing-toolkit.md" Pack="true" PackagePath="README.md" />
+  </ItemGroup>
+</Project>

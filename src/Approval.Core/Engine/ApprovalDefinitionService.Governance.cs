@@ -21,6 +21,8 @@ public sealed record DefinitionGovernanceSummary(string Key, string Name, long R
 
 public sealed partial class ApprovalDefinitionService
 {
+    private const int MaxDraftCharacters = 1_000_000;
+
     private static string? CategoryOf(FlowDefinition flow)
     {
         var category = flow.Settings?.Category?.Trim();
@@ -35,14 +37,21 @@ public sealed partial class ApprovalDefinitionService
         await _authorization.RequireAsync(ApprovalPermissions.DefinitionReadSensitive, new() { DefinitionKey = sourceKey }, ct: token);
         await _authorization.RequireAsync(ApprovalPermissions.DefinitionDesign, new() { DefinitionKey = targetKey }, ct: token);
         ValidateIdentity(targetKey, name);
-        if (sourceKey == targetKey || await _db.Set<ApprovalDefinition>().AnyAsync(d => d.Key == targetKey, token)
-            || await _db.Set<ApprovalDefinitionManagement>().AnyAsync(d => d.Key == targetKey, token))
+        if (sourceKey == targetKey)
             throw new ApprovalException("目标流程标识已存在") { Code = ApprovalErrorCode.Conflict };
+        await RequireUnusedDefinitionKeyAsync(targetKey, token);
         var source = await _db.Set<ApprovalDefinition>().AsNoTracking().Where(d => d.Key == sourceKey && d.IsPublished
             && (sourceDefinitionId == null || d.Id == sourceDefinitionId)).OrderByDescending(d => d.Version).FirstOrDefaultAsync(token)
             ?? throw new ApprovalException("来源流程版本不存在") { Code = ApprovalErrorCode.NotFound };
         return await SaveDesignDraftAsync(targetKey, name, source.DefinitionJson, 0, ct: token);
     }, ct);
+
+    private async Task RequireUnusedDefinitionKeyAsync(string key, CancellationToken ct)
+    {
+        if (await _db.Set<ApprovalDefinition>().AnyAsync(d => d.Key == key, ct)
+            || await _db.Set<ApprovalDefinitionManagement>().AnyAsync(d => d.Key == key, ct))
+            throw new ApprovalException("目标流程标识已存在") { Code = ApprovalErrorCode.Conflict };
+    }
 
     private static void ValidateIdentity(string key, string name)
     {
@@ -60,11 +69,12 @@ public sealed partial class ApprovalDefinitionService
     { if (expected < 0 || management.Revision != expected) throw Conflict(); }
 
     private async Task<ApprovalDefinitionManagement> GetOrCreateManagementAsync(string key, string name, CancellationToken ct)
+        => await _db.Set<ApprovalDefinitionManagement>().SingleOrDefaultAsync(x => x.Key == key, ct) ?? CreateManagement(key, name);
+
+    private ApprovalDefinitionManagement CreateManagement(string key, string name)
     {
-        var managed = await _db.Set<ApprovalDefinitionManagement>().SingleOrDefaultAsync(x => x.Key == key, ct);
-        if (managed is not null) return managed;
         // The unique management row and Revision serialize publication; conflicts roll back the whole unit.
-        managed = new()
+        var managed = new ApprovalDefinitionManagement
         {
             Id = _unit.NewId("DefinitionManagement"),
             Key = key,
@@ -136,18 +146,25 @@ public sealed partial class ApprovalDefinitionService
         await _authorization.RequireAsync(ApprovalPermissions.DefinitionDesign, new() { DefinitionKey = key }, ct: token);
         ValidateIdentity(key, name);
         if (string.IsNullOrWhiteSpace(definitionJson)) throw new ApprovalException("设计草稿 JSON 不能为空");
-        if (definitionJson.Length > 1_000_000) throw new ApprovalException("设计草稿超过 1000000 字符");
+        if (definitionJson.Length > MaxDraftCharacters) throw new ApprovalException("设计草稿超过 1000000 字符");
         var flow = FlowDefinition.Parse(definitionJson);
         var json = SerializeDefinition(flow); // Incomplete approval designs can still be saved.
         if (sourceDefinitionId is { } source && !await _db.Set<ApprovalDefinition>().AnyAsync(d => d.Id == source && d.Key == key && d.IsPublished, token))
             throw new ApprovalException("来源版本不存在") { Code = ApprovalErrorCode.NotFound };
         var management = await GetOrCreateManagementAsync(key, name, token); CheckRevision(management, expectedRevision);
+        await SaveDraftAsync(management, name, flow, json, sourceDefinitionId, null, token);
+        return await DescribeAsync(management, token);
+    }, ct);
+
+    private async Task SaveDraftAsync(ApprovalDefinitionManagement management, string name, FlowDefinition flow,
+        string json, Guid? sourceDefinitionId, string? note, CancellationToken ct)
+    {
         management.Name = name; management.DraftJson = json; management.DraftSourceDefinitionId = sourceDefinitionId;
         management.Category = CategoryOf(flow);
-        Audit(management, DefinitionAuditAction.DraftSaved, source: sourceDefinitionId, json: json);
+        Audit(management, DefinitionAuditAction.DraftSaved, source: sourceDefinitionId, note: note, json: json);
         management.DraftRevision = management.Revision;
-        await SaveGovernanceAsync(token); return await DescribeAsync(management, token);
-    }, ct);
+        await SaveGovernanceAsync(ct);
+    }
 
     public Task<ApprovalDefinition> PublishDesignDraftAsync(string key, long expectedRevision, string? changeNote = null,
         CancellationToken ct = default) => _unit.ExecuteCommandAsync(ApprovalWriteOwner.Definitions, async token =>

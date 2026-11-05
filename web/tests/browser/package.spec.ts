@@ -1,4 +1,5 @@
 import { expect, test, type Page, type APIRequestContext } from '@playwright/test'
+import { readFile } from 'node:fs/promises'
 
 const users: Record<string, RegExp> = {
   admin: /管理员/, alice: /Alice（员工）/, dave: /Dave（研发部负责人）/, quinn: /Quinn（质量）/, leo: /Leo（负责人）/,
@@ -16,6 +17,115 @@ async function json(request: APIRequestContext, path: string, user = 'alice') {
   expect(response.ok(), await response.text()).toBe(true)
   return response.json()
 }
+
+async function publishPortableVersions(request: APIRequestContext, key: string) {
+  const endpoint = `${process.env.APPROVAL_SMOKE_API}/api/approval/definitions/${key}`
+  for (const [index, name] of ['初审', '复审'].entries()) {
+    const response = await request.post(endpoint, {
+      headers: { 'X-User-Id': 'admin', 'Idempotency-Key': `${key}.${index}` },
+      data: { schemaVersion: 1, startNodeId: 's', nodes: {
+        s: { type: 'Start', name: '提交', next: 'review' },
+        review: { type: 'Approval', name, approvers: [{ type: 'User', value: 'dave' }], next: 'e' },
+        e: { type: 'End', name: '结束' },
+      } },
+    })
+    expect(response.ok(), await response.text()).toBe(true)
+  }
+}
+
+async function openVersions(page: Page, key: string) {
+  await page.addInitScript(() => { if (!localStorage.getItem('approval-demo-user')) localStorage.setItem('approval-demo-user', 'admin') })
+  await page.goto('/definitions')
+  await page.getByRole('row').filter({ hasText: key }).getByRole('button', { name: '版本与治理', exact: true }).click()
+  return page.getByRole('dialog', { name: `版本与治理 · ${key}` })
+}
+
+test('packaged version comparison swaps and locates changes without changing the active version', async ({ page, request }) => {
+  const key = `package.compare.${Date.now()}`
+  await publishPortableVersions(request, key)
+  const before = await json(request, `/api/approval/definitions/${key}/governance`, 'admin')
+  const drawer = await openVersions(page, key)
+  await drawer.getByRole('button', { name: '版本对比', exact: true }).click()
+  const comparison = drawer.getByRole('region', { name: '流程版本对比' })
+  const compare = comparison.getByRole('button', { name: '比较版本', exact: true })
+  await expect(compare).toBeDisabled()
+  await comparison.getByText('选择基准版本', { exact: true }).click()
+  await page.getByRole('option', { name: /^v1 ·/ }).click()
+  await comparison.getByRole('button', { name: '目标选最新' }).click()
+  await compare.click()
+  const change = comparison.getByRole('row').filter({ hasText: '/nodes/review/name' })
+  await expect(change.getByRole('cell').nth(1)).toHaveText('初审')
+  await expect(change.getByRole('cell').nth(2)).toHaveText('复审')
+  await change.getByRole('button', { name: '复审', exact: true }).click()
+  await expect(comparison.locator('.vue-flow__node[data-id="review"] .flow-node--selected')).toBeVisible()
+  await comparison.getByText('全部变化类型', { exact: true }).click()
+  await page.getByRole('option', { name: '新增', exact: true }).click()
+  await expect(change).toHaveCount(0)
+  await comparison.getByRole('button', { name: '交换', exact: true }).click()
+  await compare.click()
+  await expect(change.getByRole('cell').nth(1)).toHaveText('复审')
+  await expect(change.getByRole('cell').nth(2)).toHaveText('初审')
+  expect(await json(request, `/api/approval/definitions/${key}/governance`, 'admin')).toEqual(before)
+  await drawer.locator('.el-drawer__close-btn').click()
+  await switchUser(page, 'alice')
+  await expect(comparison).toHaveCount(0)
+})
+
+test('packaged definition download imports as a draft and recovers a lost response with the original key', async ({ page, request }) => {
+  const key = `package.portable.${Date.now()}`
+  const target = `${key}.draft`
+  await publishPortableVersions(request, key)
+  const drawer = await openVersions(page, key)
+  const downloadReady = page.waitForEvent('download')
+  await drawer.getByRole('row').filter({ has: page.getByRole('cell', { name: 'v1', exact: true }) })
+    .getByRole('button', { name: '导出', exact: true }).click()
+  const download = await downloadReady
+  expect(download.suggestedFilename()).toBe(`${key}-v1.approval.json`)
+  const file = await readFile(await download.path())
+  const exported = JSON.parse(file.toString('utf8'))
+  expect(exported.source).toMatchObject({ key, version: 1 })
+  expect(exported.definition.nodes.review.name).toBe('初审')
+  await drawer.locator('.el-drawer__close-btn').click()
+  await page.getByRole('button', { name: '导入流程定义', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: '导入流程定义', exact: true })
+  const input = dialog.locator('input[type=file]')
+  const missingResolver = JSON.parse(file.toString('utf8'))
+  missingResolver.definition.nodes.review.approvers[0].type = 'UnregisteredBrowserResolver'
+  await input.setInputFiles({ name: 'missing-resolver.approval.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(missingResolver)) })
+  await dialog.getByRole('textbox').fill(target)
+  await dialog.getByRole('button', { name: '检查文件和宿主依赖' }).click()
+  await expect(dialog.getByText(/UnregisteredBrowserResolver/)).toBeVisible()
+  await expect(dialog.getByRole('button', { name: '导入为草稿' })).toBeDisabled()
+  await input.setInputFiles({ name: download.suggestedFilename(), mimeType: 'application/json', buffer: file })
+  await expect(dialog.getByText(`来源 ${key}（${key} · v1）`)).toBeVisible()
+  const preview = page.waitForResponse(r => new URL(r.url()).pathname.endsWith(`/${target}/import/validate`))
+  await dialog.getByRole('button', { name: '检查文件和宿主依赖' }).click()
+  const validated = await preview
+  expect(validated.status()).toBe(200)
+  expect(validated.request().headers()).not.toHaveProperty('idempotency-key')
+  await expect(dialog.getByText('预检通过，可以创建未发布草稿')).toBeVisible()
+
+  const submissions: { key: string | undefined; payload: string | null }[] = []
+  await page.route(`**/definitions/${target}/import`, async route => {
+    submissions.push({ key: route.request().headers()['idempotency-key'], payload: route.request().postData() })
+    if (submissions.length === 1) {
+      const committed = await route.fetch()
+      expect(committed.status(), await committed.text()).toBe(200)
+      await route.abort('failed')
+    } else await route.continue()
+  })
+  await dialog.getByRole('button', { name: '导入为草稿' }).click()
+  await dialog.getByRole('button', { name: '按原内容重试上次操作' }).click()
+  await expect(page).toHaveURL(new RegExp(`/designer/${target.replaceAll('.', '\\.')}$`))
+  expect(submissions).toHaveLength(2)
+  expect(submissions[0]!.key).toBeTruthy()
+  expect(submissions[1]).toEqual(submissions[0])
+  const governance = await json(request, `/api/approval/definitions/${target}/governance`, 'admin')
+  expect(governance).toMatchObject({ hasDraftChanges: true, lastVersion: 0, activeDefinitionId: null })
+  expect(JSON.parse(governance.draftJson)).toEqual(exported.definition)
+  const audit = await json(request, `/api/approval/definitions/${target}/audit`, 'admin')
+  expect(audit.items).toHaveLength(1)
+})
 
 test('packaged designer publishes a workflow and three approvals activate the certificate', async ({ page, request }, info) => {
   test.setTimeout(120000)

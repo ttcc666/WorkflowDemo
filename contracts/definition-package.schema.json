@@ -1,0 +1,55 @@
+{
+  "$id": "urn:approval:definition-package:1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "definition": {
+      "$ref": "urn:approval:flow:1"
+    },
+    "kind": {
+      "const": "approval-definition",
+      "type": "string"
+    },
+    "packageVersion": {
+      "const": 1,
+      "type": "integer"
+    },
+    "source": {
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "maxLength": 100,
+          "minLength": 1,
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 200,
+          "minLength": 1,
+          "type": "string"
+        },
+        "publishedAt": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "version": {
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "key",
+        "name",
+        "version",
+        "publishedAt"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "packageVersion",
+    "kind",
+    "source",
+    "definition"
+  ],
+  "type": "object"
+}

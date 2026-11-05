@@ -15,7 +15,7 @@ import {
   type NodeType,
 } from './flowModel'
 
-const props = withDefaults(defineProps<{ readonly?: boolean; height?: string }>(), {
+const props = withDefaults(defineProps<{ readonly?: boolean; height?: string; highlightedNodeId?: string }>(), {
   readonly: false,
   height: '100%',
 })
@@ -42,6 +42,8 @@ const {
   fitView,
   screenToFlowCoordinate,
   findEdge,
+  findNode,
+  setCenter,
   onNodeDrag,
   onNodeDragStop,
   onNodesChange,
@@ -72,7 +74,7 @@ function requestFit() {
   requestAnimationFrame(() => {
     if (fitPending && areNodesInitialized.value && viewportHelper.value.viewportInitialized) {
       fitPending = false
-      void fit()
+      if (!focusHighlightedNode()) void fit()
     }
   })
 }
@@ -80,6 +82,18 @@ onInit(requestFit)
 watch(() => [dimensions.value.width, dimensions.value.height], () => {
   if (props.readonly) requestFit()
 })
+function focusHighlightedNode() {
+  const node = props.highlightedNodeId ? findNode(props.highlightedNodeId) : undefined
+  if (node && areNodesInitialized.value && viewportHelper.value.viewportInitialized) {
+    fitPending = false
+    const center = nodeCenter(node)
+    void setCenter(center.x, center.y, { zoom: 1 })
+    return true
+  }
+  return false
+}
+watch(() => props.highlightedNodeId, focusHighlightedNode, { flush: 'post' })
+onNodesInitialized(focusHighlightedNode)
 
 function onConnect(connection: Connection) {
   emit('connect', connection.source, connection.target)
@@ -180,7 +194,7 @@ defineExpose({
     >
       <!-- 插槽名为 node-<节点类型>，节点类型见 flowModel.FLOW_NODE_TYPE -->
       <template #node-flow-node="nodeProps">
-        <FlowNodeCard :data="nodeProps.data" :selected="nodeProps.selected" />
+        <FlowNodeCard :data="nodeProps.data" :selected="nodeProps.selected || nodeProps.id === highlightedNodeId" />
       </template>
       <Background :gap="16" />
       <Controls :show-interactive="false" />

@@ -4,6 +4,7 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="../../src/Approval.Testing/Approval.Testing.csproj" />
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <ProjectReference Include="../../samples/Approval.Certificate/Approval.Certificate.csproj" />
     <ProjectReference Include="../../samples/Certificate.Api/Certificate.Api.csproj" />

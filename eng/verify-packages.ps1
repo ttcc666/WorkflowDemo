@@ -13,12 +13,13 @@ $uiPackage = Get-Content -LiteralPath (Join-Path $webRoot 'packages/approval-ui/
 if ($uiPackage.version -ne $version) { throw 'NuGet and npm release versions differ' }
 $packages = Join-Path $repositoryRoot ('output/packages/' + $version)
 $frameworkPackages = @('Approval.Core', 'Approval.AspNetCore', 'Approval.Forms', 'Approval.Forms.AspNetCore')
+$allPackages = $frameworkPackages + 'Approval.Testing'
 New-Item -ItemType 'Directory' -Path $packages -Force | Out-Null
 if (-not $SkipBuild) {
     Invoke-CheckedCommand 'dotnet' @('build', 'Workflow.slnx', '--configuration', 'Release') $repositoryRoot
     Invoke-CheckedCommand 'pnpm' @('build:lib') $webRoot
 }
-foreach ($package in $frameworkPackages) {
+foreach ($package in $allPackages) {
     Invoke-CheckedCommand 'dotnet' @('pack', ('src/' + $package), '--configuration', 'Release', '--no-build', '--output', $packages) $repositoryRoot
 }
 $tarball = Join-Path $packages ('approval-ui-' + $version + '.tgz')
@@ -107,7 +108,7 @@ $project = @'
 </Project>
 '@ -f $efVersion, $version
 $project | Set-Content -LiteralPath (Join-Path $apiRoot 'Certificate.Api.csproj')
-foreach ($name in $frameworkPackages) {
+foreach ($name in $allPackages) {
     Copy-Item -LiteralPath (Join-Path $packages ($name + '.' + $version + '.nupkg')) -Destination $feed
 }
 Invoke-CheckedCommand 'dotnet' @('build', 'Certificate.Api.csproj', '--configuration', 'Release', ('-p:RestorePackagesPath=' + (Join-Path $consumerRoot 'nuget-packages'))) $apiRoot
@@ -118,6 +119,7 @@ foreach ($name in $frameworkPackages) {
     if ($deps.libraries.($name + '/' + $version).sha512 -cne $expectedHash) { throw ('Consumer restored stale package bytes: ' + $name) }
 }
 if ($deps.libraries.('Approval.Certificate/' + $version).type -ne 'project') { throw 'The business sample must be built from the copied sample project.' }
+if (@($deps.libraries.PSObject.Properties.Name | Where-Object { $_ -like 'Approval.Testing/*' }).Count -gt 0) { throw 'Production packages depend on Approval.Testing.' }
 $referenceProjectPath = Join-Path $referenceRoot 'Approval.ReferenceHost.csproj'
 $referenceProject = [xml](Get-Content -LiteralPath $referenceProjectPath -Raw)
 foreach ($property in ([ordered]@{ TargetFramework = 'net10.0'; ImplicitUsings = 'enable'; Nullable = 'enable' }).GetEnumerator()) {
@@ -146,6 +148,7 @@ foreach ($name in $frameworkPackages) {
     $expectedHash = 'sha512-' + [Convert]::ToBase64String([Security.Cryptography.SHA512]::HashData([IO.File]::ReadAllBytes((Join-Path $feed ($name + '.' + $version + '.nupkg')))))
     if ($dependency.type -ne 'package' -or $dependency.sha512 -cne $expectedHash) { throw ('Reference host did not consume the validated package: ' + $name) }
 }
+if (@($referenceDeps.libraries.PSObject.Properties.Name | Where-Object { $_ -like 'Approval.Testing/*' }).Count -gt 0) { throw 'Reference host depends on Approval.Testing.' }
 Invoke-CheckedCommand 'pwsh' @('-NoProfile', '-File', (Join-Path $PSScriptRoot 'verify-reference-host.ps1'), '-SkipBuild', '-SamplePath', $referenceRoot) $repositoryRoot
 foreach ($name in @('certificate.create.json', 'certificate.update.json', 'certificate.revoke.json')) {
     if (-not (Test-Path -LiteralPath (Join-Path $apiRoot ('bin/Release/net10.0/Flows/' + $name)))) { throw ('Missing sample workflow: ' + $name) }
@@ -190,7 +193,7 @@ foreach ($reference in $embeddedProject.SelectNodes('/Project/ItemGroup/PackageR
 $embeddedProject.Save($embeddedProjectPath)
 Invoke-CheckedCommand 'dotnet' @('build', 'EmbeddedHost.csproj', '--configuration', 'Release', ('-p:RestorePackagesPath=' + (Join-Path $consumerRoot 'nuget-packages'))) $embeddedRoot
 $embeddedDeps = Get-Content -LiteralPath (Join-Path $embeddedRoot 'bin/Release/net10.0/EmbeddedHost.deps.json') -Raw | ConvertFrom-Json
-if (@($embeddedDeps.libraries.PSObject.Properties.Name | Where-Object { $_ -like 'Approval.Forms/*' -or $_ -like 'Approval.Forms.AspNetCore/*' }).Count -gt 0) { throw 'Core-only consumer implicitly depends on Forms.' }
+if (@($embeddedDeps.libraries.PSObject.Properties.Name | Where-Object { $_ -like 'Approval.Forms/*' -or $_ -like 'Approval.Forms.AspNetCore/*' -or $_ -like 'Approval.Testing/*' }).Count -gt 0) { throw 'Embedded consumer implicitly depends on Forms or Approval.Testing.' }
 foreach ($name in @('Approval.Core', 'Approval.AspNetCore')) {
     if ($embeddedDeps.libraries.($name + '/' + $version).type -ne 'package') { throw ('Embedded consumer did not use package: ' + $name) }
     $expectedHash = 'sha512-' + [Convert]::ToBase64String([Security.Cryptography.SHA512]::HashData([IO.File]::ReadAllBytes((Join-Path $feed ($name + '.' + $version + '.nupkg')))))
@@ -208,7 +211,48 @@ try {
 }
 finally { $env:APPROVAL_CONSUMER_DATABASE = $savedConsumerDatabase; $env:APPROVAL_CONSUMER_REPORT = $savedConsumerReport }
 
-$artifacts = @($tarball) + @($frameworkPackages | ForEach-Object { Join-Path $packages ($_ + '.' + $version + '.nupkg') })
+# Test toolkit consumer chooses its own provider and restores only the packed product assemblies.
+$testingRoot = Join-Path $consumerRoot 'testing-host'
+Copy-HostSources (Join-Path $repositoryRoot 'eng/consumers/TestingHost') $testingRoot
+$testingProjectPath = Join-Path $testingRoot 'TestingHost.csproj'
+$testingProject = [xml](Get-Content -LiteralPath $testingProjectPath -Raw)
+$testingProject.SelectSingleNode('/Project/ItemGroup/PackageReference[@Include="Approval.Testing"]').SetAttribute('Version', $version)
+$testingProject.SelectSingleNode('/Project/ItemGroup/PackageReference[@Include="Microsoft.EntityFrameworkCore.Sqlite"]').SetAttribute('Version', $efVersion)
+$testingProject.Save($testingProjectPath)
+$testingPackage = Join-Path $feed ('Approval.Testing.' + $version + '.nupkg')
+$archive = [IO.Compression.ZipFile]::OpenRead($testingPackage)
+try {
+    $nuspecEntry = $archive.Entries | Where-Object FullName -eq 'Approval.Testing.nuspec'
+    $reader = [IO.StreamReader]::new($nuspecEntry.Open())
+    try { $nuspec = [xml]$reader.ReadToEnd() }
+    finally { $reader.Dispose() }
+    $allowed = @('Approval.Core', 'Microsoft.Extensions.DependencyInjection.Abstractions', 'Microsoft.Extensions.TimeProvider.Testing')
+    $actual = @($nuspec.SelectNodes('//*[local-name()="dependency"]') | ForEach-Object { $_.GetAttribute('id') })
+    if ($actual -notcontains 'Approval.Core' -or @($actual | Where-Object { $_ -notin $allowed }).Count -ne 0) {
+        throw ('Unexpected Approval.Testing package dependencies: ' + ($actual -join ', '))
+    }
+}
+finally { $archive.Dispose() }
+Invoke-CheckedCommand 'dotnet' @('build', 'TestingHost.csproj', '--configuration', 'Release', ('-p:RestorePackagesPath=' + (Join-Path $consumerRoot 'nuget-packages'))) $testingRoot
+$testingDeps = Get-Content -LiteralPath (Join-Path $testingRoot 'bin/Release/net10.0/TestingHost.deps.json') -Raw | ConvertFrom-Json
+foreach ($name in @('Approval.Core', 'Approval.Testing')) {
+    $dependency = $testingDeps.libraries.($name + '/' + $version)
+    $expectedHash = 'sha512-' + [Convert]::ToBase64String([Security.Cryptography.SHA512]::HashData([IO.File]::ReadAllBytes((Join-Path $feed ($name + '.' + $version + '.nupkg')))))
+    if ($dependency.type -ne 'package' -or $dependency.sha512 -cne $expectedHash) { throw ('TestingHost did not consume the validated package: ' + $name) }
+}
+$unexpected = @($testingDeps.libraries.PSObject.Properties.Name | Where-Object { $_ -match '^(Approval\.(AspNetCore|Forms)|xunit|nunit|mstest|Microsoft\.NET\.Test\.Sdk)' })
+if ($unexpected.Count -ne 0) { throw ('Unexpected TestingHost dependencies: ' + ($unexpected -join ', ')) }
+$savedTestingReport = $env:APPROVAL_TESTING_CONSUMER_REPORT
+$testingReport = Join-Path $testingRoot 'verification.json'
+try {
+    $env:APPROVAL_TESTING_CONSUMER_REPORT = $testingReport
+    Invoke-CheckedCommand 'dotnet' @('run', '--project', 'TestingHost.csproj', '--configuration', 'Release', '--no-build', '--no-restore') $testingRoot
+    $testingEvidence = Get-Content -LiteralPath $testingReport -Raw | ConvertFrom-Json
+    if (-not $testingEvidence.passed -or $testingEvidence.checks.Count -lt 20) { throw 'TestingHost did not execute the required checks.' }
+}
+finally { $env:APPROVAL_TESTING_CONSUMER_REPORT = $savedTestingReport }
+
+$artifacts = @($tarball) + @($allPackages | ForEach-Object { Join-Path $packages ($_ + '.' + $version + '.nupkg') })
 $hashes = @($artifacts | ForEach-Object { [pscustomobject]@{ File = (Split-Path -Leaf $_); Sha256 = (Get-FileHash -LiteralPath $_).Hash.ToLowerInvariant() } })
 $sourceHasher = [Security.Cryptography.IncrementalHash]::CreateHash([Security.Cryptography.HashAlgorithmName]::SHA256)
 Push-Location -LiteralPath $repositoryRoot
@@ -225,7 +269,7 @@ try {
 }
 finally { Pop-Location; $sourceHasher.Dispose() }
 $contractHashes = @(Get-ChildItem -LiteralPath (Join-Path $repositoryRoot 'contracts') -File | ForEach-Object { [pscustomobject]@{ File = $_.Name; Sha256 = (Get-FileHash -LiteralPath $_.FullName).Hash.ToLowerInvariant() } })
-$manifest = [ordered]@{ Version = $version; Commit = $commit; SourceSha256 = $sourceHash; ConsumerRoot = $consumerRoot; ApiRoot = $apiRoot; ReferenceApiRoot = $referenceRoot; EmbeddedApiRoot = $embeddedRoot; UiRoot = $uiRoot; Packages = $hashes; Contracts = $contractHashes; ChangelogSha256 = (Get-FileHash -LiteralPath (Join-Path $repositoryRoot 'CHANGELOG.md')).Hash.ToLowerInvariant() }
+$manifest = [ordered]@{ Version = $version; Commit = $commit; SourceSha256 = $sourceHash; ConsumerRoot = $consumerRoot; ApiRoot = $apiRoot; ReferenceApiRoot = $referenceRoot; EmbeddedApiRoot = $embeddedRoot; TestingHostRoot = $testingRoot; TestingHostChecks = $testingEvidence.checks; UiRoot = $uiRoot; Packages = $hashes; Contracts = $contractHashes; ChangelogSha256 = (Get-FileHash -LiteralPath (Join-Path $repositoryRoot 'CHANGELOG.md')).Hash.ToLowerInvariant() }
 $manifestPath = Join-Path $consumerRoot 'verification.json'
 $manifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $manifestPath
 $manifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $repositoryRoot 'output/engineering/package-verification.json')

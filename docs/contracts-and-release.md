@@ -6,6 +6,8 @@ Directory.Build.props 的 ApprovalVersion 与 @approval/ui 的版本一致。四
 
 Certificate.Api、ReferenceHost 从复制后的宿主源码构建并引用 NuGet 包。EmbeddedHost 只装 Core/AspNetCore，使用已有 Identity、宿主 SaveChanges 和业务表，实际生成 Migration 并运行无 Forms 的审批能力验证。消费者不引用仓库框架源码。
 
+TestingHost 单独还原 `Approval.Testing` 和 Core，选择自己的 SQLite Provider 并执行集成场景。包门禁检查 `Approval.Testing` 的依赖、独立消费者还原的包哈希、场景执行结果及生产消费者的依赖图。 [测试工具包](testing-toolkit.md)
+
 npm tgz 在独立消费者安装，验证 dist 导出、版本、types、CSS 导入并构建真实 demo。可选 RunBrowser 运行消费者页面 smoke。产物记录在 output/packages/<version>/release-manifest.json，包括源码、包、契约与 changelog 摘要。
 
 运行 pnpm contracts:update 更新 OpenAPI、JSON schema、四个公共程序集 API 基线与 TypeScript；CI 用 contracts:check 拒绝漂移。前端 types 依赖生成契约，不能把旧生成内容当成当前协议。
