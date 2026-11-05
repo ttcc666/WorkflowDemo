@@ -18,9 +18,9 @@
 | A01 | 元数据约束身份识别；完整 executor、治理、Provider 回归 | Core + SQLite Database 定点；服务数据库由 CI | 本地定点通过，待最终 SHA CI |
 | A02 | 复用 Availability 和版本固定；活动、显式、停用、重试、变量回归 | Core + HTTP 定点 | 本地定点通过，待最终 SHA CI |
 | A03 | Warnings 回调保护；正常/同步异步保存/Commit/重入/HTTP 回归 | Core + HTTP + SQLite Database 定点 | 本地定点通过，待最终 SHA CI |
-| A04 | 幂等、事件、最小宿主接入示例及文档交叉核对 | 签名、契约及独立消费者核对 | 签名核对通过，待最终门禁 |
-| A05 | 公共类型职责/消费者矩阵；定向收敛 Worker、Signal | Contracts + Packages；审阅生成 diff | 待最终门禁 |
-| 最终 | 汇总正式测试证据与各阶段 SHA | Backend、Contracts、Packages、相关前端及最终 SHA CI | 待实施 |
+| A04 | 幂等、事件、最小宿主接入示例及文档交叉核对 | 签名、契约及独立消费者核对 | 本地通过，待最终 SHA CI |
+| A05 | 公共类型职责/消费者矩阵；定向收敛 Worker、Signal | Contracts + Packages；审阅生成 diff | 本地通过，待最终 SHA CI |
+| 最终 | 汇总正式测试证据与各阶段 SHA | Backend、Contracts、Packages、相关前端及最终 SHA CI | 四项本地门禁通过，待最终 SHA CI |
 
 ## 验证与回滚
 

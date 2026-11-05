@@ -7,8 +7,8 @@
 | A01 | 代码及本地正式回归通过，待最终 CI | Core 27 / 0 / 0；SQLite Database 18 / 0 / 0 |
 | A02 | 代码及本地正式回归通过，待最终 CI | Core 32 / 0 / 0；HTTP 8 / 0 / 0 |
 | A03 | 代码及本地正式回归通过，待最终 CI | Core 19 / 0 / 0；HTTP 12 / 0 / 0；SQLite Database 16 / 0 / 0 |
-| A04 | 文档与代码签名已核对，待最终门禁 | SDK、HTTP/OpenAPI、Outbox 和独立消费者源码 |
-| A05 | 公共 API 审查及定向收敛，待最终门禁 | `ApprovalWorker`、`ApprovalOutboxSignal` 改为 internal |
+| A04 | 文档与代码签名已核对，独立消费者通过，待最终 CI | SDK、HTTP/OpenAPI、Outbox 和 EmbeddedHost |
+| A05 | 公共 API 收敛及本地门禁通过，待最终 CI | `ApprovalWorker`、`ApprovalOutboxSignal` 改为 internal |
 
 ## A01
 
@@ -97,3 +97,18 @@ dotnet test 'tests/Approval.Database.Tests/Approval.Database.Tests.csproj' --con
 | 启动、发布、治理审计、Outbox 查询的实体结果 | 保留 | 启动和定义返回值被 HTTP、Forms、Certificate、ReferenceHost 和独立 NuGet 消费者读取，宿主诊断和 HTTP 适配使用现有结果。审批写保护继续约束实体写入，宿主扩展回调使用 Context/Snapshot。 |
 
 审查范围包括 Core、AspNetCore、Forms、Forms.AspNetCore 的公开基线，以及项目示例和独立 NuGet/npm 消费者。A05 的有意契约差异是 Core 中这两个内部实现类型的公开记录，HTTP/OpenAPI、JSON、TypeScript 与数据库模型保持原契约。
+
+## 本地完整门禁与远程验收
+
+分支 `codex/architecture-audit-fixes`，实际验证的代码 SHA `3526c07d0c5606ca1316a13e6f7e7209c555d4b5`。A01 `0695b10`、A02 `3ac5662`、A03 `2c0b65c`、A04 `e7bf865`、A05 `3526c07`。其后的验收记录提交仅包含 Markdown。
+
+从仓库根目录运行以下门禁，全部退出 0。
+
+| 门禁 | 本地证据 |
+| --- | --- |
+| `pwsh -NoProfile -File './eng/verify.ps1' -Scope 'Backend'` | Release 构建 0 警告 / 0 错误。Core 607、HTTP 119、SQLite Database 78、Certificate 59，合计 Passed 863 / Failed 0 / Skipped 0。Model Drift 9 项通过，ReferenceHost 冒烟 27 项通过。 |
+| `pwsh -NoProfile -File './eng/verify.ps1' -Scope 'Contracts'` | 四个程序集、OpenAPI、JSON Schema、TypeScript 和示例契约均匹配基线。之前运行的 `pnpm --dir 'web' 'contracts:update'` 退出 0，审阅生成差异后仅 `Approval.Core.api.txt` 的两个类型记录变更。 |
+| `pwsh -NoProfile -File './eng/verify.ps1' -Scope 'Frontend'` | 依赖边界和类型检查通过，边界测试 12 项、UI 242 项、Demo 6 项通过，失败及跳过均为 0，库和 Demo 构建通过。 |
+| `pwsh -NoProfile -File './eng/verify.ps1' -Scope 'Packages'` | 独立 NuGet 与 npm 消费者通过，打包版 ReferenceHost 冒烟 27 项，EmbeddedHost 18 项，浏览器 Passed 7 / Failed 0 / Skipped 0。 |
+
+最终发布门禁仍需当前分支 SHA 的 GitHub Actions Run。`3526c07d0c5606ca1316a13e6f7e7209c555d4b5` 当前无远程 Run。PostgreSQL、SQL Server 和 MySQL 的新回归尚未在本轮服务数据库上运行，9 项 Model Drift 只记录模型验证。
