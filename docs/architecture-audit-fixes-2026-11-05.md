@@ -4,11 +4,11 @@
 
 | 编号 | 当前状态 | 关键证据 |
 | --- | --- | --- |
-| A01 | 代码及本地正式回归通过，待最终 CI | Core 27 / 0 / 0；SQLite Database 18 / 0 / 0 |
-| A02 | 代码及本地正式回归通过，待最终 CI | Core 32 / 0 / 0；HTTP 8 / 0 / 0 |
-| A03 | 代码及本地正式回归通过，待最终 CI | Core 19 / 0 / 0；HTTP 12 / 0 / 0；SQLite Database 16 / 0 / 0 |
-| A04 | 文档与代码签名已核对，独立消费者通过，待最终 CI | SDK、HTTP/OpenAPI、Outbox 和 EmbeddedHost |
-| A05 | 公共 API 收敛及本地门禁通过，待最终 CI | `ApprovalWorker`、`ApprovalOutboxSignal` 改为 internal |
+| A01 | 四个真实 Provider 回归通过 | SQLite、SQL Server、PostgreSQL、MySQL 各 81 / 0 / 0 |
+| A02 | 正式回归和完整 CI 通过 | Core 32 / 0 / 0；HTTP 8 / 0 / 0 |
+| A03 | 补充回滚修复及完整 CI 通过 | 补充本地定点 Core 27 / 0 / 0；HTTP 4 / 0 / 0 |
+| A04 | 文档核对、独立消费者和完整 CI 通过 | SDK、HTTP/OpenAPI、Outbox 和 EmbeddedHost |
+| A05 | 公共 API 收敛和完整 CI 通过 | `ApprovalWorker`、`ApprovalOutboxSignal` 改为 internal |
 
 ## A01
 
@@ -35,7 +35,7 @@ dotnet test 'tests/Approval.Core.Tests/Approval.Core.Tests.csproj' --configurati
 dotnet test 'tests/Approval.Database.Tests/Approval.Database.Tests.csproj' --configuration 'Release' --filter 'FullyQualifiedName~RealProviderUniqueConstraints|FullyQualifiedName~Executor_RealProviderHostError|FullyQualifiedName~Executor_SynchronizedOperation|FullyQualifiedName~RealProviderConstraints|FullyQualifiedName~RealProviderSqlError|FullyQualifiedName~AtomicCommands_Twenty|FullyQualifiedName~AtomicCommands_DifferentKeys|FullyQualifiedName~Governance_ConcurrentDrafts' --verbosity 'minimal'
 ```
 
-两条均退出 0，分别 Passed 27 / Failed 0 / Skipped 0 与 Passed 18 / Failed 0 / Skipped 0。Database 本地实际 Provider 为 SQLite；服务数据库的新回归尚待最终提交对应 CI，不能标为已通过。
+两条均退出 0，分别 Passed 27 / Failed 0 / Skipped 0 与 Passed 18 / Failed 0 / Skipped 0。此处 Database 本地实际 Provider 为 SQLite，后续四种 Provider 的证据见补充验收。
 
 ## A02
 
@@ -111,4 +111,54 @@ dotnet test 'tests/Approval.Database.Tests/Approval.Database.Tests.csproj' --con
 | `pwsh -NoProfile -File './eng/verify.ps1' -Scope 'Frontend'` | 依赖边界和类型检查通过，边界测试 12 项、UI 242 项、Demo 6 项通过，失败及跳过均为 0，库和 Demo 构建通过。 |
 | `pwsh -NoProfile -File './eng/verify.ps1' -Scope 'Packages'` | 独立 NuGet 与 npm 消费者通过，打包版 ReferenceHost 冒烟 27 项，EmbeddedHost 18 项，浏览器 Passed 7 / Failed 0 / Skipped 0。 |
 
-最终发布门禁仍需当前分支 SHA 的 GitHub Actions Run。`3526c07d0c5606ca1316a13e6f7e7209c555d4b5` 当前无远程 Run。PostgreSQL、SQL Server 和 MySQL 的新回归尚未在本轮服务数据库上运行，9 项 Model Drift 只记录模型验证。
+上一轮推送提交 `8e4fb8753d061e7a934fb6f6197a3628ea664752` 的 [CI #42008090488](https://github.com/ttcc666/WorkflowDemo/actions/runs/42008090488) 全部通过。PostgreSQL、SQL Server 和 MySQL 各运行 78 项真实数据库测试。下文记录补充 A03 和 A01 后的新证据。
+
+## 补充验收 A03 和 A01
+
+基线 `8e4fb8753d061e7a934fb6f6197a3628ea664752`。A03 `3f7e231` 单独修复，A01 代码及测试提交 `b6e4febe61c69739f82a05fd417953944078140f`。
+
+### A03 捕获异常后的事务回滚
+
+先执行新增 Warnings 回归，得到 7 项通过、2 项失败。同步和异步两种场景均观察到 Warnings 捕获保存拒绝后继续返回，外层命令将正常业务记录和扩展插入的记录一起提交。
+
+`ApprovalPersistence` 在拦截保存、事务开启/提交及只读扩展的 EF 直接写入时将当前上下文标为失败。`ApprovalUnitOfWork` 重入检查也锁定失败状态，`ApprovalCommandExecutor` 在宿主委托返回后检查该状态，随后由现有工作单元回滚。作用域退出时保留失败状态直到上下文释放或池化租期变更。
+
+| 用例 | 证据 |
+| --- | --- |
+| `Warnings_CaughtSaveRejectionRollsBackEntireKeyedCommand` | 两种 SaveChanges 都被拒绝，扩展捕获异常后外层委托走到返回。独立上下文确认宿主记录、实例、任务、业务占用、Operation、日志和 Outbox 均回滚，发布定义仍存在。 |
+| `Warnings_RejectHostSaveChangesAndPreserveDatabase` | 验证同步和异步拒绝异常的原有传播路径。 |
+| `Warnings_ReadOnlyCallbackAllowsKeyedHostAndApprovalWrites` | 只读回调正常返回时，带键委托保存宿主数据并提交审批、Operation、审计和 Outbox。 |
+| `Warnings_RejectOpeningTransactionAndInvalidateCallerScope`、`Warnings_RejectCommitAndLeaveOuterTransactionAvailableForRollback` | 拒绝开启事务和提交，验证同一作用域后续保存或提交仍被拒绝且可回滚。 |
+| `Warnings_RejectDirectEfWritesToHostTable`、`Warnings_RejectKeyedCommandReentryBeforeInvokingDelegate` | 拒绝批量更新、原生命令及执行器重入。 |
+
+```powershell
+dotnet test 'tests/Approval.Core.Tests/Approval.Core.Tests.csproj' --configuration 'Release' --filter 'FullyQualifiedName~WarningsBoundaryTests|FullyQualifiedName~StrictCommandBoundaryTests|FullyQualifiedName~OutboxTests|FullyQualifiedName~HostDbContextIntegrationTests' --verbosity 'minimal'
+dotnet test 'tests/Approval.AspNetCore.Tests/Approval.AspNetCore.Tests.csproj' --configuration 'Release' --filter 'FullyQualifiedName~ValidateEndpoint_WarningsCanReadButCannotPersistHostRecords|FullyQualifiedName~OutboxRetryEndpointTests' --verbosity 'minimal'
+```
+
+本地分别通过 27 项、4 项，失败和跳过均为 0，两条命令均退出 0。
+
+### A01 真实 Provider 回归
+
+MySQL 错误 1062 末尾的索引标识使用原生索引名，主键为 `PRIMARY`。识别时仍验证 EF 实体归属及错误中的表名或同类型 Entries，取末尾索引标识以排除重复值干扰。其余 Provider 保留现有约束身份判断。
+
+`RealProviderUniqueConstraints_ClassifyOnlyOwnedBusinessIndexes` 新增抄送已读的业务唯一索引和主键冲突。它还验证 Operation、业务占用、流程版本、流程治理与审计约束，以及不属于已识别业务冲突的日志主键。`Executor_RealProviderHostErrorPreservesOriginalAndRollsBack` 验证宿主主键、外键及 SQL 错误的原生异常类型和错误码，保留异常实例并回滚同事务的审批和宿主写入。外键仅加入测试宿主夹具。
+
+```powershell
+dotnet test 'tests/Approval.Database.Tests/Approval.Database.Tests.csproj' --configuration 'Release' --filter 'FullyQualifiedName~RealProviderUniqueConstraints|FullyQualifiedName~Executor_RealProviderHostError|FullyQualifiedName~Executor_SynchronizedOperation|FullyQualifiedName~RealProviderConstraints|FullyQualifiedName~RealProviderSqlError' --verbosity 'minimal'
+```
+
+本地 SQLite 18 项通过、0 失败、0 跳过，退出 0。
+
+| Provider | 实测 | 原生错误证据 |
+| --- | --- | --- |
+| SQLite | 本地定点 18 / 0 / 0，CI 全集 81 / 0 / 0 | `SqliteException` 扩展码 1555、787、1 分别对应宿主主键、外键和缺失列，审批唯一约束由表与列身份匹配。 |
+| SQL Server | 真实数据库 81 / 0 / 0 | `SqlException` 2601 和 2627 包含审批索引或主键及表名，宿主主键/外键/缺失列为 2627、547、207。 |
+| PostgreSQL | 真实数据库 81 / 0 / 0 | `PostgresException` 的 23505、23503、42703 分别为唯一、外键、缺失列，约束冲突保留结构化约束名和表名。 |
+| MySQL | 真实数据库 81 / 0 / 0 | `MySqlException` 1062 区分 `ApprovalCarbonCopyReads.PRIMARY` 和宿主主键，外键/缺失列为 1452、1054。 |
+
+三个服务数据库的 TRX 和原生异常证据均来自代码 SHA `b6e4febe61c69739f82a05fd417953944078140f`。[CI #42030923238](https://github.com/ttcc666/WorkflowDemo/actions/runs/42030923238)
+
+### 完整 CI
+
+代码 SHA `b6e4febe61c69739f82a05fd417953944078140f` 的 `approval-pilot` 全部四个 Job 成功。Windows 的 `eng/verify.ps1` 退出 0，后端 872 项通过、0 失败、0 跳过（Core 613、HTTP 119、SQLite Database 81、Certificate 59）。9 项模型漂移检查通过，ReferenceHost 冒烟 27 项、前端门禁、契约、独立 NuGet/npm 消费者和浏览器 7 项均通过。代码差异集中在 Core 持久化及测试夹具，契约检查与模型漂移检查分别确认公开契约和产品 Migration 无差异。[CI #42030923238](https://github.com/ttcc666/WorkflowDemo/actions/runs/42030923238)
