@@ -7,7 +7,7 @@
 | A01 | 代码及本地正式回归通过，待最终 CI | Core 27 / 0 / 0；SQLite Database 18 / 0 / 0 |
 | A02 | 代码及本地正式回归通过，待最终 CI | Core 32 / 0 / 0；HTTP 8 / 0 / 0 |
 | A03 | 代码及本地正式回归通过，待最终 CI | Core 19 / 0 / 0；HTTP 12 / 0 / 0；SQLite Database 16 / 0 / 0 |
-| A04 | 待实施 | 当前 SDK、事件协议及宿主接入 |
+| A04 | 文档与代码签名已核对，待最终门禁 | SDK、HTTP/OpenAPI、Outbox 和独立消费者源码 |
 | A05 | 待审查 | 按宿主长期依赖判断，不追求 public 数量 |
 
 ## A01
@@ -77,3 +77,9 @@ dotnet test 'tests/Approval.Database.Tests/Approval.Database.Tests.csproj' --con
 ```
 
 三条均退出 0，分别 Passed 19、12、16，Failed 0 / Skipped 0。Database 测试实际使用 SQLite。
+
+## A04
+
+- [事务与幂等](transactions-and-idempotency.md) 使用四参数 `client.api.reassignUser`。已核对 SDK `commandHeaders`、`AdminEndpoints` 的 `OperationId` 提取、`ReassignRequest` 和 OpenAPI 必填 `Idempotency-Key`。
+- [事件与 Outbox](events.md) 按 `ApprovalEvent`、`OutboxJson` 和 `ApprovalOutboxService` 记录现行格式、稳定 ID、投递与人工重试及宿主去重责任。
+- [宿主接入](embedded-host-integration.md) 集中给出注册与带键完整业务委托示例，对照 `ApprovalBuilder` 和可运行的 [EmbeddedHost](../eng/consumers/EmbeddedHost/Program.cs)。该阶段仅修改文档。

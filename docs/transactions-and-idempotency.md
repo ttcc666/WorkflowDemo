@@ -68,37 +68,15 @@ const operationId = crypto.randomUUID() // 在创建意图时保存，重试复�
 await client.api.approve(taskId, '同意', undefined, operationId)
 ```
 
-当前 `client.api.reassignUser` 没有显式键参数。严格模式的批量调用使用客户端已提供的 HTTP 入口：
+`client.api.reassignUser(userId, toUserId, reason, operationId)` 接受同一意图键，并把它作为 `Idempotency-Key` 发送。请求体使用 OpenAPI 的 `ReassignRequest`，结果为 `ReassignResult`。
 
 ```typescript
-await client.http.post(
-  '/api/approval/admin/users/bob/reassign',
-  { toUserId: 'carol', reason: '离职交接' },
-  { 'Idempotency-Key': operationId },
-)
+const result = await client.api.reassignUser('bob', 'carol', '离职交接', operationId)
 ```
 
 路径以宿主实际 endpoint 前缀为准。SDK 不替调用方持久保存跨页面／跨进程的意图键；网络失败后保留原键，确定发起新意图时才换键。
 
-非 HTTP 宿主通过 IApprovalContextResolver 提供可信操作人，然后使用命令执行器：
-
-```csharp
-var instanceId = await commands.ExecuteAsync(
-    new ApprovalCommand("invoice.start", "invoice/" + invoiceId, operationId,
-        new { invoiceId, amount }, ApprovalPermissions.InstanceStart,
-        new ApprovalResource { DefinitionKey = "invoice" }),
-    async (sp, token) =>
-    {
-        var db = sp.GetRequiredService<AppDbContext>();
-        // 在这里使用 db 保存本地业务变化，不捕获原 scope 的服务或实体。
-        var engine = sp.GetRequiredService<ApprovalEngine>();
-        var instance = await engine.StartAsync(new StartApprovalRequest(
-            "invoice", "Invoice", invoiceId.ToString(), actorId), token);
-        return instance.Id;
-    }, ct);
-```
-
-Kind、Scope、Key 与 Payload 必须稳定；Payload 要包含所有影响业务决策的输入，执行器不会分析委托来补充摘要。结果使用可序列化 DTO。严格模式下未提供键、也未经过带键 executor 的普通写服务调用会抛出 `ApprovalException`（`OperationIdRequired`），裸 UnitOfWork 不能代替已预约的带键命令。StartApprovalRequest 的 OperationId 入口也由执行器协调；后台系统操作仅在显式能力集合内运行。
+非 HTTP 宿主通过 `IApprovalContextResolver` 提供可信操作人。业务数据与审批的原子提交用完整的带键执行器委托，见[宿主接入示例](embedded-host-integration.md#在同一事务提交业务数据与审批)。直接使用 `StartApprovalRequest.OperationId` 时，引擎也通过执行器协调启动。后台系统操作使用显式授予的能力。
 
 没有操作过期、自动结果擦除或后台保留调度。已删除旧结果擦除的墓碑字段和 ReplayExpired 协议；每个已提交操作保留完整结果，原键继续重放并复核当前权限。
 

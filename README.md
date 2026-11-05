@@ -66,7 +66,7 @@ Forms 保留动态字段、公式、明细、字段权限、规范化、草稿�
 
 ## 事件与前端
 
-所有业务事件随审批事务写入 Outbox，由单个 Worker 至少一次投递给 `IApprovalEventHandler`。Event.Id 稳定，宿主以该 ID 幂等处理外部副作用。旧通知规则可作为 `NotificationRequested` 事件携带接收人、内容与宿主路由提示；Core 不注册任何发送渠道。
+所有业务事件随审批事务写入 Outbox，由单个 Worker 至少一次投递给 `IApprovalEventHandler`。Event.Id 稳定，宿主以该 ID 幂等处理外部副作用。流程通知规则直接产生 `NotificationRequested` 事件，携带接收人、内容与宿主路由提示。
 
 启用 Dispatcher 时缺少或无法构造事件处理器会在宿主启动时失败。明确不投递时设置 `o.Outbox.EnableDispatcher = false`：Outbox 继续保存为 Pending；`EnableBackgroundServices = false` 只关闭定时调度，仍允许手动投递并要求处理器。
 

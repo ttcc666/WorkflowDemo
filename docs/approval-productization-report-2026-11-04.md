@@ -1,5 +1,7 @@
 # 阶段一实施与验证报告
 
+后续架构盘点 A01～A05 的修复与验收见[架构盘点修复实施与验收记录](architecture-audit-fixes-2026-11-05.md)。
+
 2026-11-05 P4 最终安全验收完成：代码 SHA `247991233ffcd77349eeae745bb86a2ec90a550f` 的 S01～S22、最终汇总并发撤权回归、重新执行的 Backend（833 通过 / 0 失败 / 0 跳过）与 Contracts 门禁均通过；该确切 SHA 的 Windows 完整 verify 及 PostgreSQL / SQL Server / MySQL CI（各 68 / 0 / 0）全部通过。当前证据与完成结论见 [P4 安全验收报告](p4-safety-acceptance-2026-11-05.md)。下文原实施与验证记录保留为历史证据，不替代本次最终验收。
 
 日期：2026-11-04（Asia/Shanghai）。工作分支：`main`。基线 HEAD：`76219b4d241ec989b5fe8926bd0c5b519baf2cd8`。开始时工作区干净；以下验证针对该基线上的本次未提交改动。未提交、推送、合并或发布，没有可用于本次改动验收的 CI 提交 SHA。

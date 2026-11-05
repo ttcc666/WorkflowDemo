@@ -212,4 +212,4 @@ dotnet run --project './output/architecture-audit/ArchitectureAudit.csproj' --co
 gh run view '41986698611' --json 'headSha,status,conclusion,jobs,url'
 ```
 
-定点程序是本轮本地诊断产物，被 Git 忽略；本报告已保留其输入场景、观测结果和证据边界。建议下一轮先修 A01，再修 A02 / A03 并形成正式回归，随后修正文档和审查公共类型。前端拆包与跨页面恢复按实际宿主需求另行决定。
+定点程序是本轮本地诊断产物，被 Git 忽略。本报告保留基线的输入场景、观测结果和证据边界。A01～A05 后续修复、正式回归和最终 CI 状态见[架构盘点修复实施与验收记录](architecture-audit-fixes-2026-11-05.md)。前端拆包与跨页面恢复按实际宿主需求另行决定。
