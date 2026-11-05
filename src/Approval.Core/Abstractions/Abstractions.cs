@@ -40,8 +40,12 @@ public interface IApprovalUserDirectory
 
 public sealed record Assignee(AssigneeKind Kind, string Value);
 
+/// <summary>可选只读解析说明；由 Resolver 在实际解析中报告，未报告不代表解析失败。</summary>
+public sealed record ApproverResolutionTrace(string Type, string Description);
+
 public sealed class ApproverResolveContext
 {
+    public Action<ApproverResolutionTrace>? Trace { get; init; }
     public required ApprovalInstanceContext Instance { get; init; }
     public required ApprovalNodeContext Node { get; init; }
 

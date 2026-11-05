@@ -83,7 +83,7 @@ public sealed record InstanceQuery(
     DateTime? From = null,
     DateTime? To = null,
     string? InitiatorId = null, string? BusinessType = null, string? BusinessKey = null, string? ApproverId = null,
-    ApprovalSort Sort = ApprovalSort.Newest);
+    ApprovalSort Sort = ApprovalSort.Newest, bool OverdueOnly = false);
 
 /// <summary>只读查询：待办、已办、我发起的、抄送我的、全部实例（管理员）、审批详情。列表均分页，按时间排序。</summary>
 public sealed class ApprovalQueryService(
@@ -259,6 +259,12 @@ public sealed class ApprovalQueryService(
             var isId = Guid.TryParse(keyword, out var id);
             instances = instances.Where(i => (i.Title != null && i.Title.Contains(keyword)) || i.InitiatorId.Contains(keyword)
                 || i.BusinessKey.Contains(keyword) || isId && i.Id == id);
+        }
+        if (query.OverdueOnly)
+        {
+            var now = clock.GetUtcNow().UtcDateTime;
+            instances = instances.Where(i => (i.Status == InstanceStatus.Running || i.Status == InstanceStatus.Returned)
+                && i.Tasks.Any(t => t.Status == ApprovalTaskStatus.Pending && t.DueAt != null && t.DueAt <= now));
         }
         if (query.Status is { } status) instances = instances.Where(i => i.Status == status);
         if (Trim(query.DefinitionKey) is { } definitionKey) instances = instances.Where(i => i.DefinitionKey == definitionKey);

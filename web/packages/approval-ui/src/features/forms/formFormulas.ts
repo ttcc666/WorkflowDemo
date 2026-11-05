@@ -1,4 +1,4 @@
-import type { FormField, FormSchema, FormValues } from '../../contracts/forms'
+import type { FormField, FormSchema, FormValues } from '@ui/contracts/forms'
 import { sumKey, tableSum } from './formFields'
 import { parseFormula, roundTo, type ParsedFormula } from './formula'
 

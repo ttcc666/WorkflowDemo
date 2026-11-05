@@ -41,3 +41,23 @@ test('allows stateless HTTP helpers and client types in UI code', () => {
   const source = "import { ApiError, errorMessage } from '../api/http'; import { queryString } from '../api/approval'; import type { ApprovalUIOptions } from '../config'"
   assert.deepEqual(boundaryViolations(join(sourceRoot, 'views/Screen.ts'), source, roots), [])
 })
+
+test('source aliases preserve contract and host dependency boundaries', () => {
+  const file = join(roots.contractsRoot, 'flow.ts')
+  assert.deepEqual(boundaryViolations(file, "export type { Flow } from '@ui/contracts/flow'", roots), [])
+  const source = "export type A = import('@ui/features/forms/formModel').FormSchema; export type B = import('@ui/../../../apps/demo/src/session').Session"
+  assert.deepEqual(boundaryViolations(file, source, roots).map(v => v.reason), [
+    'contracts may depend only on other contract files',
+    'contracts may depend only on other contract files',
+    'the UI library must not depend on a host application',
+  ])
+  assert.deepEqual(boundaryViolations(join(sourceRoot, 'views/Screen.vue'),
+    `<script setup lang="ts">import { session } from '@/stores/session'</script>`, roots).map(v => v.reason),
+  ['the UI library must not depend on a host application'])
+})
+
+test('source aliases cannot bypass injected client rules', () => {
+  const file = join(sourceRoot, 'views/Screen.vue')
+  const source = `<script setup lang="ts">import { approvalApi } from '@ui/api/approval'; export { http } from '@ui/api/http'; import { errorMessage } from '@ui/api/http'</script>`
+  assert.deepEqual(boundaryViolations(file, source, roots).map(v => v.specifier), ['@ui/api/approval', '@ui/api/http'])
+})

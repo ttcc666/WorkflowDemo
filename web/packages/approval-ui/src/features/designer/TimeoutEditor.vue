@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { shallowRef, watch } from 'vue'
-import { timeoutActionLabels, type TimeoutAction, type TimeoutPolicy } from '../flow/flowModel'
+import { timeoutActionLabels, type TimeoutAction, type TimeoutPolicy } from '@ui/features/flow/flowModel'
 
 /** 审批节点时限：超时后提醒（可重复催办）、自动同意或自动驳回。 */
 const timeout = defineModel<TimeoutPolicy | null>({ required: true })

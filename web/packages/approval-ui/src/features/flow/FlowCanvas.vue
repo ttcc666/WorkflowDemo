@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useId, useTemplateRef } from 'vue'
+import { useId, useTemplateRef, watch } from 'vue'
 import { VueFlow, useVueFlow, type Connection } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import { Controls } from '@vue-flow/controls'
@@ -48,6 +48,9 @@ const {
   onEdgesChange,
   onNodesInitialized,
   areNodesInitialized,
+  viewportHelper,
+  onInit,
+  dimensions,
 } = useVueFlow(flowId)
 const container = useTemplateRef<HTMLDivElement>('container')
 
@@ -58,7 +61,7 @@ onEdgesChange((changes) => changes.some((c) => c.type === 'remove') && emit('cha
 let fitPending = true
 const fit = () => fitView({ padding: 0.15, maxZoom: 1 })
 onNodesInitialized(() => {
-  if (!fitPending) return
+  if (!fitPending || !viewportHelper.value.viewportInitialized) return
   fitPending = false
   void fit()
 })
@@ -67,12 +70,16 @@ onNodesInitialized(() => {
 function requestFit() {
   fitPending = true
   requestAnimationFrame(() => {
-    if (fitPending && areNodesInitialized.value) {
+    if (fitPending && areNodesInitialized.value && viewportHelper.value.viewportInitialized) {
       fitPending = false
       void fit()
     }
   })
 }
+onInit(requestFit)
+watch(() => [dimensions.value.width, dimensions.value.height], () => {
+  if (props.readonly) requestFit()
+})
 
 function onConnect(connection: Connection) {
   emit('connect', connection.source, connection.target)

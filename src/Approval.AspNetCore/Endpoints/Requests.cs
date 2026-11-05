@@ -52,10 +52,10 @@ public sealed record InstanceListRequest(
     DateTimeOffset? From,
     DateTimeOffset? To,
     string? InitiatorId, string? BusinessType = null, string? BusinessKey = null, string? ApproverId = null,
-    ApprovalSort? Sort = null)
+    ApprovalSort? Sort = null, bool? OverdueOnly = null)
 {
     public PageRequest ToPage() => new(Page, PageSize);
 
     public InstanceQuery ToQuery() => new(Keyword, Status, DefinitionKey, From?.UtcDateTime, To?.UtcDateTime, InitiatorId,
-        BusinessType, BusinessKey, ApproverId, Sort ?? ApprovalSort.Newest);
+        BusinessType, BusinessKey, ApproverId, Sort ?? ApprovalSort.Newest, OverdueOnly ?? false);
 }

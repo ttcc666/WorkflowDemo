@@ -1,4 +1,4 @@
-import { approvalIdentityKey, type ResolvedApprovalUIOptions } from '../config'
+import { approvalIdentityKey, type ResolvedApprovalUIOptions } from '@ui/config'
 
 /** 后端返回的业务错误（ProblemDetails），message 为可直接展示给用户的中文提示。 */
 export class ApiError extends Error {

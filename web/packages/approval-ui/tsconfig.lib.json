@@ -3,6 +3,7 @@
   "compilerOptions": {
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.lib.tsbuildinfo",
     "strict": true,
+    "paths": { "@ui/*": ["./src/*"] },
     "types": ["element-plus/global"],
     "noEmit": false,
     "declaration": true,
@@ -11,5 +12,5 @@
     "rootDir": "src"
   },
   "include": ["src/**/*.ts", "src/**/*.vue", "env.d.ts"],
-  "exclude": ["src/**/*.test.ts"]
+  "exclude": ["tests", "**/*.test.ts"]
 }

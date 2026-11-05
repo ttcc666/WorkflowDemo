@@ -1,5 +1,5 @@
 import type { Edge, Node } from '@vue-flow/core'
-import type { NodeType, ApproveMode, ApproverRule, EmptyApproverPolicy, NotificationRule, TimeoutPolicy, FieldAccess } from '../../contracts/flow'
+import type { NodeType, ApproveMode, ApproverRule, EmptyApproverPolicy, NotificationRule, TimeoutPolicy, FieldAccess } from '@ui/contracts/flow'
 
 /** 节点在流程实例中的状态（只读展示时使用） */
 export type NodeRunStatus = 'done' | 'active' | 'rejected' | 'skipped'
@@ -19,6 +19,7 @@ export interface FlowNodeData {
   timeout: TimeoutPolicy | null
   fieldPermissions: Record<string, FieldAccess>
   status?: NodeRunStatus
+  statusLabel?: string
 }
 
 /** 条件分支信息挂在从条件节点出发的连线上 */

@@ -1,4 +1,4 @@
-import { type ResolvedApprovalUIOptions } from '../config'
+import { type ResolvedApprovalUIOptions } from '@ui/config'
 import { type ApprovalHttpClient } from './http'
 import type {
   AddSignMode,
@@ -29,8 +29,9 @@ import type {
   StartableFlow,
   TodoItem,
   ValidationResult,
-} from '../contracts/api'
-import type { FileValue, FormValues } from '../contracts/forms'
+  ApprovalSimulationResult,
+} from '@ui/contracts/api'
+import type { FileValue, FormValues } from '@ui/contracts/forms'
 
 const enc = encodeURIComponent
 /** 查询字符串：忽略空值（undefined、null、''、false） */
@@ -49,9 +50,12 @@ export function createApprovalApi(
   getConfig: () => Pick<ResolvedApprovalUIOptions, 'apiBase'>,
 ) {
   const api = (path: string) => getConfig().apiBase + path
-  const commandHeaders = (key?: string) => key ? { 'Idempotency-Key': key } : undefined
+  const commandHeaders = (key: string) => {
+    if (typeof key !== 'string' || !key.trim()) throw new TypeError('业务写操作需要稳定 OperationId')
+    return { 'Idempotency-Key': key }
+  }
   return {
-    copyDefinition: (key: string, body: { targetKey: string; name: string; sourceDefinitionId?: string }, operationId?: string) =>
+    copyDefinition: (key: string, body: { targetKey: string; name: string; sourceDefinitionId?: string }, operationId: string) =>
       http.post<DefinitionGovernance>(api(`/definitions/${enc(key)}/copy`), body, commandHeaders(operationId)),
     me: (signal?: AbortSignal) => http.get<ApprovalMe>(api('/me'), signal),
     diagnostics: (signal?: AbortSignal) => http.get<ApprovalDiagnosticReport>(api('/diagnostics'), signal),
@@ -64,15 +68,15 @@ export function createApprovalApi(
     startableForms: (signal?: AbortSignal) => http.get<StartableFlow[]>(api('/forms/startable'), signal),
     startForm: (key: string, signal?: AbortSignal) => http.get<StartForm>(api(`/forms/${enc(key)}`), signal),
     /** 发起表单审批；校验失败抛出 ApiError（errors 为字段错误）；带 draftId 时提交成功后删除草稿 */
-    submitForm: (key: string, formData: FormValues, comment: string, draftId?: string | null, operationId?: string) =>
+    submitForm: (key: string, formData: FormValues, comment: string, draftId: string | null | undefined, operationId: string) =>
       http.post<{ instanceId: string }>(api(`/forms/${enc(key)}/start`), { formData, comment, draftId: draftId ?? null }, commandHeaders(operationId)),
 
     drafts: (signal?: AbortSignal) => http.get<DraftSummary[]>(api('/forms/drafts'), signal),
     draft: (id: string, signal?: AbortSignal) => http.get<DraftDetail>(api(`/forms/drafts/${id}`), signal),
     /** 保存草稿（不校验必填）；draftId 为空时新建 */
-    saveDraft: (key: string, draftId: string | null, formData: FormValues, comment: string, operationId?: string) =>
+    saveDraft: (key: string, draftId: string | null, formData: FormValues, comment: string, operationId: string) =>
       http.put<{ draftId: string; updatedAt: string }>(api(`/forms/${enc(key)}/draft`), { draftId, formData, comment }, commandHeaders(operationId)),
-    deleteDraft: (id: string, operationId?: string) => http.delete(api(`/forms/drafts/${id}`), commandHeaders(operationId)),
+    deleteDraft: (id: string, operationId: string) => http.delete(api(`/forms/drafts/${id}`), commandHeaders(operationId)),
 
     todo: (query: ListQuery = {}, signal?: AbortSignal) => http.get<PagedResult<TodoItem>>(api(`/todo${queryString(query)}`), signal),
     todoCount: (signal?: AbortSignal) => http.get<{ count: number }>(api('/todo/count'), signal),
@@ -84,7 +88,7 @@ export function createApprovalApi(
     carbonCopies: (query: ListQuery = {}, signal?: AbortSignal) => http.get<PagedResult<CarbonCopyItem>>(api(`/carbon-copies${queryString(query)}`), signal),
     carbonCopyRecipients: (id: string, page = 1, pageSize = 20, signal?: AbortSignal) =>
       http.get<CarbonCopyRecipients>(api(`/carbon-copies/${id}/recipients${queryString({ page, pageSize })}`), signal),
-    readCarbonCopy: (id: string, operationId?: string) => http.post(api(`/carbon-copies/${id}/read`), {}, commandHeaders(operationId)),
+    readCarbonCopy: (id: string, operationId: string) => http.post(api(`/carbon-copies/${id}/read`), {}, commandHeaders(operationId)),
     carbonCopyHistory: (id: string, signal?: AbortSignal) => http.get<CarbonCopyItem[]>(api(`/instances/${id}/carbon-copies`), signal),
     /** 已发布流程的标识与名称（筛选下拉） */
     flows: (signal?: AbortSignal) => http.get<FlowSummary[]>(api('/flows'), signal),
@@ -97,19 +101,19 @@ export function createApprovalApi(
     myTask: (instanceId: string, signal?: AbortSignal) => http.get<MyTaskResult>(api(`/instances/${instanceId}/my-task`), signal),
 
     /** formData 仅表单审批可传：只含任务所在节点的可编辑字段，同意时一并修改 */
-    approve: (taskId: string, comment: string, formData?: FormValues, operationId?: string) =>
+    approve: (taskId: string, comment: string, formData: FormValues | undefined, operationId: string) =>
       http.post(api(`/tasks/${taskId}/approve`), { comment, formData: formData ?? null }, commandHeaders(operationId)),
     /** targetNodeId 为空时驳回并结束流程，否则退回到该节点 */
-    reject: (taskId: string, comment: string, targetNodeId?: string, operationId?: string) =>
+    reject: (taskId: string, comment: string, targetNodeId: string | undefined, operationId: string) =>
       http.post(api(`/tasks/${taskId}/reject`), { comment, targetNodeId: targetNodeId ?? null }, commandHeaders(operationId)),
     returnTargets: (taskId: string, signal?: AbortSignal) => http.get<ReturnTarget[]>(api(`/tasks/${taskId}/return-targets`), signal),
-    addSign: (taskId: string, userIds: string[], mode: AddSignMode, comment: string, operationId?: string) =>
+    addSign: (taskId: string, userIds: string[], mode: AddSignMode, comment: string, operationId: string) =>
       http.post(api(`/tasks/${taskId}/add-sign`), { userIds, mode, comment }, commandHeaders(operationId)),
     /** formData 仅表单审批可传（修改后的表单） */
-    resubmit: (taskId: string, comment: string, formData?: Record<string, unknown>, operationId?: string) =>
+    resubmit: (taskId: string, comment: string, formData: Record<string, unknown> | undefined, operationId: string) =>
       http.post(api(`/tasks/${taskId}/resubmit`), { comment, formData: formData ?? null }, commandHeaders(operationId)),
-    transfer: (taskId: string, toUserId: string, comment: string, operationId?: string) => http.post(api(`/tasks/${taskId}/transfer`), { toUserId, comment }, commandHeaders(operationId)),
-    withdraw: (instanceId: string, comment: string, operationId?: string) => http.post(api(`/instances/${instanceId}/withdraw`), { comment }, commandHeaders(operationId)),
+    transfer: (taskId: string, toUserId: string, comment: string, operationId: string) => http.post(api(`/tasks/${taskId}/transfer`), { toUserId, comment }, commandHeaders(operationId)),
+    withdraw: (instanceId: string, comment: string, operationId: string) => http.post(api(`/instances/${instanceId}/withdraw`), { comment }, commandHeaders(operationId)),
 
     /** 上传附件（未绑定，提交表单后绑定到申请）：文件名放在请求头，请求体为文件内容 */
     uploadFile: (file: File) =>
@@ -141,31 +145,33 @@ export function createApprovalApi(
     latestDefinition: (key: string) => http.get<ApprovalDefinition>(api(`/definitions/${enc(key)}`)),
     definitionById: (id: string, signal?: AbortSignal) => http.get<ApprovalDefinition>(api(`/definitions/by-id/${id}`), signal),
     versions: (key: string, signal?: AbortSignal) => http.get<ApprovalDefinition[]>(api(`/definitions/${enc(key)}/versions`), signal),
+    simulate: (definitionJson: string, formData: Record<string, unknown>, nodeId?: string, ruleIndex?: number) =>
+      http.post<ApprovalSimulationResult>(api('/definitions/simulate'), { definitionJson, formData, nodeId, ruleIndex }),
     validate: (flowJson: string) => http.postJson<ValidationResult>(api('/definitions/validate'), flowJson),
-    publish: (key: string, name: string, flowJson: string, operationId?: string) =>
+    publish: (key: string, name: string, flowJson: string, operationId: string) =>
       http.postJson<{ id: string; key: string; version: number }>(api(`/definitions/${enc(key)}?name=${enc(name)}`), flowJson, commandHeaders(operationId)),
 
     messages: (unreadOnly = false, signal?: AbortSignal) =>
       http.get<ApprovalMessage[]>(api(`/messages?unreadOnly=${unreadOnly}&take=30`), signal),
     unreadCount: (signal?: AbortSignal) => http.get<{ count: number }>(api('/messages/unread-count'), signal),
-    markRead: (id: string, operationId?: string) => http.post(api(`/messages/${id}/read`), {}, commandHeaders(operationId)),
-    markAllRead: (operationId?: string) => http.post(api('/messages/read-all'), {}, commandHeaders(operationId)),
+    markRead: (id: string, operationId: string) => http.post(api(`/messages/${id}/read`), {}, commandHeaders(operationId)),
+    markAllRead: (operationId: string) => http.post(api('/messages/read-all'), {}, commandHeaders(operationId)),
 
     outbox: (query: ListQuery = {}, signal?: AbortSignal) =>
       http.get<PagedResult<OutboxMessage>>(api(`/outbox${queryString(query)}`), signal),
-    retryOutbox: (id: string, operationId?: string) => http.post(api(`/outbox/${id}/retry`), {}, commandHeaders(operationId)),
+    retryOutbox: (id: string, operationId: string) => http.post(api(`/outbox/${id}/retry`), {}, commandHeaders(operationId)),
 
     // ───── 管理（仅管理员）─────
     adminInstances: (query: ListQuery = {}, signal?: AbortSignal) =>
       http.get<PagedResult<InstanceListItem>>(api(`/admin/instances${queryString(query)}`), signal),
-    terminate: (instanceId: string, reason: string, operationId?: string) => http.post(api(`/admin/instances/${instanceId}/terminate`), { reason }, commandHeaders(operationId)),
-    reassign: (taskId: string, toUserId: string, reason: string, operationId?: string) =>
+    terminate: (instanceId: string, reason: string, operationId: string) => http.post(api(`/admin/instances/${instanceId}/terminate`), { reason }, commandHeaders(operationId)),
+    reassign: (taskId: string, toUserId: string, reason: string, operationId: string) =>
       http.post(api(`/admin/tasks/${taskId}/reassign`), { toUserId, reason }, commandHeaders(operationId)),
     /** 某人的未完成待办（离职交接预览） */
     userTasks: (userId: string, query: ListQuery = {}, signal?: AbortSignal) =>
       http.get<PagedResult<TodoItem>>(api(`/admin/users/${enc(userId)}/tasks${queryString(query)}`), signal),
-    reassignUser: (userId: string, toUserId: string, reason: string) =>
-      http.post<ReassignResult>(api(`/admin/users/${enc(userId)}/reassign`), { toUserId, reason }),
+    reassignUser: (userId: string, toUserId: string, reason: string, operationId: string) =>
+      http.post<ReassignResult>(api(`/admin/users/${enc(userId)}/reassign`), { toUserId, reason }, commandHeaders(operationId)),
     statistics: (query: { from?: string; to?: string; definitionKey?: string }, signal?: AbortSignal) =>
       http.get<ApprovalStatistics>(api(`/admin/statistics${queryString(query)}`), signal),
   }

@@ -1,14 +1,18 @@
 <script setup lang="ts">
+import CommandRecovery from '@ui/components/CommandRecovery.vue'
 import { computed, shallowRef, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { useApprovalClient } from '../../client'
-import { errorMessage } from '../../api/http'
-import type { ReassignResult, TodoItem } from '../../contracts/api'
-import UserPicker from '../../components/UserPicker.vue'
-import { useAsyncData } from '../../composables/useAsyncData'
-import { formatDateTime, taskStatusLabels } from '../../utils/labels'
+import { useCommandIntent } from '@ui/composables/useCommandIntent'
+import { useApprovalClient } from '@ui/client'
+import { errorMessage } from '@ui/api/http'
+import type { ReassignResult, TodoItem } from '@ui/contracts/api'
+import UserPicker from '@ui/components/UserPicker.vue'
+import { useAsyncData } from '@ui/composables/useAsyncData'
+import { formatDateTime, taskStatusLabels } from '@ui/utils/labels'
 
-const { api: approvalApi } = useApprovalClient()
+// 批量命令可能已逐实例提交；即使后续返回 4xx，也不能据此丢弃恢复键。
+const intent = useCommandIntent('bulk-reassign', { retainOnError: true })
+const { api: approvalApi, userKey } = useApprovalClient()
 
 /** 离职交接：选择原处理人 → 预览其未完成的待办 → 选择新处理人 → 确认批量改派（不含角色任务）。 */
 const fromUser = shallowRef<string | null>(null)
@@ -22,21 +26,28 @@ const preview = useAsyncData(
   { watch: [fromUser] },
 )
 watch(fromUser, () => (result.value = null))
+watch(userKey, () => { fromUser.value = null; toUser.value = null; reason.value = '离职交接'; result.value = null }, { flush: 'sync' })
 
 const tasks = computed<TodoItem[]>(() => preview.data.value?.items ?? [])
 const total = computed(() => preview.data.value?.total ?? 0)
-const canSubmit = computed(() => !!fromUser.value && !!toUser.value && fromUser.value !== toUser.value && total.value > 0)
+const canSubmit = computed(() => !!fromUser.value && !!toUser.value && !!reason.value.trim() && fromUser.value !== toUser.value && (total.value > 0 || intent.hasPending(fromUser.value!)))
+
+function recover(value: unknown) { result.value = value as ReassignResult; void preview.reload() }
 
 async function submit() {
-  if (!canSubmit.value) return
+  if (!canSubmit.value || submitting.value) return
+  const owner = userKey.value
+  const body = { from: fromUser.value!, to: toUser.value!, reason: reason.value.trim() }
+  submitting.value = true
   try {
     await ElMessageBox.confirm(`把 ${fromUser.value} 的 ${total.value} 条未完成待办改派给 ${toUser.value}？`, '离职交接', { type: 'warning' })
   } catch {
+    submitting.value = false
     return
   }
-  submitting.value = true
+  if (owner !== userKey.value) { submitting.value = false; return }
   try {
-    result.value = await approvalApi.reassignUser(fromUser.value!, toUser.value!, reason.value.trim())
+    result.value = await intent.run(body.from, body, (payload, key) => approvalApi.reassignUser(payload.from, payload.to, payload.reason, key))
     ElMessage.success(`已改派 ${result.value.count} 条待办`)
     await preview.reload()
   } catch (e) {
@@ -48,6 +59,7 @@ async function submit() {
 </script>
 
 <template>
+  <CommandRecovery :intent="intent" :busy="submitting" @recovered="recover" />
   <div class="handover">
     <el-form label-position="top" class="handover__form" @submit.prevent>
       <el-form-item label="原处理人" required>
@@ -56,7 +68,7 @@ async function submit() {
       <el-form-item label="新处理人" required>
         <UserPicker v-model="toUser" :exclude="fromUser ? [fromUser] : []" placeholder="选择接手人员" />
       </el-form-item>
-      <el-form-item label="原因">
+      <el-form-item label="原因" required>
         <el-input v-model="reason" maxlength="200" />
       </el-form-item>
       <el-form-item label=" ">
@@ -66,6 +78,7 @@ async function submit() {
 
     <div class="handover__help">
       只改派指派给本人的待办（含依次审批中尚未轮到、等待加签的任务）；角色任务由角色内其他成员处理，不在此列。
+      结果未知时请保留原处理人、接手人员和原因，用原内容重试。
       新处理人是申请的发起人（不允许审批自己的申请）或已是该节点审批人时会跳过；处理时限不重置。
     </div>
 
@@ -118,4 +131,6 @@ async function submit() {
   margin-bottom: 8px;
   font-weight: 600;
 }
+@media (max-width: 900px) { .handover__form { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 550px) { .handover__form { grid-template-columns: minmax(0, 1fr); } }
 </style>

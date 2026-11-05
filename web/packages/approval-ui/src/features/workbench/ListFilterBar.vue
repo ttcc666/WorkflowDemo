@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { FlowSummary } from '../../contracts/api'
-import type { ListFilters } from '../../composables/usePagedList'
-import { instanceStatusLabels } from '../../utils/labels'
+import type { FlowSummary } from '@ui/contracts/api'
+import type { ListFilters } from '@ui/composables/usePagedList'
+import { instanceStatusLabels } from '@ui/utils/labels'
 
 /** 列表筛选栏：关键字（回车查询）、流程、状态、发起日期、只看已超时；下拉与日期修改后立即查询。 */
 const props = withDefaults(

@@ -1,11 +1,14 @@
 <script setup lang="ts">
+import CommandRecovery from './CommandRecovery.vue'
 import { onBeforeUnmount, shallowRef, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { useCommandIntent } from '../composables/useCommandIntent'
-import { useApprovalClient } from '../client'
-import type { ApprovalMessage } from '../contracts/api'
-import { approvalRouteNames } from '../routes'
-import { formatDateTime } from '../utils/labels'
+import { ElMessage } from 'element-plus'
+import { errorMessage } from '@ui/api/http'
+import { useCommandIntent } from '@ui/composables/useCommandIntent'
+import { useApprovalClient } from '@ui/client'
+import type { ApprovalMessage } from '@ui/contracts/api'
+import { approvalRouteNames } from '@ui/routes'
+import { formatDateTime } from '@ui/utils/labels'
 
 const { api: approvalApi, userKey: approvalUserKey } = useApprovalClient()
 
@@ -15,6 +18,7 @@ const intent = useCommandIntent('message')
 const unread = shallowRef(0)
 const messages = shallowRef<ApprovalMessage[]>([])
 const loading = shallowRef(false)
+const error = shallowRef('')
 
 async function refreshCount() {
   try {
@@ -26,25 +30,33 @@ async function refreshCount() {
 
 async function loadMessages() {
   loading.value = true
+  error.value = ''
   try {
     messages.value = await approvalApi.messages()
+  } catch (cause) {
+    messages.value = []
+    error.value = errorMessage(cause)
   } finally {
     loading.value = false
   }
 }
 
 async function open(message: ApprovalMessage) {
-  if (!message.isRead) {
-    await intent.run(message.id, {}, (_, operationId) => approvalApi.markRead(message.id, operationId))
-    void refreshCount()
-    void loadMessages()
-  }
-  if (message.instanceId) void router.push({ name: approvalRouteNames.detail, params: { id: message.instanceId } })
+  try {
+    if (!message.isRead) {
+      await intent.run(message.id, {}, (_, operationId) => approvalApi.markRead(message.id, operationId))
+      void refreshCount()
+      void loadMessages()
+    }
+    if (message.instanceId) void router.push({ name: approvalRouteNames.detail, params: { id: message.instanceId } })
+  } catch (cause) { ElMessage.error(errorMessage(cause)) }
 }
 
 async function readAll() {
-  await intent.run('read-all', {}, (_, operationId) => approvalApi.markAllRead(operationId))
-  await Promise.all([refreshCount(), loadMessages()])
+  try {
+    await intent.run('read-all', {}, (_, operationId) => approvalApi.markAllRead(operationId))
+    await Promise.all([refreshCount(), loadMessages()])
+  } catch (cause) { ElMessage.error(errorMessage(cause)) }
 }
 
 watch(approvalUserKey, refreshCount, { immediate: true })
@@ -53,19 +65,23 @@ onBeforeUnmount(() => window.clearInterval(timer))
 </script>
 
 <template>
-  <el-popover placement="bottom-end" :width="380" trigger="click" @show="loadMessages">
+  <el-popover placement="bottom-end" width="min(380px, calc(100vw - 24px))" trigger="click" @show="loadMessages">
     <template #reference>
       <el-badge :value="unread" :hidden="unread === 0" :max="99">
         <el-button circle title="站内信">🔔</el-button>
       </el-badge>
     </template>
 
+    <CommandRecovery :intent="intent" @recovered="loadMessages" />
     <div class="bell__header">
       <span>站内信</span>
       <el-button link type="primary" size="small" :disabled="unread === 0" @click="readAll">全部已读</el-button>
     </div>
+    <el-alert v-if="error" :title="error" type="error" :closable="false">
+      <el-button text type="primary" :loading="loading" @click="loadMessages">重新加载</el-button>
+    </el-alert>
     <el-scrollbar v-loading="loading" max-height="420px">
-      <el-empty v-if="!messages.length" :image-size="60" description="暂无消息" />
+      <el-empty v-if="!loading && !error && !messages.length" :image-size="60" description="暂无消息" />
       <div v-for="m in messages" :key="m.id" :class="['bell__item', { 'bell__item--unread': !m.isRead }]" @click="open(m)">
         <div class="bell__title">{{ m.title }}</div>
         <div class="bell__content">{{ m.content }}</div>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, shallowRef, watch } from 'vue'
-import type { ApprovalInstance } from '../../contracts/api'
+import type { ApprovalInstance, ApprovalSimulationResult } from '@ui/contracts/api'
+import { computeSimulationState } from './simulationState'
 import FlowCanvas from './FlowCanvas.vue'
 import { computeRunState, toFlowElements, NODE_HEIGHT, type FlowDefinition, type FlowEdge, type FlowNode } from './flowModel'
 
@@ -8,6 +9,8 @@ import { computeRunState, toFlowElements, NODE_HEIGHT, type FlowDefinition, type
 const props = defineProps<{
   definitionJson: string
   instance?: ApprovalInstance
+  simulationSteps?: ApprovalSimulationResult['steps']
+  height?: string
 }>()
 
 // 只读展示只整体替换，不需要深层响应
@@ -15,14 +18,17 @@ const nodes = shallowRef<FlowNode[]>([])
 const edges = shallowRef<FlowEdge[]>([])
 
 watch(
-  () => [props.definitionJson, props.instance] as const,
-  ([json, instance]) => {
+  () => [props.definitionJson, props.instance, props.simulationSteps] as const,
+  ([json, instance, simulationSteps]) => {
     const definition = JSON.parse(json) as FlowDefinition
     const elements = toFlowElements(definition)
-    const { status, visitedEdges } = instance ? computeRunState(definition, instance)
+    const { status, visitedEdges } = simulationSteps ? computeSimulationState(definition, simulationSteps) : instance ? computeRunState(definition, instance)
       : { status: new Map(), visitedEdges: new Set<string>() }
 
-    nodes.value = elements.nodes.map((n) => ({ ...n, data: { ...n.data!, status: status.get(n.id) } }))
+    const simulated = new Map(simulationSteps?.map(step => [step.nodeId, step.status]))
+    const simulationLabels: Record<string, string> = { Visited: '已预演', AutoApproved: '自动通过', RequiresDecision: '待人工决策', Waiting: '等待汇聚', Blocked: '处理受阻', Failed: '预演失败' }
+    nodes.value = elements.nodes.map((n) => ({ ...n, data: { ...n.data!, status: status.get(n.id),
+      statusLabel: simulationSteps ? simulationLabels[simulated.get(n.id) ?? ''] ?? '尚未预演' : undefined } }))
     edges.value = elements.edges.map((e) => {
       const visited = visitedEdges.has(`${e.source}->${e.target}`)
       return { ...e, animated: visited && (instance?.status === 'Running' || instance?.status === 'Returned'), style: visited ? { stroke: '#67c23a', strokeWidth: 2 } : undefined }
@@ -32,7 +38,7 @@ watch(
 )
 
 // 画布高度随流程图高度自适应（约 0.75 倍缩放），避免长流程被压缩到看不清
-const height = computed(() => {
+const autoHeight = computed(() => {
   const ys = nodes.value.map((n) => n.position.y)
   const graphHeight = ys.length ? Math.max(...ys) - Math.min(...ys) + NODE_HEIGHT : 0
   return `${Math.min(Math.max(graphHeight * 0.75 + 80, 320), 1000)}px`
@@ -40,5 +46,5 @@ const height = computed(() => {
 </script>
 
 <template>
-  <FlowCanvas v-model:nodes="nodes" v-model:edges="edges" readonly :height="height" />
+  <FlowCanvas v-model:nodes="nodes" v-model:edges="edges" readonly :height="height ?? autoHeight" />
 </template>

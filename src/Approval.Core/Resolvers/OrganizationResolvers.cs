@@ -78,11 +78,13 @@ public sealed class DeptLeaderApproverResolver(IApprovalOrganizationProvider org
         CancellationToken ct)
     {
         var department = await Organization.GetDepartmentAsync(baseUser, ct);
+        context.Trace?.Invoke(new(Type, $"基准人员 {baseUser}，所在部门：{department?.Name ?? "无"}"));
         var visited = new HashSet<string>();
         for (var i = 1; department is not null && i < level; i++)
         {
             if (!visited.Add(department.Id)) return [];   // 部门关系有环
             department = await Organization.GetParentDepartmentAsync(department.Id, ct);
+            context.Trace?.Invoke(new(Type, $"第 {i + 1} 级部门：{department?.Name ?? "无"}"));
         }
         return department is null ? [] : await Organization.GetDepartmentLeadersAsync(department.Id, ct);
     }
@@ -106,6 +108,7 @@ public sealed class ManagerApproverResolver(IApprovalOrganizationProvider organi
         for (var i = 0; i < level; i++)
         {
             var manager = await Organization.GetManagerAsync(current, ct);
+            context.Trace?.Invoke(new(Type, $"第 {i + 1} 级：{current} → {manager ?? "无上级"}"));
             if (string.IsNullOrWhiteSpace(manager) || !visited.Add(manager)) return [];
             current = manager;
         }
@@ -136,6 +139,7 @@ public sealed class ManagerChainApproverResolver(IApprovalOrganizationProvider o
         for (var i = 0; i < level; i++)
         {
             var manager = await Organization.GetManagerAsync(current, ct);
+            context.Trace?.Invoke(new(Type, $"第 {i + 1} 级：{current} → {manager ?? "无上级"}"));
             if (string.IsNullOrWhiteSpace(manager) || !visited.Add(manager)) break;
             current = manager;
             if (manager != context.Instance.InitiatorId) chain.Add(manager);

@@ -8,7 +8,7 @@ const { userId, users, roles, switchUser } = useDemoUsers()
   <div class="user-switcher">
     <span class="user-switcher__label">演示用户</span>
     <el-select :model-value="userId" size="small" class="user-switcher__select" @update:model-value="switchUser">
-      <el-option v-for="u in users" :key="u.id" :label="u.id" :value="u.id">
+      <el-option v-for="u in users" :key="u.id" :label="u.name" :value="u.id">
         <span>{{ u.name }}</span>
         <span class="user-switcher__roles">{{ u.roles.join('、') || '普通用户' }}</span>
       </el-option>
@@ -38,5 +38,9 @@ const { userId, users, roles, switchUser } = useDemoUsers()
   margin-left: 16px;
   color: #909399;
   font-size: 12px;
+}
+@media (max-width: 600px) {
+  .user-switcher__label, .user-switcher > .el-tag { display: none; }
+  .user-switcher__select { width: 160px; }
 }
 </style>

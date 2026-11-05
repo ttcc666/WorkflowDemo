@@ -1,18 +1,19 @@
 <script setup lang="ts">
+import CommandRecovery from '@ui/components/CommandRecovery.vue'
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useApprovalClient } from '../client'
-import { useAsyncData } from '../composables/useAsyncData'
-import { usePagedList } from '../composables/usePagedList'
-import { approvalRouteNames } from '../routes'
-import ListFilterBar from '../features/workbench/ListFilterBar.vue'
-import TodoTable from '../features/workbench/TodoTable.vue'
-import InstanceTable from '../features/workbench/InstanceTable.vue'
-import CarbonCopyTable from '../features/workbench/CarbonCopyTable.vue'
-import type { CarbonCopyItem } from '../contracts/api'
+import { useApprovalClient } from '@ui/client'
+import { useAsyncData } from '@ui/composables/useAsyncData'
+import { usePagedList } from '@ui/composables/usePagedList'
+import { approvalRouteNames } from '@ui/routes'
+import ListFilterBar from '@ui/features/workbench/ListFilterBar.vue'
+import TodoTable from '@ui/features/workbench/TodoTable.vue'
+import InstanceTable from '@ui/features/workbench/InstanceTable.vue'
+import CarbonCopyTable from '@ui/features/workbench/CarbonCopyTable.vue'
+import type { CarbonCopyItem } from '@ui/contracts/api'
 import { ElMessage } from 'element-plus'
-import { errorMessage } from '../api/http'
-import { useCommandIntent } from '../composables/useCommandIntent'
+import { errorMessage } from '@ui/api/http'
+import { useCommandIntent } from '@ui/composables/useCommandIntent'
 
 const { api: approvalApi, userKey: approvalUserKey } = useApprovalClient()
 
@@ -62,6 +63,7 @@ const pageSizes = [10, 20, 50, 100]
 </script>
 
 <template>
+  <CommandRecovery :intent="ccIntent" @recovered="refresh" />
   <el-card shadow="never">
     <template #header>
       <div class="card-header">

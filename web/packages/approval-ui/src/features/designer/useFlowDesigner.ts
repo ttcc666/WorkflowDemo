@@ -1,5 +1,5 @@
 import { computed, nextTick, ref, shallowRef, type Ref } from 'vue'
-import { useApprovalClient } from '../../client'
+import { useApprovalClient } from '@ui/client'
 import {
   applyConnection,
   branchLabel,
@@ -21,8 +21,8 @@ import {
   type FlowNodeData,
   type NodeType,
   type NotificationRule,
-} from '../flow/flowModel'
-import { checkSchema, cleanSchema, cleanSettings, cloneField, type FlowSettings, type FormSchema } from '../forms/formModel'
+} from '@ui/features/flow/flowModel'
+import { checkSchema, cleanSchema, cleanSettings, cloneField, type FlowSettings, type FormSchema } from '@ui/features/forms/formModel'
 import { createHistory } from './history'
 
 type Point = { x: number; y: number }

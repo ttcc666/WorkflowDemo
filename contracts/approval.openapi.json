@@ -202,9 +202,36 @@
           "code": {
             "type": "string"
           },
+          "definitionId": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "definitionKey": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "instanceId": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "resourceId": {
             "format": "uuid",
             "type": "string"
+          },
+          "taskId": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
           }
         },
         "required": [
@@ -910,6 +937,207 @@
         ],
         "type": "object"
       },
+      "ApprovalSimulationAssignment": {
+        "properties": {
+          "members": {
+            "items": {
+              "$ref": "#/components/schemas/ApprovalSimulationMember"
+            },
+            "type": "array"
+          },
+          "taskAssignee": {
+            "$ref": "#/components/schemas/Assignee"
+          }
+        },
+        "required": [
+          "taskAssignee",
+          "members"
+        ],
+        "type": "object"
+      },
+      "ApprovalSimulationEvaluation": {
+        "properties": {
+          "expression": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "matched": {
+            "type": "boolean"
+          },
+          "nextNodeId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "expression",
+          "matched",
+          "nextNodeId"
+        ],
+        "type": "object"
+      },
+      "ApprovalSimulationMember": {
+        "properties": {
+          "exclusionReason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "isEligible": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "userId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "userId",
+          "name",
+          "isEligible",
+          "exclusionReason"
+        ],
+        "type": "object"
+      },
+      "ApprovalSimulationRequest": {
+        "properties": {
+          "definitionJson": {
+            "type": "string"
+          },
+          "formData": {
+            "$ref": "#/components/schemas/JsonElement"
+          },
+          "nodeId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "ruleIndex": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "definitionJson",
+          "formData"
+        ],
+        "type": "object"
+      },
+      "ApprovalSimulationResult": {
+        "properties": {
+          "errors": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "isComplete": {
+            "type": "boolean"
+          },
+          "isValid": {
+            "type": "boolean"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/ApprovalSimulationStep"
+            },
+            "type": "array"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "isValid",
+          "isComplete",
+          "steps",
+          "errors",
+          "warnings"
+        ],
+        "type": "object"
+      },
+      "ApprovalSimulationStep": {
+        "properties": {
+          "assignments": {
+            "items": {
+              "$ref": "#/components/schemas/ApprovalSimulationAssignment"
+            },
+            "type": "array"
+          },
+          "blockReason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "evaluations": {
+            "items": {
+              "$ref": "#/components/schemas/ApprovalSimulationEvaluation"
+            },
+            "type": "array"
+          },
+          "excludedAssignees": {
+            "items": {
+              "$ref": "#/components/schemas/Assignee"
+            },
+            "type": "array"
+          },
+          "nodeId": {
+            "type": "string"
+          },
+          "nodeName": {
+            "type": "string"
+          },
+          "nodeType": {
+            "$ref": "#/components/schemas/NodeType"
+          },
+          "resolutionTrace": {
+            "items": {
+              "$ref": "#/components/schemas/ApproverResolutionTrace"
+            },
+            "type": "array"
+          },
+          "resolvedAssignees": {
+            "items": {
+              "$ref": "#/components/schemas/Assignee"
+            },
+            "type": "array"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "nodeId",
+          "nodeName",
+          "nodeType",
+          "status",
+          "resolvedAssignees",
+          "excludedAssignees",
+          "evaluations",
+          "blockReason"
+        ],
+        "type": "object"
+      },
       "ApprovalSort": {
         "enum": [
           "Newest",
@@ -1226,6 +1454,21 @@
         ],
         "type": "object"
       },
+      "ApproverResolutionTrace": {
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "description"
+        ],
+        "type": "object"
+      },
       "ApproverRule": {
         "properties": {
           "type": {
@@ -1287,6 +1530,21 @@
           "Level",
           "Text"
         ]
+      },
+      "Assignee": {
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/AssigneeKind"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "value"
+        ],
+        "type": "object"
       },
       "AssigneeKind": {
         "enum": [
@@ -3428,6 +3686,13 @@
             "schema": {
               "$ref": "#/components/schemas/ApprovalSort"
             }
+          },
+          {
+            "in": "query",
+            "name": "OverdueOnly",
+            "schema": {
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -4203,6 +4468,13 @@
           },
           {
             "in": "query",
+            "name": "OverdueOnly",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
             "name": "unreadOnly",
             "schema": {
               "type": "boolean"
@@ -4722,6 +4994,13 @@
             "schema": {
               "$ref": "#/components/schemas/ApprovalSort"
             }
+          },
+          {
+            "in": "query",
+            "name": "OverdueOnly",
+            "schema": {
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -5115,6 +5394,105 @@
                     "$ref": "#/components/schemas/DefinitionGovernanceSummary"
                   },
                   "type": "array"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "410": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Gone"
+          },
+          "503": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "tags": [
+          "Approval"
+        ]
+      }
+    },
+    "/api/approval/definitions/simulate": {
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApprovalSimulationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApprovalSimulationResult"
                 }
               }
             },
@@ -6847,6 +7225,13 @@
             "name": "Sort",
             "schema": {
               "$ref": "#/components/schemas/ApprovalSort"
+            }
+          },
+          {
+            "in": "query",
+            "name": "OverdueOnly",
+            "schema": {
+              "type": "boolean"
             }
           }
         ],
@@ -9480,6 +9865,13 @@
             "name": "Sort",
             "schema": {
               "$ref": "#/components/schemas/ApprovalSort"
+            }
+          },
+          {
+            "in": "query",
+            "name": "OverdueOnly",
+            "schema": {
+              "type": "boolean"
             }
           }
         ],

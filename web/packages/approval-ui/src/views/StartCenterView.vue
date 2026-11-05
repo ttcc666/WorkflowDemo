@@ -1,15 +1,16 @@
 <script setup lang="ts">
+import CommandRecovery from '@ui/components/CommandRecovery.vue'
 import { computed, shallowRef } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { useCommandIntent } from '../composables/useCommandIntent'
-import { useApprovalClient } from '../client'
-import { errorMessage } from '../api/http'
-import type { DraftSummary, StartableFlow } from '../contracts/api'
-import { useApprovalUser } from '../composables/useApprovalUser'
-import { useAsyncData } from '../composables/useAsyncData'
-import { approvalRouteNames } from '../routes'
-import { formatDateTime } from '../utils/labels'
+import { useCommandIntent } from '@ui/composables/useCommandIntent'
+import { useApprovalClient } from '@ui/client'
+import { errorMessage } from '@ui/api/http'
+import type { DraftSummary, StartableFlow } from '@ui/contracts/api'
+import { useApprovalUser } from '@ui/composables/useApprovalUser'
+import { useAsyncData } from '@ui/composables/useAsyncData'
+import { approvalRouteNames } from '@ui/routes'
+import { formatDateTime } from '@ui/utils/labels'
 
 const { api: approvalApi, userKey: approvalUserKey } = useApprovalClient()
 
@@ -55,6 +56,7 @@ async function removeDraft(draft: DraftSummary) {
 </script>
 
 <template>
+  <CommandRecovery :intent="intent" @recovered="drafts.reload" />
   <el-card v-if="drafts.data.value?.length" shadow="never" class="start__drafts">
     <template #header>我的草稿（{{ drafts.data.value.length }}）</template>
     <el-table :data="drafts.data.value" size="small" @row-click="(row: DraftSummary) => openDraft(row)">

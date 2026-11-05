@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.test.tsbuildinfo",
+    "noEmit": true,
+    "types": ["element-plus/global", "node"]
+  },
+  "include": ["tests/**/*.ts", "env.d.ts"]
+}

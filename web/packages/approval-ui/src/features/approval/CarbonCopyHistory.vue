@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { useApprovalClient } from '../../client'
-import { useAsyncData } from '../../composables/useAsyncData'
-import { formatDateTime } from '../../utils/labels'
+import { useApprovalClient } from '@ui/client'
+import { useAsyncData } from '@ui/composables/useAsyncData'
+import { formatDateTime } from '@ui/utils/labels'
 import { shallowRef } from 'vue'
-import { useApprovalUser } from '../../composables/useApprovalUser'
+import { useApprovalUser } from '@ui/composables/useApprovalUser'
 import CarbonCopyRecipientsDialog from './CarbonCopyRecipientsDialog.vue'
 
 const props = defineProps<{ instanceId: string }>()

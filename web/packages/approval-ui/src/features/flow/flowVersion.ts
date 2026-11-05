@@ -1,4 +1,4 @@
-import type { FlowDefinition } from '../../contracts/flow'
+import type { FlowDefinition } from '@ui/contracts/flow'
 
 export const currentFlowSchemaVersion = 1
 

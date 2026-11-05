@@ -1,15 +1,15 @@
 <script setup lang="ts">
 import { computed, shallowRef, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { approvalRouteNames } from '../routes'
-import { useApprovalClient } from '../client'
-import type { DefinitionGovernanceSummary } from '../contracts/api'
-import { useApprovalUser } from '../composables/useApprovalUser'
-import { useAsyncData } from '../composables/useAsyncData'
-import DefinitionTable from '../features/definitions/DefinitionTable.vue'
-import DefinitionVersionsDrawer from '../features/definitions/DefinitionVersionsDrawer.vue'
-import NewDefinitionDialog from '../features/definitions/NewDefinitionDialog.vue'
-import DefinitionCategoryFilter from '../features/definitions/DefinitionCategoryFilter.vue'
+import { approvalRouteNames } from '@ui/routes'
+import { useApprovalClient } from '@ui/client'
+import type { DefinitionGovernanceSummary } from '@ui/contracts/api'
+import { useApprovalUser } from '@ui/composables/useApprovalUser'
+import { useAsyncData } from '@ui/composables/useAsyncData'
+import DefinitionTable from '@ui/features/definitions/DefinitionTable.vue'
+import DefinitionVersionsDrawer from '@ui/features/definitions/DefinitionVersionsDrawer.vue'
+import NewDefinitionDialog from '@ui/features/definitions/NewDefinitionDialog.vue'
+import DefinitionCategoryFilter from '@ui/features/definitions/DefinitionCategoryFilter.vue'
 
 const { api: approvalApi, userKey } = useApprovalClient()
 

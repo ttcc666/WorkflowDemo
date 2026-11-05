@@ -9,6 +9,7 @@ defineProps<{
   canSave?: boolean
   canPublish: boolean
   canValidate?: boolean
+  canSimulate?: boolean
   canUndo: boolean
   canRedo: boolean
 }>()
@@ -24,6 +25,7 @@ const emit = defineEmits<{
   publish: []
   save: []
   preview: []
+  simulate: []
 }>()
 </script>
 
@@ -43,6 +45,7 @@ const emit = defineEmits<{
       </el-button-group>
       <el-button @click="emit('layout')">自动排版</el-button>
       <el-button @click="emit('preview')">草稿预览</el-button>
+      <el-button v-if="canSimulate" @click="emit('simulate')">流程模拟</el-button>
       <el-button v-if="canValidate" :loading="validating" @click="emit('validate')">校验</el-button>
       <el-button v-if="canSave" :loading="saving" :disabled="publishing" @click="emit('save')">保存草稿</el-button>
       <el-tooltip :disabled="canPublish" content="缺少发布流程权限" placement="bottom">
@@ -59,6 +62,7 @@ const emit = defineEmits<{
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .toolbar__name {
@@ -69,5 +73,11 @@ const emit = defineEmits<{
   display: flex;
   gap: 8px;
   margin-left: auto;
+  flex-wrap: wrap;
+}
+.toolbar__actions :deep(.el-button + .el-button) { margin-left: 0; }
+@media (max-width: 900px) {
+  .toolbar__actions { width: 100%; margin-left: 0; }
+  .toolbar__name { flex: 1; min-width: 160px; }
 }
 </style>

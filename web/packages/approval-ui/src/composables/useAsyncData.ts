@@ -1,7 +1,7 @@
 import { readonly, shallowRef, watch, type Ref, type ShallowRef, type WatchSource } from 'vue'
 import { ElMessage } from 'element-plus'
-import { errorMessage } from '../api/http'
-import { useApprovalClient } from '../client'
+import { errorMessage } from '@ui/api/http'
+import { useApprovalClient } from '@ui/client'
 
 interface UseAsyncDataOptions<T> {
   /** 变化时自动重新加载（如路由参数、当前用户） */

@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ElMessage } from 'element-plus'
-import { useApprovalClient } from '../../client'
-import { errorMessage } from '../../api/http'
-import type { FileValue } from '../../contracts/forms'
+import { useApprovalClient } from '@ui/client'
+import { errorMessage } from '@ui/api/http'
+import type { FileValue } from '@ui/contracts/forms'
 
 const { api: approvalApi } = useApprovalClient()
 

@@ -7,7 +7,7 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
     "types": ["element-plus/global"],
-    "paths": { "@/*": ["./src/*"] }
+    "paths": { "@/*": ["./src/*"], "@ui/*": ["../../packages/approval-ui/src/*"] }
   },
   "include": ["src/**/*.ts", "src/**/*.vue", "env.d.ts"]
 }

@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, shallowRef, watch } from 'vue'
-import { useDirectory } from '../../composables/useDirectory'
+import { useDirectory } from '@ui/composables/useDirectory'
 import FileList from './FileList.vue'
-import type { FileValue, FormField } from '../../contracts/forms'
+import type { FileValue, FormField } from '@ui/contracts/forms'
 
 /** 字段值的只读展示：选项显示名称、人员显示姓名、金额保留两位小数。 */
 const props = defineProps<{ field: FormField; value: unknown }>()

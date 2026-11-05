@@ -1,4 +1,4 @@
-import type { NodeType, FlowDefinition } from '../../contracts/flow'
+import type { NodeType, FlowDefinition } from '@ui/contracts/flow'
 import type { FlowNodeData } from './flowElements'
 import { defaultNotification } from './flowPresentation'
 import { currentFlowSchemaVersion } from './flowVersion'

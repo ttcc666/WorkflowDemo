@@ -1,4 +1,4 @@
-import type { NodeType, NotifyEvent, TimeoutAction, ApproveMode, ApproverRule, NotificationRule } from '../../contracts/flow'
+import type { NodeType, NotifyEvent, TimeoutAction, ApproveMode, ApproverRule, NotificationRule } from '@ui/contracts/flow'
 import type { FlowNodeData } from './flowElements'
 
 export const nodeTypeLabels: Record<NodeType, string> = {

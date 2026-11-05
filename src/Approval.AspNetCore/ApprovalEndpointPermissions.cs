@@ -34,6 +34,7 @@ internal static class ApprovalEndpointPermissions
             ("GET", "/directory/users" or "/directory/roles") => ApprovalPermissions.DirectoryRead,
             ("GET", "/meta" or "/flows") => ApprovalPermissions.DefinitionRead,
             ("GET", "/definitions" or "/definitions/{key}" or "/definitions/{key}/versions" or "/definitions/by-id/{id:guid}") => ApprovalPermissions.DefinitionReadSensitive,
+            ("POST", "/definitions/simulate") => ApprovalPermissions.DefinitionSimulate,
             ("POST", "/definitions/validate") => ApprovalPermissions.DefinitionValidate,
             ("POST", "/definitions/{key}") => ApprovalPermissions.DefinitionPublish,
             ("GET", "/definitions/governance" or "/definitions/{key}/governance" or "/definitions/{key}/audit") => ApprovalPermissions.DefinitionReadSensitive,

@@ -1,11 +1,12 @@
 <script setup lang="ts">
+import CommandRecovery from '@ui/components/CommandRecovery.vue'
 import { shallowRef } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { useApprovalClient } from '../../client'
-import { useAsyncData } from '../../composables/useAsyncData'
-import { useCommandIntent } from '../../composables/useCommandIntent'
-import { errorMessage } from '../../api/http'
-import { formatDateTime } from '../../utils/labels'
+import { useApprovalClient } from '@ui/client'
+import { useAsyncData } from '@ui/composables/useAsyncData'
+import { useCommandIntent } from '@ui/composables/useCommandIntent'
+import { errorMessage } from '@ui/api/http'
+import { formatDateTime } from '@ui/utils/labels'
 
 const props = defineProps<{ flowKey: string }>()
 const emit = defineEmits<{ changed: [] }>()
@@ -19,6 +20,7 @@ const note = shallowRef('')
 const selectedVersion = shallowRef<string | null>(null)
 const busy = shallowRef(false)
 const can = (permission: string) => state.data.value?.capabilities[permission] === true
+function recover() { void state.reload(); void versions.reload(); void audit.reload(); emit('changed') }
 async function govern(kind: 'enabled' | 'select') {
   if (!state.data.value) return
   const current = state.data.value
@@ -46,6 +48,7 @@ const actionLabel = (action: string) => actionLabels[action] ?? action
 </script>
 
 <template>
+  <CommandRecovery :intent="intent" :busy="busy" @recovered="recover" />
   <section v-loading="state.loading.value">
     <el-alert v-if="state.error.value" type="error" :closable="false" :title="errorMessage(state.error.value)" />
     <template v-if="state.data.value">

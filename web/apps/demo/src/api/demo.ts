@@ -1,4 +1,4 @@
-import { approval } from '../approval'
+import { approval } from '@/approval'
 import type { DemoUser, DemoWebhookState } from './types'
 
 const http = approval.http

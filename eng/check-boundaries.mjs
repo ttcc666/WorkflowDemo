@@ -23,11 +23,12 @@ export function boundaryViolations(file, source, { contractsRoot, appsRoot, appP
   const syntax = ts.createSourceFile(file, scripts, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
   const violations = []
   const check = (specifier, values = []) => {
-    const target = specifier.startsWith('.') || isAbsolute(specifier) ? resolve(dirname(file), specifier) : null
+    const target = specifier.startsWith('@ui/') ? resolve(sourceRoot, specifier.slice('@ui/'.length))
+      : specifier.startsWith('.') || isAbsolute(specifier) ? resolve(dirname(file), specifier) : null
     if (contract && (!target || !within(contractsRoot, target))) {
       violations.push({ specifier, reason: 'contracts may depend only on other contract files' })
     }
-    if ((target && within(appsRoot, target)) || appPackages.some(name => specifier === name || specifier.startsWith(`${name}/`))) {
+    if (specifier.startsWith('@/') || (target && within(appsRoot, target)) || appPackages.some(name => specifier === name || specifier.startsWith(`${name}/`))) {
       violations.push({ specifier, reason: 'the UI library must not depend on a host application' })
     }
     const module = target ? relative(sourceRoot, target).replaceAll('\\', '/').replace(/\.ts$/, '') : specifier

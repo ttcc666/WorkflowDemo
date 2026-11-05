@@ -206,3 +206,82 @@ test('packaged definition categories are shown and filtered by server', async ({
   await expect(page.getByRole('cell', { name: category, exact: true })).toBeVisible()
   await expect(page.getByRole('row').filter({ hasText: `${prefix}.two` })).toHaveCount(0)
 })
+
+test('packaged simulation stops at decisions and node preview leaves the saved draft unchanged', async ({ page, request }) => {
+  const api = process.env.APPROVAL_SMOKE_API!, key = `package.simulate.${Date.now()}`
+  const flow = { schemaVersion: 1, startNodeId: 's', nodes: {
+    s: { type: 'Start', name: '提交', next: 'c' },
+    c: { type: 'Condition', name: '金额判断', branches: [{ priority: 1, expression: 'amount >= 5000', next: 'high' }, { priority: 2, next: 'low' }] },
+    high: { type: 'Approval', name: '高金额审批', approvers: [{ type: 'User', value: 'dave' }], next: 'e' },
+    low: { type: 'Approval', name: '普通审批', approvers: [{ type: 'User', value: 'quinn' }], next: 'e' }, e: { type: 'End', name: '结束' },
+  } }
+  const published = await request.post(api + `/api/approval/definitions/${key}`, { headers: { 'X-User-Id': 'admin', 'Idempotency-Key': key }, data: flow })
+  expect(published.ok(), await published.text()).toBe(true)
+  const before = await json(request, `/api/approval/definitions/${key}/governance`, 'admin')
+  await page.addInitScript(() => localStorage.setItem('approval-demo-user', 'admin'))
+  await page.goto(`/designer/${key}`)
+  await page.getByRole('button', { name: '流程模拟', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: '流程模拟', exact: true })
+  await dialog.getByRole('textbox').fill('{"amount":8000}')
+  const simulation = page.waitForResponse(r => new URL(r.url()).pathname.endsWith('/definitions/simulate'))
+  await dialog.getByRole('button', { name: '执行模拟', exact: true }).click()
+  const response = await simulation
+  expect(response.status()).toBe(200)
+  expect(response.request().headers()).not.toHaveProperty('idempotency-key')
+  expect((await response.json()).isComplete).toBe(false)
+  await expect(dialog.getByText('需要人工决策；后续路径未模拟', { exact: true })).toBeVisible()
+  await expect(dialog.getByText('任务 / 抄送对象：User · dave', { exact: true })).toBeVisible()
+  await dialog.getByRole('textbox').fill('{"amount":1}')
+  await expect(dialog.getByText('任务 / 抄送对象：User · dave', { exact: true })).toHaveCount(0)
+  await dialog.getByRole('button', { name: '执行模拟', exact: true }).click()
+  await expect(dialog.getByText('任务 / 抄送对象：User · quinn', { exact: true })).toBeVisible()
+  await dialog.locator('.el-dialog__headerbtn').click()
+  await expect(dialog).not.toBeVisible()
+  await page.locator('.vue-flow__node.selectable[data-id="high"]').click()
+  await page.getByRole('button', { name: '预览节点分配', exact: true }).click()
+  const preview = page.getByRole('dialog', { name: '审批人解析预览', exact: true })
+  await preview.getByRole('button', { name: '执行模拟', exact: true }).click()
+  await expect(preview.getByText('任务 / 抄送对象：User · dave', { exact: true })).toBeVisible()
+  const after = await json(request, `/api/approval/definitions/${key}/governance`, 'admin')
+  expect(after.revision).toBe(before.revision); expect(after.draftJson).toBe(before.draftJson)
+  expect(after.activeDefinitionId).toBe(before.activeDefinitionId)
+})
+
+test('packaged approval recovers the original key and payload after the server commits but response is lost', async ({ page, request }) => {
+  const api = process.env.APPROVAL_SMOKE_API!, key = `package.recovery.${Date.now()}`
+  const flow = { schemaVersion: 1, startNodeId: 's', settings: { startable: true },
+    form: { fields: [{ key: 'memo', label: '说明', type: 'Text' }] }, nodes: {
+      s: { type: 'Start', name: '提交', next: 'review' },
+      review: { type: 'Approval', name: '审核', approvers: [{ type: 'User', value: 'dave' }], next: 'e' }, e: { type: 'End', name: '结束' },
+    } }
+  const published = await request.post(api + `/api/approval/definitions/${key}`, { headers: { 'X-User-Id': 'admin', 'Idempotency-Key': key }, data: flow })
+  expect(published.ok(), await published.text()).toBe(true)
+  const started = await request.post(api + `/api/approval/forms/${key}/start`, { headers: { 'X-User-Id': 'alice', 'Idempotency-Key': `${key}.start` }, data: { formData: { memo: 'original' }, comment: '' } })
+  expect(started.ok(), await started.text()).toBe(true)
+  const { instanceId } = await started.json()
+  await page.addInitScript(() => localStorage.setItem('approval-demo-user', 'dave'))
+  await page.goto(`/approvals/${instanceId}`)
+  const submissions: { key: string | undefined; payload: string | null }[] = []
+  await page.route('**/tasks/*/approve', async route => {
+    submissions.push({ key: route.request().headers()['idempotency-key'], payload: route.request().postData() })
+    if (submissions.length === 1) {
+      const committed = await route.fetch()
+      expect(committed.status()).toBe(204)
+      await route.abort('failed')
+    } else await route.continue()
+  })
+  await page.getByRole('button', { name: '同意', exact: true }).click()
+  await page.getByRole('dialog').getByRole('textbox').fill('original-comment')
+  await page.getByRole('dialog').getByRole('button', { name: '确定', exact: true }).click()
+  const retry = page.getByRole('button', { name: '按原内容重试上次操作', exact: true })
+  await expect(retry).toBeVisible()
+  await expect(page.getByRole('button', { name: '同意', exact: true })).toHaveCount(0)
+  await retry.click()
+  await expect(retry).toHaveCount(0)
+  expect(submissions).toHaveLength(2)
+  expect(submissions[0]!.key).toBeTruthy()
+  expect(submissions[1]).toEqual(submissions[0])
+  const detail = await json(request, `/api/approval/instances/${instanceId}`, 'admin')
+  expect(detail.status).toBe('Approved')
+  expect(detail.logs.filter((log: { action: string }) => log.action === 'Approve')).toHaveLength(1)
+})

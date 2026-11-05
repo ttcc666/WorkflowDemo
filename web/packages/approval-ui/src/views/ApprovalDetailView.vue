@@ -1,13 +1,14 @@
 <script setup lang="ts">
+import CommandRecovery from '@ui/components/CommandRecovery.vue'
 import { computed, ref, shallowRef, useTemplateRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { useCommandIntent } from '../composables/useCommandIntent'
-import { useApprovalClient } from '../client'
-import { ApiError, errorMessage } from '../api/http'
-import type { AddSignMode, ApprovalTask } from '../contracts/api'
-import { useApprovalUser } from '../composables/useApprovalUser'
-import DynamicForm from '../features/forms/DynamicForm.vue'
+import { useCommandIntent } from '@ui/composables/useCommandIntent'
+import { useApprovalClient } from '@ui/client'
+import { ApiError, errorMessage } from '@ui/api/http'
+import type { AddSignMode, ApprovalTask } from '@ui/contracts/api'
+import { useApprovalUser } from '@ui/composables/useApprovalUser'
+import DynamicForm from '@ui/features/forms/DynamicForm.vue'
 import {
   changedFields,
   formOfDefinition,
@@ -16,15 +17,15 @@ import {
   pickValues,
   withoutFields,
   type FormValues,
-} from '../features/forms/formModel'
-import ApprovalActions from '../features/approval/ApprovalActions.vue'
-import ApprovalSummary from '../features/approval/ApprovalSummary.vue'
-import ApprovalTimeline from '../features/approval/ApprovalTimeline.vue'
-import ReassignDialog from '../features/approval/ReassignDialog.vue'
-import { businessPanelOf } from '../features/approval/businessPanels'
-import { useApprovalDetail } from '../features/approval/useApprovalDetail'
-import FlowViewer from '../features/flow/FlowViewer.vue'
-import CarbonCopyHistory from '../features/approval/CarbonCopyHistory.vue'
+} from '@ui/features/forms/formModel'
+import ApprovalActions from '@ui/features/approval/ApprovalActions.vue'
+import ApprovalSummary from '@ui/features/approval/ApprovalSummary.vue'
+import ApprovalTimeline from '@ui/features/approval/ApprovalTimeline.vue'
+import ReassignDialog from '@ui/features/approval/ReassignDialog.vue'
+import { businessPanelOf } from '@ui/features/approval/businessPanels'
+import { useApprovalDetail } from '@ui/features/approval/useApprovalDetail'
+import FlowViewer from '@ui/features/flow/FlowViewer.vue'
+import CarbonCopyHistory from '@ui/features/approval/CarbonCopyHistory.vue'
 
 const { api: approvalApi, config: approvalConfig } = useApprovalClient()
 
@@ -134,6 +135,7 @@ const onReassign = (task: ApprovalTask, to: string, reason: string) =>
 </script>
 
 <template>
+  <CommandRecovery :intent="intent" :busy="busy" @recovered="reload" />
   <div v-loading="loading && !instance" class="detail-page">
     <el-page-header class="detail-header" title="返回" @back="router.back()">
       <template #content>审批详情</template>
@@ -173,8 +175,8 @@ const onReassign = (task: ApprovalTask, to: string, reason: string) =>
         <ApprovalSummary :instance="instance" :definition-name="definition?.name" />
       </el-card>
 
-      <el-row :gutter="16">
-        <el-col :span="14" class="detail-col">
+      <el-row :gutter="16" class="detail-columns">
+        <el-col :xs="24" :sm="24" :md="14" class="detail-col">
           <el-card shadow="never" header="申请内容">
             <!-- 审批状态变化后重新挂载，刷新业务单据状态 -->
             <component :is="businessPanel" v-if="businessPanel" :key="instance.status" :business-key="instance.businessKey" />
@@ -194,7 +196,7 @@ const onReassign = (task: ApprovalTask, to: string, reason: string) =>
             <el-skeleton v-else :rows="6" animated />
           </el-card>
         </el-col>
-        <el-col :span="10" class="detail-col">
+        <el-col :xs="24" :sm="24" :md="10" class="detail-col">
           <CarbonCopyHistory :instance-id="instance.id" />
           <el-card shadow="never" header="审批轨迹">
             <ApprovalTimeline :logs="instance.logs" :tasks="instance.tasks" :form="formSchema" :can-reassign="canReassign"
@@ -215,7 +217,10 @@ const onReassign = (task: ApprovalTask, to: string, reason: string) =>
   gap: 16px;
 }
 
+.detail-columns { row-gap: 16px; }
+
 .detail-col {
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 16px;

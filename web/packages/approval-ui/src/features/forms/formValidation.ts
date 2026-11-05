@@ -1,4 +1,4 @@
-import type { FormField, FormFieldType, FormSchema } from '../../contracts/forms'
+import type { FormField, FormFieldType, FormSchema } from '@ui/contracts/forms'
 import { isValidFieldKey, numberTypes, optionTypes, textTypes } from './formFields'
 import { parseFormula } from './formula'
 

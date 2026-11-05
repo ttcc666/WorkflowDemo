@@ -138,6 +138,7 @@ Approval.Forms.Schema.FormDefinitionValidator
   Constructor Void .ctor() [args=]
   Method System.Collections.Generic.IReadOnlyList`1[System.String] Warnings(Approval.Core.Definitions.FlowDefinition) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull]
   Method System.Collections.Generic.IReadOnlySet`1[System.String] UserFields(Approval.Core.Definitions.FlowDefinition) [return=Nullable/Nullable<NotNull/NotNull>; args=NotNull/NotNull]
+  Method System.String NormalizeSimulationData(Approval.Core.Definitions.FlowDefinition, System.String) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull]
   Method Void Validate(Approval.Core.Definitions.FlowDefinition, System.Collections.Generic.List`1[System.String]) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull<NotNull/NotNull>]
 Approval.Forms.Schema.FormField
   Constructor Void .ctor() [args=]

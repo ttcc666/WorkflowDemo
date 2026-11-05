@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import type { CarbonCopyItem } from '../../contracts/api'
-import { formatDateTime, instanceStatusLabels } from '../../utils/labels'
+import type { CarbonCopyItem } from '@ui/contracts/api'
+import { formatDateTime, instanceStatusLabels } from '@ui/utils/labels'
 import { shallowRef } from 'vue'
-import { useApprovalUser } from '../../composables/useApprovalUser'
-import CarbonCopyRecipientsDialog from '../approval/CarbonCopyRecipientsDialog.vue'
+import { useApprovalUser } from '@ui/composables/useApprovalUser'
+import CarbonCopyRecipientsDialog from '@ui/features/approval/CarbonCopyRecipientsDialog.vue'
 
 const { can } = useApprovalUser()
 const selected = shallowRef('')

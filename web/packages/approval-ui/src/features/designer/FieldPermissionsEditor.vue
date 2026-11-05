@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { FieldAccess } from '../../contracts/flow'
-import { fieldTypeLabels, type FormField } from '../forms/formModel'
+import type { FieldAccess } from '@ui/contracts/flow'
+import { fieldTypeLabels, type FormField } from '@ui/features/forms/formModel'
 
 /**
  * 节点的表单字段权限：只读（默认）/ 可编辑（仅审批节点，计算字段除外）/ 隐藏。

@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed, shallowRef } from 'vue'
-import { useApprovalClient } from '../../client'
-import type { FlowSummary } from '../../contracts/api'
-import { useAsyncData } from '../../composables/useAsyncData'
-import { localDayStart } from '../../composables/usePagedList'
-import { assigneeText, durationText, formatDateTime } from '../../utils/labels'
+import { useApprovalClient } from '@ui/client'
+import type { FlowSummary } from '@ui/contracts/api'
+import { useAsyncData } from '@ui/composables/useAsyncData'
+import { localDayStart } from '@ui/composables/usePagedList'
+import { assigneeText, durationText, formatDateTime } from '@ui/utils/labels'
 
 const { api: approvalApi } = useApprovalClient()
 

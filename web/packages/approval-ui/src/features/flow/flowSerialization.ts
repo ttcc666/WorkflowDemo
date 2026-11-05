@@ -1,4 +1,4 @@
-import type { FlowDefinition, FlowNodeDef, NotificationRule } from '../../contracts/flow'
+import type { FlowDefinition, FlowNodeDef, NotificationRule } from '@ui/contracts/flow'
 import { createEdge, FLOW_NODE_TYPE, type FlowNode, type FlowEdge } from './flowElements'
 import { layoutNodes } from './flowLayout'
 import { notifyEventsFor } from './flowPresentation'

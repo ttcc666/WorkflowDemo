@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useApprovalClient } from '../client'
-import { useApprovalUser } from '../composables/useApprovalUser'
-import { useAsyncData } from '../composables/useAsyncData'
-import HandoverPanel from '../features/monitor/HandoverPanel.vue'
-import MonitorInstances from '../features/monitor/MonitorInstances.vue'
-import MonitorStatistics from '../features/monitor/MonitorStatistics.vue'
+import { useApprovalClient } from '@ui/client'
+import { useApprovalUser } from '@ui/composables/useApprovalUser'
+import { useAsyncData } from '@ui/composables/useAsyncData'
+import HandoverPanel from '@ui/features/monitor/HandoverPanel.vue'
+import MonitorInstances from '@ui/features/monitor/MonitorInstances.vue'
+import MonitorStatistics from '@ui/features/monitor/MonitorStatistics.vue'
 
 const { api: approvalApi } = useApprovalClient()
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nodeTypeLabels, PALETTE_DRAG_TYPE, type NodeType } from '../flow/flowModel'
+import { nodeTypeLabels, PALETTE_DRAG_TYPE, type NodeType } from '@ui/features/flow/flowModel'
 
 const emit = defineEmits<{ add: [type: NodeType] }>()
 

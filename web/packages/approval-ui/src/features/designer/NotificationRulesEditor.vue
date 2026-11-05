@@ -1,14 +1,14 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { ApproverTypeMeta, ChannelMeta, TemplateVariableMeta } from '../../contracts/api'
+import type { ApproverTypeMeta, ChannelMeta, TemplateVariableMeta } from '@ui/contracts/api'
 import {
   defaultNotification,
   defaultTemplates,
   notifyEventLabels,
   type NotificationRule,
   type NotifyEvent,
-} from '../flow/flowModel'
-import { fieldVariables } from '../forms/formModel'
+} from '@ui/features/flow/flowModel'
+import { fieldVariables } from '@ui/features/forms/formModel'
 import ApproverRulesEditor from './ApproverRulesEditor.vue'
 import { useDesignerForm } from './designerContext'
 

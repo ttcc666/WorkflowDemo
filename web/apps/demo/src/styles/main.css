@@ -5,3 +5,13 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
   color: #303133;
 }
+
+/* 宿主统一约束弹窗尺寸，固定宽度的业务弹窗在窄屏内仍可操作。 */
+.el-dialog { max-width: calc(100vw - 24px); }
+.el-drawer { max-width: 100vw; }
+.el-dialog__body { overflow-wrap: anywhere; }
+.el-table__empty-text { line-height: 1.7; padding: 18px 0; }
+@media (max-width: 600px) {
+  .el-card__body, .el-card__header { padding: 14px; }
+  .el-pagination { max-width: 100%; overflow-x: auto; }
+}

@@ -47,6 +47,7 @@ const activeMenu = computed(() => {
 <style scoped>
 .layout {
   min-height: 100vh;
+  min-width: 0;
 }
 
 .layout__header {
@@ -55,9 +56,12 @@ const activeMenu = computed(() => {
   gap: 24px;
   border-bottom: 1px solid #ebeef5;
   background: #fff;
+  min-width: 0;
 }
 
 .layout__brand {
+  flex-shrink: 0;
+  white-space: nowrap;
   color: #303133;
   font-size: 18px;
   font-weight: 600;
@@ -65,10 +69,19 @@ const activeMenu = computed(() => {
 
 .layout__menu {
   flex: 1;
+  min-width: 0;
   border-bottom: none;
 }
 
 .layout__main {
   padding: 16px 20px;
+  min-width: 0;
+}
+
+@media (max-width: 1100px) {
+  .layout__header { height: auto; flex-wrap: wrap; gap: 8px; padding: 10px 12px 0; }
+  .layout__brand { margin-right: auto; }
+  .layout__menu { order: 3; flex: 0 0 100%; width: 100%; overflow-x: auto; --el-menu-horizontal-height: 44px; }
+  .layout__main { padding: 12px; }
 }
 </style>

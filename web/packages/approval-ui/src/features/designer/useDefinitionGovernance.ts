@@ -1,9 +1,9 @@
 import { shallowRef } from 'vue'
-import type { ApprovalApiClient } from '../../api/approval'
-import { ApiError } from '../../api/http'
-import { useApprovalClient } from '../../client'
-import { createCommandIntent, useCommandIntent } from '../../composables/useCommandIntent'
-import type { DefinitionGovernance } from '../../contracts/api'
+import type { ApprovalApiClient } from '@ui/api/approval'
+import { ApiError } from '@ui/api/http'
+import { useApprovalClient } from '@ui/client'
+import { createCommandIntent, useCommandIntent } from '@ui/composables/useCommandIntent'
+import type { DefinitionGovernance } from '@ui/contracts/api'
 
 type DraftApi = Pick<ApprovalApiClient, 'definitionGovernance' | 'saveDesignDraft' | 'publishDesignDraft'>
 export function createDefinitionEditor(api: DraftApi, key: () => string, intent: ReturnType<typeof createCommandIntent>) {

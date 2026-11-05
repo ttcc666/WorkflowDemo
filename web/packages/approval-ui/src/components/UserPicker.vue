@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, shallowRef, watch } from 'vue'
-import type { DirectoryUser } from '../contracts/api'
-import { useDirectory } from '../composables/useDirectory'
-import { useApprovalClient } from '../client'
+import type { DirectoryUser } from '@ui/contracts/api'
+import { useDirectory } from '@ui/composables/useDirectory'
+import { useApprovalClient } from '@ui/client'
 
 /**
  * 用户选择器：远程搜索用户目录，回显已选用户名称。

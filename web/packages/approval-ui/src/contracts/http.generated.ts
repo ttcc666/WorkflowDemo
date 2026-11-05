@@ -17,6 +17,7 @@ export interface paths {
                     From?: string;
                     InitiatorId?: string;
                     Keyword?: string;
+                    OverdueOnly?: boolean;
                     Page?: number | string;
                     PageSize?: number | string;
                     Sort?: components["schemas"]["ApprovalSort"];
@@ -650,6 +651,7 @@ export interface paths {
                     From?: string;
                     InitiatorId?: string;
                     Keyword?: string;
+                    OverdueOnly?: boolean;
                     Page?: number | string;
                     PageSize?: number | string;
                     Sort?: components["schemas"]["ApprovalSort"];
@@ -1066,6 +1068,7 @@ export interface paths {
                     From?: string;
                     InitiatorId?: string;
                     Keyword?: string;
+                    OverdueOnly?: boolean;
                     Page?: number | string;
                     PageSize?: number | string;
                     Sort?: components["schemas"]["ApprovalSort"];
@@ -2582,6 +2585,108 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/approval/definitions/simulate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["ApprovalSimulationRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ApprovalSimulationResult"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Gone */
+                410: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+                /** @description Service Unavailable */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/problem+json": components["schemas"]["ProblemDetails"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/approval/definitions/validate": {
         parameters: {
             query?: never;
@@ -3017,6 +3122,7 @@ export interface paths {
                     From?: string;
                     InitiatorId?: string;
                     Keyword?: string;
+                    OverdueOnly?: boolean;
                     Page?: number | string;
                     PageSize?: number | string;
                     Sort?: components["schemas"]["ApprovalSort"];
@@ -5524,6 +5630,7 @@ export interface paths {
                     From?: string;
                     InitiatorId?: string;
                     Keyword?: string;
+                    OverdueOnly?: boolean;
                     Page?: number | string;
                     PageSize?: number | string;
                     Sort?: components["schemas"]["ApprovalSort"];
@@ -6608,7 +6715,14 @@ export interface components {
         ApprovalDiagnosticFinding: {
             code: string;
             /** Format: uuid */
+            definitionId?: null | string;
+            definitionKey?: null | string;
+            /** Format: uuid */
+            instanceId?: null | string;
+            /** Format: uuid */
             resourceId: string;
+            /** Format: uuid */
+            taskId?: null | string;
         };
         ApprovalDiagnosticReport: {
             assignmentSampleTruncated: boolean;
@@ -6781,6 +6895,47 @@ export interface components {
             /** Format: int32 */
             version: number | string;
         };
+        ApprovalSimulationAssignment: {
+            members: components["schemas"]["ApprovalSimulationMember"][];
+            taskAssignee: components["schemas"]["Assignee"];
+        };
+        ApprovalSimulationEvaluation: {
+            expression: null | string;
+            matched: boolean;
+            nextNodeId: string;
+        };
+        ApprovalSimulationMember: {
+            exclusionReason: null | string;
+            isEligible: null | boolean;
+            name: null | string;
+            userId: string;
+        };
+        ApprovalSimulationRequest: {
+            definitionJson: string;
+            formData: components["schemas"]["JsonElement"];
+            nodeId?: null | string;
+            /** Format: int32 */
+            ruleIndex?: null | number | string;
+        };
+        ApprovalSimulationResult: {
+            errors: string[];
+            isComplete: boolean;
+            isValid: boolean;
+            steps: components["schemas"]["ApprovalSimulationStep"][];
+            warnings: string[];
+        };
+        ApprovalSimulationStep: {
+            assignments?: components["schemas"]["ApprovalSimulationAssignment"][];
+            blockReason: null | string;
+            evaluations: components["schemas"]["ApprovalSimulationEvaluation"][];
+            excludedAssignees: components["schemas"]["Assignee"][];
+            nodeId: string;
+            nodeName: string;
+            nodeType: components["schemas"]["NodeType"];
+            resolutionTrace?: components["schemas"]["ApproverResolutionTrace"][];
+            resolvedAssignees: components["schemas"]["Assignee"][];
+            status: string;
+        };
         /** @enum {unknown} */
         ApprovalSort: "Newest" | "Oldest" | "Title" | null;
         ApprovalStartedResponse: {
@@ -6857,6 +7012,10 @@ export interface components {
             comment: null | string;
             formData: null | components["schemas"]["JsonElement"];
         };
+        ApproverResolutionTrace: {
+            description: string;
+            type: string;
+        };
         ApproverRule: {
             type: string;
             value: string;
@@ -6871,6 +7030,10 @@ export interface components {
         };
         /** @enum {unknown} */
         ApproverValueKind: "None" | "User" | "Role" | "FormUserField" | "Level" | "Text";
+        Assignee: {
+            kind: components["schemas"]["AssigneeKind"];
+            value: string;
+        };
         /** @enum {unknown} */
         AssigneeKind: "User" | "Role";
         BacklogItem: {

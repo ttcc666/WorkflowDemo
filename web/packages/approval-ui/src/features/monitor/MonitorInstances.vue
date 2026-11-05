@@ -1,21 +1,26 @@
 <script setup lang="ts">
+import CommandRecovery from '@ui/components/CommandRecovery.vue'
 import { shallowRef } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { useApprovalClient } from '../../client'
-import { errorMessage } from '../../api/http'
-import type { FlowSummary, InstanceListItem } from '../../contracts/api'
-import UserPicker from '../../components/UserPicker.vue'
-import { usePagedList } from '../../composables/usePagedList'
-import { approvalRouteNames } from '../../routes'
-import InstanceTable from '../workbench/InstanceTable.vue'
-import ListFilterBar from '../workbench/ListFilterBar.vue'
+import { useCommandIntent } from '@ui/composables/useCommandIntent'
+import { useApprovalUser } from '@ui/composables/useApprovalUser'
+import { useApprovalClient } from '@ui/client'
+import { errorMessage } from '@ui/api/http'
+import type { FlowSummary, InstanceListItem } from '@ui/contracts/api'
+import UserPicker from '@ui/components/UserPicker.vue'
+import { usePagedList } from '@ui/composables/usePagedList'
+import { approvalRouteNames } from '@ui/routes'
+import InstanceTable from '@ui/features/workbench/InstanceTable.vue'
+import ListFilterBar from '@ui/features/workbench/ListFilterBar.vue'
 
-const { api: approvalApi } = useApprovalClient()
+const { api: approvalApi, userKey } = useApprovalClient()
 
 /** 流程监控：全部流程的分页搜索（状态、流程、发起人、关键字、发起日期），进行中的可终止。 */
 defineProps<{ flows: FlowSummary[] }>()
 
+const intent = useCommandIntent('monitor-terminate')
+const { can } = useApprovalUser()
 const router = useRouter()
 const initiator = shallowRef<string | null>(null)
 const list = usePagedList((query, signal) => approvalApi.adminInstances({ ...query, initiatorId: initiator.value ?? undefined }, signal), {
@@ -35,6 +40,7 @@ function reset() {
 const open = (id: string) => router.push({ name: approvalRouteNames.detail, params: { id } })
 
 async function terminate(row: InstanceListItem) {
+  const owner = userKey.value
   let reason: string
   try {
     const result = await ElMessageBox.prompt(`终止「${row.title || row.businessKey}」？所有待办将取消，业务单据按驳回处理。`, '终止流程', {
@@ -48,8 +54,9 @@ async function terminate(row: InstanceListItem) {
   } catch {
     return
   }
+  if (owner !== userKey.value) return
   try {
-    await approvalApi.terminate(row.id, reason)
+    await intent.run(row.id, { instanceId: row.id, reason }, (body, key) => approvalApi.terminate(body.instanceId, body.reason, key))
     ElMessage.success('已终止流程')
   } catch (e) {
     ElMessage.error(errorMessage(e))
@@ -59,14 +66,15 @@ async function terminate(row: InstanceListItem) {
 </script>
 
 <template>
+  <CommandRecovery :intent="intent" @recovered="list.reload" />
   <div class="monitor-instances">
     <div class="monitor-instances__filters">
-      <ListFilterBar v-model="list.filters" :flows="flows" status dates @search="list.search" @reset="reset" />
+      <ListFilterBar v-model="list.filters" :flows="flows" status dates overdue @search="list.search" @reset="reset" />
       <UserPicker v-model="initiator" placeholder="发起人" class="monitor-instances__initiator" @update:model-value="onInitiatorChange" />
     </div>
     <InstanceTable :items="list.items.value" :loading="list.loading.value" empty-text="没有符合条件的流程" @open="open">
       <template #actions="{ row }">
-        <el-button v-if="(row.status === 'Running' || row.status === 'Returned')" link type="danger" size="small" @click.stop="terminate(row)">终止</el-button>
+        <el-button v-if="can('approval.instance.terminate') && (row.status === 'Running' || row.status === 'Returned')" link type="danger" size="small" @click.stop="terminate(row)">终止</el-button>
       </template>
     </InstanceTable>
     <el-pagination v-model:current-page="list.page.value" v-model:page-size="list.pageSize.value" :total="list.total.value"

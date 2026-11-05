@@ -1,4 +1,4 @@
-import { approval } from '../approval'
+import { approval } from '@/approval'
 import type { ListQuery, PagedResult } from '@approval/ui'
 import type { Certificate, CertificateData, CertificateRequest, CertificateRequestDetail } from './types'
 

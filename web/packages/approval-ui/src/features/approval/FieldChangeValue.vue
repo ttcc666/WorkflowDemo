@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import FormValueText from '../forms/FormValueText.vue'
-import type { FormField, FormValues } from '../../contracts/forms'
+import FormValueText from '@ui/features/forms/FormValueText.vue'
+import type { FormField, FormValues } from '@ui/contracts/forms'
 
 /** 修改记录中的字段值：明细表逐行列出各列的值，其他字段按类型显示。 */
 const props = defineProps<{ field: FormField; value: unknown }>()

@@ -53,7 +53,7 @@ const cardClass = computed(() => [
     <div class="flow-node__header">
       <span class="flow-node__icon">{{ typeIcons[data.type] }}</span>
       <span class="flow-node__type">{{ nodeTypeLabels[data.type] }}</span>
-      <span v-if="data.status" class="flow-node__status">{{ statusText[data.status] }}</span>
+      <span v-if="data.status" class="flow-node__status">{{ data.statusLabel ?? statusText[data.status] }}</span>
       <span v-else-if="badges.length" class="flow-node__badges">
         <span v-for="b in badges" :key="b.text" :title="b.title">{{ b.text }}</span>
       </span>

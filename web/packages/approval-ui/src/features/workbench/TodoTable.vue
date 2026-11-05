@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import type { TodoItem } from '../../contracts/api'
-import { assigneeText, dueText, formatDateTime, taskKindLabels } from '../../utils/labels'
+import type { TodoItem } from '@ui/contracts/api'
+import { assigneeText, dueText, formatDateTime, taskKindLabels } from '@ui/utils/labels'
 
 defineProps<{ items: TodoItem[]; loading: boolean }>()
 const emit = defineEmits<{ open: [instanceId: string] }>()

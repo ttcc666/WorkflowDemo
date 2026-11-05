@@ -74,7 +74,7 @@ export interface ListQuery {
   from?: string
   to?: string
   initiatorId?: string
-  /** 仅待办：只看已超时 */
+  /** 待办或实例列表：只看存在超期待办的运行实例 */
   overdueOnly?: boolean
   /** 仅投递记录 */
   instanceId?: string
@@ -83,3 +83,5 @@ export interface ListQuery {
 export type CarbonCopyItem = Omit<ResponseShape<Schemas['CarbonCopyItem']>, 'status'> & { status: InstanceStatus }
 
 export type CarbonCopyRecipients = ResponseShape<Schemas['CarbonCopyRecipients']>
+
+export type ApprovalSimulationResult = ResponseShape<Schemas['ApprovalSimulationResult']>

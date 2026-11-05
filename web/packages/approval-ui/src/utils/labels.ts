@@ -5,7 +5,7 @@ import type {
   OutboxStatus,
   TaskKind,
   TaskStatus,
-} from '../contracts/api'
+} from '@ui/contracts/api'
 
 export type TagType = 'primary' | 'success' | 'warning' | 'danger' | 'info'
 

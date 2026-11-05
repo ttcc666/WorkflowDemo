@@ -24,6 +24,7 @@ public sealed class AsyncValidationTests
         public IReadOnlySet<string>? UserFields(FlowDefinition definition) => null;
         public void Validate(FlowDefinition definition, List<string> errors) { Calls++; errors.Add("extension-result"); }
         public IReadOnlyList<string> Warnings(FlowDefinition definition) => [];
+        public string NormalizeSimulationData(FlowDefinition definition, string dataJson) => dataJson;
     }
 
     [Theory]

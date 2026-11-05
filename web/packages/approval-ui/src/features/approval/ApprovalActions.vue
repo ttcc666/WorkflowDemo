@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed, reactive, ref, shallowRef, useTemplateRef } from 'vue'
-import { useApprovalClient } from '../../client'
-import type { AddSignMode, ApprovalTask, ReturnTarget } from '../../contracts/api'
-import UserPicker from '../../components/UserPicker.vue'
-import DynamicForm from '../forms/DynamicForm.vue'
-import { initialValues, type FormSchema, type FormValues } from '../forms/formModel'
-import { assigneeText, taskKindLabels } from '../../utils/labels'
+import { useApprovalClient } from '@ui/client'
+import type { AddSignMode, ApprovalTask, ReturnTarget } from '@ui/contracts/api'
+import UserPicker from '@ui/components/UserPicker.vue'
+import DynamicForm from '@ui/features/forms/DynamicForm.vue'
+import { initialValues, type FormSchema, type FormValues } from '@ui/features/forms/formModel'
+import { assigneeText, taskKindLabels } from '@ui/utils/labels'
 
 const { api: approvalApi } = useApprovalClient()
 
@@ -232,6 +232,7 @@ async function submit() {
 <style scoped>
 .approval-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   padding: 12px 16px;
@@ -242,11 +243,15 @@ async function submit() {
 
 .approval-actions__hint {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
   margin-right: auto;
   color: #606266;
 }
+
+.approval-actions > .el-button { margin-left: 0; }
+@media (max-width: 767px) { .approval-actions__hint { flex-basis: 100%; } }
 
 .dialog-help--block {
   margin: 0 0 12px;

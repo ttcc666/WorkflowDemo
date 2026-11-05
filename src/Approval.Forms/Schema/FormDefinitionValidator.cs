@@ -6,6 +6,15 @@ namespace Approval.Forms.Schema;
 
 public sealed class FormDefinitionValidator : IApprovalDefinitionExtension
 {
+    public string NormalizeSimulationData(FlowDefinition definition, string dataJson)
+    {
+        if (definition.GetForm() is not { } schema) return dataJson;
+        using var data = System.Text.Json.JsonDocument.Parse(dataJson);
+        var result = FormDataValidator.Validate(schema, data.RootElement);
+        if (!result.IsValid) throw new Approval.Core.ApprovalValidationException(result.Errors);
+        return result.Json;
+    }
+
     public IReadOnlySet<string>? UserFields(FlowDefinition definition) => definition.GetForm()?.Fields
         .Where(f => f.Type is FormFieldType.User or FormFieldType.Users).Select(f => f.Key).ToHashSet(StringComparer.OrdinalIgnoreCase);
 

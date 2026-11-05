@@ -7,6 +7,7 @@ const external = [/^vue($|\/)/, /^vue-router/, /^element-plus/, /^@element-plus\
 
 export default defineConfig({
   plugins: [vue()],
+  resolve: { alias: { '@ui': fileURLToPath(new URL('./src', import.meta.url)) } },
   build: {
     lib: {
       entry: fileURLToPath(new URL('./src/index.ts', import.meta.url)),
@@ -20,6 +21,6 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
-    include: ['src/**/*.test.ts'],
+    include: ['tests/**/*.test.ts'],
   },
 })

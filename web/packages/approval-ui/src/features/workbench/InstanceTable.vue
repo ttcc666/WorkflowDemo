@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import type { InstanceListItem } from '../../contracts/api'
-import { formatDateTime, instanceStatusLabels } from '../../utils/labels'
+import type { InstanceListItem } from '@ui/contracts/api'
+import { formatDateTime, instanceStatusLabels } from '@ui/utils/labels'
 
 defineProps<{ items: InstanceListItem[]; loading: boolean; emptyText: string }>()
 const emit = defineEmits<{ open: [instanceId: string] }>()

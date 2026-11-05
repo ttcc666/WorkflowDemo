@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { BranchData } from '../flow/flowModel'
-import { fieldVariables, numberTypes, optionTypes } from '../forms/formModel'
+import type { BranchData } from '@ui/features/flow/flowModel'
+import { fieldVariables, numberTypes, optionTypes } from '@ui/features/forms/formModel'
 import { useDesignerForm } from './designerContext'
 
 const props = defineProps<{

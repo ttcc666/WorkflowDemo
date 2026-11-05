@@ -21,8 +21,8 @@
     "types": "./dist/types/index.d.ts"
   },
   "scripts": {
-    "build": "vite build && vue-tsc -p tsconfig.lib.json",
-    "typecheck": "vue-tsc --noEmit -p tsconfig.json",
+    "build": "vite build && vue-tsc -p tsconfig.lib.json && node scripts/resolve-declaration-imports.mjs",
+    "typecheck": "vue-tsc --noEmit -p tsconfig.json && vue-tsc --noEmit -p tsconfig.test.json",
     "test": "vitest run"
   },
   "dependencies": {

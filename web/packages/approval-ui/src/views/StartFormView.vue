@@ -1,17 +1,18 @@
 <script setup lang="ts">
+import CommandRecovery from '@ui/components/CommandRecovery.vue'
 import { computed, onBeforeUnmount, ref, shallowRef, useTemplateRef, watch } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { useCommandIntent } from '../composables/useCommandIntent'
-import { useApprovalClient } from '../client'
-import { ApiError, errorMessage } from '../api/http'
-import type { DraftDetail, StartForm } from '../contracts/api'
-import { useApprovalUser } from '../composables/useApprovalUser'
-import { useAsyncData } from '../composables/useAsyncData'
-import DynamicForm from '../features/forms/DynamicForm.vue'
-import { initialValues, parseFormValues, type FormValues } from '../features/forms/formModel'
-import { approvalRouteNames } from '../routes'
-import { formatDateTime } from '../utils/labels'
+import { useCommandIntent } from '@ui/composables/useCommandIntent'
+import { useApprovalClient } from '@ui/client'
+import { ApiError, errorMessage } from '@ui/api/http'
+import type { DraftDetail, StartForm } from '@ui/contracts/api'
+import { useApprovalUser } from '@ui/composables/useApprovalUser'
+import { useAsyncData } from '@ui/composables/useAsyncData'
+import DynamicForm from '@ui/features/forms/DynamicForm.vue'
+import { applyFormulas, initialValues, parseFormValues, type FormValues } from '@ui/features/forms/formModel'
+import { approvalRouteNames } from '@ui/routes'
+import { formatDateTime } from '@ui/utils/labels'
 
 const { api: approvalApi, userKey } = useApprovalClient()
 const { can } = useApprovalUser()
@@ -71,6 +72,7 @@ const dirty = computed(() => !!start.data.value && snapshot() !== savedSnapshot.
 
 function load(form: StartForm | undefined, value: DraftDetail | null | undefined) {
   data.value = initialValues(form?.form, value ? parseFormValues(value.formDataJson) : {})
+  if (form?.form) applyFormulas(form.form, data.value)
   comment.value = value?.comment ?? ''
   serverErrors.value = undefined
   savedAt.value = value?.updatedAt ?? null
@@ -112,6 +114,16 @@ const timer = window.setInterval(() => {
 }, AUTO_SAVE_MS)
 onBeforeUnmount(() => window.clearInterval(timer))
 
+async function recover(value: unknown, scope: string) {
+  if (!value || typeof value !== 'object') return
+  if (scope.startsWith('start:') && 'instanceId' in value && typeof value.instanceId === 'string') {
+    await router.push({ name: approvalRouteNames.detail, params: { id: value.instanceId } })
+  } else if ('draftId' in value && typeof value.draftId === 'string') {
+    draftId.value = value.draftId
+    if ('updatedAt' in value && typeof value.updatedAt === 'string') savedAt.value = value.updatedAt
+    await router.replace({ query: { ...route.query, draft: value.draftId } })
+  }
+}
 async function submit() {
   const identity = userKey.value
   const definition = start.data.value
@@ -170,6 +182,7 @@ const loadError = computed(() => start.error.value ?? draft.error.value)
 </script>
 
 <template>
+  <CommandRecovery :intent="intent" :busy="saving || submitting" @recovered="recover" />
   <div v-loading="start.loading.value || draft.loading.value" class="start-form">
     <el-page-header title="返回" @back="backToCenter">
       <template #content>
@@ -227,10 +240,14 @@ const loadError = computed(() => start.error.value ?? draft.error.value)
 
 .start-form__actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
 }
+
+.start-form__actions > .el-button { margin-left: 0; }
+@media (max-width: 600px) { .start-form__saved { flex-basis: 100%; } }
 
 .start-form__saved {
   margin-right: auto;

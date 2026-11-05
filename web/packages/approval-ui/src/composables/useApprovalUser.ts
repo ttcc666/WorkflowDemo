@@ -1,6 +1,6 @@
 import { computed, effectScope, shallowRef, watch } from 'vue'
-import { registerClientCleanup, useApprovalClient, type ApprovalClient } from '../client'
-import type { ApprovalMe } from '../contracts/api'
+import { registerClientCleanup, useApprovalClient, type ApprovalClient } from '@ui/client'
+import type { ApprovalMe } from '@ui/contracts/api'
 
 const users = new WeakMap<ApprovalClient, ReturnType<typeof createUserState>>()
 

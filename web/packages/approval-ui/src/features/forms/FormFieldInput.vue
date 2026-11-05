@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import UserPicker from '../../components/UserPicker.vue'
+import UserPicker from '@ui/components/UserPicker.vue'
 import FileUploadInput from './FileUploadInput.vue'
-import type { FormField } from '../../contracts/forms'
+import type { FormField } from '@ui/contracts/forms'
 
 /** 单个字段的输入控件（明细表单元格也使用）。 */
 const props = defineProps<{ field: FormField; size?: 'large' | 'default' | 'small' }>()

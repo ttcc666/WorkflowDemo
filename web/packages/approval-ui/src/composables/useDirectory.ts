@@ -1,6 +1,6 @@
 import { effectScope, shallowRef, watch } from 'vue'
-import { registerClientCleanup, useApprovalClient, type ApprovalClient } from '../client'
-import type { DirectoryUser } from '../contracts/api'
+import { registerClientCleanup, useApprovalClient, type ApprovalClient } from '@ui/client'
+import type { DirectoryUser } from '@ui/contracts/api'
 
 const directories = new WeakMap<ApprovalClient, ReturnType<typeof createDirectory>>()
 

@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import type { DefinitionGovernanceSummary } from '../../contracts/api'
-import { formatDateTime } from '../../utils/labels'
+import type { DefinitionGovernanceSummary } from '@ui/contracts/api'
+import { formatDateTime } from '@ui/utils/labels'
 
 defineProps<{ definitions: DefinitionGovernanceSummary[]; loading: boolean; canDesign?: boolean }>()
 const emit = defineEmits<{ design: [key: string]; versions: [definition: DefinitionGovernanceSummary] }>()

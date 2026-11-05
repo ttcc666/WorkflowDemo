@@ -29,7 +29,7 @@ const { data, loading, error, reload } = useAsyncData((signal) => canDiagnose.va
     <el-alert v-if="error" :title="error" type="error" :closable="false" />
     <div v-loading="loading">
       <template v-if="data">
-        <el-descriptions :column="4" border>
+        <el-descriptions :column="2" border>
           <el-descriptions-item label="审核中">{{ data.pendingApplications }}</el-descriptions-item>
           <el-descriptions-item label="投递失败">{{ data.failedDeliveries }}</el-descriptions-item>
           <el-descriptions-item label="等待投递">{{ data.dueDeliveries }}</el-descriptions-item>

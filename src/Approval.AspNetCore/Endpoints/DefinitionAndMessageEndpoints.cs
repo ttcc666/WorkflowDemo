@@ -68,6 +68,9 @@ internal static class DefinitionEndpoints
             return (await d.ListVersionsAsync(key, ct)).Select(ApprovalDefinitionResponse.From).ToArray();
         });
 
+        group.MapPost("/definitions/simulate", (ApprovalSimulationRequest request, ApprovalSimulationService simulation, CancellationToken ct) =>
+            simulation.SimulateAsync(request, ct));
+
         // 只校验不发布，供设计器实时提示；解析失败也作为校验错误返回。warnings 为不阻止发布的提示
         group.MapPost("/definitions/validate", async (HttpContext http, ApprovalDefinitionService d, CancellationToken ct) =>
         {

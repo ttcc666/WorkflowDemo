@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { ApprovalMeta } from '../../contracts/api'
+import type { ApprovalMeta } from '@ui/contracts/api'
 import {
   modeLabels,
   nodeTypeLabels,
   notifyEventsFor,
   type ApproveMode,
   type FlowNodeData,
-} from '../flow/flowModel'
+} from '@ui/features/flow/flowModel'
 import ApproverRulesEditor from './ApproverRulesEditor.vue'
 import FieldPermissionsEditor from './FieldPermissionsEditor.vue'
 import NotificationRulesEditor from './NotificationRulesEditor.vue'
@@ -71,7 +71,7 @@ const modeHelp: Record<ApproveMode, string> = {
             <el-checkbox :model-value="data.requireComment" @update:model-value="(v) => emit('update', { requireComment: !!v })">同意时必须填写意见</el-checkbox>
           </el-form-item>
           <el-form-item v-if="hasApprovers" :label="data.type === 'Cc' ? '抄送人' : '审批人'" required>
-            <ApproverRulesEditor :model-value="data.approvers" :types="meta.approverTypes" :roles="roles"
+            <ApproverRulesEditor :preview-node-id="nodeId" :model-value="data.approvers" :types="meta.approverTypes" :roles="roles"
               @update:model-value="(v) => emit('update', { approvers: v })" />
             <el-alert v-if="orderedRule" type="warning" :closable="false" show-icon class="inspector__alert"
               :title="`「${orderedRule.displayName}」需按顺序逐级审批`">

@@ -1,9 +1,18 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import type { ApprovalInstance } from '../../contracts/api'
-import { formatDateTime, instanceStatusLabels } from '../../utils/labels'
+import { computed, onMounted, onUnmounted, shallowRef } from 'vue'
+import type { ApprovalInstance } from '@ui/contracts/api'
+import { formatDateTime, instanceStatusLabels } from '@ui/utils/labels'
 
 const props = defineProps<{ instance: ApprovalInstance; definitionName?: string }>()
+const compact = shallowRef(false)
+let media: MediaQueryList | undefined
+const updateLayout = () => { compact.value = media?.matches ?? false }
+onMounted(() => {
+  media = window.matchMedia('(max-width: 767px)')
+  updateLayout()
+  media.addEventListener('change', updateLayout)
+})
+onUnmounted(() => media?.removeEventListener('change', updateLayout))
 
 const status = computed(() => instanceStatusLabels[props.instance.status])
 const currentNodes = computed(() =>
@@ -12,8 +21,8 @@ const currentNodes = computed(() =>
 </script>
 
 <template>
-  <el-descriptions :column="3" border>
-    <el-descriptions-item label="标题" :span="2">{{ instance.title || instance.businessKey }}</el-descriptions-item>
+  <el-descriptions :column="compact ? 1 : 3" border>
+    <el-descriptions-item label="标题" :span="compact ? 1 : 2">{{ instance.title || instance.businessKey }}</el-descriptions-item>
     <el-descriptions-item label="状态">
       <el-tag :type="status.type">{{ status.text }}</el-tag>
     </el-descriptions-item>

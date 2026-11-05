@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { useApprovalClient } from '../../client'
-import { useAsyncData } from '../../composables/useAsyncData'
-import { formatDateTime } from '../../utils/labels'
+import CommandRecovery from '@ui/components/CommandRecovery.vue'
+import { useApprovalClient } from '@ui/client'
+import { useAsyncData } from '@ui/composables/useAsyncData'
+import { formatDateTime } from '@ui/utils/labels'
 import DefinitionGovernancePanel from './DefinitionGovernancePanel.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { useCommandIntent } from '../../composables/useCommandIntent'
-import { errorMessage } from '../../api/http'
+import { useCommandIntent } from '@ui/composables/useCommandIntent'
+import { errorMessage } from '@ui/api/http'
 
 const { api: approvalApi } = useApprovalClient()
 
@@ -30,6 +31,7 @@ const { data: versions, loading } = useAsyncData((signal) => approvalApi.version
 
 <template>
   <el-drawer v-model="visible" :title="`版本与治理 · ${flowKey}`" size="720px">
+  <CommandRecovery :intent="copyIntent" @recovered="emit('changed')" />
     <DefinitionGovernancePanel :flow-key="flowKey" @changed="emit('changed')" />
     <el-button v-if="canDesign" @click="copy">复制为新流程草稿</el-button>
     <el-table v-loading="loading" :data="versions" size="small">

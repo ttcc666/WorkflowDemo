@@ -64,7 +64,7 @@ try
         foreach (var endpoint in ((IEndpointRouteBuilder)app).DataSources.SelectMany(s => s.Endpoints).OfType<RouteEndpoint>())
         {
             var permissions = endpoint.Metadata.GetMetadata<ApprovalPermissionMetadata>();
-            if (permissions is null || permissions.Permissions.Any(p => p is ApprovalPermissions.DefinitionValidate or ApprovalPermissions.FileUpload)) continue;
+            if (permissions is null || permissions.Permissions.Any(p => p is ApprovalPermissions.DefinitionValidate or ApprovalPermissions.DefinitionSimulate or ApprovalPermissions.FileUpload)) continue;
             var path = System.Text.RegularExpressions.Regex.Replace(endpoint.RoutePattern.RawText!, @"\{([^}:]+):[^}]+\}", "{$1}");
             foreach (var method in endpoint.Metadata.GetMetadata<HttpMethodMetadata>()!.HttpMethods.Where(m => m is "POST" or "PUT" or "DELETE"))
                 if (document["paths"]?[path]?[method.ToLowerInvariant()] is JsonObject operation)

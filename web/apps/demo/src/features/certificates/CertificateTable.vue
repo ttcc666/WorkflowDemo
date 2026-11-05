@@ -21,7 +21,7 @@ const cert = (row: unknown) => row as Certificate
 </script>
 
 <template>
-  <el-table v-loading="loading" :data="certificates" row-key="id" empty-text="暂无证书，点击右上角“申请新增”">
+  <el-table v-loading="loading" :data="certificates" row-key="id" empty-text="暂无证书，可点击“登记注册证”发起申请">
     <el-table-column prop="certNo" label="证书编号" width="130" />
     <el-table-column prop="name" label="证书名称" min-width="160" />
     <el-table-column prop="holder" label="持有人" width="110" />

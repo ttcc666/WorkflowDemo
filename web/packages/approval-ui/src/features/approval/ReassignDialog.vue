@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, shallowRef, watch } from 'vue'
-import type { ApprovalTask } from '../../contracts/api'
-import UserPicker from '../../components/UserPicker.vue'
-import { assigneeText } from '../../utils/labels'
+import type { ApprovalTask } from '@ui/contracts/api'
+import UserPicker from '@ui/components/UserPicker.vue'
+import { assigneeText } from '@ui/utils/labels'
 
 /** 管理员改派待办：选择新处理人（不能是原处理人、发起人），填写原因（选填）；时限不重置。 */
 const visible = defineModel<boolean>('visible', { required: true })

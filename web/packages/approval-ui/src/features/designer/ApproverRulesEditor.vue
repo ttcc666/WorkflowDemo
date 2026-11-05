@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import type { ApproverTypeMeta, ApproverValueKind } from '../../contracts/api'
-import UserPicker from '../../components/UserPicker.vue'
-import { userFields } from '../forms/formModel'
-import { useDesignerForm } from './designerContext'
-import { approverTypeLabels, formatLevel, levelApproverTypes, parseLevel, valuelessApproverTypes, type ApproverRule } from '../flow/flowModel'
+import { computed, inject } from 'vue'
+import type { ApproverTypeMeta, ApproverValueKind } from '@ui/contracts/api'
+import { useApprovalUser } from '@ui/composables/useApprovalUser'
+import UserPicker from '@ui/components/UserPicker.vue'
+import { userFields } from '@ui/features/forms/formModel'
+import { useDesignerForm, simulationPreviewKey } from './designerContext'
+import { approverTypeLabels, formatLevel, levelApproverTypes, parseLevel, valuelessApproverTypes, type ApproverRule } from '@ui/features/flow/flowModel'
 
 /** 审批人 / 通知接收人规则列表：类型 + 参数，参数控件按类型描述（valueKind）生成。 */
 const props = withDefaults(
@@ -14,10 +15,13 @@ const props = withDefaults(
     /** 至少保留的规则数 */
     min?: number
     defaultType?: string
+    previewNodeId?: string
   }>(),
   { min: 1, defaultType: 'Role' },
 )
 
+const { can } = useApprovalUser()
+const preview = inject(simulationPreviewKey, undefined)
 const rules = defineModel<ApproverRule[]>({ required: true })
 
 // 流程带表单时，“表单人员字段”与级数的基准人员从人员字段中选择
@@ -99,10 +103,12 @@ function updateLevel(index: number, patch: { level?: number | null; field?: stri
           @update:model-value="(v: string) => update(index, { value: v })" />
         <span v-else class="rule__value rule__value--static">{{ metaOf(rule.type).displayName }}</span>
 
+        <el-button v-if="preview && previewNodeId && can('approval.definition.simulate')" link type="primary" @click="preview(previewNodeId, index)">预览规则</el-button>
         <el-button link type="danger" :disabled="rules.length <= min" @click="remove(index)">删除</el-button>
       </div>
       <div v-if="metaOf(rule.type).help && kindOf(rule.type) === 'Level'" class="rule__help">{{ metaOf(rule.type).help }}</div>
     </div>
+    <el-button v-if="preview && previewNodeId && can('approval.definition.simulate')" link type="primary" @click="preview(previewNodeId)">预览节点分配</el-button>
     <el-button link type="primary" class="rules__add" @click="add">+ 添加</el-button>
   </div>
 </template>
@@ -119,6 +125,7 @@ function updateLevel(index: number, patch: { level?: number | null; field?: stri
   display: flex;
   align-items: center;
   gap: 6px;
+  flex-wrap: wrap;
 }
 
 .rule__type {
@@ -134,6 +141,7 @@ function updateLevel(index: number, patch: { level?: number | null; field?: stri
 .rule__value {
   flex: 1;
   min-width: 0;
+  flex-basis: 120px;
 }
 
 .rule__value--static {

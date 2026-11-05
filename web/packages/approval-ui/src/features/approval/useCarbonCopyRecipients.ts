@@ -1,7 +1,7 @@
 import { shallowRef, watch, type Ref } from 'vue'
-import type { ApprovalApiClient } from '../../api/approval'
-import type { CarbonCopyRecipients } from '../../contracts/api'
-import { errorMessage } from '../../api/http'
+import type { ApprovalApiClient } from '@ui/api/approval'
+import type { CarbonCopyRecipients } from '@ui/contracts/api'
+import { errorMessage } from '@ui/api/http'
 
 export function useCarbonCopyRecipients(api: Pick<ApprovalApiClient, 'carbonCopyRecipients'>, userKey: Readonly<Ref<string>>, id: () => string, visible: Ref<boolean>) {
   const page = shallowRef(1)

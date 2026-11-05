@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed, shallowRef } from 'vue'
 import { ElMessage } from 'element-plus'
-import { useApprovalClient } from '../../client'
-import { errorMessage } from '../../api/http'
+import { useApprovalClient } from '@ui/client'
+import { errorMessage } from '@ui/api/http'
 import FileList from './FileList.vue'
-import type { FileValue, FormField } from '../../contracts/forms'
+import type { FileValue, FormField } from '@ui/contracts/forms'
 
 const { api: approvalApi } = useApprovalClient()
 

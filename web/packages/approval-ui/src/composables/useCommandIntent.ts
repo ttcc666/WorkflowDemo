@@ -1,6 +1,6 @@
 import { shallowRef } from 'vue'
-import { useApprovalClient } from '../client'
-import { ApiError } from '../api/http'
+import { useApprovalClient } from '@ui/client'
+import { ApiError } from '@ui/api/http'
 
 interface Intent { key: string; fingerprint: string; uncertain: boolean }
 type IntentStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>
@@ -16,13 +16,15 @@ function defaultStorage(): IntentStorage {
   return { getItem: key => memory.get(key) ?? null, setItem: (key, value) => { memory.set(key, value) }, removeItem: key => { memory.delete(key) } }
 }
 /** One key per logical intent. Only a digest and opaque key are kept; request bodies are never persisted. */
-export function createCommandIntent(identity: () => string, options: { storage?: IntentStorage; generate?: () => string } = {}) {
+export function createCommandIntent(identity: () => string, options: { storage?: IntentStorage; generate?: () => string; retainOnError?: boolean } = {}) {
   const storage = options.storage ?? defaultStorage()
   const fallback = failedWrites.get(storage) ?? new Map<string, string | null>()
   failedWrites.set(storage, fallback)
   const generate = options.generate ?? (() => crypto.randomUUID())
   const pending = shallowRef<string | null>(null)
   const running = new Set<string>()
+  // Sensitive payloads and bound callbacks stay in this page only, never in browser storage.
+  const retries = new Map<string, () => Promise<unknown>>()
   const storageKey = (scope: string) => `approval.intent.v1:${encodeURIComponent(identity())}:${encodeURIComponent(scope)}`
   function read(key: string): Intent | undefined {
     let stored = fallback.get(key)
@@ -51,21 +53,30 @@ export function createCommandIntent(identity: () => string, options: { storage?:
       if (previous && previous.fingerprint !== fingerprint) throw new Error('上次提交结果尚未确认，请先使用原内容重试或检查已发起的记录，再开始新申请')
       const intent = previous ?? { key: generate(), fingerprint, uncertain: false }
       save(key, intent); pending.value = scope
+      retries.set(key, () => run(scope, JSON.parse(json) as P, send))
       try {
         const result = await send(body, intent.key)
         if (identity() !== owner) throw new DOMException('身份已切换', 'AbortError')
         save(key); pending.value = null
+        retries.delete(key)
         return result
       } catch (error) {
-        if (!intent.uncertain && error instanceof ApiError && error.status < 500) { save(key); pending.value = null }
+        if (!options.retainOnError && !intent.uncertain && error instanceof ApiError && error.status < 500 && error.code !== 'CommitOutcomeUnknown') { save(key); pending.value = null; retries.delete(key) }
         else { intent.uncertain = true; save(key, intent) }
         throw error
       }
     } finally { running.delete(key) }
   }
-  return { run, pending, reset: (scope: string) => { save(storageKey(scope)); pending.value = null } }
+  function canRetry(scope = pending.value) { return scope !== null && retries.has(storageKey(scope)) }
+  async function retry(scope = pending.value): Promise<unknown> {
+    const replay = scope === null ? undefined : retries.get(storageKey(scope))
+    if (!replay) throw new Error('当前页面没有原请求内容，请核对记录后恢复原内容')
+    return replay()
+  }
+  return { run, pending, retry, canRetry, hasPending: (scope: string) => !!read(storageKey(scope)), reset: (scope: string) => { const key = storageKey(scope); save(key); retries.delete(key); pending.value = null } }
 }
-export function useCommandIntent(namespace: string) {
+export type CommandIntent = ReturnType<typeof createCommandIntent>
+export function useCommandIntent(namespace: string, options: { retainOnError?: boolean } = {}) {
   const client = useApprovalClient()
-  return createCommandIntent(() => `${client.userKey.value}:${client.config().apiBase}:${namespace}`)
+  return createCommandIntent(() => `${client.userKey.value}:${client.config().apiBase}:${namespace}`, options)
 }

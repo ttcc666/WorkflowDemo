@@ -1,6 +1,6 @@
 import { computed, nextTick, reactive, shallowRef, watch, type ComputedRef, type Ref, type WatchSource } from 'vue'
 import { useRouter, type LocationQuery, type Router } from 'vue-router'
-import type { ListQuery, PagedResult } from '../contracts/api'
+import type { ListQuery, PagedResult } from '@ui/contracts/api'
 import { useAsyncData } from './useAsyncData'
 
 /** 列表筛选条件（字符串形式，便于绑定筛选栏和同步到路由 query）。 */

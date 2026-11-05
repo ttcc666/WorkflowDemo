@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import type { FlowDefinition } from '../../contracts/flow'
-import { initialValues, type FormValues } from '../forms/formModel'
-import DynamicForm from '../forms/DynamicForm.vue'
-import FlowViewer from '../flow/FlowViewer.vue'
+import type { FlowDefinition } from '@ui/contracts/flow'
+import { initialValues, type FormValues } from '@ui/features/forms/formModel'
+import DynamicForm from '@ui/features/forms/DynamicForm.vue'
+import FlowViewer from '@ui/features/flow/FlowViewer.vue'
 
 const props = defineProps<{ definition: FlowDefinition }>()
 const visible = defineModel<boolean>({ required: true })

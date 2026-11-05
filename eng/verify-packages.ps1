@@ -43,7 +43,7 @@ function Copy-HostSources {
         foreach ($entry in (Get-ChildItem -LiteralPath $pendingDirectories.Pop() -Force)) {
             if ($entry.Attributes -band [IO.FileAttributes]::ReparsePoint) { continue }
             if ($entry.PSIsContainer) {
-                if ($entry.Name -notin @('bin', 'obj', 'node_modules', 'wwwroot', 'App_Data', 'dist')) { $pendingDirectories.Push($entry.FullName) }
+                if ($entry.Name -notin @('bin', 'obj', 'node_modules', 'wwwroot', 'App_Data', 'dist', 'tests')) { $pendingDirectories.Push($entry.FullName) }
             }
             elseif ($entry.Name -notlike '*.db*' -and $entry.Name -notlike '*.test.ts') { $files.Add($entry.FullName) }
         }

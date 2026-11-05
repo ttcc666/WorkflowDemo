@@ -45,7 +45,7 @@ async function submit() {
         <el-input v-model="form.name" placeholder="如 合同签署审批" />
       </el-form-item>
     </el-form>
-    <div class="dialog-tip">业务代码通过流程标识发起审批（StartApprovalRequest.DefinitionKey），发布后即可使用。</div>
+    <div class="dialog-tip">业务系统通过流程标识发起审批，流程发布并启用后即可使用。</div>
     <template #footer>
       <el-button @click="visible = false">取消</el-button>
       <el-button type="primary" @click="submit">开始设计</el-button>

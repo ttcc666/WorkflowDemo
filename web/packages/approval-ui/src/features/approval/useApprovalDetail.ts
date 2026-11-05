@@ -1,18 +1,20 @@
 import { computed, type Ref } from 'vue'
-import { useApprovalClient } from '../../client'
-import { ApiError } from '../../api/http'
-import { useAsyncData } from '../../composables/useAsyncData'
-import type { FlowDefinition } from '../../contracts/flow'
+import { useApprovalClient } from '@ui/client'
+import { ApiError } from '@ui/api/http'
+import { useAsyncData } from '@ui/composables/useAsyncData'
+import type { FlowDefinition } from '@ui/contracts/flow'
 
 /**
  * 审批详情：实例（含任务、轨迹，已按当前用户去掉隐藏字段）、实例绑定版本的流程定义（公开视图）、
  * 当前用户可处理的任务及其所在节点可在同意时修改的字段。
  */
-export function useApprovalDetail(instanceId: Ref<string>) {
+export function useApprovalDetail(instanceId: Ref<string | undefined>) {
   const { api: approvalApi, userKey: approvalUserKey } = useApprovalClient()
   // 切换用户后重新加载（权限可能变化）；无权查看与不存在都返回 404，数据置为 null，页面显示提示
   const instance = useAsyncData(
     async (signal) => {
+      // 离开详情时路由参数先被清空，组件随后才卸载；此时只取消旧查询，不再请求资源。
+      if (!instanceId.value) return undefined
       try {
         return await approvalApi.instance(instanceId.value, signal)
       } catch (e) {
@@ -27,12 +29,12 @@ export function useApprovalDetail(instanceId: Ref<string>) {
   // 实例加载成功后再取定义：公开视图不含通知配置，所有能查看实例的人都可读取
   const definitionId = computed(() => instance.data.value?.definitionId)
   const definition = useAsyncData(
-    async (signal) => (definitionId.value ? approvalApi.instanceDefinition(instanceId.value, signal) : undefined),
+    async (signal) => (instanceId.value && definitionId.value ? approvalApi.instanceDefinition(instanceId.value, signal) : undefined),
     { watch: [definitionId] },
   )
 
   // 切换用户后重新判断可处理的任务
-  const handling = useAsyncData((signal) => approvalApi.myTask(instanceId.value, signal), {
+  const handling = useAsyncData(async (signal) => instanceId.value ? approvalApi.myTask(instanceId.value, signal) : undefined, {
     watch: [instanceId, approvalUserKey],
   })
   const myTask = computed(() => handling.data.value?.task)

@@ -1,4 +1,4 @@
-import type { FormField, FormSchema, FormValues, FlowSettings } from '../../contracts/forms'
+import type { FormField, FormSchema, FormValues, FlowSettings } from '@ui/contracts/forms'
 import { cloneField, numberTypes, numericTypes, optionTypes, textTypes } from './formFields'
 
 export function cleanField(field: FormField, isColumn = false): FormField {

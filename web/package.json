@@ -7,7 +7,7 @@
     "build": "pnpm --filter approval-demo build",
     "build:lib": "pnpm --filter @approval/ui build",
     "check:boundaries": "node ../eng/check-boundaries.mjs",
-    "test:boundaries": "node --test ../eng/check-boundaries.test.mjs",
+    "test:boundaries": "node --test ../eng/check-boundaries.test.mjs ../eng/resolve-declaration-imports.test.mjs",
     "contracts:check": "node scripts/contracts.mjs",
     "contracts:update": "node scripts/contracts.mjs --update",
     "typecheck": "pnpm -r typecheck",

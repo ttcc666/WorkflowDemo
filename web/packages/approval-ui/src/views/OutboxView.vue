@@ -1,13 +1,14 @@
 <script setup lang="ts">
+import CommandRecovery from '@ui/components/CommandRecovery.vue'
 import { onBeforeUnmount } from 'vue'
 import { ElMessage } from 'element-plus'
-import { useCommandIntent } from '../composables/useCommandIntent'
-import { useApprovalClient } from '../client'
-import { errorMessage } from '../api/http'
-import type { OutboxMessage } from '../contracts/api'
-import { useApprovalUser } from '../composables/useApprovalUser'
-import { usePagedList } from '../composables/usePagedList'
-import { formatDateTime, outboxStatusLabels } from '../utils/labels'
+import { useCommandIntent } from '@ui/composables/useCommandIntent'
+import { useApprovalClient } from '@ui/client'
+import { errorMessage } from '@ui/api/http'
+import type { OutboxMessage } from '@ui/contracts/api'
+import { useApprovalUser } from '@ui/composables/useApprovalUser'
+import { usePagedList } from '@ui/composables/usePagedList'
+import { formatDateTime, outboxStatusLabels } from '@ui/utils/labels'
 
 const { api: approvalApi, userKey: approvalUserKey, config: approvalConfig } = useApprovalClient()
 
@@ -44,6 +45,7 @@ const msg = (r: unknown) => r as OutboxMessage
 <template>
   <el-alert v-if="!can('approval.outbox.read')" type="warning" :closable="false" show-icon title="没有投递记录查看权限" />
   <div v-else class="outbox">
+    <CommandRecovery :intent="intent" @recovered="refresh" />
     <el-card shadow="never">
       <template #header>
         <div class="outbox__header">

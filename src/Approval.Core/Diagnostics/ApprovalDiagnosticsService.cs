@@ -14,7 +14,13 @@ public sealed record ApprovalDiagnosticContribution(string Code, bool Healthy, l
 public interface IApprovalDiagnosticsContributor
 { Task<ApprovalDiagnosticContribution> CheckAsync(CancellationToken ct); }
 
-public sealed record ApprovalDiagnosticFinding(string Code, Guid ResourceId);
+public sealed record ApprovalDiagnosticFinding(string Code, Guid ResourceId)
+{
+    public Guid? InstanceId { get; init; }
+    public Guid? TaskId { get; init; }
+    public string? DefinitionKey { get; init; }
+    public Guid? DefinitionId { get; init; }
+}
 public sealed record ApprovalDiagnosticReport(bool Ready, bool DataAvailable, bool SchemaManaged, int PendingMigrations, bool ModelDrift,
     int RunningInstances, int PendingOutbox, int FailedOutbox, DateTime? OldestPendingAt, int OverdueTasks,
     int MissingBusinessSlots, int StaleBusinessSlots, bool AssignmentSampleTruncated,
@@ -51,11 +57,11 @@ public sealed class ApprovalDiagnosticsService(ApprovalDbContextAccessor accesso
                 var instance = await instances.Include(i => i.Tasks).SingleAsync(i => i.Id == task.InstanceId, ct);
                 var definition = await _db.Set<ApprovalDefinition>().AsNoTracking().SingleAsync(d => d.Id == instance.DefinitionId, ct);
                 try { loaded = (instance, FlowDefinition.Parse(definition.DefinitionJson)); flows[instance.Id] = loaded; }
-                catch (ApprovalException) { findings.Add(new("invalid_definition", instance.Id)); continue; }
+                catch (ApprovalException) { findings.Add(new("invalid_definition", instance.Id) { InstanceId = instance.Id, DefinitionKey = instance.DefinitionKey, DefinitionId = instance.DefinitionId }); continue; }
             }
-            if (!loaded.Flow.Nodes.TryGetValue(task.NodeId, out var node)) { findings.Add(new("missing_node", task.Id)); continue; }
+            if (!loaded.Flow.Nodes.TryGetValue(task.NodeId, out var node)) { findings.Add(new("missing_node", task.Id) { InstanceId = task.InstanceId, TaskId = task.Id, DefinitionKey = loaded.Instance.DefinitionKey, DefinitionId = loaded.Instance.DefinitionId }); continue; }
             var eligible = await engine.GetEligibleApproversAsync(loaded.Instance, node, ct);
-            if (eligible.Count == 0 || task.AssigneeKind == AssigneeKind.User && !eligible.Contains(task.AssigneeValue)) findings.Add(new("unavailable_assignee", task.Id));
+            if (eligible.Count == 0 || task.AssigneeKind == AssigneeKind.User && !eligible.Contains(task.AssigneeValue)) findings.Add(new("unavailable_assignee", task.Id) { InstanceId = task.InstanceId, TaskId = task.Id, DefinitionKey = loaded.Instance.DefinitionKey, DefinitionId = loaded.Instance.DefinitionId });
         }
         var contributions = new List<ApprovalDiagnosticContribution>();
         foreach (var contributor in contributors.Take(20))

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { FormFieldOption } from '../../contracts/forms'
+import type { FormFieldOption } from '@ui/contracts/forms'
 
 /** 选项列表编辑：显示名称 + 值（值用于条件表达式，如 leaveType == "annual"）。 */
 const options = defineModel<FormFieldOption[]>({ required: true })

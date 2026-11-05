@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { useApprovalClient } from '../../client'
-import { formatDateTime } from '../../utils/labels'
+import { useApprovalClient } from '@ui/client'
+import { formatDateTime } from '@ui/utils/labels'
 import { useCarbonCopyRecipients } from './useCarbonCopyRecipients'
 
 const props = defineProps<{ carbonCopyId: string }>()

@@ -1,29 +1,31 @@
 <script setup lang="ts">
+import CommandRecovery from '@ui/components/CommandRecovery.vue'
 import { computed, onBeforeUnmount, provide, shallowRef, useTemplateRef, watch } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { useDefinitionGovernance } from '../features/designer/useDefinitionGovernance'
-import { useApprovalClient } from '../client'
-import { ApiError, errorMessage } from '../api/http'
-import { useAsyncData } from '../composables/useAsyncData'
-import { useApprovalUser } from '../composables/useApprovalUser'
-import { useDirectory } from '../composables/useDirectory'
-import BranchInspector from '../features/designer/BranchInspector.vue'
-import DesignerToolbar from '../features/designer/DesignerToolbar.vue'
-import DesignerPreview from '../features/designer/DesignerPreview.vue'
-import NodeInspector from '../features/designer/NodeInspector.vue'
-import NodePalette from '../features/designer/NodePalette.vue'
-import NotificationRulesEditor from '../features/designer/NotificationRulesEditor.vue'
-import ValidationResult from '../features/designer/ValidationResult.vue'
-import { designerFormKey } from '../features/designer/designerContext'
-import FlowSettingsPanel from '../features/forms/FlowSettingsPanel.vue'
-import FormDesigner from '../features/forms/FormDesigner.vue'
-import { useFlowDesigner } from '../features/designer/useFlowDesigner'
-import { useDesignerShortcuts } from '../features/designer/useDesignerShortcuts'
-import FlowCanvas from '../features/flow/FlowCanvas.vue'
-import { newFlowDefinition, notifyEventsFor, type FlowDefinition, type NodeType } from '../features/flow/flowModel'
-import type { ApprovalMeta } from '../contracts/api'
-import { approvalRouteNames } from '../routes'
+import { useDefinitionGovernance } from '@ui/features/designer/useDefinitionGovernance'
+import { useApprovalClient } from '@ui/client'
+import { ApiError, errorMessage } from '@ui/api/http'
+import { useAsyncData } from '@ui/composables/useAsyncData'
+import { useApprovalUser } from '@ui/composables/useApprovalUser'
+import { useDirectory } from '@ui/composables/useDirectory'
+import BranchInspector from '@ui/features/designer/BranchInspector.vue'
+import DesignerToolbar from '@ui/features/designer/DesignerToolbar.vue'
+import DesignerSimulation from '@ui/features/designer/DesignerSimulation.vue'
+import DesignerPreview from '@ui/features/designer/DesignerPreview.vue'
+import NodeInspector from '@ui/features/designer/NodeInspector.vue'
+import NodePalette from '@ui/features/designer/NodePalette.vue'
+import NotificationRulesEditor from '@ui/features/designer/NotificationRulesEditor.vue'
+import ValidationResult from '@ui/features/designer/ValidationResult.vue'
+import { designerFormKey, simulationPreviewKey } from '@ui/features/designer/designerContext'
+import FlowSettingsPanel from '@ui/features/forms/FlowSettingsPanel.vue'
+import FormDesigner from '@ui/features/forms/FormDesigner.vue'
+import { useFlowDesigner } from '@ui/features/designer/useFlowDesigner'
+import { useDesignerShortcuts } from '@ui/features/designer/useDesignerShortcuts'
+import FlowCanvas from '@ui/features/flow/FlowCanvas.vue'
+import { newFlowDefinition, notifyEventsFor, type FlowDefinition, type NodeType } from '@ui/features/flow/flowModel'
+import type { ApprovalMeta } from '@ui/contracts/api'
+import { approvalRouteNames } from '@ui/routes'
 
 const { api: approvalApi, userKey } = useApprovalClient()
 
@@ -44,6 +46,18 @@ const flowKey = computed(() => route.params.key as string)
 const governance = useDefinitionGovernance(() => flowKey.value)
 const intent = governance.intent
 const saving = shallowRef(false)
+const simulationVisible = shallowRef(false)
+const simulationDefinition = shallowRef<FlowDefinition>(newFlowDefinition())
+const simulationNode = shallowRef<string | undefined>()
+const simulationRule = shallowRef<number | undefined>()
+provide(simulationPreviewKey, (nodeId, ruleIndex) => {
+  simulationDefinition.value = designer.buildDefinition()
+  simulationNode.value = nodeId; simulationRule.value = ruleIndex; simulationVisible.value = true
+})
+function simulateDraft() {
+  simulationDefinition.value = designer.buildDefinition()
+  simulationNode.value = undefined; simulationRule.value = undefined; simulationVisible.value = true
+}
 const previewVisible = shallowRef(false)
 const previewDefinition = shallowRef<FlowDefinition>(newFlowDefinition())
 function previewDraft() { previewDefinition.value = designer.buildDefinition(); previewVisible.value = true }
@@ -63,6 +77,10 @@ const version = shallowRef<number | null>(null)
 // 每次身份变化都重新确认当前企业的权限与定义。
 const canLoad = canViewDefinitions
 watch(userKey, () => {
+  simulationVisible.value = false
+  previewVisible.value = false
+  simulationDefinition.value = newFlowDefinition()
+  previewDefinition.value = newFlowDefinition()
   designer.load(newFlowDefinition())
   name.value = ''
   version.value = null
@@ -213,6 +231,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', onBeforeUnload)
 </script>
 
 <template>
+  <CommandRecovery :intent="intent" :busy="saving || publishing" @recovered="loader.reload" />
   <el-alert v-if="me && (!canViewDefinitions || !can('approval.definition.design'))" type="warning" :closable="false" show-icon title="没有流程设计或定义读取权限" />
   <div v-else v-loading="loader.loading.value" class="designer">
     <el-card shadow="never" body-class="designer__toolbar-body">
@@ -227,6 +246,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', onBeforeUnload)
         :can-save="canGovern('approval.definition.design')"
         :can-publish="canGovern('approval.definition.publish')"
         :can-validate="can('approval.definition.validate')"
+        :can-simulate="can('approval.definition.simulate')"
         :can-undo="designer.canUndo.value"
         :can-redo="designer.canRedo.value"
         @back="router.push({ name: approvalRouteNames.definitions })"
@@ -237,10 +257,12 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', onBeforeUnload)
         @publish="publish"
         @save="saveDraft"
         @preview="previewDraft"
+        @simulate="simulateDraft"
       />
     </el-card>
 
     <ValidationResult :errors="designer.errors.value" :warnings="designer.warnings.value" />
+    <DesignerSimulation v-model="simulationVisible" :definition="simulationDefinition" :node-id="simulationNode" :rule-index="simulationRule" />
     <DesignerPreview v-model="previewVisible" :definition="previewDefinition" />
     <el-input v-model="changeNote" placeholder="发布变更说明（最多 1000 字符）" maxlength="1000" />
     <el-alert v-if="governance.state.value && !governance.state.value.isEnabled" type="warning" :closable="false" title="此流程已停用；保存或发布不会自动启用" />
@@ -384,5 +406,15 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', onBeforeUnload)
   color: #909399;
   font-size: 13px;
   line-height: 1.8;
+}
+@media (max-width: 1100px) {
+  .designer__side { width: 160px; }
+  .designer__side--right { width: 290px; }
+}
+@media (max-width: 800px) {
+  .designer { height: auto; min-height: calc(100vh - 160px); }
+  .designer__body { display: grid; grid-template-columns: minmax(0, 1fr); }
+  .designer__canvas { height: 55vh; min-height: 360px; }
+  .designer__side, .designer__side--right { width: auto; max-height: 420px; }
 }
 </style>

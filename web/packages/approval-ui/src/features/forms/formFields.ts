@@ -1,4 +1,4 @@
-import type { FormFieldType, FormField, FormSchema, FormValues } from '../../contracts/forms'
+import type { FormFieldType, FormField, FormSchema, FormValues } from '@ui/contracts/forms'
 
 /** 系统默认允许上传的扩展名（与服务端 ApprovalFileOptions.AllowedExtensions 默认值一致） */
 export const defaultFileExtensions = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'csv', 'png', 'jpg', 'jpeg', 'gif', 'zip']

@@ -15,3 +15,5 @@ DI 使用 EF ConfigureDbContext 安装 UseApproval 拦截器，不要求改写�
 业务启动请通过 IApprovalCommandExecutor，把业务写入和引擎调用放进同一完整委托，从传入 IServiceProvider 获取上下文。执行器重试时创建新的 scope，不得捕获请求 scope 的已跟踪实体。多个 DbContext 不自动共享事务；裸外部事务明确拒绝。
 
 独立消费夹具 eng/consumers/EmbeddedHost 使用 NuGet 包、已有 IdentityDbContext 和 SaveChanges override，没有 Forms 引用；实际迁移/发起/加签/退回/重提/并行/事件验证由 verify-packages.ps1 执行。Certificate.Api 则验证业务宿主使用可选 Forms 的集成。
+
+当前产品边界：单宿主、单应用实例的嵌入式通用审批引擎，Forms 可选，samples 仅为集成验证。宿主拥有用户、组织、权限和外部副作用；不包含多租户平台、服务任务、持久等待、工作日历、SLA 或审批代理。本轮计划能力及验收状态见[阶段一产品化计划](../plans/2026-11-04-approval-productization.md)，未验收项不代表已实现。

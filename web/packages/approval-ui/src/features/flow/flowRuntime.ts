@@ -1,5 +1,5 @@
-import type { FlowDefinition, FlowNodeDef } from '../../contracts/flow'
-import type { ApprovalInstance } from '../../contracts/api'
+import type { FlowDefinition, FlowNodeDef } from '@ui/contracts/flow'
+import type { ApprovalInstance } from '@ui/contracts/api'
 import type { NodeRunStatus } from './flowElements'
 
 /** 根据实例的任务与轨迹，推算每个节点的状态以及走过的连线。 */
