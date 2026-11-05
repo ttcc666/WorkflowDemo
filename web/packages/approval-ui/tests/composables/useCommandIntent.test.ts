@@ -15,7 +15,7 @@ it('网络失败和结果待确认重试保持原键，成功后新申请换键'
   await intent.run('start', { amount: 1 }, async (_, key) => { keys.push(key) })
   expect(keys).toEqual(['key-1', 'key-1', 'key-2'])
 })
-it('重新创建页面仍能恢复原键，存储不包含表单正文', async () => {
+it('重建意图管理器并重新提供原正文可恢复原键，存储不包含表单正文', async () => {
   const state = setup()
   await expect(state.intent.run('start', { secret: 'private-body' }, async () => { throw new ApiError('unknown', 503, 'CommitOutcomeUnknown') })).rejects.toBeInstanceOf(ApiError)
   expect([...state.entries.values()].join()).not.toContain('private-body')

@@ -66,7 +66,7 @@ SDK 不生成随机键，缺键在发出请求前拒绝。UI 的 `CommandRecover
 | 模拟 UI 过期响应与草稿保护 | `模拟发送快照且不修改草稿，输入改变后旧结果立即失效`；`丢弃 %s 改变后的迟到响应`；浏览器 `packaged simulation stops at decisions and node preview leaves the saved draft unchanged`。 |
 | 异常资源范围、样本截断、超期分页 | `DiagnosticFindingsCarryScopedResourceLinks_AndExposeSampleTruncation`；`OverdueInstanceFilterIsScopedAndPaged_AndExcludesCurrentTasks`；`OperationsOverdueFilter_TranslatesScopeAndPaginationOnEachProvider`（本地 SQLite）。 |
 | 所有 SDK 写方法的键 | 参数化 `%s forwards exactly the supplied stable key` 与 `%s rejects absent or blank keys before sending`，覆盖 22 个方法。 |
-| 原键 / 原内容恢复与身份隔离 | `任务按钮消失后可用内存快照重试，编辑表单不会改变原请求`；`CommitOutcomeUnknown 即使由 4xx 返回也保留原键`；`同页重复点击不会启动第二个发送；身份切换不会删除原用户的未知结果`。 |
+| 原键 / 原内容恢复与身份隔离 | `重建意图管理器并重新提供原正文可恢复原键，存储不包含表单正文`（重建 manager 并再次提供原正文，未执行浏览器 Reload）；`任务按钮消失后可用内存快照重试，编辑表单不会改变原请求`；`CommitOutcomeUnknown 即使由 4xx 返回也保留原键`；`同页重复点击不会启动第二个发送；身份切换不会删除原用户的未知结果`。 |
 | 批量部分提交、重建意图管理器及零待办恢复 | `批量改派部分提交后发生 4xx，重建意图管理器并提供原正文可恢复原键`：重新提供原正文后恢复存储中的原键；不是浏览器整页 Reload 后自动恢复正文。 |
 | 上传与只读例外 | `file upload keeps the existing raw file boundary without a command key`；`read-only simulation and validation need no key`。 |
 | 真实提交结果未知的同页恢复 | 浏览器 `packaged approval recovers the original key and payload after the server commits but response is lost`，同页重试断言键 / 正文完全相同，最终 Approved 且仅一条 Approve 日志；未执行整页 Reload。 |
