@@ -34,7 +34,7 @@
 
 SDK 不生成随机键，缺键在发出请求前拒绝。UI 的 `CommandRecovery` 使用现有意图管理器保留的同页内存快照，恢复不会从刷新后的任务、表单或版本令牌重新拼正文。存储中仍只有键和指纹。身份变更不能使用其他身份的回调。
 
-浏览器用例真实提交审批后故意丢弃响应：页面刷新后原同意按钮消失，恢复入口仍可发送完全相同的 Header 与正文；结果成功恢复，审批审计只有一条。
+浏览器用例真实提交审批后故意丢弃响应：同页重新获取业务状态后原同意按钮消失，恢复入口仍可用内存快照发送完全相同的 Header 与正文；结果成功恢复，审批审计只有一条。该用例没有执行 `page.reload()`，不证明整页重新加载后自动恢复原正文的能力。
 
 ## 3. 契约变化
 
@@ -67,9 +67,9 @@ SDK 不生成随机键，缺键在发出请求前拒绝。UI 的 `CommandRecover
 | 异常资源范围、样本截断、超期分页 | `DiagnosticFindingsCarryScopedResourceLinks_AndExposeSampleTruncation`；`OverdueInstanceFilterIsScopedAndPaged_AndExcludesCurrentTasks`；`OperationsOverdueFilter_TranslatesScopeAndPaginationOnEachProvider`（本地 SQLite）。 |
 | 所有 SDK 写方法的键 | 参数化 `%s forwards exactly the supplied stable key` 与 `%s rejects absent or blank keys before sending`，覆盖 22 个方法。 |
 | 原键 / 原内容恢复与身份隔离 | `任务按钮消失后可用内存快照重试，编辑表单不会改变原请求`；`CommitOutcomeUnknown 即使由 4xx 返回也保留原键`；`同页重复点击不会启动第二个发送；身份切换不会删除原用户的未知结果`。 |
-| 批量部分提交、页面重建及零待办恢复 | `批量改派部分提交后发生 4xx，重建页面且待办已清空仍可恢复原键和请求`。 |
+| 批量部分提交、重建意图管理器及零待办恢复 | `批量改派部分提交后发生 4xx，重建意图管理器并提供原正文可恢复原键`：重新提供原正文后恢复存储中的原键；不是浏览器整页 Reload 后自动恢复正文。 |
 | 上传与只读例外 | `file upload keeps the existing raw file boundary without a command key`；`read-only simulation and validation need no key`。 |
-| 真实提交结果未知恢复 | 浏览器 `packaged approval recovers the original key and payload after the server commits but response is lost`，断言键 / 正文完全相同，最终 Approved 且仅一条 Approve 日志。 |
+| 真实提交结果未知的同页恢复 | 浏览器 `packaged approval recovers the original key and payload after the server commits but response is lost`，同页重试断言键 / 正文完全相同，最终 Approved 且仅一条 Approve 日志；未执行整页 Reload。 |
 
 新增断言已按外部结果复核，包含状态、具体对象顺序、拒绝类型、数据库最终状态、请求 Header / 正文及审计条数；未用随机等待制造并发。仅做静态伪变异映射和实际业务回归，没有宣称执行 mutation testing。
 

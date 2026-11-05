@@ -84,7 +84,7 @@ export function dueText(dueAt: string, now = Date.now()) {
   const diff = new Date(dueAt).getTime() - now
   const minutes = Math.round(Math.abs(diff) / 60000)
   const span = minutes >= 1440 ? `${Math.floor(minutes / 1440)} 天` : minutes >= 60 ? `${Math.floor(minutes / 60)} 小时` : `${minutes} 分钟`
-  return diff < 0 ? { overdue: true, text: `已超时 ${span}` } : { overdue: false, text: `剩余 ${span}` }
+  return diff <= 0 ? { overdue: true, text: `已超时 ${span}` } : { overdue: false, text: `剩余 ${span}` }
 }
 
 /** 时长（分钟）的简短描述：45 分钟、2.5 小时、3.2 天。 */

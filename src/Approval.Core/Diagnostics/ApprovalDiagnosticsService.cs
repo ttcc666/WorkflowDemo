@@ -60,8 +60,8 @@ public sealed class ApprovalDiagnosticsService(ApprovalDbContextAccessor accesso
                 catch (ApprovalException) { findings.Add(new("invalid_definition", instance.Id) { InstanceId = instance.Id, DefinitionKey = instance.DefinitionKey, DefinitionId = instance.DefinitionId }); continue; }
             }
             if (!loaded.Flow.Nodes.TryGetValue(task.NodeId, out var node)) { findings.Add(new("missing_node", task.Id) { InstanceId = task.InstanceId, TaskId = task.Id, DefinitionKey = loaded.Instance.DefinitionKey, DefinitionId = loaded.Instance.DefinitionId }); continue; }
-            var eligible = await engine.GetEligibleApproversAsync(loaded.Instance, node, ct);
-            if (eligible.Count == 0 || task.AssigneeKind == AssigneeKind.User && !eligible.Contains(task.AssigneeValue)) findings.Add(new("unavailable_assignee", task.Id) { InstanceId = task.InstanceId, TaskId = task.Id, DefinitionKey = loaded.Instance.DefinitionKey, DefinitionId = loaded.Instance.DefinitionId });
+            if (!await engine.HasEligibleTaskAssigneeAsync(loaded.Instance, node, new(task.AssigneeKind, task.AssigneeValue), ct))
+                findings.Add(new("unavailable_assignee", task.Id) { InstanceId = task.InstanceId, TaskId = task.Id, DefinitionKey = loaded.Instance.DefinitionKey, DefinitionId = loaded.Instance.DefinitionId });
         }
         var contributions = new List<ApprovalDiagnosticContribution>();
         foreach (var contributor in contributors.Take(20))

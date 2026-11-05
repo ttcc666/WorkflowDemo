@@ -107,7 +107,7 @@ public sealed partial class ApprovalEngine
             }
             catch (ApprovalException ex) when (ex.Code == ApprovalErrorCode.Conflict)
             {
-                var tasks = await _db.Set<ApprovalTask>().AsNoTracking().Where(t => t.InstanceId == instanceId && t.AssigneeValue == fromUserId).ToListAsync(ct);
+                var tasks = await (await ReassignTasksAsync(fromUserId, ct)).Where(t => t.InstanceId == instanceId).ToListAsync(ct);
                 skipped.AddRange(tasks.Select(t => new ReassignSkip(t.Id, instanceId, null, t.NodeName, ex.Message)));
             }
         }
@@ -116,15 +116,18 @@ public sealed partial class ApprovalEngine
     }
 
     private async Task<List<Guid>> ReassignCandidatesAsync(string fromUserId, CancellationToken ct)
+        => await (await ReassignTasksAsync(fromUserId, ct)).Select(t => t.InstanceId).Distinct().ToListAsync(ct);
+
+    private async Task<IQueryable<ApprovalTask>> ReassignTasksAsync(string fromUserId, CancellationToken ct)
     {
         var scoped = await _authorization.ScopeAsync(_db.Set<ApprovalInstance>().AsNoTracking(), ct);
-        return await (from t in _db.Set<ApprovalTask>().AsNoTracking()
+        return from t in _db.Set<ApprovalTask>().AsNoTracking()
                       join i in scoped on t.InstanceId equals i.Id
                       where t.AssigneeKind == AssigneeKind.User && t.AssigneeValue == fromUserId
                           && (t.Status == ApprovalTaskStatus.Pending || t.Status == ApprovalTaskStatus.Waiting || t.Status == ApprovalTaskStatus.Suspended)
                           && (i.Status == InstanceStatus.Running || i.Status == InstanceStatus.Returned)
                       orderby i.CreatedAt, i.Id
-                      select i.Id).Distinct().ToListAsync(ct);
+                      select t;
     }
 
     private async Task<ReassignResult> ReassignBatchInstanceAsync(Guid instanceId, string fromUserId, string toUserId, string operatorId, string? reason, CancellationToken ct)

@@ -135,7 +135,23 @@ internal sealed class ApprovalAssigneeService(
     public async Task<IReadOnlyList<string>> GetEligibleApproversAsync(ApprovalInstance instance, FlowNode node, CancellationToken ct = default)
     {
         var assignees = await ResolveAssigneesAsync(instance, node, FormData.Parse(instance.FormDataJson), expandRoles: true, ct);
-        var ids = assignees.Select(a => a.Value).Distinct().Where(id =>
+        return await EligibleUsersAsync(instance, node, assignees.Select(a => a.Value), ct);
+    }
+
+    internal async Task<IReadOnlyList<string>> GetEligibleTaskApproversAsync(ApprovalInstance instance, FlowNode node, Assignee taskAssignee, CancellationToken ct)
+    {
+        if (taskAssignee.Kind == AssigneeKind.User)
+            return (await GetEligibleApproversAsync(instance, node, ct)).Where(id => id == taskAssignee.Value).ToArray();
+
+        var assignments = await ResolveAssigneesAsync(instance, node, FormData.Parse(instance.FormDataJson), expandRoles: false, ct);
+        if (!assignments.Contains(taskAssignee)) return [];
+        var members = await _identity.GetUserIdsInRoleAsync(taskAssignee.Value, ct);
+        return await EligibleUsersAsync(instance, node, members, ct);
+    }
+
+    private async Task<IReadOnlyList<string>> EligibleUsersAsync(ApprovalInstance instance, FlowNode node, IEnumerable<string> users, CancellationToken ct)
+    {
+        var ids = users.Distinct().Where(id =>
             (_options.AllowInitiatorApprove || id != instance.InitiatorId)
             && (_options.AllowSameUserMultipleNodes || !instance.Tasks.Any(t =>
                 t.NodeId != node.Id && t.HandledBy == id && t.Status == ApprovalTaskStatus.Approved))).ToList();

@@ -123,7 +123,7 @@ public sealed class ApprovalStatisticsService
                 throw LimitExceeded("关联任务", _options.MaxTaskRows, "请缩短时间范围、按流程筛选或使用宿主报表");
             var handled = task.Status is ApprovalTaskStatus.Approved or ApprovalTaskStatus.Rejected;
             if (task.DueAt is { } due && ((handled && task.CompletedAt > due)
-                || (task.Status == ApprovalTaskStatus.Pending && now > due))) overdue++;
+                || (task.Status == ApprovalTaskStatus.Pending && now >= due))) overdue++;
             if (!handled || task.CompletedAt is not { } completed || task.Kind == ApprovalTaskKind.Resubmit
                 || task.HandledBy == ApprovalEngine.SystemOperator) continue;
             var group = (task.DefinitionKey, task.NodeId);
@@ -183,8 +183,8 @@ public sealed class ApprovalStatisticsService
                 throw LimitExceeded("当前待办积压", _options.MaxBacklogRows, "积压不受日期范围限制，请按流程筛选或使用宿主报表");
             var group = (task.AssigneeKind, task.AssigneeValue);
             if (groups.TryGetValue(group, out var value))
-                groups[group] = (value.Count + 1, value.Overdue + (task.DueAt < now ? 1 : 0), task.CreatedAt < value.Oldest ? task.CreatedAt : value.Oldest);
-            else groups[group] = (1, task.DueAt < now ? 1 : 0, task.CreatedAt);
+                groups[group] = (value.Count + 1, value.Overdue + (task.DueAt <= now ? 1 : 0), task.CreatedAt < value.Oldest ? task.CreatedAt : value.Oldest);
+            else groups[group] = (1, task.DueAt <= now ? 1 : 0, task.CreatedAt);
         }
 
         return groups.Select(g => new BacklogItem(g.Key.Kind, g.Key.Value, g.Value.Count, g.Value.Overdue, g.Value.Oldest))

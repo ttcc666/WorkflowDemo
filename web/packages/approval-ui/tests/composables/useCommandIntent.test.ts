@@ -69,7 +69,7 @@ it('CommitOutcomeUnknown 即使由 4xx 返回也保留原键', async () => {
   await intent.run('command', {}, async (_, key) => expect(key).toBe('key-1'))
 })
 
-it('批量改派部分提交后发生 4xx，重建页面且待办已清空仍可恢复原键和请求', async () => {
+it('批量改派部分提交后发生 4xx，重建意图管理器并提供原正文可恢复原键', async () => {
   const state = setup()
   const body = { from: 'alice', to: 'bob', reason: '交接' }
   const manager = createCommandIntent(() => 'bulk:admin', { ...state.options, retainOnError: true })

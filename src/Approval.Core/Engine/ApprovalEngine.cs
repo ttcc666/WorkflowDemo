@@ -493,6 +493,12 @@ public sealed partial class ApprovalEngine
 
     /// <summary>按当前组织/用户目录计算合格人员；供岗位约束、宿主预检和无人处理告警共用。实例应包含任务历史。</summary>
     public async Task<IReadOnlyList<string>> GetEligibleApproversAsync(ApprovalInstance instance, FlowNode node, CancellationToken ct = default)
+        => await GetEligibleApproversAsync(instance, node, null, ct);
+
+    internal async Task<bool> HasEligibleTaskAssigneeAsync(ApprovalInstance instance, FlowNode node, Assignee assignee, CancellationToken ct)
+        => (await GetEligibleApproversAsync(instance, node, assignee, ct)).Count > 0;
+
+    private async Task<IReadOnlyList<string>> GetEligibleApproversAsync(ApprovalInstance instance, FlowNode node, Assignee? taskAssignee, CancellationToken ct)
     {
         var operation = new ApprovalOperationContext();
         if (!await _authorization.CanAsync(ApprovalPermissions.TaskRead, new() { InstanceId = instance.Id }, ct: ct))
@@ -500,7 +506,8 @@ public sealed partial class ApprovalEngine
         var actual = await _db.Set<ApprovalInstance>().AsNoTracking().Include(i => i.Tasks).SingleAsync(i => i.Id == instance.Id, ct);
         var flow = await LoadFlowAsync(operation, actual, ct);
         if (!flow.Nodes.TryGetValue(node.Id, out var actualNode)) throw new ApprovalException("节点不存在") { Code = ApprovalErrorCode.NotFound };
-        return await _assignees.GetEligibleApproversAsync(actual, actualNode, ct);
+        return taskAssignee is null ? await _assignees.GetEligibleApproversAsync(actual, actualNode, ct)
+            : await _assignees.GetEligibleTaskApproversAsync(actual, actualNode, taskAssignee, ct);
     }
 
     /// <summary>发起前人员预检：校验可信发起人和发起权限，使用当前宿主的已发布定义，不创建实例。</summary>

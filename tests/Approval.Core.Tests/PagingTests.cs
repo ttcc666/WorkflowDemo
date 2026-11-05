@@ -94,7 +94,7 @@ public sealed class PagingTests : IAsyncLifetime
     public async Task Todo_includes_role_tasks_supports_filters_and_count()
     {
         await SeedAsync();
-        _host.Clock.Advance(TimeSpan.FromMinutes(58));   // 现在 01:02：截止 01:00、01:01 的前两条已超时
+        _host.Clock.Advance(TimeSpan.FromMinutes(58));   // 现在 01:02：含恰好截止的第三条，前三条均超时
 
         var all = await QueryAsync(q => q.GetTodoAsync("r1"));
         var byKeyword = await QueryAsync(q => q.GetTodoAsync("r1", new TodoQuery(Keyword: "bob")));
@@ -106,7 +106,7 @@ public sealed class PagingTests : IAsyncLifetime
         Assert.Equal(["证书 B1", "证书 B2", "证书 B3", "证书 B4"], all.Items.Select(t => t.Title));
         Assert.Equal(["证书 B4"], byKeyword.Items.Select(t => t.Title));
         Assert.Equal(["证书 B3"], byFlow.Items.Select(t => t.Title));
-        Assert.Equal(["证书 B1", "证书 B2"], overdue.Items.Select(t => t.Title));
+        Assert.Equal(["证书 B1", "证书 B2", "证书 B3"], overdue.Items.Select(t => t.Title));
         Assert.Equal(0, await QueryAsync(q => q.GetTodoCountAsync("alice")));
     }
 

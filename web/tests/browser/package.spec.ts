@@ -274,6 +274,7 @@ test('packaged approval recovers the original key and payload after the server c
   await page.getByRole('dialog').getByRole('textbox').fill('original-comment')
   await page.getByRole('dialog').getByRole('button', { name: '确定', exact: true }).click()
   const retry = page.getByRole('button', { name: '按原内容重试上次操作', exact: true })
+  // Same-page recovery retains the original payload in memory; this case does not reload the document.
   await expect(retry).toBeVisible()
   await expect(page.getByRole('button', { name: '同意', exact: true })).toHaveCount(0)
   await retry.click()

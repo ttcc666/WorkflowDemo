@@ -55,6 +55,11 @@ public sealed partial class DatabaseContractTests
                 .SearchInstancesAsync(new(DefinitionKey: "operations", OverdueOnly: true), new(page, 1)));
             Assert.Equal(2, result.Total);
             Assert.Equal(expected.Skip(page - 1).Take(1), result.Items.Select(i => i.Id));
+            var todos = await AtomicRun(host, "bob", sp => sp.GetRequiredService<ApprovalQueryService>()
+                .GetTodoAsync("bob", new(DefinitionKey: "operations", OverdueOnly: true), new(page, 1)));
+            Assert.Equal(2, todos.Total);
+            // Todo has oldest-first task ordering; instance search uses newest-first ordering.
+            Assert.Equal(expected.AsEnumerable().Reverse().Skip(page - 1).Take(1), todos.Items.Select(i => i.InstanceId));
         }
     }
 }

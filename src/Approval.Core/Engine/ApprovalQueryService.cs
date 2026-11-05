@@ -116,7 +116,7 @@ public sealed class ApprovalQueryService(
             from t in TodoTasks(userId, roles)
             join i in scopedInstances on t.InstanceId equals i.Id
             join d in _db.Set<ApprovalDefinition>().AsNoTracking() on i.DefinitionId equals d.Id
-            where !overdueOnly || (t.DueAt != null && t.DueAt < now)
+            where !overdueOnly || (t.DueAt != null && t.DueAt <= now)
             select new { Task = t, Instance = i, Definition = d };
 
         var sorted = query.Sort switch

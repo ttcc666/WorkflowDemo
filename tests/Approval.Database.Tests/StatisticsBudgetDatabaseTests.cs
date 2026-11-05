@@ -121,11 +121,11 @@ public sealed partial class DatabaseContractTests
             .GetStatisticsAsync(new(Timestamp.AddDays(-1), Timestamp.AddDays(1), definition.Key)));
         var node = Assert.Single(stats.Nodes);
         Assert.Equal(2, node.Handled); Assert.Equal(45, node.AverageMinutes); Assert.Equal(1, node.Overdue);
-        Assert.Equal(3, stats.OverdueTasks); // Includes system/resubmit handled tasks, as before.
+        Assert.Equal(8, stats.OverdueTasks); // Three historical late completions plus five pending tasks exactly at their deadline.
         Assert.Equal(5, stats.Backlog.Count);
         Assert.Equal(2, stats.Backlog[0].Count);
         Assert.Equal("bob", stats.Backlog[0].AssigneeValue);
-        Assert.All(stats.Backlog, b => { Assert.Equal(0, b.Overdue); Assert.Equal(Timestamp, b.OldestCreatedAt); });
+        Assert.All(stats.Backlog, b => { Assert.Equal(b.AssigneeValue == "BOB" ? 0 : b.Count, b.Overdue); Assert.Equal(Timestamp, b.OldestCreatedAt); });
         Assert.Contains(stats.Backlog, b => b.AssigneeKind == AssigneeKind.Role && b.AssigneeValue == "bob");
         foreach (var name in new[] { "bob", "BOB", "bób", "bob " })
             Assert.Single(stats.Backlog, b => b.AssigneeKind == AssigneeKind.User && b.AssigneeValue == name);
