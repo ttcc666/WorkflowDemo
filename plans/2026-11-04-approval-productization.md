@@ -1,6 +1,6 @@
 # 通用审批引擎阶段一产品化实施计划
 
-日期：2026-11-04。状态：代码工作包与本地验收完成；服务数据库 CI 待本次未来提交验证。基线：main / 76219b4d241ec989b5fe8926bd0c5b519baf2cd8，开始时工作区干净。
+日期：2026-11-04；P4 最终验收更新：2026-11-05。状态：代码工作包、本地门禁与 P4 安全验收完成；验收代码 `247991233ffcd77349eeae745bb86a2ec90a550f` 的 Windows verify 及 PostgreSQL / SQL Server / MySQL CI 全部通过。原实施基线：main / 76219b4d241ec989b5fe8926bd0c5b519baf2cd8，开始时工作区干净；历史验证记录保留。
 
 本计划取代历史多租户、服务任务、持久等待与工作流编排路线。历史实施与验收记录保留，仅作为历史证据。
 
@@ -18,7 +18,7 @@
 - [x] P2：从正式导航提取共享自动遍历，增加只读模拟 DTO / 服务 / HTTP / 设计器；覆盖条件优先级、默认分支、并行、嵌套汇聚、人工停止、取消、预算、权限和无副作用。
 - [x] P3：共享审批人快照解析，支持单规则和节点预览；区分规则输出、任务分配对象和有效成员，保持角色展开和顺序；覆盖自定义 Resolver、自审、停用、目录缺失与异常。
 - [x] P4 功能实现：扩展诊断页，连接 Outbox、监控、详情及已有改派 / 终止入口；覆盖权限、分页及样本截断；不允许数据修复。
-- [ ] P4 安全验收：2026-11-05 已补齐 S01～S22 本地安全证据并修复两类重放越权读取；正式关闭仍待本轮修改提交后确切 SHA 的服务数据库矩阵与 Windows verify。逐项矩阵、失败复现、实际命令及结果见 [P4 安全验收报告](../docs/p4-safety-acceptance-2026-11-05.md)，历史记录不替代本轮证据。
+- [x] P4 安全验收：2026-11-05 基于 `247991233ffcd77349eeae745bb86a2ec90a550f` 完成 S01～S22 及最终汇总并发撤权回归；重新执行完整 Backend（833 / 0 / 0）与 Contracts 门禁退出 0；该确切 SHA 的 Windows verify 和 PostgreSQL / SQL Server / MySQL CI（各 68 / 0 / 0）全部通过。逐项矩阵、失败复现、实际命令及当前 CI 证据见 [P4 安全验收报告](../docs/p4-safety-acceptance-2026-11-05.md)，历史记录保留。
 
   **P4.1 安全边界与实现基线**
 
@@ -279,7 +279,9 @@
 
   验收记录必须注明新增 / 复用用例、实际执行命令与对应 SHA，区分仅编译、实际测试、失败及未验证 Provider。完成 P4 安全验收前逐项记录 S01～S22 的证据，不得以历史绿色 CI 或本次定点回归代替整个矩阵。
 
-  **2026-11-05 P4 安全补齐记录**（开始于 `0ce8d5c84adb806dc05b0a3c6f4d16c1f1011256`，最终验收为 `cec2292313a2fd2f51e52c5fc14af9b9cdc74957` 加本轮未提交工作区；两 HEAD 仅计划文档不同）：S01～S22 的具体测试、初始缺口、回归断言、失败复现与 Provider 限制统一记录于 [本轮安全验收报告](../docs/p4-safety-acceptance-2026-11-05.md)。生产修复仅为批量汇总重放的当前实例读取 / Scope / AccessPolicy 检查，以及关联实例 Outbox 重放的当前 QueryScope 检查；批量仍逐实例提交，不重做已提交项。完整 Backend 退出 0：Core 580 / HTTP 117 / SQLite 数据库 68 / Certificate 59，合计 824 通过、0 失败、0 跳过；Release 0 警告 / 0 错误，9 项 Model Drift、ReferenceHost 27 项检查通过；Contracts 退出 0。没有公共 API、路由、数据库模型或 Migration 改动。待确切提交 SHA 的服务数据库与 Windows CI 后再决定正式关闭。
+  **2026-11-05 P4 安全补齐记录（历史）**（开始于 `0ce8d5c84adb806dc05b0a3c6f4d16c1f1011256`，最终验收为 `cec2292313a2fd2f51e52c5fc14af9b9cdc74957` 加本轮未提交工作区；两 HEAD 仅计划文档不同）：S01～S22 的具体测试、初始缺口、回归断言、失败复现与 Provider 限制统一记录于 [本轮安全验收报告](../docs/p4-safety-acceptance-2026-11-05.md)。生产修复仅为批量汇总重放的当前实例读取 / Scope / AccessPolicy 检查，以及关联实例 Outbox 重放的当前 QueryScope 检查；批量仍逐实例提交，不重做已提交项。完整 Backend 退出 0：Core 580 / HTTP 117 / SQLite 数据库 68 / Certificate 59，合计 824 通过、0 失败、0 跳过；Release 0 警告 / 0 错误，9 项 Model Drift、ReferenceHost 27 项检查通过；Contracts 退出 0。没有公共 API、路由、数据库模型或 Migration 改动。待确切提交 SHA 的服务数据库与 Windows CI 后再决定正式关闭。
+
+  **2026-11-05 P4 最终安全验收完成记录**：验收代码 `247991233ffcd77349eeae745bb86a2ec90a550f`，本次从干净工作区重新执行 Backend 与 Contracts，均退出 0；Core 589、HTTP 117、SQLite 数据库 68、Certificate 59，合计 833 通过、0 失败、0 跳过，Release 0 警告 / 0 错误、9 项 Model Drift 和 ReferenceHost 27 项通过。[当前 SHA 的 GitHub Actions](https://github.com/ttcc666/WorkflowDemo/actions/runs/41981665694) 中 Windows 完整 verify 与 PostgreSql / SqlServer / MySql 矩阵全部 success，服务数据库各 68 通过、0 失败、0 跳过，TRX 完整性校验通过。并发汇总补丁的三种撤权、首次提交、系统边界和空计划已纳入 S21 当前证据。本次按全部门禁通过后勾选 P4 安全验收；详细矩阵与历史记录见 [安全验收报告](../docs/p4-safety-acceptance-2026-11-05.md)。
 
 - [x] P5：全量审查 SDK 与 HTTP 写调用，键改为必需，修复批量改派 UI；覆盖未知结果、同键异内容、身份切换、存储不可用和重复点击。
 - [x] 更新生成契约并审阅；执行 Backend / Frontend / Contracts / Packages 门禁，整理实施报告。
