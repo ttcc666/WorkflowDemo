@@ -102,7 +102,7 @@ public sealed partial class ApprovalDefinitionService
     {
         try { await _db.SaveChangesAsync(ct); }
         catch (DbUpdateConcurrencyException ex) { throw new ApprovalException(Conflict().Message, ex) { Code = ApprovalErrorCode.Conflict }; }
-        catch (DbUpdateException ex) when (ApprovalDatabaseErrors.Unique(ex))
+        catch (DbUpdateException ex) when (ApprovalDatabaseErrors.GovernanceConflict(ex, _db))
         { throw new ApprovalException(Conflict().Message, ex) { Code = ApprovalErrorCode.Conflict }; }
     }
 

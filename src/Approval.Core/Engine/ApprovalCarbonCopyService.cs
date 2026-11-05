@@ -108,7 +108,7 @@ public sealed class ApprovalCarbonCopyService(ApprovalDbContextAccessor accessor
                 ReadAt = _clock.GetUtcNow().UtcDateTime
             });
             try { await _db.SaveChangesAsync(token); }
-            catch (DbUpdateException error) when (ApprovalDatabaseErrors.Unique(error))
+            catch (DbUpdateException error) when (ApprovalDatabaseErrors.CarbonCopyReadConflict(error, _db))
             { throw new ApprovalException("阅读状态已被其他请求更新，请重试", error) { Code = ApprovalErrorCode.Conflict }; }
         }, ct);
 

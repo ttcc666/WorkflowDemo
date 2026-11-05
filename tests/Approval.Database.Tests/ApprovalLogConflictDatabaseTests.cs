@@ -219,6 +219,9 @@ public sealed partial class DatabaseContractTests
         Assert.Equal(expected, IsLogSequence(error, db, target));
         Assert.Equal(expected, IsLogSequence(error, db, null)); // UnitOfWork 使用的实际实例归属推断路径。
         Assert.Equal(constraint != "foreign-key", IsUnique(error));
+        Assert.Equal(constraint == "business-slot", OwnedConflict("BusinessSlotConflict", error, db));
+        Assert.False(OwnedConflict("OperationConflict", error, db));
+        Assert.False(OwnedConflict("GovernanceConflict", error, db));
         Assert.NotNull(DescribeDatabaseError(error));
         await using var verify = fixture.CreateStorage();
         Assert.Equal(1, await verify.Set<ApprovalLog>().CountAsync());
@@ -237,6 +240,9 @@ public sealed partial class DatabaseContractTests
         var log = new ApprovalLog { Id = Guid.NewGuid(), InstanceId = Guid.NewGuid(), OperatorId = "probe" };
         var update = new DbUpdateException("SQL error", error, [db.Entry(log)]);
         Assert.False(IsLogSequence(update, db, log.InstanceId)); Assert.False(IsUnique(update));
+        Assert.False(OwnedConflict("OperationConflict", update, db));
+        Assert.False(OwnedConflict("BusinessSlotConflict", update, db));
+        Assert.False(OwnedConflict("GovernanceConflict", update, db));
         await WriteConflictEvidence("identify-sql", new { provider = fixture.Provider, matched = false, database = DescribeDatabaseError(error) });
     }
 

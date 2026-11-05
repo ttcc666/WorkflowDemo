@@ -20,6 +20,7 @@ public sealed class TestDbContext(DbContextOptions<TestDbContext> options) : DbC
     {
         modelBuilder.ConfigureApproval().ConfigureApprovalForms();
         modelBuilder.Entity<TestRecord>().HasIndex(x => x.Name).IsUnique();
+        modelBuilder.Entity<TestRecord>().HasOne<TestRecord>().WithMany().HasForeignKey(x => x.ParentId);
     }
 }
 
@@ -28,6 +29,7 @@ public sealed class TestRecord
 {
     public Guid Id { get; set; }
     public required string Name { get; set; }
+    public Guid? ParentId { get; set; }
 }
 
 /// <summary>用户 → 角色的内存映射。</summary>
@@ -155,7 +157,8 @@ public sealed class TestHost : IAsyncDisposable
     private sealed class StorageContext(DbContextOptions<StorageContext> options) : DbContext(options)
     {
         protected override void OnModelCreating(ModelBuilder model)
-        { model.ConfigureApproval().ConfigureApprovalForms(); model.Entity<TestRecord>().HasIndex(x => x.Name).IsUnique(); }
+        { model.ConfigureApproval().ConfigureApprovalForms(); model.Entity<TestRecord>().HasIndex(x => x.Name).IsUnique();
+            model.Entity<TestRecord>().HasOne<TestRecord>().WithMany().HasForeignKey(x => x.ParentId); }
     }
     // Explicit offline storage fixture for corrupt/legacy rows. Never used by service/security scenarios.
     public async Task SeedStorageAsync(Func<DbContext, Task> seed)

@@ -68,7 +68,8 @@ internal sealed class ApprovalCommandExecutor<TContext>(IServiceScopeFactory sco
             return stored.Value;
         }
         await using var strategyScope = CreateScope();
-        var strategy = strategyScope.ServiceProvider.GetRequiredService<TContext>().Database.CreateExecutionStrategy();
+        var strategyDb = strategyScope.ServiceProvider.GetRequiredService<TContext>();
+        var strategy = strategyDb.Database.CreateExecutionStrategy();
         try
         {
             return await strategy.ExecuteAsync(async () =>
@@ -131,7 +132,9 @@ internal sealed class ApprovalCommandExecutor<TContext>(IServiceScopeFactory sco
                 }
             });
         }
-        catch (Exception ex) when (ApprovalDatabaseErrors.Unique(ex) || ex is ApprovalException { Code: ApprovalErrorCode.Conflict })
+        catch (Exception ex) when (ex is DbUpdateException update &&
+            (ApprovalDatabaseErrors.OperationConflict(update, strategyDb) || ApprovalDatabaseErrors.BusinessSlotConflict(update, strategyDb))
+            || ex is ApprovalException { Code: ApprovalErrorCode.Conflict })
         {
             Approval.Core.Diagnostics.ApprovalInstrumentation.Conflicts.Add(1);
             // Transaction/scope have been disposed; PostgreSQL is no longer in an aborted transaction.

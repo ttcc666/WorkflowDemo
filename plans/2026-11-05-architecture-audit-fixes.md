@@ -15,7 +15,7 @@
 
 | 阶段 | 实施 | 门禁 | 状态 |
 | --- | --- | --- | --- |
-| A01 | 元数据约束身份识别；完整 executor、治理、Provider 回归 | Core + SQLite Database 定点；服务数据库由 CI | 待实施 |
+| A01 | 元数据约束身份识别；完整 executor、治理、Provider 回归 | Core + SQLite Database 定点；服务数据库由 CI | 本地定点通过，待最终 SHA CI |
 | A02 | 复用 Availability 和版本固定；活动、显式、停用、重试、变量回归 | Core + HTTP 定点 | 待实施 |
 | A03 | Warnings 回调保护；正常/同步异步保存/Commit/重入/HTTP 回归 | Core + HTTP + SQLite Database 定点 | 待实施 |
 | A04 | 幂等、事件、最小宿主接入示例及文档交叉核对 | 签名、契约及独立消费者核对 | 待实施 |
