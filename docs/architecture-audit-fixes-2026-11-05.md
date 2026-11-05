@@ -8,7 +8,7 @@
 | A02 | 代码及本地正式回归通过，待最终 CI | Core 32 / 0 / 0；HTTP 8 / 0 / 0 |
 | A03 | 代码及本地正式回归通过，待最终 CI | Core 19 / 0 / 0；HTTP 12 / 0 / 0；SQLite Database 16 / 0 / 0 |
 | A04 | 文档与代码签名已核对，待最终门禁 | SDK、HTTP/OpenAPI、Outbox 和独立消费者源码 |
-| A05 | 待审查 | 按宿主长期依赖判断，不追求 public 数量 |
+| A05 | 公共 API 审查及定向收敛，待最终门禁 | `ApprovalWorker`、`ApprovalOutboxSignal` 改为 internal |
 
 ## A01
 
@@ -83,3 +83,17 @@ dotnet test 'tests/Approval.Database.Tests/Approval.Database.Tests.csproj' --con
 - [事务与幂等](transactions-and-idempotency.md) 使用四参数 `client.api.reassignUser`。已核对 SDK `commandHeaders`、`AdminEndpoints` 的 `OperationId` 提取、`ReassignRequest` 和 OpenAPI 必填 `Idempotency-Key`。
 - [事件与 Outbox](events.md) 按 `ApprovalEvent`、`OutboxJson` 和 `ApprovalOutboxService` 记录现行格式、稳定 ID、投递与人工重试及宿主去重责任。
 - [宿主接入](embedded-host-integration.md) 集中给出注册与带键完整业务委托示例，对照 `ApprovalBuilder` 和可运行的 [EmbeddedHost](../eng/consumers/EmbeddedHost/Program.cs)。该阶段仅修改文档。
+
+## A05
+
+| 对象 | 决定 | 消费者与依据 |
+| --- | --- | --- |
+| `ApprovalWorker` | 改为 internal | DI 注册唯一 `IHostedService`。手动调度已有 `ApprovalOutboxDispatcher` 和 `ApprovalTimeoutScanner`，组合循环只有 Core 和友元测试使用。 |
+| `ApprovalOutboxSignal` | 改为 internal | Core 在提交后唤醒投递器并协调批次，外部无需操作信号。已有 Core 与 HTTP 友元测试覆盖唤醒时序。 |
+| `ApprovalOutboxDispatcher`、`ApprovalTimeoutScanner` | 保留 | 单次运行是关闭定时后台服务后的宿主调度入口。独立 NuGet 消费者调用 `DispatchOnceAsync`。 |
+| `ApprovalBackgroundRunner`、`ApprovalBackgroundState` | 保留现有可见性 | 两个单次运行服务的构造器使用 Runner，数据库诊断测试用 State 构造诊断服务，ReferenceHost 场景直接验证 Runner 的系统作用域。同步隐藏需要更改公开构造器和真实测试消费者。宿主诊断扩展走 `IApprovalDiagnosticsContributor`。 |
+| `ApprovalDbContextAccessor`、`DefaultApprovalAccessPolicy` | 保留 | Forms 服务与 ASP.NET Core readiness 使用 Accessor，Certificate 的访问策略从 `DefaultApprovalAccessPolicy` 派生，构造器需要 Accessor。宿主业务写入仍从命令委托解析自己的 DbContext。 |
+| 查询、统计、消息、抄送、诊断及 Forms 服务构造器 | 保留 | 服务依赖既有宿主配置、投影、权限、用户目录、文件存储和时钟。继续使用现有 DI 组合，无新增包装。 |
+| 启动、发布、治理审计、Outbox 查询的实体结果 | 保留 | 启动和定义返回值被 HTTP、Forms、Certificate、ReferenceHost 和独立 NuGet 消费者读取，宿主诊断和 HTTP 适配使用现有结果。审批写保护继续约束实体写入，宿主扩展回调使用 Context/Snapshot。 |
+
+审查范围包括 Core、AspNetCore、Forms、Forms.AspNetCore 的公开基线，以及项目示例和独立 NuGet/npm 消费者。A05 的有意契约差异是 Core 中这两个内部实现类型的公开记录，HTTP/OpenAPI、JSON、TypeScript 与数据库模型保持原契约。

@@ -9,7 +9,7 @@ using System.Text.Json;
 namespace Approval.Core.Engine;
 
 /// <summary>唤醒后台投递任务：审批操作写入 Outbox 并提交后调用，避免等待轮询间隔。</summary>
-public sealed class ApprovalOutboxSignal
+internal sealed class ApprovalOutboxSignal
 {
     private readonly SemaphoreSlim _signal = new(0, 1);
     private int _dispatching;

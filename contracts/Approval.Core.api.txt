@@ -509,9 +509,6 @@ Approval.Core.Background.ApprovalOutboxDispatcher
 Approval.Core.Background.ApprovalTimeoutScanner
   Constructor Void .ctor(Approval.Core.Abstractions.IApprovalScopeFactory, System.TimeProvider, Microsoft.Extensions.Logging.ILogger`1[Approval.Core.Background.ApprovalTimeoutScanner], Approval.Core.Background.ApprovalBackgroundRunner) [args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull<NotNull/NotNull>,NotNull/NotNull]
   Method System.Threading.Tasks.Task`1[System.Int32] ScanOnceAsync(System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull default=null]
-Approval.Core.Background.ApprovalWorker
-  Constructor Void .ctor(Approval.Core.Background.ApprovalOutboxDispatcher, Approval.Core.Background.ApprovalTimeoutScanner, Approval.Core.Engine.ApprovalOutboxSignal, Approval.Core.ApprovalOptions, System.TimeProvider, Microsoft.Extensions.Logging.ILogger`1[Approval.Core.Background.ApprovalWorker]) [args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull<NotNull/NotNull>]
-  Method System.Threading.Tasks.Task RunOnceAsync(System.Threading.CancellationToken) [return=NotNull/NotNull; args=NotNull/NotNull default=null]
 Approval.Core.Conditions.DynamicExpressoConditionEvaluator
   Constructor Void .ctor() [args=]
   Method Boolean Evaluate(System.String, System.Collections.Generic.IReadOnlyDictionary`2[System.String,System.Object]) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull<NotNull/NotNull,Nullable/Nullable>]
@@ -1035,10 +1032,6 @@ Approval.Core.Engine.ApprovalOutboxService
   Method System.Threading.Tasks.Task`1[Approval.Core.Engine.PagedResult`1[Approval.Core.Domain.ApprovalOutboxMessage]] ListAsync(Approval.Core.Engine.OutboxQuery, Approval.Core.Engine.PageRequest, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull<NotNull/NotNull>>; args=NotNull/NotNull,Nullable/Nullable default=null,NotNull/NotNull default=null]
   Method System.Threading.Tasks.Task`1[System.Int32] ProcessDueAsync(System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull default=null]
   Method System.TimeSpan RetryDelay(Int32) [return=NotNull/NotNull; args=NotNull/NotNull]
-Approval.Core.Engine.ApprovalOutboxSignal
-  Constructor Void .ctor() [args=]
-  Method System.Threading.Tasks.Task`1[System.Boolean] WaitAsync(System.TimeSpan, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull,NotNull/NotNull]
-  Method Void Notify() [return=NotNull/NotNull; args=]
 Approval.Core.Engine.ApprovalQueryService
   Constructor Void .ctor(Approval.Core.Persistence.ApprovalDbContextAccessor, Approval.Core.Abstractions.IApprovalIdentityProvider, Approval.Core.Abstractions.IApprovalAccessPolicy, Approval.Core.ApprovalOptions, System.TimeProvider, Approval.Core.Abstractions.IApprovalDataProjection) [args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,Nullable/Nullable default=null]
   Method System.Threading.Tasks.Task`1[Approval.Core.Abstractions.ApprovalDefinitionSnapshot] GetPublicDefinitionAsync(System.Guid, Approval.Core.Abstractions.ApprovalViewer, System.Threading.CancellationToken) [return=NotNull/NotNull<Nullable/Nullable>; args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull default=null]

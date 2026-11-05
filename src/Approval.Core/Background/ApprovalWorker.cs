@@ -5,7 +5,7 @@ using Microsoft.Extensions.Logging;
 namespace Approval.Core.Background;
 
 /// <summary>宿主中唯一的审批后台循环。各批次串行执行，作用域由具体服务创建。</summary>
-public sealed class ApprovalWorker(
+internal sealed class ApprovalWorker(
     ApprovalOutboxDispatcher outbox,
     ApprovalTimeoutScanner timeouts,
     ApprovalOutboxSignal signal,
