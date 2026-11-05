@@ -38,10 +38,16 @@ public static class ApprovalPersistence
 
     private static void ValidateWrites(DbContext db)
     {
-        if (ApprovalPersistence.State(db).Failed) throw new InvalidOperationException("审批操作失败后当前作用域已作废，不能继续保存");
-        if (ApprovalPersistence.State(db).ExtensionDepth > 0) throw new InvalidOperationException("生命周期/业务回调不得自行 SaveChanges；由审批工作单元统一提交");
+        var state = State(db);
+        if (state.Failed) throw new InvalidOperationException("审批操作失败后当前作用域已作废，不能继续保存");
+        if (state.ExtensionDepth > 0)
+        {
+            // A callback may catch the exception while leaving pending changes in the tracker.
+            state.Failed = true;
+            throw new InvalidOperationException("生命周期/业务回调不得自行 SaveChanges；由审批工作单元统一提交");
+        }
         db.ChangeTracker.DetectChanges();
-        var writes = ApprovalPersistence.State(db).Writes ??= new(db);
+        var writes = state.Writes ??= new(db);
         writes.Validate();
         foreach (var entry in db.ChangeTracker.Entries<Approval.Core.Abstractions.IApprovalTrackedRevision>().Where(e => e.State == EntityState.Modified))
         {
@@ -99,14 +105,29 @@ public static class ApprovalPersistence
     {
         public static readonly TransactionGuard Instance = new();
 
-        private static void Check(TransactionEventData data)
-        { if (data.Context is { } db && ApprovalPersistence.State(db).ExtensionCommitDepth > 0) throw new InvalidOperationException("扩展不得自行提交数据库事务"); }
+        private static void RejectExtensionTransaction(DbContext? context, string message)
+        {
+            if (context is null) return;
+            var state = State(context);
+            if (state.ExtensionCommitDepth > 0)
+            {
+                state.Failed = true;
+                throw new InvalidOperationException(message);
+            }
+            if (state.Failed) throw new InvalidOperationException("审批操作失败后当前作用域已作废，不能开启或提交数据库事务");
+        }
+
+        public override InterceptionResult<DbTransaction> TransactionStarting(DbConnection connection, TransactionStartingEventData data, InterceptionResult<DbTransaction> result)
+        { RejectExtensionTransaction(data.Context, "扩展不得自行开启数据库事务"); return result; }
+
+        public override ValueTask<InterceptionResult<DbTransaction>> TransactionStartingAsync(DbConnection connection, TransactionStartingEventData data, InterceptionResult<DbTransaction> result, CancellationToken ct = default)
+        { RejectExtensionTransaction(data.Context, "扩展不得自行开启数据库事务"); return ValueTask.FromResult(result); }
 
         public override InterceptionResult TransactionCommitting(System.Data.Common.DbTransaction transaction, TransactionEventData eventData, InterceptionResult result)
-        { Check(eventData); return result; }
+        { RejectExtensionTransaction(eventData.Context, "扩展不得自行提交数据库事务"); return result; }
 
         public override ValueTask<InterceptionResult> TransactionCommittingAsync(System.Data.Common.DbTransaction transaction, TransactionEventData eventData, InterceptionResult result, CancellationToken ct = default)
-        { Check(eventData); return ValueTask.FromResult(result); }
+        { RejectExtensionTransaction(eventData.Context, "扩展不得自行提交数据库事务"); return ValueTask.FromResult(result); }
     }
 
     internal sealed class ApprovalCommandGuard : DbCommandInterceptor
@@ -115,10 +136,23 @@ public static class ApprovalPersistence
 
         private static void Validate(DbCommand command, CommandEventData data)
         {
-            if (data.CommandSource == CommandSource.SaveChanges && data.Context is { } saving) State(saving).Writes?.VerifySaving();
-            if (data.CommandSource is not (CommandSource.SaveChanges or CommandSource.Migrations) && data.Context is { } context
-                && ApprovalSqlWriteGuard.WritesProtectedTable(context, command.CommandText))
+            if (data.Context is not { } context) return;
+            if (data.CommandSource == CommandSource.SaveChanges)
+            {
+                State(context).Writes?.VerifySaving();
+                return;
+            }
+            if (data.CommandSource != CommandSource.Migrations && ApprovalSqlWriteGuard.WritesProtectedTable(context, command.CommandText))
+            {
+                if (State(context) is { ExtensionDepth: > 0 } state) state.Failed = true;
                 throw new InvalidOperationException("审批表禁止通过批量操作或原生 SQL 写入；可信离线维护须使用独立连接");
+            }
+            if (data.CommandSource is CommandSource.ExecuteUpdate or CommandSource.ExecuteDelete or CommandSource.ExecuteSqlRaw
+                && State(context) is { ExtensionDepth: > 0 } readOnly)
+            {
+                readOnly.Failed = true;
+                throw new InvalidOperationException("只读扩展不得执行批量写入或 ExecuteSqlRaw");
+            }
         }
 
         public override InterceptionResult<int> NonQueryExecuting(DbCommand command, CommandEventData eventData, InterceptionResult<int> result)

@@ -108,6 +108,7 @@ internal sealed class ApprovalCommandExecutor<TContext>(IServiceScopeFactory sco
                         }
                         ApprovalPersistence.State(db).KeyedCommand = true;
                         var result = await operation(sp, token);
+                        unit.CheckUsable();
                         string resultJson;
                         using (unit.Extension()) resultJson = JsonSerializer.Serialize(new StoredResult<T>(result, authorizedResource), Json);
                         var committedAt = clock.GetUtcNow().UtcDateTime;

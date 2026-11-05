@@ -76,8 +76,12 @@ internal sealed class ApprovalUnitOfWork(DbContext db) : IApprovalUnitOfWork
 
     internal static void RejectExtensionReentry(DbContext context)
     {
-        if (ApprovalPersistence.State(context).ExtensionCommitDepth != 0)
+        var state = ApprovalPersistence.State(context);
+        if (state.ExtensionCommitDepth != 0)
+        {
+            state.Failed = true;
             throw new InvalidOperationException("扩展不能重入审批写操作或自行提交工作单元");
+        }
     }
 
     internal Task<T> ExecuteCommandAsync<T>(Func<CancellationToken, Task<T>> operation, CancellationToken ct = default) =>
