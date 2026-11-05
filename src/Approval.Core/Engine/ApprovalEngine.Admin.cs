@@ -95,16 +95,7 @@ public sealed partial class ApprovalEngine
             var result = await commands.ExecuteAsync<ReassignResult>(finalCommand, (_, _) => throw new InvalidOperationException("已提交汇总不能重新执行"), ct);
             var candidates = await commands.ExecuteAsync<List<Guid>>(new("task.reassign-bulk.plan", fromUserId, operationId, payload,
                 ApprovalPermissions.TaskReassignBulk, resource), (_, _) => throw new InvalidOperationException("已提交汇总必须有原候选计划"), ct);
-            if (!_contextAccessor.IsSystem)
-                foreach (var id in candidates)
-                {
-                    // The summary contains resource IDs and skipped task details. Apply the same current
-                    // read/scope/access checks as an individual committed item, without rerunning any item.
-                    await _authorization.RequireAsync(ApprovalPermissions.InstanceRead, new() { InstanceId = id }, operatorId, ct);
-                    var instance = await _db.Set<ApprovalInstance>().AsNoTracking().SingleAsync(i => i.Id == id, ct);
-                    if (!(await _accessPolicy().GetAccessAsync(new(operatorId, false), ApprovalContextSnapshots.Instance(instance), ct)).CanView)
-                        throw new ApprovalException("无权读取原操作结果") { Code = ApprovalErrorCode.NotFound };
-                }
+            await ValidateBulkResultReadAccessAsync(candidates, operatorId, ct);
             return result;
         }
         var instanceIds = await commands.ExecuteAsync(new("task.reassign-bulk.plan", fromUserId, operationId, payload, ApprovalPermissions.TaskReassignBulk, resource),
@@ -127,7 +118,22 @@ public sealed partial class ApprovalEngine
             }
         }
         var summary = new ReassignResult(count, skipped);
-        return await commands.ExecuteAsync(finalCommand, (_, _) => Task.FromResult(summary), ct);
+        var finalResult = await commands.ExecuteAsync(finalCommand, (_, _) => Task.FromResult(summary), ct);
+        // ExecuteAsync may replay a concurrently committed summary even when the initial lookup was empty.
+        await ValidateBulkResultReadAccessAsync(instanceIds, operatorId, ct);
+        return finalResult;
+    }
+
+    private async Task ValidateBulkResultReadAccessAsync(IReadOnlyList<Guid> instanceIds, string operatorId, CancellationToken ct)
+    {
+        if (_contextAccessor.IsSystem) return;
+        foreach (var id in instanceIds)
+        {
+            await _authorization.RequireAsync(ApprovalPermissions.InstanceRead, new() { InstanceId = id }, operatorId, ct);
+            var instance = await _db.Set<ApprovalInstance>().AsNoTracking().SingleAsync(i => i.Id == id, ct);
+            if (!(await _accessPolicy().GetAccessAsync(new(operatorId, false), ApprovalContextSnapshots.Instance(instance), ct)).CanView)
+                throw new ApprovalException("无权读取原操作结果") { Code = ApprovalErrorCode.NotFound };
+        }
     }
 
     private async Task<List<Guid>> ReassignCandidatesAsync(string fromUserId, CancellationToken ct)

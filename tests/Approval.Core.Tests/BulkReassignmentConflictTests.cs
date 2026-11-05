@@ -87,9 +87,16 @@ public sealed class BulkReassignmentConflictTests
         };
         Task<ReassignResult> Run() => host.RunAsAsync("admin", sp => sp.GetRequiredService<ApprovalEngine>()
             .ReassignUserAsync("bob", "carol", "admin", "handover", "stable-batch"));
+        if (hidden)
+        {
+            // The first invocation also checks current read access after committing its summary.
+            Assert.Equal(ApprovalErrorCode.NotFound, (await Assert.ThrowsAsync<ApprovalException>(() => Run())).Code);
+            scope.Hidden = Guid.Empty;
+        }
         var result = await Run();
         if (hidden)
         {
+            scope.Hidden = contested.Id;
             Assert.Equal(ApprovalErrorCode.NotFound, (await Assert.ThrowsAsync<ApprovalException>(() => Run())).Code);
             scope.Hidden = Guid.Empty; // Restore read access; replay must return the original summary without retrying the conflicted item.
         }

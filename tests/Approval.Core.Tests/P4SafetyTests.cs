@@ -1,3 +1,4 @@
+using System.Data.Common;
 using System.Text.Json;
 using Approval.Core.Abstractions;
 using Approval.Core.Background;
@@ -62,13 +63,15 @@ public sealed class P4SafetyTests
             return ValueTask.FromResult(result);
         }
     }
-    private static TestHost Host(Permissions permissions, Scope? scope = null, Access? access = null, ItemFailure? failure = null, Status? status = null) => new(
+    private static TestHost Host(Permissions permissions, Scope? scope = null, Access? access = null, ItemFailure? failure = null, Status? status = null,
+        DbTransactionInterceptor? transaction = null) => new(
         o => { o.EnableBackgroundServices = false; o.Outbox.EnableDispatcher = false; }, b =>
         {
             b.Services.AddSingleton<IApprovalPermissionProvider>(permissions);
             if (scope is not null) b.Services.AddSingleton<IApprovalQueryScope>(scope);
             if (access is not null) b.Services.AddSingleton<IApprovalAccessPolicy>(access);
             if (failure is not null) b.Services.ConfigureDbContext<TestDbContext>(o => o.AddInterceptors(failure));
+            if (transaction is not null) b.Services.ConfigureDbContext<TestDbContext>(o => o.AddInterceptors(transaction));
             if (status is not null) { b.Services.AddSingleton<IApprovalUserStatusProvider>(status); b.Services.AddSingleton<IApprovalUserDirectory>(status); }
         });
 
@@ -123,6 +126,219 @@ public sealed class P4SafetyTests
         var error = await Assert.ThrowsAsync<ApprovalException>(() => Bulk(host));
         Assert.Equal(revocation is "query-scope" or "access-policy" ? ApprovalErrorCode.NotFound : ApprovalErrorCode.Forbidden, error.Code);
         Assert.Equal(before, await Snapshot(host)); Assert.Empty(host.Handler.Calls);
+    }
+
+    private sealed class SummaryReplayBarrier : DbCommandInterceptor
+    {
+        public AsyncLocal<string?> Request { get; } = new();
+        public HashSet<string> InitialChecks { get; } = [];
+        public TaskCompletionSource AAtFinalLookup { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource BAtFinalLookup { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource ReleaseA { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource ReleaseB { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public bool BFinalRecordRead;
+        private string? _summaryLookup;
+
+        private bool IsSummaryLookup(DbCommand command) => command.CommandText.Contains("ApprovalOperations", StringComparison.Ordinal)
+            && _summaryLookup is not null && command.Parameters.Cast<DbParameter>().Any(p => Equals(p.Value, _summaryLookup));
+
+        public override async ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(DbCommand command, CommandEventData eventData,
+            InterceptionResult<DbDataReader> result, CancellationToken ct = default)
+        {
+            var request = Request.Value;
+            if (request is not ("A" or "B") || !command.CommandText.Contains("ApprovalOperations", StringComparison.Ordinal)) return result;
+            if (command.CommandText.StartsWith("SELECT EXISTS", StringComparison.Ordinal))
+            {
+                _summaryLookup ??= command.Parameters.Cast<DbParameter>().Select(p => p.Value).OfType<string>().Single();
+                Assert.True(IsSummaryLookup(command));
+                Assert.True(InitialChecks.Add(request));
+            }
+            else if (IsSummaryLookup(command))
+            {
+                if (request == "A") { AAtFinalLookup.TrySetResult(); await ReleaseA.Task.WaitAsync(ct); }
+                else { BAtFinalLookup.TrySetResult(); await ReleaseB.Task.WaitAsync(ct); }
+            }
+            return result;
+        }
+
+        public override ValueTask<DbDataReader> ReaderExecutedAsync(DbCommand command, CommandExecutedEventData eventData,
+            DbDataReader result, CancellationToken ct = default)
+        {
+            if (Request.Value == "B" && IsSummaryLookup(command) && !command.CommandText.StartsWith("SELECT EXISTS", StringComparison.Ordinal))
+                BFinalRecordRead = true;
+            return ValueTask.FromResult(result);
+        }
+    }
+
+    [Theory]
+    [InlineData("read-permission")]
+    [InlineData("query-scope")]
+    [InlineData("access-policy")]
+    public async Task BulkSummaryConcurrentReplay_RevokedResourceAccessRejectsWithoutLeaks(string revocation)
+    {
+        var barrier = new SummaryReplayBarrier(); var permissions = new Permissions(); var scope = new Scope(); var access = new Access();
+        await using var host = new TestHost(o => { o.EnableBackgroundServices = false; o.Outbox.EnableDispatcher = false; }, b =>
+        {
+            b.Services.AddSingleton<IApprovalPermissionProvider>(permissions); b.Services.AddSingleton<IApprovalQueryScope>(scope);
+            b.Services.AddSingleton<IApprovalAccessPolicy>(access); b.Services.ConfigureDbContext<TestDbContext>(o => o.AddInterceptors(barrier));
+        });
+        await host.PublishAsync("p4", Flow); var successful = await host.StartAsync("p4", "successful", "alice");
+        host.Clock.Advance(TimeSpan.FromMinutes(1)); var skipped = await host.StartAsync("p4", "confidential-skipped", "alice");
+        var bItemReads = 0; var bTaskWrites = 0; var bFinalReplayAuthorizations = 0;
+        permissions.Rule = r =>
+        {
+            if (barrier.Request.Value == "B")
+            {
+                if (r.Permission == ApprovalPermissions.InstanceRead && r.Resource.InstanceId == successful.Id) bItemReads++;
+                if (r.Permission == ApprovalPermissions.TaskReassign) bTaskWrites++;
+                if (barrier.BFinalRecordRead && r.Permission == ApprovalPermissions.TaskReassignBulk && r.Resource.InstanceId is null)
+                    bFinalReplayAuthorizations++;
+            }
+            return r.Permission != ApprovalPermissions.TaskReassign || r.Resource.TaskId != skipped.Tasks.Single().Id;
+        };
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        async Task<ReassignResult> Run(string request)
+        {
+            barrier.Request.Value = request;
+            return await host.RunAsAsync("admin", sp => sp.GetRequiredService<ApprovalEngine>()
+                .ReassignUserAsync("bob", "carol", "admin", "handover", "concurrent-summary", cancellation.Token));
+        }
+        var a = Run("A"); Task<ReassignResult>? b = null;
+        try
+        {
+            // A has committed plan/items but is paused before its final ExecuteAsync lookup/transaction.
+            await barrier.AAtFinalLookup.Task.WaitAsync(cancellation.Token);
+            b = Run("B");
+            await barrier.BAtFinalLookup.Task.WaitAsync(cancellation.Token);
+            Assert.Equal(new[] { "A", "B" }, barrier.InitialChecks.Order());
+            Assert.True(bItemReads > 0); Assert.Equal(0, bTaskWrites); Assert.False(barrier.BFinalRecordRead);
+            Assert.Equal(0, await host.RunAsync(sp => sp.GetRequiredService<TestDbContext>().Set<ApprovalOperation>()
+                .CountAsync(o => o.Kind == "task.reassign-bulk.result")));
+
+            barrier.ReleaseA.TrySetResult(); var winner = await a;
+            Assert.Equal(1, winner.Count); var originalSkip = Assert.Single(winner.Skipped);
+            Assert.Equal((skipped.Id, skipped.Tasks.Single().Id, skipped.Title), (originalSkip.InstanceId, originalSkip.TaskId, originalSkip.Title));
+            Assert.Contains("权限", originalSkip.Reason);
+            var committed = await Snapshot(host);
+            await host.RunAsync(async sp =>
+            {
+                var db = sp.GetRequiredService<TestDbContext>();
+                Assert.Equal(4, await db.Set<ApprovalOperation>().CountAsync());
+                var summary = await db.Set<ApprovalOperation>().SingleAsync(o => o.Kind == "task.reassign-bulk.result");
+                Assert.Contains(skipped.Id.ToString(), summary.ResultJson); Assert.Contains(originalSkip.TaskId.ToString(), summary.ResultJson);
+                Assert.Single(await db.Set<ApprovalLog>().Where(l => l.Action == ApprovalAction.Reassign).ToListAsync());
+            });
+            // B's item replays have finished; A's result is durable, but B has not read that result yet.
+            if (revocation == "read-permission")
+                permissions.Rule = r =>
+                {
+                    if (barrier.Request.Value == "B" && barrier.BFinalRecordRead && r.Permission == ApprovalPermissions.TaskReassignBulk && r.Resource.InstanceId is null)
+                        bFinalReplayAuthorizations++;
+                    return r.Permission != ApprovalPermissions.InstanceRead || r.Resource.InstanceId != skipped.Id;
+                };
+            else if (revocation == "query-scope") scope.Hidden = skipped.Id;
+            else access.Allow = false;
+            barrier.ReleaseB.TrySetResult();
+            var error = await Assert.ThrowsAsync<ApprovalException>(() => b);
+            Assert.Equal(revocation == "read-permission" ? ApprovalErrorCode.Forbidden : ApprovalErrorCode.NotFound, error.Code);
+            Assert.True(barrier.BFinalRecordRead); Assert.True(bFinalReplayAuthorizations > 0);
+            Assert.Equal(committed, await Snapshot(host)); Assert.Empty(host.Handler.Calls);
+            Assert.DoesNotContain(skipped.Id.ToString(), error.Message); Assert.DoesNotContain(originalSkip.TaskId.ToString(), error.Message);
+            Assert.DoesNotContain(originalSkip.Title!, error.Message); Assert.DoesNotContain(originalSkip.Reason, error.Message);
+
+            permissions.Rule = _ => true; scope.Hidden = Guid.Empty; access.Allow = true;
+            var recovered = await Bulk(host, "concurrent-summary");
+            Assert.Equal(winner.Count, recovered.Count); Assert.Equal(winner.Skipped, recovered.Skipped);
+            Assert.Equal(committed, await Snapshot(host)); Assert.Empty(host.Handler.Calls);
+        }
+        finally
+        {
+            barrier.ReleaseA.TrySetResult(); barrier.ReleaseB.TrySetResult(); cancellation.Cancel();
+            try { await Task.WhenAll(b is null ? [a] : new[] { a, b }); }
+            catch (ApprovalException) { /* Expected denial was asserted above. */ }
+            catch (OperationCanceledException) { /* Release paused requests before disposing their shared connection. */ }
+        }
+    }
+
+    private sealed class SummaryCommitted(Action revoke) : DbTransactionInterceptor
+    {
+        public bool Fired;
+        public override Task TransactionCommittedAsync(DbTransaction transaction, TransactionEndEventData eventData, CancellationToken ct = default)
+        {
+            if (!Fired && eventData.Context!.ChangeTracker.Entries<ApprovalOperation>().Any(e => e.Entity.Kind == "task.reassign-bulk.result"))
+            { Fired = true; revoke(); }
+            return Task.CompletedTask;
+        }
+    }
+
+    [Theory]
+    [InlineData("read-permission")]
+    [InlineData("query-scope")]
+    [InlineData("access-policy")]
+    public async Task BulkSummaryFirstCommit_RevokedResourceAccessRejectsAndOriginalKeyRecovers(string revocation)
+    {
+        var permissions = new Permissions(); var scope = new Scope(); var access = new Access(); Guid instanceId = default;
+        var commit = new SummaryCommitted(() =>
+        {
+            if (revocation == "read-permission") permissions.Rule = r => r.Permission != ApprovalPermissions.InstanceRead;
+            else if (revocation == "query-scope") scope.Hidden = instanceId;
+            else access.Allow = false;
+        });
+        await using var host = Host(permissions, scope, access, transaction: commit);
+        await host.PublishAsync("p4", Flow); var instance = await host.StartAsync("p4", "one", "alice"); instanceId = instance.Id;
+        var error = await Assert.ThrowsAsync<ApprovalException>(() => Bulk(host));
+        Assert.True(commit.Fired);
+        Assert.Equal(revocation == "read-permission" ? ApprovalErrorCode.Forbidden : ApprovalErrorCode.NotFound, error.Code);
+        var committed = await Snapshot(host);
+        await host.RunAsync(async sp =>
+        {
+            var db = sp.GetRequiredService<TestDbContext>();
+            Assert.Equal(3, await db.Set<ApprovalOperation>().CountAsync());
+            Assert.Equal(1, await db.Set<ApprovalOperation>().CountAsync(o => o.Kind == "task.reassign-bulk.result"));
+            Assert.Single(await db.Set<ApprovalLog>().Where(l => l.Action == ApprovalAction.Reassign).ToListAsync());
+            Assert.Equal(2, await db.Set<ApprovalTask>().CountAsync());
+            Assert.Equal("carol", (await db.Set<ApprovalTask>().SingleAsync(t => t.Status == ApprovalTaskStatus.Pending)).AssigneeValue);
+            Assert.Equal(InstanceStatus.Running, (await db.Set<ApprovalInstance>().SingleAsync()).Status);
+        });
+        permissions.Rule = _ => true; scope.Hidden = Guid.Empty; access.Allow = true;
+        var recovered = await Bulk(host); Assert.Equal(1, recovered.Count); Assert.Empty(recovered.Skipped);
+        Assert.Equal(committed, await Snapshot(host)); Assert.Empty(host.Handler.Calls);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task BulkSummary_SystemReadBypassPreservesWriteGrants(bool canReassign)
+    {
+        var permissions = new Permissions { Rule = r => r.Permission != ApprovalPermissions.InstanceRead };
+        var scope = new Scope(); var access = new Access { Allow = false };
+        await using var host = Host(permissions, scope, access);
+        await host.PublishAsync("p4", Flow); var instance = await host.StartAsync("p4", "one", "alice");
+        var grants = canReassign ? new[] { ApprovalPermissions.TaskReassignBulk, ApprovalPermissions.TaskReassign } : new[] { ApprovalPermissions.TaskReassignBulk };
+        async Task<ReassignResult> Run(IReadOnlyCollection<string> allowed)
+        {
+            await using var request = host.NewScope(authorize: true);
+            request.ServiceProvider.GetRequiredService<Approval.Core.Hosting.ApprovalExecutionContext>().InitializeSystem("handover-worker", allowed);
+            return await request.ServiceProvider.GetRequiredService<ApprovalEngine>().ReassignUserAsync("bob", "carol", "handover-worker", "handover", "system-summary");
+        }
+        var result = await Run(grants); Assert.Equal(canReassign ? 1 : 0, result.Count);
+        if (canReassign) Assert.Empty(result.Skipped); else Assert.Equal(instance.Tasks.Single().Id, Assert.Single(result.Skipped).TaskId);
+        var committed = await Snapshot(host); scope.Hidden = instance.Id;
+        var replay = await Run(grants); Assert.Equal(result.Count, replay.Count); Assert.Equal(result.Skipped, replay.Skipped);
+        Assert.Equal(committed, await Snapshot(host));
+        Assert.Equal(ApprovalErrorCode.Forbidden, (await Assert.ThrowsAsync<ApprovalException>(() => Run([ApprovalPermissions.TaskReassign]))).Code);
+        Assert.Equal(committed, await Snapshot(host));
+    }
+
+    [Fact]
+    public async Task BulkSummary_EmptyPlanDoesNotRequireInstanceRead()
+    {
+        await using var host = Host(new Permissions { Rule = r => r.Permission != ApprovalPermissions.InstanceRead }, access: new Access { Allow = false });
+        var result = await Bulk(host); Assert.Equal(0, result.Count); Assert.Empty(result.Skipped);
+        var committed = await Snapshot(host);
+        var replay = await Bulk(host); Assert.Equal(0, replay.Count); Assert.Empty(replay.Skipped);
+        Assert.Equal(2, await host.RunAsync(sp => sp.GetRequiredService<TestDbContext>().Set<ApprovalOperation>().CountAsync()));
+        Assert.Equal(committed, await Snapshot(host));
     }
 
     [Fact]

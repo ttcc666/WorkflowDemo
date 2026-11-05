@@ -83,9 +83,15 @@ public sealed partial class DatabaseContractTests
         };
         Task<ReassignResult> Run() => AtomicRun(host, "admin", sp => sp.GetRequiredService<ApprovalEngine>()
             .ReassignUserAsync("bob", "charlie", "admin", "handover", "conflict-batch"));
+        if (hide)
+        {
+            Assert.Equal(Approval.Core.ApprovalErrorCode.NotFound, (await Assert.ThrowsAsync<Approval.Core.ApprovalException>(() => Run())).Code);
+            visibility.Hidden = Guid.Empty;
+        }
         var result = await Run();
         if (hide)
         {
+            visibility.Hidden = contested;
             Assert.Equal(Approval.Core.ApprovalErrorCode.NotFound, (await Assert.ThrowsAsync<Approval.Core.ApprovalException>(() => Run())).Code);
             visibility.Hidden = Guid.Empty;
         }
