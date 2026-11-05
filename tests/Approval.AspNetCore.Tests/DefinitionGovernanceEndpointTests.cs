@@ -2,6 +2,8 @@ using Approval.Forms;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Approval.Core.Abstractions;
+using Approval.Core.Definitions;
 using Approval.Core.Domain;
 using Approval.Core.Engine;
 using Microsoft.EntityFrameworkCore;
@@ -48,6 +50,59 @@ public sealed class DefinitionGovernanceEndpointTests
         {"schemaVersion":1,"startNodeId":"start","settings":{"startable":true},"nodes":{"start":{"type":"Start","name":"Start","next":"review"},
         "review":{"type":"Approval","name":"Review","approvers":[{"type":"User","value":"bob"}],"next":"end"},"end":{"type":"End","name":"End"}}}
         """;
+
+    private sealed class ValidationWarnings(ApiDbContext db, bool save) : IApprovalDefinitionExtension
+    {
+        public IReadOnlySet<string>? UserFields(FlowDefinition definition) => null;
+        public void Validate(FlowDefinition definition, List<string> errors) { }
+        public string NormalizeSimulationData(FlowDefinition definition, string dataJson) => dataJson;
+
+        public IReadOnlyList<string> Warnings(FlowDefinition definition)
+        {
+            if (save)
+            {
+                db.Add(new ApiHostRecord { Name = "unexpected" });
+                db.SaveChanges();
+            }
+            return [db.Set<ApiHostRecord>().AsNoTracking().Single(r => r.Name == "host warning").Name];
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ValidateEndpoint_WarningsCanReadButCannotPersistHostRecords(bool save)
+    {
+        await using var host = await ApiHost.StartAsync(build: b => b.Services.AddScoped<IApprovalDefinitionExtension>(sp =>
+            new ValidationWarnings(sp.GetRequiredService<ApiDbContext>(), save)));
+        await host.RunAsync(async sp =>
+        {
+            var db = sp.GetRequiredService<ApiDbContext>();
+            db.Add(new ApiHostRecord { Name = "host warning" });
+            return await db.SaveChangesAsync();
+        });
+
+        using var response = await host.SendAsync(HttpMethod.Post, "/api/approval/definitions/validate", "admin", rawJson: Flow,
+            withOperationId: false);
+        Assert.Equal(save ? HttpStatusCode.InternalServerError : HttpStatusCode.OK, response.StatusCode);
+        if (!save)
+        {
+            var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+            Assert.Empty(body.GetProperty("errors").EnumerateArray());
+            Assert.Equal("host warning", Assert.Single(body.GetProperty("warnings").EnumerateArray()).GetString());
+        }
+
+        await host.RunAsync(async sp =>
+        {
+            var db = sp.GetRequiredService<ApiDbContext>();
+            Assert.Equal("host warning", (await db.Set<ApiHostRecord>().SingleAsync()).Name);
+            Assert.Empty(await db.Set<ApprovalDefinition>().ToListAsync());
+            Assert.Empty(await db.Set<ApprovalOperation>().ToListAsync());
+            Assert.Empty(await db.Set<ApprovalOutboxMessage>().ToListAsync());
+            return true;
+        });
+    }
+
     private static async Task<JsonElement> Command(ApiHost host, HttpMethod method, string suffix, string key, object body)
     {
         using var request = new HttpRequestMessage(method, "/api/approval/definitions/doc/" + suffix);

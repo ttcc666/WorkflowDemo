@@ -74,6 +74,12 @@ internal sealed class ApprovalUnitOfWork(DbContext db) : IApprovalUnitOfWork
         if (State.Failed) throw new InvalidOperationException("审批操作失败后必须释放当前作用域，不能继续保存或重用实体图");
     }
 
+    internal static void RejectExtensionReentry(DbContext context)
+    {
+        if (ApprovalPersistence.State(context).ExtensionCommitDepth != 0)
+            throw new InvalidOperationException("扩展不能重入审批写操作或自行提交工作单元");
+    }
+
     internal Task<T> ExecuteCommandAsync<T>(Func<CancellationToken, Task<T>> operation, CancellationToken ct = default) =>
         ExecuteCommandAsync(ApprovalWriteOwner.Engine, operation, ct);
 
@@ -118,7 +124,7 @@ internal sealed class ApprovalUnitOfWork(DbContext db) : IApprovalUnitOfWork
     public async Task<T> ExecuteAsync<T>(Func<CancellationToken, Task<T>> operation, CancellationToken ct = default)
     {
         CheckUsable();
-        if (State.ExtensionCommitDepth != 0) throw new InvalidOperationException("扩展不能重入审批写操作或自行提交工作单元");
+        RejectExtensionReentry(db);
         if (IsActive)
         {
             try { return await operation(ct); }

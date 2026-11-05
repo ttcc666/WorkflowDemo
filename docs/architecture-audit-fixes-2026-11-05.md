@@ -6,7 +6,7 @@
 | --- | --- | --- |
 | A01 | 代码及本地正式回归通过，待最终 CI | Core 27 / 0 / 0；SQLite Database 18 / 0 / 0 |
 | A02 | 代码及本地正式回归通过，待最终 CI | Core 32 / 0 / 0；HTTP 8 / 0 / 0 |
-| A03 | 待实施 | Warnings 只读保存、事务及重入边界 |
+| A03 | 代码及本地正式回归通过，待最终 CI | Core 19 / 0 / 0；HTTP 12 / 0 / 0；SQLite Database 16 / 0 / 0 |
 | A04 | 待实施 | 当前 SDK、事件协议及宿主接入 |
 | A05 | 待审查 | 按宿主长期依赖判断，不追求 public 数量 |
 
@@ -54,3 +54,26 @@ dotnet test 'tests/Approval.AspNetCore.Tests/Approval.AspNetCore.Tests.csproj' -
 ```
 
 两条均退出 0，分别 Passed 32 / Failed 0 / Skipped 0 与 Passed 8 / Failed 0 / Skipped 0。HTTP 验证覆盖现有发布、切换和停用治理入口，人员预检是 Core 接入 API。
+
+## A03
+
+`ApprovalDefinitionService.Warnings` 在现有 `Extension` 中调用扩展并复制警告结果。`ApprovalCommandExecutor` 与工作单元复用调用作用域的重入检查，防止回调借助执行器创建写入作用域。`UseApproval` 继续负责同一上下文的保存、事务提交和审批表批量写入保护。
+
+| Requirement | Evidence |
+| --- | --- |
+| 允许宿主读取并返回警告 | `WarningsBoundaryTests.Warnings_CanReadHostDataAndReturnWarningsWithoutWriting` |
+| 拒绝同步/异步保存并核验最终库状态 | `WarningsBoundaryTests.Warnings_RejectHostSaveChangesAndPreserveDatabase` |
+| 拒绝 Commit，外部事务仍可回滚 | `WarningsBoundaryTests.Warnings_RejectCommitAndLeaveOuterTransactionAvailableForRollback` |
+| 拒绝通过带键执行器重入，委托未执行且无持久化副作用 | `WarningsBoundaryTests.Warnings_RejectKeyedCommandReentryBeforeInvokingDelegate` |
+| 审批定义批量更新继续被拦截 | `WarningsBoundaryTests.Warnings_RejectBulkUpdateOfProtectedDefinition` |
+| 实际校验 HTTP 入口正常返回警告并拒绝宿主保存 | `DefinitionGovernanceEndpointTests.ValidateEndpoint_WarningsCanReadButCannotPersistHostRecords` |
+
+修复前 HTTP 用例收到 200 而非 500，Core 复现同步/异步保存、Commit 和带键执行器重入均未被拒绝。修复后执行：
+
+```powershell
+dotnet test 'tests/Approval.Core.Tests/Approval.Core.Tests.csproj' --configuration 'Release' --filter 'FullyQualifiedName~WarningsBoundaryTests|FullyQualifiedName~AsyncValidationTests|FullyQualifiedName~OutboxTests|FullyQualifiedName~StrictCommandBoundaryTests' --verbosity 'minimal'
+dotnet test 'tests/Approval.AspNetCore.Tests/Approval.AspNetCore.Tests.csproj' --configuration 'Release' --filter 'FullyQualifiedName~DefinitionGovernanceEndpointTests|FullyQualifiedName~OutboxRetryEndpointTests' --verbosity 'minimal'
+dotnet test 'tests/Approval.Database.Tests/Approval.Database.Tests.csproj' --configuration 'Release' --no-build --filter 'FullyQualifiedName~AtomicCommands_|FullyQualifiedName~AtomicOutbox_|FullyQualifiedName~Governance_' --verbosity 'minimal'
+```
+
+三条均退出 0，分别 Passed 19、12、16，Failed 0 / Skipped 0。Database 测试实际使用 SQLite。

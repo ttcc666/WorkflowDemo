@@ -9,12 +9,13 @@ using System.Text.Json;
 namespace Approval.Core.Persistence;
 
 internal sealed class ApprovalCommandExecutor<TContext>(IServiceScopeFactory scopes,
-    IApprovalActorContext actor, ApprovalOptions options, TimeProvider clock) : IApprovalCommandExecutor where TContext : DbContext
+    IApprovalActorContext actor, ApprovalOptions options, TimeProvider clock, TContext callerContext) : IApprovalCommandExecutor where TContext : DbContext
 {
     private static readonly JsonSerializerOptions Json = JsonSerializerOptions.Web;
 
     public async Task<T> ExecuteAsync<T>(ApprovalCommand command, Func<IServiceProvider, CancellationToken, Task<T>> operation, CancellationToken ct = default)
     {
+        ApprovalUnitOfWork.RejectExtensionReentry(callerContext);
         if (string.IsNullOrWhiteSpace(command.Kind) || command.Kind.Length > 100 || command.Scope.Length > 2000)
             throw new ArgumentException("命令类型/范围无效", nameof(command));
         var key = command.OperationId;

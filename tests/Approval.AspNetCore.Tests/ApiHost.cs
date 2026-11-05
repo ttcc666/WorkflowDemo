@@ -24,7 +24,17 @@ public sealed class ApiDbContext(DbContextOptions<ApiDbContext> options) : DbCon
     protected override void OnConfiguring(DbContextOptionsBuilder options)
     { base.OnConfiguring(options); options.UseApproval(); }
 
-    protected override void OnModelCreating(ModelBuilder modelBuilder) => modelBuilder.ConfigureApproval().ConfigureApprovalForms();
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        modelBuilder.ConfigureApproval().ConfigureApprovalForms();
+        modelBuilder.Entity<ApiHostRecord>();
+    }
+}
+
+internal sealed class ApiHostRecord
+{
+    public Guid Id { get; set; }
+    public required string Name { get; set; }
 }
 
 /// <summary>内存用户表，同时作为身份提供者与用户目录。</summary>

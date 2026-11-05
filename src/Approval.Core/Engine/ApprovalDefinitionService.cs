@@ -86,7 +86,12 @@ public sealed partial class ApprovalDefinitionService
     { using var callback = _unit.Extension(); return flow.ToJson(); }
 
     /// <summary>不阻止发布的提示，如节点隐藏的字段可能通过标题、通知模板或计算字段间接暴露。</summary>
-    public IReadOnlyList<string> Warnings(FlowDefinition flow) => DefinitionExtension?.Warnings(flow) ?? [];
+    public IReadOnlyList<string> Warnings(FlowDefinition flow)
+    {
+        if (DefinitionExtension is null) return [];
+        using var callback = _unit.Extension();
+        return DefinitionExtension.Warnings(flow).ToArray();
+    }
 
     public Task<ApprovalDefinition> PublishAsync(string key, string name, FlowDefinition flow, CancellationToken ct = default) =>
         _unit.ExecuteCommandAsync(ApprovalWriteOwner.Definitions, token => PublishAsyncCore(key, name, flow, token), ct);
