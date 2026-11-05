@@ -5,7 +5,7 @@
 | 编号 | 当前状态 | 关键证据 |
 | --- | --- | --- |
 | A01 | 代码及本地正式回归通过，待最终 CI | Core 27 / 0 / 0；SQLite Database 18 / 0 / 0 |
-| A02 | 待实施 | 活动、显式、固定版本及停用语义 |
+| A02 | 代码及本地正式回归通过，待最终 CI | Core 32 / 0 / 0；HTTP 8 / 0 / 0 |
 | A03 | 待实施 | Warnings 只读保存、事务及重入边界 |
 | A04 | 待实施 | 当前 SDK、事件协议及宿主接入 |
 | A05 | 待审查 | 按宿主长期依赖判断，不追求 public 数量 |
@@ -36,3 +36,21 @@ dotnet test 'tests/Approval.Database.Tests/Approval.Database.Tests.csproj' --con
 ```
 
 两条均退出 0，分别 Passed 27 / Failed 0 / Skipped 0 与 Passed 18 / Failed 0 / Skipped 0。Database 本地实际 Provider 为 SQLite；服务数据库的新回归尚待最终提交对应 CI，不能标为已通过。
+
+## A02
+
+`ApprovalEngine` 的人员预检与正式启动共用定义选择。默认选择活动发布版本，显式版本优先于工作单元固定版本，两类请求均受停用规则约束。正式启动继续固定所选版本，已提交命令按原键重放绑定结果。预检使用宿主提供的表单变量和业务上下文，保持只读。
+
+| Requirement | Evidence |
+| --- | --- |
+| 活动版本及显式历史/当前版本与实际分配一致 | `StartDefinitionSelectionTests.Preflight_AndStartSelectSameActiveOrExplicitVersion` |
+| 停用拒绝显式及隐式预检和启动，且无审批侧写入 | `StartDefinitionSelectionTests.Preflight_AndStartRejectDisabledFlowWithSameError` |
+| 原键重放历史绑定，且无重复实例、Operation 或提交日志 | `StartDefinitionSelectionTests.Start_OriginalKeyReplaysBoundVersionAfterNewPublicationAndDisable`、`OperationTests.KeyedCoreStart_ReplaysOriginalVersionAndRejectsDifferentContent` |
+| Resolver 保留准备变量、业务上下文和版本，预检不调用生命周期准备 | `StartDefinitionSelectionTests.Preflight_PreservesPreparedVariablesAndContextWithoutRunningLifecycle` |
+
+```powershell
+dotnet test 'tests/Approval.Core.Tests/Approval.Core.Tests.csproj' --configuration 'Release' --filter 'FullyQualifiedName~StartDefinitionSelectionTests|FullyQualifiedName~DefinitionBindingTests|FullyQualifiedName~DefinitionGovernanceTests|FullyQualifiedName~OperationTests' --verbosity 'minimal'
+dotnet test 'tests/Approval.AspNetCore.Tests/Approval.AspNetCore.Tests.csproj' --configuration 'Release' --filter 'FullyQualifiedName~DefinitionGovernanceEndpointTests' --verbosity 'minimal'
+```
+
+两条均退出 0，分别 Passed 32 / Failed 0 / Skipped 0 与 Passed 8 / Failed 0 / Skipped 0。HTTP 验证覆盖现有发布、切换和停用治理入口，人员预检是 Core 接入 API。

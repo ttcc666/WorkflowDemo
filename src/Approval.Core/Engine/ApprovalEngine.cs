@@ -96,16 +96,7 @@ public sealed partial class ApprovalEngine
         var operation = new ApprovalOperationContext();
         await _authorization.RequireAsync(Approval.Core.Abstractions.ApprovalPermissions.InstanceStart, new() { DefinitionKey = request.DefinitionKey, DefinitionId = request.DefinitionId, BusinessType = request.BusinessType, BusinessKey = request.BusinessKey }, request.InitiatorId, ct);
         await EnsureActiveUserAsync(request.InitiatorId, ct);
-        if (await _db.Set<ApprovalDefinitionManagement>().AnyAsync(m => m.Key == request.DefinitionKey && !m.IsEnabled, ct))
-            throw new ApprovalException($"流程 '{request.DefinitionKey}' 已停用，不能发起新审批");
-        var pinned = _unit.PinnedDefinition(request.DefinitionKey);
-        var definitionId = request.DefinitionId ?? pinned;
-        var available = definitionId is not null ? _db.Set<ApprovalDefinition>().AsQueryable() : ApprovalDefinitionAvailability.ForNewStarts(_db);
-        var definition = await available
-            .Where(d => d.Key == request.DefinitionKey && d.IsPublished && (definitionId == null || d.Id == definitionId))
-            .OrderByDescending(d => d.Version)
-            .FirstOrDefaultAsync(ct)
-            ?? throw new ApprovalException($"流程 '{request.DefinitionKey}' 未发布") { Code = ApprovalErrorCode.NotFound };
+        var definition = await SelectStartDefinitionAsync(request.DefinitionKey, request.DefinitionId, ct);
         _unit.PinDefinition(request.DefinitionKey, definition.Id);
 
         if (_options.SingleRunningInstancePerBusiness &&
@@ -515,7 +506,7 @@ public sealed partial class ApprovalEngine
             : await _assignees.GetEligibleTaskApproversAsync(actual, actualNode, taskAssignee, ct);
     }
 
-    /// <summary>发起前人员预检：校验可信发起人和发起权限，使用当前宿主的已发布定义，不创建实例。</summary>
+    /// <summary>发起前人员预检：校验发起权限，按新启动规则选择定义，使用调用方提供的表单数据。</summary>
     public async Task<IReadOnlyList<string>> GetStartEligibleApproversAsync(StartApprovalRequest request, string nodeId, CancellationToken ct = default)
     {
         await _authorization.RequireAsync(ApprovalPermissions.InstanceStart, new()
@@ -525,10 +516,7 @@ public sealed partial class ApprovalEngine
             BusinessType = request.BusinessType,
             BusinessKey = request.BusinessKey
         }, request.InitiatorId, ct);
-        var definition = await _db.Set<ApprovalDefinition>().AsNoTracking()
-            .Where(d => d.Key == request.DefinitionKey && d.IsPublished && (request.DefinitionId == null || d.Id == request.DefinitionId))
-            .OrderByDescending(d => d.Version).FirstOrDefaultAsync(ct)
-            ?? throw new ApprovalException("流程未发布") { Code = ApprovalErrorCode.NotFound };
+        var definition = await SelectStartDefinitionAsync(request.DefinitionKey, request.DefinitionId, ct);
         var flow = FlowDefinition.Parse(definition.DefinitionJson);
         if (flow.Form is not null && DefinitionExtension is null)
             throw new ApprovalException("此定义包含可选模块快照，请注册拥有它的模块") { Code = ApprovalErrorCode.InvalidDefinition };
@@ -544,6 +532,19 @@ public sealed partial class ApprovalEngine
             FormDataJson = SerializeData(request.FormData),
             Status = InstanceStatus.Running
         }, node, ct);
+    }
+
+    private async Task<ApprovalDefinition> SelectStartDefinitionAsync(string key, Guid? requestedId, CancellationToken ct)
+    {
+        if (await _db.Set<ApprovalDefinitionManagement>().AnyAsync(m => m.Key == key && !m.IsEnabled, ct))
+            throw new ApprovalException($"流程 '{key}' 已停用，不能发起新审批");
+
+        var definitionId = requestedId ?? _unit.PinnedDefinition(key);
+        var available = definitionId is { } id
+            ? _db.Set<ApprovalDefinition>().Where(d => d.IsPublished && d.Id == id)
+            : ApprovalDefinitionAvailability.ForNewStarts(_db);
+        return await available.AsNoTracking().FirstOrDefaultAsync(d => d.Key == key, ct)
+            ?? throw new ApprovalException($"流程 '{key}' 未发布") { Code = ApprovalErrorCode.NotFound };
     }
 
     private async Task EnsureActiveUserAsync(string userId, CancellationToken ct)
