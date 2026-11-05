@@ -28,16 +28,17 @@ internal sealed class ApprovalAssigneeService(
 
     internal async Task<List<Assignee>> ResolveAssigneesAsync(
         ApprovalInstanceContext instance, FlowNode node, IReadOnlyDictionary<string, object?> form, bool expandRoles, CancellationToken ct,
-        Action<ApproverResolutionTrace>? trace = null)
+        Action<ApproverResolutionTrace>? trace = null, ApprovalSimulationBudget? budget = null)
     {
         if (node.Type == NodeType.Approval && node.RequireQualifiedAssignee && _directory is null)
             throw new ApprovalException("岗位资格校验需要注册用户目录") { Code = ApprovalErrorCode.InvalidDefinition };
         var result = new List<Assignee>();
-        foreach (var assignee in await ResolveRulesAsync(node.Approvers, instance, node, form, ct, trace))
+        foreach (var assignee in await ResolveRulesAsync(node.Approvers, instance, node, form, ct, trace, budget))
         {
             if (expandRoles && assignee.Kind == AssigneeKind.Role)
             {
-                var userIds = await _identity.GetUserIdsInRoleAsync(assignee.Value, ct);
+                var userIds = await RoleMembersAsync(assignee.Value, ct, budget);
+                budget?.Assignees(userIds.Count);
                 result.AddRange(userIds.Select(id => new Assignee(AssigneeKind.User, id)));
             }
             else
@@ -53,7 +54,8 @@ internal sealed class ApprovalAssigneeService(
         => await ResolveRulesAsync(rules, ApprovalContextSnapshots.Instance(instance), node, form, ct);
 
     internal async Task<List<Assignee>> ResolveRulesAsync(IEnumerable<ApproverRule> rules, ApprovalInstanceContext instance, FlowNode node,
-        IReadOnlyDictionary<string, object?> form, CancellationToken ct, Action<ApproverResolutionTrace>? trace = null)
+        IReadOnlyDictionary<string, object?> form, CancellationToken ct, Action<ApproverResolutionTrace>? trace = null,
+        ApprovalSimulationBudget? budget = null)
     {
         var result = new List<Assignee>();
         foreach (var rule in rules)
@@ -61,6 +63,7 @@ internal sealed class ApprovalAssigneeService(
             ct.ThrowIfCancellationRequested();
             if (!_resolvers.TryGetValue(rule.Type, out var resolver))
                 throw new ApprovalException($"未注册的审批人类型 '{rule.Type}'") { Code = ApprovalErrorCode.InvalidDefinition };
+            budget?.ResolverCall();
             var context = new ApproverResolveContext
             {
                 Trace = trace,
@@ -72,6 +75,8 @@ internal sealed class ApprovalAssigneeService(
             trace?.Invoke(new(rule.Type, $"规则参数：{rule.Value}"));
             var resolved = await resolver.ResolveAsync(rule.Value, context, ct);
             ct.ThrowIfCancellationRequested();
+            budget?.Assignees(resolved.Count);
+            if (trace is not null) budget?.BeforeTrace();
             trace?.Invoke(new(rule.Type, "规则输出：" + string.Join("、", resolved.Select(a => $"{a.Kind}:{a.Value}"))));
             result.AddRange(resolved);
         }
@@ -85,13 +90,14 @@ internal sealed class ApprovalAssigneeService(
     public async Task<List<Assignee>> FilterEligibleAsync(ApprovalInstance instance, List<Assignee> assignees, CancellationToken ct)
         => await FilterEligibleAsync(instance.InitiatorId, assignees, ct);
 
-    internal async Task<List<Assignee>> FilterEligibleAsync(string initiatorId, List<Assignee> assignees, CancellationToken ct)
+    internal async Task<List<Assignee>> FilterEligibleAsync(string initiatorId, List<Assignee> assignees, CancellationToken ct,
+        ApprovalSimulationBudget? budget = null)
     {
         var eligible = new List<Assignee>(assignees.Count);
         foreach (var assignee in assignees)
         {
             var ids = assignee.Kind == AssigneeKind.User ? new[] { assignee.Value }
-                : (await _identity.GetUserIdsInRoleAsync(assignee.Value, ct)).ToArray();
+                : (await RoleMembersAsync(assignee.Value, ct, budget)).ToArray();
             IEnumerable<string> candidates = ids.Where(id => _options.AllowInitiatorApprove || id != initiatorId);
             if (_directory is not null)
             {
@@ -109,10 +115,11 @@ internal sealed class ApprovalAssigneeService(
         return eligible;
     }
 
-    internal async Task<IReadOnlyList<ApprovalSimulationMember>> InspectAsync(string initiatorId, Assignee assignee, CancellationToken ct)
+    internal async Task<IReadOnlyList<ApprovalSimulationMember>> InspectAsync(string initiatorId, Assignee assignee, CancellationToken ct,
+        ApprovalSimulationBudget? budget = null)
     {
         var ids = assignee.Kind == AssigneeKind.User ? new[] { assignee.Value }
-            : (await _identity.GetUserIdsInRoleAsync(assignee.Value, ct)).Distinct().ToArray();
+            : (await RoleMembersAsync(assignee.Value, ct, budget)).Distinct().ToArray();
         if (ids.Length > 200) throw new ApprovalException("预览角色成员超过 200 人预算") { Code = ApprovalErrorCode.InvalidDefinition };
         var members = new List<ApprovalSimulationMember>();
         var users = _directory is null ? [] : await _directory.GetUsersAsync(ids, ct);
@@ -128,6 +135,17 @@ internal sealed class ApprovalAssigneeService(
             members.Add(new(id, user?.Name, reason is not null ? false : known ? true : null,
                 reason ?? (known ? null : "未注册用户目录或状态 Provider，无法验证")));
         }
+        return members;
+    }
+
+    private async Task<IReadOnlyList<string>> RoleMembersAsync(string role, CancellationToken ct, ApprovalSimulationBudget? budget)
+    {
+        budget?.BeforeRoleExpansion();
+        var members = await _identity.GetUserIdsInRoleAsync(role, ct);
+        ct.ThrowIfCancellationRequested();
+        budget?.RoleMembers(members.Count);
+        if (budget is not null && members.Distinct().Take(201).Count() > 200)
+            budget.Reject("预览角色成员超过 200 人预算");
         return members;
     }
 

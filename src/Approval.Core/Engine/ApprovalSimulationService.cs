@@ -51,6 +51,7 @@ public sealed class ApprovalSimulationService
         ct = timeout.Token;
         using var readOnly = _accessor.UnitOfWork.Extension();
         var steps = new List<ApprovalSimulationStep>();
+        var budget = new ApprovalSimulationBudget();
         var warnings = new List<string>
         {
             "只预演自动路径；人工审批及其后的表单修改和路径尚未模拟。",
@@ -76,6 +77,7 @@ public sealed class ApprovalSimulationService
             async Task<bool> Enter(FlowNode node, CancellationToken token)
             {
                 token.ThrowIfCancellationRequested();
+                budget.BeginNode();
                 steps.Add(new(node.Id, node.Name, node.Type, "Visited", [], [], [], null));
                 var assigned = new List<Assignee>();
                 var excluded = new List<Assignee>();
@@ -96,15 +98,15 @@ public sealed class ApprovalSimulationService
                     var resolved = await _assignees.ResolveAssigneesAsync(context, target, form,
                         expandRoles: node.Type == NodeType.Approval && node.Mode != ApproveMode.Any, token, item =>
                         {
-                            if (trace.Count >= 200) throw ApprovalAutomaticTraversal.Invalid("解析说明超过 200 条预算");
+                            budget.Trace();
                             trace.Add(item);
-                        });
+                        }, budget);
                     if (resolved.Count > 200) throw ApprovalAutomaticTraversal.Invalid("预览处理人超过 200 人预算");
                     assigned = node.Type == NodeType.Approval
-                        ? await _assignees.FilterEligibleAsync(context.InitiatorId, resolved, token) : resolved;
+                        ? await _assignees.FilterEligibleAsync(context.InitiatorId, resolved, token, budget) : resolved;
                     excluded = resolved.Except(assigned).ToList();
                     if (node.Type == NodeType.Approval)
-                        foreach (var assignee in resolved) assignments.Add(new(assignee, await _assignees.InspectAsync(context.InitiatorId, assignee, token)));
+                        foreach (var assignee in resolved) assignments.Add(new(assignee, await _assignees.InspectAsync(context.InitiatorId, assignee, token, budget)));
                     if (node.Type == NodeType.Approval)
                     {
                         if (assigned.Count > 0) { status = "RequiresDecision"; reason = "需要人工决策；后续路径未模拟"; }

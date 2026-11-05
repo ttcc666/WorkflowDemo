@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.Json;
 using Approval.Core.Domain;
+using Approval.Core.Definitions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -9,6 +10,33 @@ namespace Approval.AspNetCore.Tests;
 public sealed class SimulationEndpointTests
 {
     private const string Flow = """{"schemaVersion":1,"startNodeId":"s","nodes":{"s":{"type":"Start","next":"cc"},"cc":{"type":"Cc","approvers":[{"type":"Initiator","value":""}],"next":"e"},"e":{"type":"End"}}}""";
+
+    [Fact]
+    public async Task SimulationBudgetExceededReturnsExplicitErrorsWithoutWrites()
+    {
+        await using var host = await ApiHost.StartAsync();
+        var flow = FlowDefinition.Parse(Flow); flow.Nodes.Remove("cc"); flow.Nodes["s"].Next = "c0";
+        for (var index = 0; index < 11; index++) flow.Nodes[$"c{index}"] = new()
+        {
+            Id = $"c{index}", Type = NodeType.Cc, Next = index == 10 ? "e" : $"c{index + 1}",
+            Approvers = [new("User", string.Join(',', Enumerable.Repeat("bob", 200)))]
+        };
+        using var response = await host.SendAsync(HttpMethod.Post, "/api/approval/definitions/simulate", "admin",
+            new { definitionJson = flow.ToJson(), formData = new { } }, withOperationId: false);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+        Assert.False(body.GetProperty("isValid").GetBoolean()); Assert.False(body.GetProperty("isComplete").GetBoolean());
+        Assert.Contains("解析对象累计超过 2000", Assert.Single(body.GetProperty("errors").EnumerateArray()).GetString());
+        var failed = body.GetProperty("steps").EnumerateArray().Last();
+        Assert.Equal("c10", failed.GetProperty("nodeId").GetString()); Assert.Equal("Failed", failed.GetProperty("status").GetString());
+        await host.RunAsync(async sp =>
+        {
+            var db = sp.GetRequiredService<ApiDbContext>();
+            Assert.Equal(0, await db.Set<ApprovalInstance>().CountAsync()); Assert.Equal(0, await db.Set<ApprovalTask>().CountAsync());
+            Assert.Equal(0, await db.Set<ApprovalOperation>().CountAsync()); Assert.Equal(0, await db.Set<ApprovalOutboxMessage>().CountAsync());
+            return true;
+        });
+    }
 
     [Fact]
     public async Task SimulationNeedsAuthorization_ButNoKey_AndCannotImpersonateApplicant()
