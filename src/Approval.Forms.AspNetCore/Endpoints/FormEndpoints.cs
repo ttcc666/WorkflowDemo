@@ -32,7 +32,7 @@ internal static class FormEndpoints
             return TypedResults.Ok(new ApprovalFileResponse(file.Id, file.FileName, file.Size, file.ContentType));
         }).WithMetadata(new RequestSizeLimitAttribute(options.Files.MaxFileSizeBytes + 64 * 1024));
 
-        // 下载附件：上传者，或能查看所属审批且附件不在隐藏字段中；一律作为附件下载，禁止浏览器嗅探类型
+        // 下载附件：上传者，或能查看所属审批且存在可见文件引用；一律作为附件下载，禁止浏览器嗅探类型
         group.MapGet("/files/{id:guid}", async (Guid id, HttpContext http, ApprovalFileService files, CancellationToken ct) =>
         {
             var (file, content) = await files.OpenAsync(id, await http.GetApprovalViewerAsync(ct), ct)

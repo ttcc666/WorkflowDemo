@@ -1,8 +1,8 @@
 namespace Approval.Forms.Attachments;
 
 /// <summary>
-/// 附件元数据，内容由 <see cref="Files.IApprovalFileStore"/> 保存。未绑定（草稿、实例都为空）时只有上传者可访问，
-/// 文件生命周期由宿主管理；绑定实例后按实例的查看权限访问。
+/// 附件元数据，内容由 <see cref="IApprovalFileStore"/> 保存。上传者之外的访问要求实例查看权限和可见文件引用。
+/// 实例绑定记录文件归属，供当前和历史引用使用。文件生命周期由宿主管理。
 /// </summary>
 public class ApprovalFile : Approval.Core.Abstractions.IApprovalTrackedRevision
 {

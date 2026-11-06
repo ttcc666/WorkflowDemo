@@ -107,22 +107,23 @@ public sealed class ApprovalFileService(
         if (file.InstanceId is not { } instanceId) return false;
 
         if (await query.GetInstanceForViewerAsync(instanceId, viewer, ct) is not { } detail) return false;
-        if (detail.HiddenFields.Count == 0) return true;
         var definition = await _db.Set<ApprovalDefinition>().AsNoTracking().Where(d => d.Id == detail.DefinitionId)
             .Select(d => d.DefinitionJson).SingleAsync(ct);
-        return FlowDefinition.Parse(definition).GetForm() is { } schema && VisibleFileIds(schema, detail).Contains(file.Id);
+        return FlowDefinition.Parse(definition).GetForm() is { } schema
+            && VisibleFileIds(schema, detail, includeHistory: true).Contains(file.Id);
     }
 
-    private static HashSet<Guid> VisibleFileIds(FormSchema schema, InstanceDetail detail)
+    private static HashSet<Guid> VisibleFileIds(FormSchema schema, InstanceDetail detail, bool includeHistory)
     {
         var hidden = detail.HiddenFields.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var keys = schema.Fields.Where(f => f.Type == FormFieldType.File && !hidden.Contains(f.Key))
             .Select(f => f.Key).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var form = JsonNode.Parse(detail.FormDataJson) as JsonObject;
         var ids = keys.SelectMany(key => FileIds(form?[key])).ToHashSet();
+        if (!includeHistory) return ids;
         foreach (var log in detail.Logs)
         {
-            if (log.Action != ApprovalAction.FormEdit || log.Details is null || JsonNode.Parse(log.Details) is not JsonArray changes) continue;
+            if (log.Action != ApprovalAction.FormEdit || string.IsNullOrEmpty(log.Details) || JsonNode.Parse(log.Details) is not JsonArray changes) continue;
             foreach (var change in changes.OfType<JsonObject>())
             {
                 if (change["field"] is not JsonValue value || !value.TryGetValue<string>(out var key) || !keys.Contains(key)) continue;
@@ -142,9 +143,9 @@ public sealed class ApprovalFileService(
     }
 
     /// <summary>
-    /// 校验表单中引用的附件并补全元数据：文件须存在、由 <paramref name="userId"/> 上传且未绑定到其他实例 / 草稿
-    /// （已属于 <paramref name="instanceId"/> 或 <paramref name="draftId"/> 的除外，可由他人上传，如重新提交、审批人修改时保留的附件），
-    /// 类型须在字段允许的范围内。<paramref name="lenient"/>（草稿）时丢弃无效的文件项，否则抛出字段错误。
+    /// 校验表单中引用的附件并补全元数据。可使用本人未绑定实例且未绑定其他草稿的上传，或保留本实例同一字段中的原引用。
+    /// 本实例已绑定附件新增到某字段时，须出现在操作者当前可见的附件字段中。类型须在字段允许范围内。
+    /// <paramref name="lenient"/>（草稿）时丢弃无效的文件项，否则抛出字段错误。
     /// 返回规范化后的数据与引用的文件（已跟踪，可修改绑定）。
     /// </summary>
     internal async Task<(string Json, List<ApprovalFile> Files)> ResolveAsync(FormSchema schema, string json, string userId,
@@ -157,18 +158,14 @@ public sealed class ApprovalFileService(
             .Where(id => id != Guid.Empty).Distinct().ToList();
         var found = ids.Count == 0 ? [] : await _db.Set<ApprovalFile>().Where(f => ids.Contains(f.Id)).ToDictionaryAsync(f => f.Id, ct);
         var inaccessible = new HashSet<Guid>();
-        if (instanceId is { } current && previousFormJson is not null)
+        if (instanceId is { } current)
         {
-            // An unchanged field retains its existing attachment. Copying a bound attachment into
-            // another field requires visibility of that attachment to the current reviewer.
-            var before = JsonNode.Parse(previousFormJson) as JsonObject;
+            // History can grant download access. A new field reference needs a currently visible source.
+            var before = previousFormJson is null ? null : JsonNode.Parse(previousFormJson) as JsonObject;
             inaccessible.UnionWith(fields.SelectMany(f => FileIds(form[f.Key]).Except(FileIds(before?[f.Key])))
-                .Where(id => found.TryGetValue(id, out var file) && file.InstanceId == current && file.UploadedBy != userId));
+                .Where(id => found.TryGetValue(id, out var file) && file.InstanceId == current));
             if (inaccessible.Count > 0 && await query.GetInstanceForViewerAsync(current, new(userId, false), ct) is { } detail)
-            {
-                if (detail.HiddenFields.Count == 0) inaccessible.Clear();
-                else inaccessible.ExceptWith(VisibleFileIds(schema, detail));
-            }
+                inaccessible.ExceptWith(VisibleFileIds(schema, detail, includeHistory: false));
         }
 
         var errors = new Dictionary<string, string[]>();
@@ -216,7 +213,10 @@ public sealed class ApprovalFileService(
         foreach (var file in files) file.DraftId = draftId;
     }
 
-    /// <summary>引用的文件绑定到实例；从草稿提交时，草稿中未引用的文件解除绑定。</summary>
+    /// <summary>
+    /// 当前引用绑定到实例。已移除的文件保留原实例归属，以支持可见历史和阻止跨实例复用。
+    /// 从草稿提交时，未引用的草稿文件解除草稿绑定。这里仅修改事务内的元数据。
+    /// </summary>
     internal async Task BindToInstanceAsync(Guid instanceId, IReadOnlyCollection<ApprovalFile> files, Guid? fromDraftId, CancellationToken ct)
     {
         using var authority = _bridge.WriteMetadata();

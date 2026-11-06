@@ -9,7 +9,7 @@
 - [x] 审查 Outbox 持久化、同进程调度、确认故障、取消、重试和积压。区分数据库状态与外部副作用，保留宿主按 `Event.Id` 去重的职责。
 - [x] 对照公共 API、DI、NuGet 和生成契约，检查性能与前端生命周期。对有证据的缺陷做局部改动，验证对应测试与工程门禁。
 - [x] 记录问题位置、风险等级、实际验证与待验收场景，形成发布判断。
-- [ ] 提交后核对本轮确切 SHA 的 Windows 及 MySQL、PostgreSQL、SQL Server CI。
+- [x] `4667a78cc293f8c281d924f502ee2da4746506ee` 的 Windows 及 MySQL、PostgreSQL、SQL Server CI 全部通过。[GitHub Actions](https://github.com/ttcc666/WorkflowDemo/actions/runs/42118639946)
 
 回滚按本次实际修复拆分。前端统计和请求状态可独立回滚。后端加固与对应回归用例一同回滚，保留宿主原有数据和事件处理方式。若发现必须调整公共契约或数据库模型，先记录现有消费者、迁移影响与兼容方案。
 
@@ -55,7 +55,7 @@
 
 模型漂移检查覆盖四种 Provider 的模型，ReferenceHost 烟测 27 项，生成契约与基线一致，NuGet/npm 独立包消费者通过。原实现的三条附件回归为 3 失败、3 通过。修复后 `FileEndpointTests`、`FormEndpointTests`、`PermissionEndpointTests` 定向运行 24 通过、0 失败、0 跳过，后续全量门禁又覆盖超长扩展名与导入格式用例。
 
-本轮代码以本地工作区为验证对象。SQLite 实际运行了并发发布、Outbox COMMIT 前后故障和取消恢复。MySQL、PostgreSQL、SQL Server 的实际运行待本轮提交后的 CI。基准 `480143de63ee91139ffbc6d5880e0221ac488a97` 的 Windows 与三个服务数据库作业已通过，服务数据库各 82 通过、0 失败、0 跳过。 [基准 GitHub Actions](https://github.com/ttcc666/WorkflowDemo/actions/runs/42065839666)
+SQLite 实际运行了并发发布、Outbox COMMIT 前后故障和取消恢复。修复提交 `4667a78cc293f8c281d924f502ee2da4746506ee` 的 Windows 与三个服务数据库作业均通过。[修复提交 GitHub Actions](https://github.com/ttcc666/WorkflowDemo/actions/runs/42118639946)
 
 ## 遗留风险与部署判断
 
@@ -67,4 +67,23 @@
 | R-04 | P2，版本或审批历史规模很大 | `ApprovalDefinitionService.cs` 154–172 行完整加载同一 Key 的版本并逐版本授权，`ApprovalInstanceReader.cs` 42–55 行加载业务历史详情。当前缺少实际流量的规模和 SQL 成本证据。先测内存、请求耗时和权限调用数，按结果决定是否增设按需快照或分页接口 |
 | R-05 | P1，将流程设计能力授予不可信作者 | `DynamicExpressoConditionEvaluator.cs` 12–45 行可解析表达式并调用输入类型允许的成员，语法校验和 JSON 字节上限不等于计算预算。本轮验证图遍历和一般语法，极端表达式与资源耗用仍需专门的隔离复现与能力收敛。在此之前只授予可信设计者相关能力。 [DynamicExpresso 解析器源码](https://github.com/dynamicexpresso/DynamicExpresso/blob/master/src/DynamicExpresso.Core/Parsing/Parser.cs) |
 
-建议在单实例、宿主权限和外部存储控制到位的前提下进入试运行验收。正式发布前须取得本轮确切提交的 CI 结果。要求多实例投递或开放不可信附件时，对应的 R-01、R-03 是部署门槛。下一阶段优先验证宿主附件隔离与对账、Outbox 停机/断网演练，以及真实数据规模下的版本与历史查询成本。
+建议在单实例、宿主权限和外部存储控制到位的前提下进入试运行验收。要求多实例投递或开放不可信附件时，对应的 R-01、R-03 是部署门槛。下一阶段优先验证宿主附件隔离与对账、Outbox 停机/断网演练，以及真实数据规模下的版本与历史查询成本。
+
+## P1 重新提交后的旧附件访问
+
+以 `4667a78cc293f8c281d924f502ee2da4746506ee` 为修复基线。旧实现将 `HiddenFields.Count == 0` 视为实例内所有文件均可用。发起人退回后重新提交移除文件，元数据仍绑定实例。后续审批人从备注或退回日志得到 UUID，可下载旧文件并把它重新写入可编辑字段。
+
+`ApprovalFileService.CanDownloadAsync` 对非上传者校验实例查看权限，按绑定版本的 Schema、查看者可见字段和结构化 `File` 引用授权。下载允许当前表单和可见 `FormEdit` 的前后值。`ResolveAsync` 保留同一字段的原引用，允许本人新上传的文件，跨字段新增同实例引用时要求当前表单中有可见来源。只出现在合法历史中的文件仍可下载，重新加入表单须重新上传。`ApprovalFormService.ResubmitAsyncCore` 也传入修改前表单执行同样的检查。Core 的 `Resubmit` 轨迹仍记录重新提交行为。
+
+`BindToInstanceAsync` 在同一事务内为当前引用保留或建立实例绑定。已移除文件继续保留原 `InstanceId`，供合法历史下载并防止跨实例复用。没有可见引用的旧文件仅上传者可访问。草稿转实例时只迁移本次引用，遗漏文件解除草稿绑定并保留上传者访问。此路径只更新元数据，实际文件继续由宿主管理。公共 API、HTTP/JSON 契约、数据库模型和迁移均未修改。
+
+| 验证项 | 实际证据 |
+|---|---|
+| 基准复现 | `ResubmitRemovedAttachmentCannotBeDownloadedOrCopiedWithoutHiddenFields` 通过真实 HTTP 上传、同意、退回和重新提交构造场景。基准代码的下载与复制分别返回 200 和 204，期望为 404 和 400。`baseline.trx` 共 9 项，8 通过、1 失败、0 跳过 |
+| 修复后授权 | 同一测试通过，覆盖当前可见与合法历史文件可下载、上传者保留访问、缺失与其他实例文件拒绝复制、备注和退回日志中的 UUID 无授权效力。覆盖新版本发布后仍用旧版本 Schema，以及两轮审批退回后最终同意。原有隐藏字段与 `FormEdit` 用例继续通过 |
+| SQLite 一致性 | 拒绝复制后，实例详情、当前任务、文件原有归属保持一致。`StartingDraftBindsOnlyReferencedAttachmentsAndCommitFailurePreservesDraftAndFiles` 注入 SQLite COMMIT 前故障，验证实例未落库、草稿及文件保留、同键重试仅提升被引用的文件 |
+| 定向测试 | `FileEndpointTests`、`FormEndpointTests`、`PermissionEndpointTests` 共 27 项通过，0 失败、0 跳过。验证了 `fixed.trx` 中的结果 |
+
+全量门禁使用 `pwsh -NoProfile -File './eng/verify.ps1' -SkipRestore`。服务数据库由 GitHub Actions 运行，验收按修复提交 SHA 核对 Windows 和三个 Provider 作业。附件事务故障用例实际运行于 SQLite。
+
+剩余风险为宿主的文件保留、孤立文件对账及外部存储健康。旧实例附件保留归属，宿主清理前需同时核对当前表单和允许保留的历史引用，相关边界见 R-03。
