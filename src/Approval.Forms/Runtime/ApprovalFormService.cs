@@ -129,7 +129,8 @@ public sealed partial class ApprovalFormService(
         var definition = await _db.Set<ApprovalDefinition>().AsNoTracking().FirstAsync(d => d.Id == instance.DefinitionId, ct);
         var flow = FlowDefinition.Parse(definition.DefinitionJson);
         var schema = flow.GetForm() ?? new FormSchema();
-        var (json, attachments) = await files.ResolveAsync(schema, await NormalizeAsync(schema, data, ct), userId, instance.Id, null, false, ct);
+        var (json, attachments) = await files.ResolveAsync(schema, await NormalizeAsync(schema, data, ct), userId, instance.Id, null, false, ct,
+            previousFormJson: instance.FormDataJson);
         await files.BindToInstanceAsync(instance.Id, attachments, null, ct);
         using (_bridge.EditTitle(instance))
             instance.Title = RenderTitle(flow.Settings ?? new FlowSettings(), definition.Name, userId, instance.CreatedAt, json);
@@ -182,7 +183,7 @@ public sealed partial class ApprovalFormService(
         // 只报告可编辑字段的错误：其他字段是发起时已校验的数据（如人员字段中的用户后来离职），不应阻止审批
         var normalized = await NormalizeAsync(schema, JsonSerializer.SerializeToElement(merged), ct,
             editable.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase));
-        // 附件：保留本实例已有的，新上传的须为审批人本人上传
+        // 附件：保留原字段引用，新引用来自本人上传或当前可见的附件字段
         var (resolved, attachments) = await files.ResolveAsync(schema, normalized, userId, instance.Id, null, false, ct,
             previousFormJson: instance.FormDataJson);
         var json = KeepNonFormVariables(instance.FormDataJson, resolved);
