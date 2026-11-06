@@ -18,6 +18,7 @@ const typeIcons: Record<NodeType, string> = {
   Condition: '◆',
   Parallel: '⇉',
   Join: '⇶',
+  Action: '⚙',
   End: '■',
 }
 

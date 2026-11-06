@@ -27,7 +27,8 @@
           "Terminate",
           "Reassign",
           "FormEdit",
-          "NodeEntered"
+          "NodeEntered",
+          "ActionExecuted"
         ]
       },
       "ApprovalInstanceResponse": {

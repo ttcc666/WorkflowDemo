@@ -78,6 +78,11 @@
         "resolved": "10.0.14",
         "contentHash": "Wz+IgL2xpg8KJ4i2VWj6uz1PmZNu4Q0Ljlwd73P9Vze5NcOBtctLii3itV0PB2MpOqwqDEGfB6RCdv94A4E5yQ=="
       },
+      "Acornima": {
+        "type": "Transitive",
+        "resolved": "1.7.0",
+        "contentHash": "a2I4O4qkuAdB0oSaGz6/k0n/bXxMbGcLBra5dNTTVSLmTwM7uORA8ebpOrNMmDfFWOMwvuaRL6gPprRV4HTV0w=="
+      },
       "Azure.Core": {
         "type": "Transitive",
         "resolved": "1.50.0",
@@ -535,6 +540,7 @@
         "type": "Project",
         "dependencies": {
           "DynamicExpresso.Core": "[2.19.6, )",
+          "Jint": "[4.17.0, )",
           "Microsoft.EntityFrameworkCore.Relational": "[10.0.14, )"
         }
       },
@@ -556,6 +562,15 @@
         "requested": "[2.19.6, )",
         "resolved": "2.19.6",
         "contentHash": "xZHcSToy6c3111kiRcBZkkoEKpqDm6Td9q1VVCT2oEcFuGBH4c+Rf7iL3o1uvJByBh9hXwW2HiPvLXNhlF2qkA=="
+      },
+      "Jint": {
+        "type": "CentralTransitive",
+        "requested": "[4.17.0, )",
+        "resolved": "4.17.0",
+        "contentHash": "9jdpLQQYsWTjOn2THpiR8zRJ34ksV6ofW0gJvZxJW/fIGK+A+TkpWonhuuLDRwqLDjP+9WsxYt2MEge6lWjk2A==",
+        "dependencies": {
+          "Acornima": "1.7.0"
+        }
       },
       "Microsoft.EntityFrameworkCore.Relational": {
         "type": "CentralTransitive",

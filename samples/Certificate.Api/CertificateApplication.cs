@@ -94,9 +94,19 @@ public static class CertificateApplication
         builder.Services.AddHttpClient(DemoWebhookChannel.HttpClientName);
         approval.AddEventHandler<DemoWebhookChannel>();
         ((ApprovalOptions)builder.Services.Last(d => d.ServiceType == typeof(ApprovalOptions)).ImplementationInstance!).NotificationTargets.Add(new("Webhook", "宿主示例 Webhook"));
-        if (certificateOptions.DemoMode) approval.AddPermissionProvider<DemoPermissionProvider>();
-
-        if (certificateOptions.DemoMode) approval.AddOrganizationProvider<DemoIdentityProvider>();
+        if (certificateOptions.DemoMode)
+        {
+            approval.AddPermissionProvider<DemoPermissionProvider>().AddOrganizationProvider<DemoIdentityProvider>();
+            approval.AddCalculationActions().AddNotificationActions()
+                .AddSqlActionQuery(new("warehouse", "inventory.available", """
+                    SELECT code, quantity FROM (
+                      SELECT 'P001' AS code, 30 AS quantity UNION ALL SELECT 'P002', 0
+                    ) AS inventory WHERE code = @productCode
+                    """, new Dictionary<string, System.Data.DbType> { ["productCode"] = System.Data.DbType.String }),
+                    _ => new Microsoft.Data.Sqlite.SqliteConnection("Data Source=:memory:;Pooling=False"));
+            if (approvalConfig["Actions:ErpEndpoint"] is { Length: > 0 } erp)
+                approval.AddHttpActions(new ApprovalHttpActionEndpoint("erp", new Uri(erp), new HashSet<string> { "POST" }));
+        }
         configureApproval?.Invoke(approval);
 
         if (approvalConfig.GetValue("EnableBackgroundServices", true))

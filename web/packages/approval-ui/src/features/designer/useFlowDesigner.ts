@@ -207,8 +207,11 @@ export function useFlowDesigner() {
   function updateNode(id: string, patch: Partial<FlowNodeData>) {
     const node = nodes.value.find((n) => n.id === id)
     if (!node?.data) return
+    const priorSteps = node.data.actions ?? []
+    const reordered = patch.actions && (patch.actions.length !== priorSteps.length ||
+      patch.actions.some((step, index) => step.id !== priorSteps[index]?.id))
     Object.assign(node.data, patch)
-    markChanged(`node:${id}:${Object.keys(patch).join(',')}`)
+    markChanged(reordered ? undefined : `node:${id}:${Object.keys(patch).join(',')}`)
   }
 
   function updateFlowNotifications(rules: NotificationRule[]) {

@@ -119,7 +119,7 @@ const emptyMeta: ApprovalMeta = {
   templateVariables: [],
   defaultTemplates: {},
 }
-const meta = useAsyncData(() => approvalApi.meta(), { initial: emptyMeta })
+const meta = useAsyncData(() => approvalApi.meta(), { initial: emptyMeta, watch: [userKey] })
 const metaValue = computed(() => meta.data.value ?? emptyMeta)
 const flowEvents = notifyEventsFor('Flow')
 
@@ -153,6 +153,28 @@ function autoLayout() {
 }
 
 const selectedEdgeData = computed(() => designer.selectedEdge.value?.data)
+const upstreamActions = computed(() => {
+  const selected = designer.selectedNode.value
+  if (selected?.data?.type !== 'Action') return []
+  const incoming = new Map<string, string[]>()
+  for (const edge of designer.edges.value) {
+    const sources = incoming.get(edge.target)
+    if (sources) sources.push(edge.source)
+    else incoming.set(edge.target, [edge.source])
+  }
+  const visited = new Set([selected.id])
+  const pending = [selected.id]
+  while (pending.length) {
+    for (const source of incoming.get(pending.pop()!) ?? []) {
+      if (!visited.has(source)) {
+        visited.add(source)
+        pending.push(source)
+      }
+    }
+  }
+  visited.delete(selected.id)
+  return designer.nodes.value.filter(node => visited.has(node.id)).flatMap(node => node.data?.actions ?? [])
+})
 
 // ───── 校验与发布 ─────
 
@@ -311,6 +333,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', onBeforeUnload)
           :data="designer.selectedNode.value.data"
           :meta="metaValue"
           :roles="directory.roles.value"
+          :upstream-actions="upstreamActions"
           @update="(patch) => designer.updateNode(designer.selectedNode.value!.id, patch)"
           @remove="designer.removeNode(designer.selectedNode.value!.id)"
         />

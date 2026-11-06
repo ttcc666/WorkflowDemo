@@ -8,6 +8,7 @@ export const nodeTypeLabels: Record<NodeType, string> = {
   Condition: '条件分支',
   Parallel: '并行分支',
   Join: '合并',
+  Action: '动作',
   End: '结束',
 }
 
@@ -23,6 +24,7 @@ export const notifyEventLabels: Record<NotifyEvent, string> = {
   Returned: '退回修改',
   Resubmitted: '重新提交',
   Completed: '流程结束',
+  Action: '动作通知',
 }
 
 export const timeoutActionLabels: Record<TimeoutAction, string> = {
@@ -114,6 +116,11 @@ export function approverSummary(data: FlowNodeData) {
   if (data.type === 'Cc') return rules || '未设置抄送人'
   if (data.type === 'Parallel') return '所有分支同时进行'
   if (data.type === 'Join') return '等待全部分支完成'
+  if (data.type === 'Action' && data.actions) {
+    return data.actions.length
+      ? `${data.actions.length} 步 · ${data.actions.map(step => `${step.type} ${step.mode === 'Async' ? '异步' : '同步'}`).join('、')}`
+      : '尚未配置动作'
+  }
   return ''
 }
 
@@ -126,6 +133,7 @@ export const defaultTemplates: Record<NotifyEvent, string> = {
   Returned: '退回修改',
   Resubmitted: '重新提交',
   Completed: '【{结果}】{标题}',
+  Action: '',
 }
 
 /** 新建通知规则：超时、到达默认发给当前审批人，其余默认发给申请人 */

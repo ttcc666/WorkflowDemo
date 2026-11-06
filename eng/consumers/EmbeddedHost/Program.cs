@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
+using System.Text.Json;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Logging.ClearProviders();
@@ -21,7 +22,8 @@ builder.Services.AddScoped<IApprovalUserStatusProvider, HostUsers>();
 builder.Services.AddSingleton<IApprovalPermissionProvider, HostPermissions>();
 builder.Services.AddSingleton<HostEvents>();
 builder.Services.AddSingleton<IApprovalEventHandler>(sp => sp.GetRequiredService<HostEvents>());
-builder.Services.AddApprovalWorkflow<InvoiceDbContext>(o => { o.EnableBackgroundServices = false; o.Outbox.BaseRetryDelay = TimeSpan.FromMilliseconds(1); });
+builder.Services.AddApprovalWorkflow<InvoiceDbContext>(o => { o.EnableBackgroundServices = false; o.Outbox.BaseRetryDelay = TimeSpan.FromMilliseconds(1); })
+    .AddActionHandler<ArchiveInvoiceAction>();
 builder.Services.AddApprovalAspNetCore();
 await using var app = builder.Build();
 var actor = app.Services.GetRequiredService<HostActor>();
@@ -121,6 +123,24 @@ await Act("bob", "approve", "branch-a", ApprovalPermissions.TaskApprove, new() {
 await As("alice", async sp => { Check((await sp.GetRequiredService<InvoiceDbContext>().Set<ApprovalInstance>().SingleAsync(i => i.Id == parallelId)).Status == InstanceStatus.Running, "JoinWaitsForOtherBranch"); return true; });
 await Act("carol", "approve", "branch-b", ApprovalPermissions.TaskApprove, new() { TaskId = b.Id }, (e, ct) => e.ApproveAsync(b.Id, "carol", ct: ct));
 await As("alice", async sp => { Check((await sp.GetRequiredService<InvoiceDbContext>().Set<ApprovalInstance>().SingleAsync(i => i.Id == parallelId)).Status == InstanceStatus.Approved, "ParallelJoinWithoutForms"); return true; });
+const string archiveFlow = """
+    {"schemaVersion":1,"startNodeId":"start","nodes":{
+      "start":{"type":"Start","next":"archive"},
+      "archive":{"type":"Action","next":"end","actions":[{"id":"archive","type":"ArchiveInvoice","config":{"amount":42}}]},
+      "end":{"type":"End"}
+    }}
+    """;
+await Command("alice", "publish", "publish-archive", archiveFlow, ApprovalPermissions.DefinitionPublish,
+    (sp, ct) => sp.GetRequiredService<ApprovalDefinitionService>().PublishAsync("archive", "archive", archiveFlow, ct));
+var archived = await Command("alice", "start", "archive", new { }, ApprovalPermissions.InstanceStart,
+    (sp, ct) => sp.GetRequiredService<ApprovalEngine>().StartAsync(new("archive", "Invoice", "archive-1", "alice"), ct));
+await As("alice", async sp =>
+{
+    var db = sp.GetRequiredService<InvoiceDbContext>();
+    Check(archived.Status == InstanceStatus.Approved && archived.Logs.Any(log => log.Action == ApprovalAction.ActionExecuted) &&
+        await db.Invoices.AnyAsync(invoice => invoice.Amount == 42 && invoice.Id != invoiceId), "ScopedCustomActionFromNuGetPackage");
+    return true;
+});
 for (var attempt = 0; attempt < 5; attempt++)
 { await app.Services.GetRequiredService<ApprovalOutboxDispatcher>().DispatchOnceAsync(); await Task.Delay(10); }
 var events = app.Services.GetRequiredService<HostEvents>();
@@ -165,4 +185,23 @@ public sealed class HostEvents : IApprovalEventHandler
     public List<ApprovalEvent> Attempts { get; } = [];
     public Task HandleAsync(ApprovalEvent approvalEvent, CancellationToken ct)
     { Attempts.Add(approvalEvent); if (Attempts.Count == 1) throw new IOException("retry host event"); return Task.CompletedTask; }
+}
+
+public sealed class ArchiveInvoiceAction(InvoiceDbContext db) : IApprovalActionHandler
+{
+    public ApprovalActionDescriptor Descriptor { get; } = new("ArchiveInvoice", "归档发票", "将发票写入宿主业务表",
+        [ActionExecutionMode.Sync], ConfigSchema: JsonSerializer.Deserialize<JsonElement>("""
+            {"type":"object","required":["amount"],"properties":{"amount":{"type":"number","minimum":0}}}
+            """));
+
+    public IReadOnlyList<string> ValidateConfig(int version, JsonElement config) =>
+        version == 1 && config.TryGetProperty("amount", out var amount) && amount.ValueKind == JsonValueKind.Number &&
+        amount.TryGetDecimal(out var value) && value >= 0 ? [] : ["需要非负发票金额"];
+
+    public Task<ApprovalActionResult> ExecuteAsync(ApprovalActionContext context, JsonElement config, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        db.Invoices.Add(new Invoice { Id = context.ExecutionId, Amount = config.GetProperty("amount").GetDecimal() });
+        return Task.FromResult(new ApprovalActionResult(true));
+    }
 }

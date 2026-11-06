@@ -129,37 +129,58 @@ internal sealed class ApprovalEventWriter(
 
             var title = Truncate(Render(string.IsNullOrWhiteSpace(rule.Title) ? NotificationDefaults.Titles[evt] : rule.Title, variables), 200);
             var content = Truncate(Render(string.IsNullOrWhiteSpace(rule.Content) ? NotificationDefaults.Contents[evt] : rule.Content, variables), 4000);
+            SendNotifications(operation, evt, instance, node, info, rule.Channels, recipients, title, content,
+                variables.GetValueOrDefault("link") as string, sent, hideDescription: false);
+        }
+    }
 
-            foreach (var channel in rule.Channels.Distinct(StringComparer.OrdinalIgnoreCase))
+    internal async Task<bool> RaiseActionNotificationAsync(ApprovalOperationContext operation, ApprovalInstance instance, FlowNode node,
+        NotificationRule rule, string title, string content, string operatorId, CancellationToken ct)
+    {
+        if (!_options.Outbox.EnableDispatcher && rule.Channels.Any(channel =>
+                !string.Equals(channel, InAppChannel.Name, StringComparison.OrdinalIgnoreCase)))
+            throw ApprovalAutomaticTraversal.Invalid("外部通知动作需要启用 Outbox Dispatcher");
+        var current = instance.Tasks.Where(t => t.Id == operation.TaskId)
+            .Select(t => new Assignee(t.AssigneeKind, t.AssigneeValue)).ToArray();
+        var info = new EventInfo(current) { OperatorId = operatorId };
+        var recipients = await ResolveRecipientsAsync(rule, instance, node, FormData.Parse(instance.FormDataJson), current, ct);
+        return SendNotifications(operation, NotifyEvent.Action, instance, node, info, rule.Channels, recipients,
+            Truncate(title, 200), Truncate(content, 4000), null, [], hideDescription: true);
+    }
+
+    private bool SendNotifications(ApprovalOperationContext operation, NotifyEvent evt, ApprovalInstance instance, FlowNode? node,
+        EventInfo info, List<string> channels, List<string> recipients, string title, string content, string? link,
+        HashSet<(string Channel, string User, string Content)> sent, bool hideDescription)
+    {
+        var queued = false;
+        foreach (var channel in channels.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            var users = recipients.Where(u => sent.Add((channel.ToLowerInvariant(), u, content))).ToList();
+            if (users.Count == 0) continue;
+            if (string.Equals(channel, InAppChannel.Name, StringComparison.OrdinalIgnoreCase))
             {
-                var users = recipients.Where(u => sent.Add((channel.ToLowerInvariant(), u, content))).ToList();
-                if (users.Count == 0) continue;
-
-                if (string.Equals(channel, InAppChannel.Name, StringComparison.OrdinalIgnoreCase))
-                {
-                    foreach (var user in users) AddMessage(instance, node, evt, user, title, content);
-                }
-                else if (_channels.Contains(channel))
-                {
-                    var link = variables.GetValueOrDefault("link") as string;
-                    AddOutbox(operation, "Host", instance, node, title,
-                        id => new ApprovalEvent(id, "NotificationRequested", instance.Id, instance.DefinitionId, instance.DefinitionVersion,
-                            instance.BusinessType, instance.BusinessKey, instance.Status, node?.Id, node?.Name, null,
-                            info.OperatorId ?? SystemOperator, info.Comment, Now)
-                        {
-                            DeliveryTarget = channel,
-                            Notification = new ApprovalNotificationRequest(id, evt, instance.Id, node?.Id,
-                            title, content, users, string.IsNullOrEmpty(link) ? null : link)
-                        });
-                }
-                else
-                {
-                    // 发布后宿主也可能撤下适配器；不能静默丢失流程承诺的通知。
-                    throw new ApprovalException($"通知适配器 '{channel}' 未注册，请先配置宿主适配器后重试")
+                foreach (var user in users) AddMessage(instance, node, evt, user, title, content);
+            }
+            else if (_channels.Contains(channel))
+            {
+                queued = true;
+                AddOutbox(operation, "Host", instance, node, hideDescription ? "NotificationRequested" : title,
+                    id => new ApprovalEvent(id, "NotificationRequested", instance.Id, instance.DefinitionId, instance.DefinitionVersion,
+                        instance.BusinessType, instance.BusinessKey, instance.Status, node?.Id, node?.Name, null,
+                        info.OperatorId ?? SystemOperator, info.Comment, Now)
+                    {
+                        DeliveryTarget = channel,
+                        Notification = new ApprovalNotificationRequest(id, evt, instance.Id, node?.Id,
+                        title, content, users, string.IsNullOrEmpty(link) ? null : link)
+                    });
+            }
+            else
+            {
+                throw new ApprovalException($"通知适配器 '{channel}' 未注册，请先配置宿主适配器后重试")
                     { Code = ApprovalErrorCode.InvalidDefinition };
-                }
             }
         }
+        return queued;
     }
 
     /// <summary>解析通知接收人并把角色展开为用户。</summary>
@@ -208,9 +229,12 @@ internal sealed class ApprovalEventWriter(
 
     /// <summary>写入 Outbox：随本次操作一起提交，提交后由后台任务投递。payload 工厂接收消息 ID（幂等键）。</summary>
     private void AddOutbox(ApprovalOperationContext operation, string target, ApprovalInstance instance, FlowNode? node, string? description,
-        Func<Guid, object> payload)
+        Func<Guid, object> payload, Guid? idOverride = null)
     {
-        var id = _unit.NewId("ApprovalEngine.Notifications");
+        var id = idOverride ?? _unit.NewId("ApprovalEngine.Notifications");
+        var json = JsonSerializer.Serialize(payload(id), OutboxJson.Options);
+        if (target == WorkflowActionDelivery.Target && System.Text.Encoding.UTF8.GetByteCount(json) > WorkflowActionDelivery.MaxPayloadBytes)
+            throw ApprovalAutomaticTraversal.Invalid("异步动作快照超过 512 KiB");
         _db.Set<ApprovalOutboxMessage>().Add(new ApprovalOutboxMessage
         {
             Id = id,
@@ -218,13 +242,20 @@ internal sealed class ApprovalEventWriter(
             InstanceId = instance.Id,
             NodeId = node?.Id,
             Description = description is null ? null : Truncate(description, 500),
-            PayloadJson = JsonSerializer.Serialize(payload(id), OutboxJson.Options),
+            PayloadJson = json,
             Status = OutboxStatus.Pending,
             MaxAttempts = Math.Max(1, _options.Outbox.MaxAttempts),
             NextAttemptAt = Now,
             CreatedAt = Now
         });
         operation.OutboxWritten = true;
+    }
+
+    internal void QueueAction(ApprovalOperationContext operation, ApprovalInstance instance, FlowNode node, WorkflowActionDelivery delivery)
+    {
+        if (!_options.Outbox.EnableDispatcher) throw ApprovalAutomaticTraversal.Invalid("异步动作需要启用 Outbox Dispatcher");
+        AddOutbox(operation, WorkflowActionDelivery.Target, instance, node, $"{delivery.Type}/{delivery.Context.ActionId}",
+            _ => delivery, delivery.Context.ExecutionId);
     }
 
     private static string Truncate(string text, int length) => text.Length <= length ? text : text[..(length - 1)] + "…";

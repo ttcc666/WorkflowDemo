@@ -82,7 +82,10 @@ public enum ApprovalAction
     /// <summary>审批人在节点修改了可编辑的表单字段。</summary>
     FormEdit,
 
-    NodeEntered
+    NodeEntered,
+
+    /// <summary>Action 步骤执行结果或投递状态。</summary>
+    ActionExecuted
 }
 
 /// <summary>流程定义的一个版本。发布新版本不影响已发起的实例。所有时间字段均为 UTC。</summary>
@@ -121,7 +124,7 @@ public class ApprovalInstance : IApprovalEntity
     /// <summary>当前活动节点；并行时为多个节点 ID，以逗号分隔。</summary>
     public string? CurrentNodeId { get; set; }
 
-    /// <summary>运行时状态（并行合并计数），见 <see cref="Engine.ExecutionState"/>。</summary>
+    /// <summary>运行时状态（并行合并计数和动作输出），见 <see cref="Engine.ExecutionState"/>。</summary>
     public string? StateJson { get; set; }
 
     /// <summary>退回次数；每次退回后新生成的任务记录当前轮次，用于区分节点的历次处理。</summary>

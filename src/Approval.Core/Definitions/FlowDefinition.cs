@@ -16,7 +16,10 @@ public enum NodeType
     /// <summary>并行合并：等待对应并行节点的所有分支到达后进入下一节点。</summary>
     Join,
 
-    End
+    End,
+
+    /// <summary>执行有序业务动作后自动推进。</summary>
+    Action
 }
 
 /// <summary>节点审批方式。</summary>
@@ -141,6 +144,7 @@ public sealed class FlowDefinition
         {
             node.Notifications = [];
             node.Timeout = null;
+            node.Actions = null;
         }
         return view;
     }
@@ -164,6 +168,9 @@ public sealed class FlowNode
     public List<ConditionBranch> Branches { get; set; } = [];
 
     public string? Next { get; set; }
+
+    /// <summary>仅 Action 节点使用。数组顺序即执行顺序。</summary>
+    public List<ActionStep>? Actions { get; set; }
 
     public EmptyApproverPolicy EmptyApproverPolicy { get; set; } = EmptyApproverPolicy.Error;
 
@@ -234,7 +241,10 @@ public enum NotifyEvent
     Completed,
 
     Returned,
-    Resubmitted
+    Resubmitted,
+
+    /// <summary>由显式 Notification 动作触发。</summary>
+    Action
 }
 
 /// <summary>

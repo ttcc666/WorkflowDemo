@@ -94,6 +94,7 @@ public sealed partial class ApprovalEngine
         // 取消当前节点（含加签）的未完成任务；退出并行块时取消块内所有分支并清除合并计数
         _tasks.CancelOpenTasks(ApprovalTaskCoordinator.CurrentTasksOf(instance, node.Id));
         var structure = operation.StructureOf(flow);
+        operation.StateOf(instance).ClearOutputsFrom(structure, target.Id);
         var depth = structure.ScopeOf(target.Id).Count;
         var scope = structure.ScopeOf(node.Id);
         if (scope.Count > depth)
@@ -163,7 +164,9 @@ public sealed partial class ApprovalEngine
         _tasks.CompleteTask(task, ApprovalTaskStatus.Approved, userId, comment);
         var start = flow.GetNode(flow.StartNodeId);
         _events.AddLog(operation, instance, start, ApprovalAction.Resubmit, userId, comment);
-        operation.StateOf(instance).Joins.Clear();
+        var state = operation.StateOf(instance);
+        state.Joins.Clear();
+        state.ActionOutputs.Clear();
         await _events.RaiseAsync(operation, NotifyEvent.Resubmitted, instance, flow, start,
             new EventInfo([new Assignee(AssigneeKind.User, instance.InitiatorId)]) { OperatorId = userId, Comment = comment }, ct);
         await MoveToAsync(operation, instance, flow, start.Next!, ct);

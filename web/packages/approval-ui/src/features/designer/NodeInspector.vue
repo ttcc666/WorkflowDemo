@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { ApprovalMeta } from '@ui/contracts/api'
+import type { ActionStep } from '@ui/contracts/flow'
 import {
   modeLabels,
   nodeTypeLabels,
@@ -9,6 +10,7 @@ import {
   type FlowNodeData,
 } from '@ui/features/flow/flowModel'
 import ApproverRulesEditor from './ApproverRulesEditor.vue'
+import ActionStepsEditor from './ActionStepsEditor.vue'
 import FieldPermissionsEditor from './FieldPermissionsEditor.vue'
 import NotificationRulesEditor from './NotificationRulesEditor.vue'
 import TimeoutEditor from './TimeoutEditor.vue'
@@ -20,6 +22,7 @@ const props = defineProps<{
   data: FlowNodeData
   meta: ApprovalMeta
   roles: string[]
+  upstreamActions?: ActionStep[]
 }>()
 
 const emit = defineEmits<{
@@ -113,10 +116,11 @@ const modeHelp: Record<ApproveMode, string> = {
 
           <div v-if="data.type === 'Condition'" class="inspector__help">
             点击从该节点出发的连线，设置分支条件与优先级。条件都不满足时走默认分支。
-            条件中可使用表单字段与动作输出变量，如 <code>amount &gt; 5000</code>、<code>risk.body.level == "high"</code>。
+            条件中可使用表单字段与动作输出变量，如 <code>amount &gt; 5000</code>、<code>outputs.risk.level == "high"</code>。
           </div>
         </el-form>
-
+        <ActionStepsEditor v-if="data.type === 'Action'" :key="nodeId" :node-id="nodeId" :steps="data.actions ?? []"
+          :upstream-actions="upstreamActions ?? []" :meta="meta" :roles="roles" @update="actions => emit('update', { actions })" />
       </el-tab-pane>
 
       <el-tab-pane v-if="notifyEvents.length" :label="`通知${data.notifications.length ? ` (${data.notifications.length})` : ''}`">

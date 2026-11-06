@@ -418,6 +418,114 @@ test('packaged simulation stops at decisions and node preview leaves the saved d
   expect(after.activeDefinitionId).toBe(before.activeDefinitionId)
 })
 
+test('packaged designer inserts an Action node and publishes calculation, SQL, HTTP and notification steps', async ({ page, request }) => {
+  const api = process.env.APPROVAL_SMOKE_API!, key = `package.actions.${Date.now()}`
+  const flow = { schemaVersion: 1, startNodeId: 's', settings: { startable: true },
+    form: { fields: [{ key: 'product', label: '商品', type: 'Text' }] }, nodes: {
+      s: { type: 'Start', name: '提交', next: 'e', position: { x: 0, y: 0 } },
+      e: { type: 'End', name: '结束', position: { x: 150, y: 260 } },
+    } }
+  const seed = await request.post(api + `/api/approval/definitions/${key}`, {
+    headers: { 'X-User-Id': 'admin', 'Idempotency-Key': key }, data: flow,
+  })
+  expect(seed.ok(), await seed.text()).toBe(true)
+  await page.addInitScript(() => localStorage.setItem('approval-demo-user', 'admin'))
+  await page.goto(`/designer/${key}`)
+  const edge = page.locator('.vue-flow__edge-path').first()
+  await expect(edge).toBeVisible()
+  const midpoint = await edge.evaluate(path => {
+    const svgPath = path as SVGPathElement
+    const point = svgPath.getPointAtLength(svgPath.getTotalLength() / 2).matrixTransform(svgPath.getScreenCTM()!)
+    return { clientX: point.x, clientY: point.y }
+  })
+  const transfer = await page.evaluateHandle(() => {
+    const data = new DataTransfer()
+    data.setData('application/x-approval-node', 'Action')
+    return data
+  })
+  await page.locator('.vue-flow').dispatchEvent('drop', { ...midpoint, dataTransfer: transfer })
+  const editor = page.locator('.actions-editor')
+  await expect(editor).toBeVisible()
+  const config = editor.locator('.actions-editor__config')
+  async function add(label: string) {
+    const button = editor.getByRole('button', { name: '添加动作', exact: true })
+    await expect(button).toBeEnabled()
+    await button.click()
+    await config.locator('.el-select').first().click()
+    await page.getByRole('option', { name: label, exact: true }).click()
+  }
+  async function choose(label: string, value: string) {
+    const field = config.locator('.el-form-item').filter({ has: page.getByText(label, { exact: true }) })
+    await field.locator('.el-select').click()
+    await page.getByRole('option', { name: value, exact: true }).click()
+  }
+  await add('JavaScript')
+  await config.getByLabel('JavaScript', { exact: true }).fill('function execute(c) { return { product: c.form.product }; }')
+  await config.getByPlaceholder('如 risk').fill('risk')
+  await add('SQL 查询')
+  await choose('数据源', 'warehouse')
+  await choose('查询 ID', 'inventory.available')
+  await config.getByRole('textbox', { name: '查询参数' }).fill('{"productCode":"{{outputs.risk.product}}"}')
+  await config.getByPlaceholder('如 risk').fill('stock')
+  await add('数据映射')
+  await config.getByRole('button', { name: '添加目标字段' }).click()
+  await config.getByLabel('源路径').fill('outputs.stock.rows[0].quantity')
+  await config.getByLabel('目标路径').fill('quantity')
+  await config.getByPlaceholder('如 risk').fill('erpPayload')
+  await add('HTTP 请求')
+  await choose('执行模式', '提交后投递')
+  await choose('宿主目标', 'erp')
+  await choose('HTTP 方法', 'POST')
+  await config.getByRole('textbox', { name: 'JSON 请求体' }).fill('{"inventory":"{{outputs.erpPayload}}"}')
+  await add('消息通知')
+  await config.locator('.el-form-item').filter({ has: page.getByText('消息标题', { exact: true }) })
+    .getByRole('textbox').fill('动作验收完成')
+  await config.getByPlaceholder('例如：订单 {{business.key}} 已审批').fill('库存 {{outputs.erpPayload.quantity}}')
+  const published = page.waitForResponse(r => new URL(r.url()).pathname.endsWith(`/${key}/publish-draft`))
+  await page.getByRole('button', { name: '发布新版本', exact: true }).click()
+  await page.getByRole('dialog').getByRole('button', { name: '确定', exact: true }).click()
+  expect((await published).status()).toBe(200)
+  const start = await request.post(api + `/api/approval/forms/${key}/start`, {
+    headers: { 'X-User-Id': 'alice', 'Idempotency-Key': `${key}.start` }, data: { formData: { product: 'P001' } },
+  })
+  expect(start.ok(), await start.text()).toBe(true)
+  const { instanceId } = await start.json()
+  await page.goto(`/approvals/${instanceId}`)
+  await expect(page.getByText('动作执行记录', { exact: true })).toBeVisible()
+  await expect(page.getByText(/已入队 ·/)).toBeVisible()
+  await page.getByRole('link', { name: '查看此实例的 Outbox' }).click()
+  await expect(page.getByRole('row').filter({ hasText: 'Http/step4' })).toBeVisible()
+})
+
+test('packaged purchase example prepares stock and queues ERP only after approval', async ({ request }) => {
+  const key = `package.purchase.actions.${Date.now()}`
+  const api = process.env.APPROVAL_SMOKE_API!
+  const definition = await readFile('../samples/Certificate.Api/ActionExamples/purchase-action.json', 'utf8')
+  const published = await request.post(`${api}/api/approval/definitions/${key}`, {
+    headers: { 'X-User-Id': 'admin', 'Idempotency-Key': key, 'Content-Type': 'application/json' }, data: definition,
+  })
+  expect(published.ok(), await published.text()).toBe(true)
+  const started = await request.post(`${api}/api/approval/forms/${key}/start`, {
+    headers: { 'X-User-Id': 'alice', 'Idempotency-Key': `${key}.start` }, data: { formData: { productCode: 'P001', amount: 58000 } },
+  })
+  expect(started.ok(), await started.text()).toBe(true)
+  const { instanceId } = await started.json()
+  const outbox = () => json(request, `/api/approval/outbox?instanceId=${instanceId}`, 'admin')
+  expect((await outbox()).items.some((item: { target: string }) => item.target === 'WorkflowAction')).toBe(false)
+  const pending = await json(request, `/api/approval/instances/${instanceId}/my-task`, 'dave')
+  const approved = await request.post(`${api}/api/approval/tasks/${pending.task.id}/approve`, {
+    headers: { 'X-User-Id': 'dave', 'Idempotency-Key': `${key}.approve` }, data: {},
+  })
+  expect(approved.status(), await approved.text()).toBe(204)
+  const queued = (await outbox()).items.filter((item: { target: string }) => item.target === 'WorkflowAction')
+  expect(queued).toHaveLength(1)
+  expect(queued[0]).toMatchObject({ nodeId: 'deliver', description: 'Http/erp', status: 'Pending' })
+  const messages = await json(request, '/api/approval/messages', 'alice')
+  expect(messages).toEqual(expect.arrayContaining([expect.objectContaining({
+    instanceId, title: '采购审批已完成', content: 'P001 · 金额 58000 · 风险 high',
+  })]))
+})
+
 test('packaged approval recovers the original key and payload after the server commits but response is lost', async ({ page, request }) => {
   const api = process.env.APPROVAL_SMOKE_API!, key = `package.recovery.${Date.now()}`
   const flow = { schemaVersion: 1, startNodeId: 's', settings: { startable: true },

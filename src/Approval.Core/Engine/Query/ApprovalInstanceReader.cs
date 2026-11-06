@@ -83,6 +83,9 @@ internal sealed class ApprovalInstanceReader(
         var context = new ApprovalDataProjectionContext(ApprovalContextSnapshots.Instance(instance), ApprovalContextSnapshots.Logs(instance.Logs));
         var data = projection?.Project(FlowDefinition.Parse(flow.ToJson()), context, access)
             ?? new ApprovalDataView(instance.FormDataJson, context.Logs, []);
+        if (data.Logs.Any(l => l.Action == ApprovalAction.ActionExecuted) &&
+            !await _authorization.CanAsync(ApprovalPermissions.InstanceReadSensitive, new() { InstanceId = instance.Id }, viewer.UserId, ct))
+            data = data with { Logs = data.Logs.Select(l => l.Action == ApprovalAction.ActionExecuted ? l with { Details = null } : l).ToArray() };
 
         return Assemble(instance, data, access.Level) with
         {

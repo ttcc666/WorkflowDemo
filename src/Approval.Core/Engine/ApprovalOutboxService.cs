@@ -1,6 +1,8 @@
 using Approval.Core.Abstractions;
 using Approval.Core.Domain;
 using Approval.Core.Persistence;
+using Approval.Core.Definitions;
+using Approval.Core.Engine.Extensions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -53,11 +55,12 @@ public sealed class ApprovalOutboxService
     private readonly TimeProvider _clock;
     private readonly ILogger<ApprovalOutboxService> _logger;
     private readonly ApprovalOutboxSignal _signal;
+    private readonly ApprovalExtensionCatalog _extensions;
     internal IApprovalEventHandler? EventHandler { get; }
 
     internal ApprovalOutboxService(ApprovalDbContextAccessor accessor,
         ApprovalOptions options, TimeProvider clock, ILogger<ApprovalOutboxService> logger, IApprovalScopeFactory scopes,
-        ApprovalOutboxSignal signal, IApprovalEventHandler? eventHandler)
+        ApprovalOutboxSignal signal, IApprovalEventHandler? eventHandler, ApprovalExtensionCatalog extensions)
     {
         _db = accessor.Context;
         _unit = accessor.UnitOfWork; _scopes = scopes;
@@ -66,6 +69,7 @@ public sealed class ApprovalOutboxService
         _clock = ApprovalHostServices.Clock(_unit, clock);
         _logger = logger;
         _signal = signal;
+        _extensions = extensions;
         EventHandler = eventHandler;
     }
 
@@ -145,6 +149,8 @@ public sealed class ApprovalOutboxService
         var message = await PendingAsync(delivery, ct);
         if (message is null) return false;
         message.Attempts++;
+        if (message.Target == WorkflowActionDelivery.Target && error is not WorkflowActionDeliveryException)
+            error = new WorkflowActionDeliveryException("ActionDeliveryFailed");
         RecordFailure(message, error); message.ConcurrencyStamp++;
         await _db.SaveChangesAsync(ct);
         return true;
@@ -177,6 +183,11 @@ public sealed class ApprovalOutboxService
 
     private async Task DeliverAsync(ApprovalOutboxMessage message, CancellationToken ct)
     {
+        if (message.Target == WorkflowActionDelivery.Target)
+        {
+            await DeliverActionAsync(message, ct);
+            return;
+        }
         var approvalEvent = JsonSerializer.Deserialize<ApprovalEvent>(message.PayloadJson, OutboxJson.Options)
             ?? throw new InvalidOperationException("审批事件正文无效");
         if (approvalEvent.Id != message.Id || approvalEvent.InstanceId == Guid.Empty || approvalEvent.DefinitionId == Guid.Empty
@@ -191,6 +202,29 @@ public sealed class ApprovalOutboxService
             throw new InvalidOperationException("审批事件正文缺少必要字段或与 Outbox 记录不一致");
         await (EventHandler ?? throw new InvalidOperationException("宿主未注册 IApprovalEventHandler"))
             .HandleAsync(approvalEvent, ct);
+    }
+
+    private async Task DeliverActionAsync(ApprovalOutboxMessage message, CancellationToken ct)
+    {
+        try
+        {
+            using var extension = _unit.Extension();
+            var delivery = JsonSerializer.Deserialize<WorkflowActionDelivery>(message.PayloadJson, OutboxJson.Options);
+            if (delivery is not { Version: 1, Context: { Mode: ActionExecutionMode.Async } context } ||
+                context.InstanceId != message.InstanceId || context.NodeId != message.NodeId || context.ExecutionId != message.Id ||
+                !ApprovalActionValidation.IsId(delivery.Type) || !_extensions.Actions.TryGetValue(delivery.Type, out var handler) ||
+                !handler.Descriptor.SupportedModes.Contains(ActionExecutionMode.Async) ||
+                handler.ValidateConfig(context.ConfigVersion, context.Mode, delivery.Config).Count != 0)
+                throw new WorkflowActionDeliveryException("InvalidActionSnapshot");
+            if (handler is Actions.HttpActionHandler http && http.DestinationStamp(delivery.Config) != delivery.DestinationStamp)
+                throw new WorkflowActionDeliveryException("HttpDestinationChanged");
+            var result = await handler.ExecuteAsync(context, delivery.Config, ct);
+            if (!result.Succeeded) throw new WorkflowActionDeliveryException("ActionRejected");
+        }
+        catch (Exception ex) when (ex is not WorkflowActionDeliveryException && !ct.IsCancellationRequested)
+        {
+            throw new WorkflowActionDeliveryException("ActionExecutionFailed");
+        }
     }
 
     /// <summary>投递记录，按创建时间倒序分页。</summary>

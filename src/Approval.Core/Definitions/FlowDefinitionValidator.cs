@@ -1,4 +1,5 @@
 using Approval.Core.Abstractions;
+using Approval.Core.Engine.Extensions;
 using Approval.Core.Notifications;
 using Approval.Core.Resolvers;
 using System.Text.RegularExpressions;
@@ -16,6 +17,9 @@ public sealed class FlowValidationContext
 
     /// <summary>宿主声明的通知路由（含内置站内信 InApp）。</summary>
     public IReadOnlySet<string>? Channels { get; init; }
+
+    internal Func<IReadOnlyDictionary<string, IApprovalActionHandler>>? ActionHandlers { get; init; }
+    internal bool ActionDispatchEnabled { get; init; } = true;
 }
 
 /// <summary>发布前对流程定义做结构校验，避免运行时才发现配置错误。</summary>
@@ -115,13 +119,14 @@ public static partial class FlowDefinitionValidator
                 errors.Add($"节点 '{key}' 的岗位资格要求只能用于人工审批，不能设置自动通过");
         }
 
+        ApprovalActionValidation.Validate(definition, errors, context.ActionHandlers, context.ActionDispatchEnabled);
         if (errors.Count == 0) CheckReachabilityAndCycles(definition, errors);
         if (errors.Count == 0) errors.AddRange(FlowStructure.Analyze(definition).Errors);
         return errors;
     }
 
     /// <summary>按审批人类型描述校验参数：用户 / 角色不能为空，级数为 1–10，<c>@字段</c> 须为表单人员字段。</summary>
-    private static void ValidateRuleValue(List<string> errors, string owner, ApproverRule rule, FlowValidationContext context,
+    internal static void ValidateRuleValue(List<string> errors, string owner, ApproverRule rule, FlowValidationContext context,
         IReadOnlySet<string>? userFields)
     {
         if (context.ApproverDescriptors?.GetValueOrDefault(rule.Type) is not { } descriptor) return;

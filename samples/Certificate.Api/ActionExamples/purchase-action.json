@@ -1,0 +1,66 @@
+{
+  "schemaVersion": 1,
+  "startNodeId": "start",
+  "settings": { "startable": true, "titleTemplate": "采购自动化" },
+  "form": {
+    "fields": [
+      { "key": "productCode", "label": "商品编码", "type": "Text", "required": true },
+      { "key": "amount", "label": "金额", "type": "Number", "required": true }
+    ]
+  },
+  "nodes": {
+    "start": { "type": "Start", "name": "发起采购", "next": "prepare" },
+    "prepare": {
+      "type": "Action",
+      "name": "采购数据准备",
+      "actions": [
+        {
+          "id": "risk", "type": "JavaScript", "outputKey": "risk",
+          "config": { "script": "function execute(c) { return { level: c.form.amount >= 50000 ? 'high' : 'low' }; }" }
+        },
+        {
+          "id": "stock", "type": "Sql", "outputKey": "stock",
+          "config": {
+            "dataSource": "warehouse", "queryId": "inventory.available",
+            "parameters": { "productCode": "{{form.productCode}}" }
+          }
+        },
+        {
+          "id": "payload", "type": "Mapping", "outputKey": "erpPayload",
+          "config": {
+            "mappings": [
+              { "source": "business.key", "target": "orderId" },
+              { "source": "form.productCode", "target": "productCode" },
+              { "source": "form.amount", "target": "amount", "transform": "Number", "precision": 2 },
+              { "source": "outputs.risk.level", "target": "riskLevel" },
+              { "source": "outputs.stock.rows[0].quantity", "target": "available", "default": 0 }
+            ]
+          }
+        }
+      ],
+      "next": "review"
+    },
+    "review": { "type": "Approval", "name": "采购审批", "approvers": [{ "type": "User", "value": "dave" }], "next": "deliver" },
+    "deliver": {
+      "type": "Action",
+      "name": "ERP 同步与采购通知",
+      "actions": [
+        {
+          "id": "erp", "type": "Http", "mode": "Async", "failurePolicy": "Retry",
+          "config": { "endpoint": "erp", "method": "POST", "body": { "order": "{{outputs.erpPayload}}" } }
+        },
+        {
+          "id": "finance", "type": "Notification",
+          "config": {
+            "recipients": [{ "type": "Initiator", "value": "" }, { "type": "User", "value": "quinn" }],
+            "channels": ["InApp"],
+            "title": "采购审批已完成",
+            "content": "{{form.productCode}} · 金额 {{form.amount}} · 风险 {{outputs.risk.level}}"
+          }
+        }
+      ],
+      "next": "end"
+    },
+    "end": { "type": "End", "name": "流程结束" }
+  }
+}

@@ -179,9 +179,9 @@ public sealed class TestHost : IAsyncDisposable
     /// <summary>可控时钟，用于超时与重试测试。</summary>
     public FakeTimeProvider Clock { get; } = new(new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero));
 
-    public TestHost(Action<ApprovalOptions>? configure = null, Action<ApprovalBuilder>? build = null)
+    public TestHost(Action<ApprovalOptions>? configure = null, Action<ApprovalBuilder>? build = null, string? connectionString = null)
     {
-        _connection = new SqliteConnection("DataSource=:memory:");
+        _connection = new SqliteConnection(connectionString ?? "DataSource=:memory:");
         _connection.Open();
 
         var services = new ServiceCollection();

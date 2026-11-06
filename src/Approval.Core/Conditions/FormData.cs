@@ -51,7 +51,7 @@ public static class FormData
         _ => JsonSerializer.Serialize(formData, JsonOptions)
     };
 
-    private static object? Convert(JsonElement element) => element.ValueKind switch
+    internal static object? Convert(JsonElement element) => element.ValueKind switch
     {
         JsonValueKind.String => element.GetString(),
         JsonValueKind.Number => element.TryGetDecimal(out var d) ? d : element.GetDouble(),

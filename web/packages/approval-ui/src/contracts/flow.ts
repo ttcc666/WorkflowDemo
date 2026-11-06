@@ -1,9 +1,9 @@
 import type { FlowSettings, FormSchema } from './forms'
 
-export type NodeType = 'Start' | 'Approval' | 'Cc' | 'Condition' | 'Parallel' | 'Join' | 'End'
+export type NodeType = 'Start' | 'Approval' | 'Cc' | 'Condition' | 'Parallel' | 'Join' | 'End' | 'Action'
 export type ApproveMode = 'Any' | 'All' | 'Sequential'
 export type EmptyApproverPolicy = 'Error' | 'AutoApprove'
-export type NotifyEvent = 'Enter' | 'Approved' | 'Rejected' | 'Transferred' | 'Timeout' | 'Completed' | 'Returned' | 'Resubmitted'
+export type NotifyEvent = 'Enter' | 'Approved' | 'Rejected' | 'Transferred' | 'Timeout' | 'Completed' | 'Returned' | 'Resubmitted' | 'Action'
 export type TimeoutAction = 'Remind' | 'AutoApprove' | 'AutoReject'
 /** 表单字段在节点的权限：可编辑（审批节点，表单审批的审批人同意时可修改）/ 隐藏；未设置为只读 */
 export type FieldAccess = 'Editable' | 'Hidden'
@@ -37,6 +37,20 @@ export interface TimeoutPolicy {
   maxReminders?: number
 }
 
+export type ActionMode = 'Sync' | 'Async'
+export type ActionFailurePolicy = 'Fail' | 'Continue' | 'Retry'
+
+export interface ActionStep {
+  id: string
+  name?: string | null
+  type: string
+  mode: ActionMode
+  outputKey?: string | null
+  configVersion: number
+  config: Record<string, unknown>
+  failurePolicy: ActionFailurePolicy
+}
+
 export interface FlowNodeDef {
   id: string
   name: string
@@ -44,6 +58,7 @@ export interface FlowNodeDef {
   mode?: ApproveMode
   approvers?: ApproverRule[]
   branches?: ConditionBranch[]
+  actions?: ActionStep[] | null
   next?: string | null
   emptyApproverPolicy?: EmptyApproverPolicy
   /** 审批节点：驳回时可退回到之前的节点或发起人，默认 true */

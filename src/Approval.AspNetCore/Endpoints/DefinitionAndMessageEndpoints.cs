@@ -44,7 +44,7 @@ internal static class DefinitionEndpoints
         group.MapPost("/definitions/{key}/select-version", (string key, SelectDefinitionVersionRequest request, ApprovalDefinitionService d, CancellationToken ct) =>
             d.SelectVersionAsync(key, request.DefinitionId, request.ExpectedRevision, request.ChangeNote, ct));
         // 设计器元数据：审批人类型、通知接收人类型、渠道、模板变量（不含敏感配置，所有登录用户可读）
-        group.MapGet("/meta", (ApprovalDefinitionService d) => d.Metadata);
+        group.MapGet("/meta", (ApprovalDefinitionService d, CancellationToken ct) => d.GetMetadataAsync(ct));
 
         // 流程标识与名称（列表的流程筛选），所有登录用户可读
         group.MapGet("/flows", (ApprovalDefinitionService d, CancellationToken ct) => d.ListFlowsAsync(ct));

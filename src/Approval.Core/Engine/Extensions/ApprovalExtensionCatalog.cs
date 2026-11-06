@@ -12,11 +12,13 @@ internal sealed class ApprovalExtensionCatalog
     private readonly Lazy<Dictionary<string, ApproverTypeDescriptor>> _approverDescriptors;
     private readonly Lazy<IReadOnlyList<ChannelInfo>> _channelDescriptors;
     private readonly Lazy<HashSet<string>> _channelNames;
+    private readonly Lazy<Dictionary<string, IApprovalActionHandler>> _actions;
 
     public ApprovalExtensionCatalog(
         Func<IEnumerable<IApproverResolver>> resolvers,
         Func<IEnumerable<IApprovalBusinessHandler>> businessHandlers,
-        Func<IEnumerable<ChannelInfo>> channels)
+        Func<IEnumerable<ChannelInfo>> channels,
+        Func<IEnumerable<IApprovalActionHandler>> actions)
     {
         _resolvers = new(() => LastByKey(resolvers(), r => r.Type));
         _businessHandlers = new(() => LastByKey(businessHandlers(), h => h.BusinessType));
@@ -29,6 +31,17 @@ internal sealed class ApprovalExtensionCatalog
             .. Channels.Select(pair => new ChannelInfo(pair.Key, pair.Value.DisplayName))
         ]);
         _channelNames = new(() => Channels.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase));
+        _actions = new(() =>
+        {
+            var registered = new Dictionary<string, IApprovalActionHandler>(StringComparer.OrdinalIgnoreCase);
+            foreach (var action in actions())
+            {
+                var type = action.Descriptor.Type;
+                if (!ApprovalActionValidation.IsId(type) || !registered.TryAdd(type, action))
+                    throw new InvalidOperationException($"动作类型 '{type}' 无效或已被注册");
+            }
+            return registered;
+        });
     }
 
     public IReadOnlyDictionary<string, IApproverResolver> Resolvers => _resolvers.Value;
@@ -37,6 +50,7 @@ internal sealed class ApprovalExtensionCatalog
     public IReadOnlyDictionary<string, ApproverTypeDescriptor> ApproverDescriptors => _approverDescriptors.Value;
     public IReadOnlyList<ChannelInfo> ChannelDescriptors => _channelDescriptors.Value;
     public IReadOnlySet<string> ChannelNames => _channelNames.Value;
+    internal IReadOnlyDictionary<string, IApprovalActionHandler> Actions => _actions.Value;
 
     private static Dictionary<string, T> LastByKey<T>(IEnumerable<T> registrations, Func<T, string> key)
     {

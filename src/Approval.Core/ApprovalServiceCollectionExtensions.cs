@@ -83,7 +83,8 @@ public static class ApprovalServiceCollectionExtensions
         services.AddSingleton<IApproverResolver, FormFieldApproverResolver>();
         services.AddSingleton<IApproverResolver, InitiatorApproverResolver>();
         services.AddScoped(sp => new ApprovalExtensionCatalog(
-            () => sp.GetServices<IApproverResolver>(), () => sp.GetServices<IApprovalBusinessHandler>(), () => options.NotificationTargets));
+            () => sp.GetServices<IApproverResolver>(), () => sp.GetServices<IApprovalBusinessHandler>(), () => options.NotificationTargets,
+            () => sp.GetServices<IApprovalActionHandler>()));
         services.AddScoped(sp => new ApprovalEngine(
             sp.GetRequiredService<ApprovalDbContextAccessor>(), sp.GetRequiredService<IApprovalIdentityProvider>(),
             sp.GetRequiredService<ApprovalExtensionCatalog>(), sp.GetRequiredService<IConditionEvaluator>(),
@@ -97,7 +98,7 @@ public static class ApprovalServiceCollectionExtensions
             sp.GetRequiredService<IConditionEvaluator>(), sp.GetService<IApprovalUserDirectory>(), sp.GetService<IApprovalUserStatusProvider>()));
         services.AddScoped(sp => new ApprovalDefinitionService(
             sp.GetRequiredService<ApprovalDbContextAccessor>(), sp.GetRequiredService<ApprovalExtensionCatalog>(),
-            sp.GetRequiredService<TimeProvider>(), sp.GetService<IApprovalDefinitionExtension>()));
+            sp.GetRequiredService<TimeProvider>(), options, sp.GetService<IApprovalDefinitionExtension>()));
     }
 
     private static void RegisterQuery(IServiceCollection services)
@@ -115,7 +116,8 @@ public static class ApprovalServiceCollectionExtensions
             sp.GetRequiredService<ApprovalDbContextAccessor>(),
             sp.GetRequiredService<ApprovalOptions>(), sp.GetRequiredService<TimeProvider>(), sp.GetRequiredService<ILogger<ApprovalOutboxService>>(),
             sp.GetRequiredService<IApprovalScopeFactory>(), sp.GetRequiredService<ApprovalOutboxSignal>(),
-            options.Outbox.EnableDispatcher ? sp.GetRequiredService<IApprovalEventHandler>() : null));
+            options.Outbox.EnableDispatcher ? sp.GetRequiredService<IApprovalEventHandler>() : null,
+            sp.GetRequiredService<ApprovalExtensionCatalog>()));
         services.AddSingleton<Approval.Core.Diagnostics.ApprovalBackgroundState>();
         services.AddSingleton<ApprovalBackgroundRunner>();
         // 后台任务：注册为单例以便宿主 / 测试直接调用 DispatchOnceAsync、ScanOnceAsync
@@ -133,6 +135,51 @@ public static class ApprovalServiceCollectionExtensions
 
 public sealed class ApprovalBuilder(IServiceCollection services)
 {
+    /// <summary>启用复用站内信和现有 Outbox 通知渠道的显式通知动作。</summary>
+    public ApprovalBuilder AddNotificationActions() => AddActionHandler<Actions.NotificationActionHandler>();
+
+    /// <summary>注册固定的参数化 SQL 查询。工厂必须返回新的独立连接，并使用仅有读取权限的数据库身份。</summary>
+    public ApprovalBuilder AddSqlActionQuery(ApprovalSqlActionQuery query, Func<IServiceProvider, System.Data.Common.DbConnection> connectionFactory)
+    {
+        if (!Engine.Extensions.ApprovalActionValidation.IsId(query.DataSource) ||
+            !Engine.Extensions.ApprovalActionValidation.IsId(query.QueryId) || string.IsNullOrWhiteSpace(query.CommandText) ||
+            query.MaxRows is < 1 or > 500 || query.TimeoutSeconds is < 1 or > 15 || query.Parameters.Count > 32)
+            throw new ArgumentException("SQL 查询注册无效", nameof(query));
+        Services.AddSingleton(new Actions.SqlActionRegistration(query with
+        {
+            Parameters = query.Parameters.ToDictionary(p => p.Key, p => p.Value, StringComparer.Ordinal)
+        }, connectionFactory));
+        return AddActionHandler<Actions.SqlActionHandler>();
+    }
+
+    /// <summary>启用 HTTP 动作，允许流程配置引用宿主登记的精确 HTTPS 目标。</summary>
+    public ApprovalBuilder AddHttpActions(params ApprovalHttpActionEndpoint[] endpoints)
+    {
+        foreach (var endpoint in endpoints)
+        {
+            if (!Engine.Extensions.ApprovalActionValidation.IsId(endpoint.Name) || !Actions.PublicHttpTransport.IsAllowedAddress(endpoint.Address))
+                throw new ArgumentException("HTTP 动作目标必须为带有效标识的公开 HTTPS URL", nameof(endpoints));
+            Services.AddSingleton(endpoint with { Methods = endpoint.Methods.ToHashSet(StringComparer.Ordinal) });
+        }
+        Services.AddHttpClient(Actions.HttpActionHandler.ClientName)
+            .ConfigurePrimaryHttpMessageHandler(Actions.PublicHttpTransport.CreateHandler).RemoveAllLoggers();
+        return AddActionHandler<Actions.HttpActionHandler>();
+    }
+
+    /// <summary>注册可在正式运行和预演中执行的受限 JavaScript 与 Mapping 动作。</summary>
+    public ApprovalBuilder AddCalculationActions()
+    {
+        AddActionHandler<Actions.JavaScriptActionHandler>();
+        return AddActionHandler<Actions.MappingActionHandler>();
+    }
+
+    /// <summary>注册 Scoped 动作处理器。同一实现重复注册时复用，多个实现声明同一类型标识时拒绝。</summary>
+    public ApprovalBuilder AddActionHandler<T>() where T : class, IApprovalActionHandler
+    {
+        Services.TryAddEnumerable(ServiceDescriptor.Scoped<IApprovalActionHandler, T>());
+        return this;
+    }
+
     public IServiceCollection Services { get; } = services;
 
     /// <summary>注册宿主的用户/角色提供者（必需）。</summary>

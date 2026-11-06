@@ -92,6 +92,11 @@ flowSchema["$schema"] = "https://json-schema.org/draft/2020-12/schema";
 flowSchema["$id"] = "urn:approval:flow:1";
 flowSchema["properties"]!["schemaVersion"] = new JsonObject { ["type"] = "integer", ["const"] = 1 };
 flowSchema["properties"]!["form"] = new JsonObject { ["anyOf"] = new JsonArray(json.GetJsonSchemaAsNode(typeof(FormSchema)), new JsonObject { ["type"] = "null" }) };
+var actionSchema = flowSchema["properties"]!["nodes"]!["additionalProperties"]!["properties"]!["actions"]!;
+actionSchema["minItems"] = 1;
+actionSchema["maxItems"] = 20;
+actionSchema["items"]!["type"] = "object";
+actionSchema["items"]!["properties"]!["config"] = new JsonObject { ["type"] = "object" };
 await WriteJsonAsync("flow.schema.json", flowSchema);
 var packageSchema = new JsonSerializerOptions(json) { RespectRequiredConstructorParameters = true, NumberHandling = JsonNumberHandling.Strict }
     .GetJsonSchemaAsNode(typeof(DefinitionTransferPackage));

@@ -26,10 +26,12 @@ export function createNodeData(type: NodeType): FlowNodeData {
     Condition: { name: '条件分支', approvers: [], notifications: [] },
     Parallel: { name: '并行分支', approvers: [], notifications: [] },
     Join: { name: '合并', approvers: [], notifications: [] },
+    Action: { name: '业务动作', approvers: [], notifications: [] },
     End: { name: '结束', approvers: [], notifications: [] },
   }
   return {
     type,
+    ...(type === 'Action' ? { actions: [] } : {}),
     mode: 'Any',
     emptyApproverPolicy: 'Error',
     allowReturn: true,

@@ -79,7 +79,7 @@ public static class NotificationDefaults
     /// <summary>各类节点允许配置的通知事件；流程级规则允许全部事件（节点事件对所有审批节点生效）。</summary>
     public static IReadOnlyList<NotifyEvent> AllowedEvents(NodeType? nodeType) => nodeType switch
     {
-        null or NodeType.Approval => Enum.GetValues<NotifyEvent>(),
+        null or NodeType.Approval => Enum.GetValues<NotifyEvent>().Where(e => e != NotifyEvent.Action).ToArray(),
         NodeType.Cc => [NotifyEvent.Enter],
         NodeType.End => [NotifyEvent.Completed],
         _ => []

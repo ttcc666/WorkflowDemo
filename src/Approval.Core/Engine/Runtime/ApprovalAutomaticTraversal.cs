@@ -29,6 +29,7 @@ internal sealed class ApprovalAutomaticTraversal(
                 case NodeType.Start:
                 case NodeType.Cc:
                 case NodeType.Approval:
+                case NodeType.Action:
                     nodeId = node.Next!;
                     break;
                 case NodeType.Condition:
@@ -56,11 +57,11 @@ internal sealed class ApprovalAutomaticTraversal(
     }
 
     // 输入值由调用方提供，以便正式执行始终使用当前实例快照。
-    internal Func<IReadOnlyDictionary<string, object?>> Form { get; init; } = () => new Dictionary<string, object?>();
+    internal Func<FlowNode, IReadOnlyDictionary<string, object?>> Form { get; init; } = _ => new Dictionary<string, object?>();
 
     private string SelectBranch(FlowNode node)
     {
-        var form = Form();
+        var form = Form(node);
         foreach (var branch in node.Branches.OrderBy(b => string.IsNullOrWhiteSpace(b.Expression)).ThenBy(b => b.Priority))
         {
             var match = string.IsNullOrWhiteSpace(branch.Expression) || evaluator.Evaluate(branch.Expression, form);

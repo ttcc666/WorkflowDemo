@@ -50,6 +50,8 @@ const msg = (r: unknown) => r as OutboxMessage
       <template #header>
         <div class="outbox__header">
           <span>投递记录（Outbox）</span>
+          <el-input v-if="outbox.filters.instanceId" v-model="outbox.filters.instanceId" size="small" clearable
+            aria-label="实例 ID" @change="outbox.search" />
           <el-radio-group v-model="outbox.filters.status" size="small" @change="outbox.search">
             <el-radio-button value="">全部</el-radio-button>
             <el-radio-button v-for="(l, s) in outboxStatusLabels" :key="s" :value="s">{{ l.text }}</el-radio-button>
@@ -58,6 +60,8 @@ const msg = (r: unknown) => r as OutboxMessage
       </template>
       <el-table :data="outbox.items.value" row-key="id" empty-text="暂无记录" size="small">
         <el-table-column prop="target" label="渠道 / 事件" width="110" />
+        <el-table-column prop="id" label="投递 ID" width="140" show-overflow-tooltip />
+        <el-table-column prop="nodeId" label="节点" width="110" show-overflow-tooltip />
         <el-table-column prop="description" label="说明" min-width="220" show-overflow-tooltip />
         <el-table-column label="状态" width="90">
           <template #default="{ row }">

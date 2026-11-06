@@ -1,6 +1,65 @@
 {
   "components": {
     "schemas": {
+      "ActionExecutionMode": {
+        "enum": [
+          "Sync",
+          "Async"
+        ]
+      },
+      "ActionFailurePolicy": {
+        "enum": [
+          "Fail",
+          "Continue",
+          "Retry"
+        ]
+      },
+      "ActionStep": {
+        "additionalProperties": false,
+        "properties": {
+          "config": {
+            "$ref": "#/components/schemas/JsonElement"
+          },
+          "configVersion": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "failurePolicy": {
+            "$ref": "#/components/schemas/ActionFailurePolicy"
+          },
+          "id": {
+            "type": "string"
+          },
+          "mode": {
+            "$ref": "#/components/schemas/ActionExecutionMode"
+          },
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "outputKey": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "config"
+        ],
+        "type": "object"
+      },
       "AddSignMode": {
         "enum": [
           "Before",
@@ -59,8 +118,86 @@
           "Terminate",
           "Reassign",
           "FormEdit",
-          "NodeEntered"
+          "NodeEntered",
+          "ActionExecuted"
         ]
+      },
+      "ApprovalActionDescriptor": {
+        "properties": {
+          "allowsContinue": {
+            "default": false,
+            "type": "boolean"
+          },
+          "configSchema": {},
+          "configVersion": {
+            "default": 1,
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "description": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "supportedModes": {
+            "items": {
+              "$ref": "#/components/schemas/ActionExecutionMode"
+            },
+            "type": "array"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "displayName",
+          "description",
+          "supportedModes"
+        ],
+        "type": "object"
+      },
+      "ApprovalActionPreview": {
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "output": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/JsonElement"
+              }
+            ]
+          },
+          "reason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "status": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "status",
+          "output",
+          "reason"
+        ],
+        "type": "object"
       },
       "ApprovalDefinitionAudit": {
         "properties": {
@@ -743,6 +880,15 @@
       },
       "ApprovalMetadata": {
         "properties": {
+          "actions": {
+            "items": {
+              "$ref": "#/components/schemas/ApprovalActionDescriptor"
+            },
+            "type": [
+              "null",
+              "array"
+            ]
+          },
           "approverTypes": {
             "items": {
               "$ref": "#/components/schemas/ApproverTypeDescriptor"
@@ -1077,6 +1223,15 @@
       },
       "ApprovalSimulationStep": {
         "properties": {
+          "actions": {
+            "items": {
+              "$ref": "#/components/schemas/ApprovalActionPreview"
+            },
+            "type": [
+              "null",
+              "array"
+            ]
+          },
           "assignments": {
             "items": {
               "$ref": "#/components/schemas/ApprovalSimulationAssignment"
@@ -2308,6 +2463,15 @@
       "FlowNode": {
         "additionalProperties": false,
         "properties": {
+          "actions": {
+            "items": {
+              "$ref": "#/components/schemas/ActionStep"
+            },
+            "type": [
+              "null",
+              "array"
+            ]
+          },
           "allowAddSign": {
             "type": "boolean"
           },
@@ -2887,7 +3051,8 @@
           "Condition",
           "Parallel",
           "Join",
-          "End"
+          "End",
+          "Action"
         ]
       },
       "NotificationRule": {
@@ -2934,7 +3099,8 @@
           "Timeout",
           "Completed",
           "Returned",
-          "Resubmitted"
+          "Resubmitted",
+          "Action"
         ]
       },
       "OutboxStatus": {

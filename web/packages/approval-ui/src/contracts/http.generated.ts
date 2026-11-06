@@ -6992,6 +6992,21 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /** @enum {unknown} */
+        ActionExecutionMode: "Sync" | "Async";
+        /** @enum {unknown} */
+        ActionFailurePolicy: "Fail" | "Continue" | "Retry";
+        ActionStep: {
+            config: components["schemas"]["JsonElement"];
+            /** Format: int32 */
+            configVersion?: number | string;
+            failurePolicy?: components["schemas"]["ActionFailurePolicy"];
+            id: string;
+            mode?: components["schemas"]["ActionExecutionMode"];
+            name?: null | string;
+            outputKey?: null | string;
+            type: string;
+        };
+        /** @enum {unknown} */
         AddSignMode: "Before" | "After" | "Parallel";
         AddSignRequest: {
             comment: null | string;
@@ -7001,7 +7016,28 @@ export interface components {
         /** @enum {unknown} */
         ApprovalAccessLevel: "None" | "Participant" | "Full";
         /** @enum {unknown} */
-        ApprovalAction: "Submit" | "Approve" | "Reject" | "Withdraw" | "Transfer" | "AutoApprove" | "Cc" | "Complete" | "Remind" | "TimeoutApprove" | "TimeoutReject" | "Return" | "AddSign" | "Resubmit" | "Terminate" | "Reassign" | "FormEdit" | "NodeEntered";
+        ApprovalAction: "Submit" | "Approve" | "Reject" | "Withdraw" | "Transfer" | "AutoApprove" | "Cc" | "Complete" | "Remind" | "TimeoutApprove" | "TimeoutReject" | "Return" | "AddSign" | "Resubmit" | "Terminate" | "Reassign" | "FormEdit" | "NodeEntered" | "ActionExecuted";
+        ApprovalActionDescriptor: {
+            /** @default false */
+            allowsContinue: boolean;
+            configSchema?: unknown;
+            /**
+             * Format: int32
+             * @default 1
+             */
+            configVersion: number | string;
+            description: string;
+            displayName: string;
+            supportedModes: components["schemas"]["ActionExecutionMode"][];
+            type: string;
+        };
+        ApprovalActionPreview: {
+            id: string;
+            output: null | components["schemas"]["JsonElement"];
+            reason: null | string;
+            status: string;
+            type: string;
+        };
         ApprovalDefinitionAudit: {
             action?: components["schemas"]["DefinitionAuditAction"];
             actorId: string;
@@ -7176,6 +7212,7 @@ export interface components {
             userId: string;
         };
         ApprovalMetadata: {
+            actions?: null | components["schemas"]["ApprovalActionDescriptor"][];
             approverTypes: components["schemas"]["ApproverTypeDescriptor"][];
             channels: components["schemas"]["ChannelInfo"][];
             defaultTemplates: {
@@ -7252,6 +7289,7 @@ export interface components {
             warnings: string[];
         };
         ApprovalSimulationStep: {
+            actions?: null | components["schemas"]["ApprovalActionPreview"][];
             assignments?: components["schemas"]["ApprovalSimulationAssignment"][];
             blockReason: null | string;
             evaluations: components["schemas"]["ApprovalSimulationEvaluation"][];
@@ -7561,6 +7599,7 @@ export interface components {
             startNodeId?: string;
         };
         FlowNode: {
+            actions?: null | components["schemas"]["ActionStep"][];
             allowAddSign?: boolean;
             allowReturn?: boolean;
             allowTransfer?: boolean;
@@ -7694,7 +7733,7 @@ export interface components {
             overdue: number | string;
         };
         /** @enum {unknown} */
-        NodeType: "Start" | "Approval" | "Cc" | "Condition" | "Parallel" | "Join" | "End";
+        NodeType: "Start" | "Approval" | "Cc" | "Condition" | "Parallel" | "Join" | "End" | "Action";
         NotificationRule: {
             channels?: string[];
             content?: null | string;
@@ -7703,7 +7742,7 @@ export interface components {
             title?: null | string;
         };
         /** @enum {unknown} */
-        NotifyEvent: "Enter" | "Approved" | "Rejected" | "Transferred" | "Timeout" | "Completed" | "Returned" | "Resubmitted";
+        NotifyEvent: "Enter" | "Approved" | "Rejected" | "Transferred" | "Timeout" | "Completed" | "Returned" | "Resubmitted" | "Action";
         /** @enum {unknown} */
         OutboxStatus: "Pending" | "Succeeded" | "Failed";
         PagedResultOfApprovalDefinitionAudit: {

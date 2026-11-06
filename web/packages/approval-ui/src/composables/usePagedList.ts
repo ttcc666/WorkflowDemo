@@ -14,13 +14,14 @@ export interface ListFilters {
   businessType?: string
   businessKey?: string
   initiatorId?: string
+  instanceId?: string
   approverId?: string
   sort?: string
   unreadOnly?: boolean
   overdueOnly: boolean
 }
 
-export const emptyFilters = (): ListFilters => ({ keyword: '', status: '', definitionKey: '', from: '', to: '', overdueOnly: false, businessType: '', businessKey: '', initiatorId: '', approverId: '', sort: '', unreadOnly: false })
+export const emptyFilters = (): ListFilters => ({ keyword: '', status: '', definitionKey: '', from: '', to: '', overdueOnly: false, businessType: '', businessKey: '', initiatorId: '', instanceId: '', approverId: '', sort: '', unreadOnly: false })
 
 const filterKeys = Object.keys(emptyFilters()) as (keyof ListFilters)[]
 
@@ -45,6 +46,7 @@ export function toListQuery(filters: ListFilters, page: number, pageSize: number
     businessType: filters.businessType?.trim() || undefined,
     businessKey: filters.businessKey?.trim() || undefined,
     initiatorId: filters.initiatorId?.trim() || undefined,
+    instanceId: filters.instanceId?.trim() || undefined,
     approverId: filters.approverId?.trim() || undefined,
     sort: filters.sort || undefined,
     unreadOnly: filters.unreadOnly || undefined,

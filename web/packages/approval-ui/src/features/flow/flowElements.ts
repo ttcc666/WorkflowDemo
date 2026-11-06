@@ -1,5 +1,5 @@
 import type { Edge, Node } from '@vue-flow/core'
-import type { NodeType, ApproveMode, ApproverRule, EmptyApproverPolicy, NotificationRule, TimeoutPolicy, FieldAccess } from '@ui/contracts/flow'
+import type { ActionStep, NodeType, ApproveMode, ApproverRule, EmptyApproverPolicy, NotificationRule, TimeoutPolicy, FieldAccess } from '@ui/contracts/flow'
 
 /** 节点在流程实例中的状态（只读展示时使用） */
 export type NodeRunStatus = 'done' | 'active' | 'rejected' | 'skipped'
@@ -9,6 +9,7 @@ export interface FlowNodeData {
   name: string
   mode: ApproveMode
   approvers: ApproverRule[]
+  actions?: ActionStep[]
   emptyApproverPolicy: EmptyApproverPolicy
   allowReturn: boolean
   allowAddSign: boolean

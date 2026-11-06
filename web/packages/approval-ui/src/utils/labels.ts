@@ -39,6 +39,7 @@ export const taskKindLabels: Record<TaskKind, string> = {
 export const actionLabels: Record<ApprovalAction, string> = {
   Submit: '提交申请',
   NodeEntered: '进入节点',
+  ActionExecuted: '执行动作',
   Approve: '同意',
   Reject: '驳回',
   Withdraw: '撤回',

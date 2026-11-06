@@ -21,6 +21,7 @@ import {
 import ApprovalActions from '@ui/features/approval/ApprovalActions.vue'
 import ApprovalSummary from '@ui/features/approval/ApprovalSummary.vue'
 import ApprovalTimeline from '@ui/features/approval/ApprovalTimeline.vue'
+import ActionExecutionList from '@ui/features/approval/ActionExecutionList.vue'
 import ReassignDialog from '@ui/features/approval/ReassignDialog.vue'
 import { businessPanelOf } from '@ui/features/approval/businessPanels'
 import { useApprovalDetail } from '@ui/features/approval/useApprovalDetail'
@@ -198,6 +199,7 @@ const onReassign = (task: ApprovalTask, to: string, reason: string) =>
         </el-col>
         <el-col :xs="24" :sm="24" :md="10" class="detail-col">
           <CarbonCopyHistory :instance-id="instance.id" />
+          <ActionExecutionList :logs="instance.logs" :instance-id="instance.id" />
           <el-card shadow="never" header="审批轨迹">
             <ApprovalTimeline :logs="instance.logs" :tasks="instance.tasks" :form="formSchema" :can-reassign="canReassign"
               @reassign="openReassign" />

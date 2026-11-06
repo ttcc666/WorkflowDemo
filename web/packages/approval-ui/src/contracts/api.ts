@@ -39,7 +39,8 @@ export type ChannelMeta = ResponseShape<Schemas['ChannelInfo']>
 export type TemplateVariableMeta = ResponseShape<Schemas['TemplateVariableInfo']>
 export type ApproverValueKind = ResponseShape<Schemas['ApproverValueKind']>
 export type ApproverTypeMeta = ResponseShape<Schemas['ApproverTypeDescriptor']>
-export type ApprovalMeta = ResponseShape<Schemas['ApprovalMetadata']>
+export type ApprovalActionMeta = ResponseShape<Schemas['ApprovalActionDescriptor']>
+export type ApprovalMeta = Omit<ResponseShape<Schemas['ApprovalMetadata']>, 'actions'> & { actions?: ApprovalActionMeta[] | null }
 export type ApprovalMessage = ResponseShape<Schemas['ApprovalMessageResponse']>
 export type OutboxStatus = ResponseShape<Schemas['OutboxStatus']>
 export type OutboxMessage = ResponseShape<Schemas['ApprovalOutboxMessageResponse']>
@@ -86,4 +87,7 @@ export type CarbonCopyItem = Omit<ResponseShape<Schemas['CarbonCopyItem']>, 'sta
 
 export type CarbonCopyRecipients = ResponseShape<Schemas['CarbonCopyRecipients']>
 
-export type ApprovalSimulationResult = ResponseShape<Schemas['ApprovalSimulationResult']>
+type ApprovalSimulationStep = Omit<ResponseShape<Schemas['ApprovalSimulationStep']>, 'actions'> & {
+  actions?: ResponseShape<Schemas['ApprovalActionPreview']>[] | null
+}
+export type ApprovalSimulationResult = Omit<ResponseShape<Schemas['ApprovalSimulationResult']>, 'steps'> & { steps: ApprovalSimulationStep[] }

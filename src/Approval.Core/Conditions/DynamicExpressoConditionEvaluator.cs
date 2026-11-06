@@ -1,5 +1,7 @@
 using Approval.Core.Abstractions;
 using DynamicExpresso;
+using System.Dynamic;
+using System.Linq.Expressions;
 
 namespace Approval.Core.Conditions;
 
@@ -13,7 +15,7 @@ public sealed class DynamicExpressoConditionEvaluator : IConditionEvaluator
     {
         try
         {
-            var interpreter = new Interpreter(InterpreterOptions.PrimitiveTypes | InterpreterOptions.SystemKeywords);
+            var interpreter = CreateInterpreter();
             foreach (var identifier in interpreter.DetectIdentifiers(expression).UnknownIdentifiers)
             {
                 var escaped = System.Text.RegularExpressions.Regex.Escape(identifier);
@@ -33,7 +35,7 @@ public sealed class DynamicExpressoConditionEvaluator : IConditionEvaluator
 
     public bool Evaluate(string expression, IReadOnlyDictionary<string, object?> variables)
     {
-        var interpreter = new Interpreter(InterpreterOptions.PrimitiveTypes | InterpreterOptions.SystemKeywords);
+        var interpreter = CreateInterpreter();
         foreach (var (name, value) in variables)
         {
             if (IsIdentifier(name)) interpreter.SetVariable(name, value, value?.GetType() ?? typeof(object));
@@ -54,4 +56,26 @@ public sealed class DynamicExpressoConditionEvaluator : IConditionEvaluator
 
     private static bool IsIdentifier(string name) =>
         name.Length > 0 && (char.IsLetter(name[0]) || name[0] == '_') && name.All(c => char.IsLetterOrDigit(c) || c == '_');
+
+    private static Interpreter CreateInterpreter()
+    {
+        var interpreter = new Interpreter(InterpreterOptions.PrimitiveTypes | InterpreterOptions.SystemKeywords);
+        interpreter.Visitors.Add(new RejectTypeInspection());
+        return interpreter;
+    }
+
+    private sealed class RejectTypeInspection : DynamicExpressionVisitor
+    {
+        protected override Expression VisitDynamic(DynamicExpression node)
+        {
+            if (node.Binder is InvokeMemberBinder { Name: nameof(GetType) }) throw new InvalidOperationException("条件表达式不能读取 CLR 类型");
+            return base.VisitDynamic(node);
+        }
+
+        protected override Expression VisitMethodCall(MethodCallExpression node)
+        {
+            if (node.Method.Name == nameof(GetType)) throw new InvalidOperationException("条件表达式不能读取 CLR 类型");
+            return base.VisitMethodCall(node);
+        }
+    }
 }

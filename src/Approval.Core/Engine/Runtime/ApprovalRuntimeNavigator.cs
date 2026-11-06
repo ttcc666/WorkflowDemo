@@ -8,13 +8,16 @@ namespace Approval.Core.Engine.Runtime;
 
 /// <summary>正式执行的副作用适配；自动导航与只读预演共享。</summary>
 internal sealed class ApprovalRuntimeNavigator(
-    ApprovalAssigneeService assignees, IConditionEvaluator evaluator, ApprovalTaskCoordinator tasks, ApprovalEventWriter events)
+    ApprovalAssigneeService assignees, IConditionEvaluator evaluator, ApprovalTaskCoordinator tasks, ApprovalEventWriter events,
+    ApprovalActionExecutor actions)
 {
     internal Task<FlowNode?> AdvanceAsync(ApprovalOperationContext operation, ApprovalInstance instance, FlowDefinition flow,
         string nodeId, CancellationToken ct, string? sourceNodeId = null, ParallelScope? directBranch = null)
     {
-        var traversal = new ApprovalAutomaticTraversal(flow, operation.StructureOf(flow), evaluator,
-            operation.StateOf(instance).Joins, () => instance.Status == InstanceStatus.Running,
+        var structure = operation.StructureOf(flow);
+        var state = operation.StateOf(instance);
+        var traversal = new ApprovalAutomaticTraversal(flow, structure, evaluator,
+            state.Joins, () => instance.Status == InstanceStatus.Running,
             () =>
             {
                 if (++operation.Steps > ApprovalAutomaticTraversal.MaxAutoSteps)
@@ -22,6 +25,11 @@ internal sealed class ApprovalRuntimeNavigator(
             }, async (node, token) =>
             {
                 events.AddLog(operation, instance, node, ApprovalAction.NodeEntered, ApprovalEngine.SystemOperator, "进入节点");
+                if (node.Type == NodeType.Action)
+                {
+                    await actions.ExecuteAsync(operation, instance, structure, node, token);
+                    return true;
+                }
                 var form = FormData.Parse(instance.FormDataJson);
                 if (node.Type == NodeType.Cc)
                 {
@@ -49,7 +57,7 @@ internal sealed class ApprovalRuntimeNavigator(
                     events.AddLog(operation, instance, node, ApprovalAction.AutoApprove, ApprovalEngine.SystemOperator, "未找到审批人，自动通过");
                 }
                 return true;
-            }) { Form = () => FormData.Parse(instance.FormDataJson) };
+            }) { Form = node => ApprovalActionExecutor.ConditionVariables(flow, structure, state, node, instance.FormDataJson) };
         return traversal.AdvanceAsync(nodeId, ct, sourceNodeId, directBranch);
     }
 }

@@ -15,7 +15,11 @@ public sealed record ApprovalMetadata(
     IReadOnlyList<ApproverTypeDescriptor> RecipientTypes,
     IReadOnlyList<ChannelInfo> Channels,
     IReadOnlyList<TemplateVariableInfo> TemplateVariables,
-    IReadOnlyDictionary<NotifyEvent, string> DefaultTemplates);
+    IReadOnlyDictionary<NotifyEvent, string> DefaultTemplates)
+{
+    /// <summary>面向授权设计人员的动作配置描述。</summary>
+    public IReadOnlyList<ApprovalActionDescriptor>? Actions { get; init; }
+}
 
 /// <summary>流程标识与名称（最新发布版本）。</summary>
 public sealed record FlowSummary(string Key, string Name);
@@ -32,8 +36,10 @@ public sealed partial class ApprovalDefinitionService
     private readonly ApprovalDbContextAccessor _accessor;
     private readonly IReadOnlyDictionary<string, ApproverTypeDescriptor> _approverTypes;
     private readonly IReadOnlyList<ChannelInfo> _channels;
+    private readonly ApprovalExtensionCatalog _extensions;
+    private readonly ApprovalOptions _options;
 
-    internal ApprovalDefinitionService(ApprovalDbContextAccessor accessor, ApprovalExtensionCatalog extensions, TimeProvider clock,
+    internal ApprovalDefinitionService(ApprovalDbContextAccessor accessor, ApprovalExtensionCatalog extensions, TimeProvider clock, ApprovalOptions options,
         IApprovalDefinitionExtension? definitionExtension = null)
     {
         _db = accessor.Context;
@@ -41,6 +47,8 @@ public sealed partial class ApprovalDefinitionService
         _unit = accessor.UnitOfWork;
         _authorization = accessor.Authorization;
         _clock = ApprovalHostServices.Clock(_unit, clock);
+        _extensions = extensions;
+        _options = options;
         _approverTypes = extensions.ApproverDescriptors;
         _channels = extensions.ChannelDescriptors;
         DefinitionExtension = definitionExtension;
@@ -69,6 +77,16 @@ public sealed partial class ApprovalDefinitionService
         return ValidateCore(flow);
     }
 
+    /// <summary>获取元数据，仅对拥有定义设计能力的操作人提供动作描述。</summary>
+    public async Task<ApprovalMetadata> GetMetadataAsync(CancellationToken ct = default)
+    {
+        var metadata = Metadata;
+        if (!await _authorization.CanAsync(ApprovalPermissions.DefinitionDesign, new(), ct: ct)) return metadata;
+        using var callback = _unit.Extension();
+        return metadata with { Actions = _extensions.Actions.Values.Select(h => h.Descriptor)
+            .OrderBy(d => d.Type, StringComparer.Ordinal).ToArray() };
+    }
+
     private IReadOnlyList<string> ValidateCore(FlowDefinition flow)
     {
         using var callback = _unit.Extension();
@@ -77,7 +95,9 @@ public sealed partial class ApprovalDefinitionService
             Extension = DefinitionExtension,
             ApproverTypes = _approverTypes.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase),
             ApproverDescriptors = _approverTypes,
-            Channels = _channels.Select(c => c.Name).ToHashSet(StringComparer.OrdinalIgnoreCase)
+            Channels = _channels.Select(c => c.Name).ToHashSet(StringComparer.OrdinalIgnoreCase),
+            ActionHandlers = () => _extensions.Actions,
+            ActionDispatchEnabled = _options.Outbox.EnableDispatcher
         }).ToList();
         return errors;
     }

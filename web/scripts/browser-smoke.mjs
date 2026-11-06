@@ -60,6 +60,7 @@ try {
   api = launch('dotnet', [join(manifest.ApiRoot, 'bin/Release/net10.0/Certificate.Api.dll'),
     '--urls', apiUrl, '--environment', 'Development', '--ConnectionStrings:Default', 'Data Source=' + database,
     '--Certificate:DemoMode', 'true', '--Approval:EnableBackgroundServices', 'false', '--Approval:BaseUrl', uiUrl,
+    '--Approval:Actions:ErpEndpoint', 'https://erp.example.invalid/orders',
     '--Approval:Files:RootPath', join(output, 'files')], manifest.ApiRoot, 'api', {})
   await ready(apiUrl + '/health/ready', api)
   ui = launch(process.execPath, [join(manifest.UiRoot, 'node_modules/vite/bin/vite.js'), 'preview', '--host', '127.0.0.1', '--port', new URL(uiUrl).port, '--strictPort'], manifest.UiRoot, 'ui', { APPROVAL_SMOKE_API: apiUrl })

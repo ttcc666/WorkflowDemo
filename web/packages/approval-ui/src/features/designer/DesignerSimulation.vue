@@ -12,16 +12,20 @@ const visible = defineModel<boolean>({ required: true })
 const { can } = useApprovalUser()
 const values = ref<FormValues>({})
 const raw = shallowRef('{}')
+const live = shallowRef(false)
 const inputForm = useTemplateRef<InstanceType<typeof DynamicForm>>('inputForm')
 const json = computed(() => JSON.stringify(props.definition))
+const isActionPreview = computed(() => !!props.nodeId && props.definition.nodes[props.nodeId]?.type === 'Action')
+const hasActions = computed(() => Object.values(props.definition.nodes).some(node => node.type === 'Action'))
+const inputJson = computed(() => props.definition.form ? JSON.stringify(values.value) : raw.value)
 watch(() => props.definition, definition => { values.value = initialValues(definition.form ?? { fields: [] }); raw.value = '{}' }, { immediate: true })
 const { result, error, loading, simulate } = useDefinitionSimulation(() => ({
-  definitionJson: json.value, formDataJson: props.definition.form ? JSON.stringify(values.value) : raw.value,
+  definitionJson: json.value, formDataJson: inputJson.value,
   nodeId: props.nodeId, ruleIndex: props.ruleIndex,
 }), () => visible.value)
 const statusLabels: Record<string, string> = { Visited: '已预演', AutoApproved: '按规则自动通过', RequiresDecision: '等待人工决策', Waiting: '等待分支汇聚', Blocked: '处理受阻', Failed: '预演失败' }
 const statusType = (status: string) => ['Blocked', 'Failed'].includes(status) ? 'danger' : status === 'RequiresDecision' ? 'warning' : status === 'Waiting' ? 'info' : 'success'
-const summary = computed(() => !result.value?.isValid ? '发现需要处理的问题' : result.value.isComplete ? '自动路径已到结束节点' : props.nodeId ? '审批人解析完成' : '已完成可确定路径的预演')
+const summary = computed(() => !result.value?.isValid ? '发现需要处理的问题' : result.value.isComplete ? '自动路径已到结束节点' : props.nodeId ? '节点预演完成' : '已完成可确定路径的预演')
 async function execute() {
   if (props.definition.form && !(await inputForm.value?.validate())) {
     error.value = '请检查标红的模拟字段后重新执行'
@@ -29,10 +33,15 @@ async function execute() {
   }
   await simulate()
 }
+watch([inputJson, live, visible], (_, __, onCleanup) => {
+  if (!live.value || !visible.value || !hasActions.value || !can('approval.definition.simulate')) return
+  const timer = window.setTimeout(() => { void execute() }, 450)
+  onCleanup(() => window.clearTimeout(timer))
+})
 </script>
 
 <template>
-  <el-dialog v-model="visible" :title="nodeId ? '审批人解析预览' : '流程模拟'" width="min(1280px, 94vw)" top="4vh" destroy-on-close>
+  <el-dialog v-model="visible" :title="isActionPreview ? '动作预演' : nodeId ? '审批人解析预览' : '流程模拟'" width="min(1280px, 94vw)" top="4vh" destroy-on-close>
     <el-alert type="info" :closable="false" title="使用当前账号预演草稿，不创建真实申请。遇到人工审批后暂停，后续路径尚未验证。" />
     <div class="simulation">
       <FlowViewer class="simulation__graph" height="var(--simulation-graph-height)" :definition-json="json" :simulation-steps="result?.steps" />
@@ -40,7 +49,11 @@ async function execute() {
         <h3>模拟输入</h3>
         <DynamicForm v-if="definition.form" ref="inputForm" v-model="values" :schema="definition.form" />
         <el-input v-else v-model="raw" type="textarea" :rows="8" aria-label="模拟数据 JSON" placeholder="输入模拟数据 JSON" />
-        <div class="simulation__actions"><el-button type="primary" :loading="loading" :disabled="!can('approval.definition.simulate')" @click="execute">执行模拟</el-button><span>修改数据后需重新执行</span></div>
+        <div class="simulation__actions">
+          <el-button type="primary" :loading="loading" :disabled="!can('approval.definition.simulate')" @click="execute">执行模拟</el-button>
+          <el-checkbox v-if="hasActions" v-model="live">输入变化时自动预演</el-checkbox>
+          <span v-else>修改数据后需重新执行</span>
+        </div>
         <el-alert v-if="error" type="error" :closable="false" :title="error" />
         <template v-if="result">
           <el-alert :type="result.isValid ? result.isComplete ? 'success' : 'info' : 'error'" :closable="false" :title="summary" />
@@ -51,6 +64,11 @@ async function execute() {
             <el-timeline-item v-for="(step, index) in result.steps" :key="index" :type="statusType(step.status)">
               <div class="simulation__step-title"><strong>{{ step.nodeName || step.nodeId }}</strong><el-tag :type="statusType(step.status)" size="small">{{ statusLabels[step.status] ?? '未知状态' }}</el-tag></div>
               <p v-if="step.blockReason">{{ step.blockReason }}</p>
+              <details v-for="action in step.actions ?? []" :key="action.id" class="simulation__details">
+                <summary>{{ action.id }} · {{ action.type }} · {{ action.status === 'Skipped' ? '仅预览' : action.status === 'Succeeded' ? '预演成功' : '预演失败' }}</summary>
+                <p v-if="action.reason">{{ action.reason }}</p>
+                <pre v-if="action.output != null">{{ JSON.stringify(action.output, null, 2) }}</pre>
+              </details>
               <p v-for="(evaluation, i) in step.evaluations" :key="i">{{ evaluation.expression || '默认分支' }}：{{ evaluation.matched ? '命中' : '不匹配' }} → {{ evaluation.nextNodeId }}</p>
               <p v-for="assignee in step.resolvedAssignees" :key="`${assignee.kind}:${assignee.value}`">任务 / 抄送对象：{{ assignee.kind }} · {{ assignee.value }}</p>
               <p v-for="assignee in step.excludedAssignees" :key="`${assignee.kind}:${assignee.value}`">已排除：{{ assignee.value }}（自审限制或宿主当前资格不满足）</p>

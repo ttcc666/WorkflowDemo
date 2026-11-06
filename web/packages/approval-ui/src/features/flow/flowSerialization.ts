@@ -20,6 +20,10 @@ export function toFlowElements(definition: FlowDefinition): { nodes: FlowNode[];
       name: def.name,
       mode: def.mode ?? 'Any',
       approvers: (def.approvers ?? []).map((r) => ({ ...r })),
+      ...(def.actions ? { actions: clone(def.actions).map(step => ({
+        ...step, mode: step.mode ?? 'Sync', configVersion: step.configVersion ?? 1,
+        failurePolicy: step.failurePolicy ?? 'Fail',
+      })) } : {}),
       emptyApproverPolicy: def.emptyApproverPolicy ?? 'Error',
       allowReturn: def.allowReturn ?? true,
       allowAddSign: def.allowAddSign ?? true,
@@ -79,6 +83,7 @@ export function toDefinition(nodes: FlowNode[], edges: FlowEdge[], flowNotificat
       if (data.requireQualifiedAssignee) def.requireQualifiedAssignee = true
       if (data.timeout) def.timeout = { ...data.timeout }
     }
+    if (data.type === 'Action') def.actions = clone(data.actions ?? [])
     if (notifyEventsFor(data.type).length && data.notifications.length) def.notifications = clone(data.notifications)
     if (data.type === 'Condition') {
       def.branches = outgoing.map((e) => ({

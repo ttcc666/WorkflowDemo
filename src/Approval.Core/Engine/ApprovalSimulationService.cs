@@ -5,6 +5,7 @@ using Approval.Core.Domain;
 using Approval.Core.Engine.Extensions;
 using Approval.Core.Engine.Runtime;
 using Approval.Core.Persistence;
+using System.Text.Json;
 
 namespace Approval.Core.Engine;
 
@@ -12,12 +13,21 @@ public sealed record ApprovalSimulationRequest(string DefinitionJson, System.Tex
 public sealed record ApprovalSimulationEvaluation(string? Expression, bool Matched, string NextNodeId);
 public sealed record ApprovalSimulationMember(string UserId, string? Name, bool? IsEligible, string? ExclusionReason);
 public sealed record ApprovalSimulationAssignment(Assignee TaskAssignee, IReadOnlyList<ApprovalSimulationMember> Members);
+/// <summary>一个动作步骤的只读预演结果。</summary>
+/// <param name="Id">步骤 ID。</param>
+/// <param name="Type">注册类型。</param>
+/// <param name="Status">预演状态。</param>
+/// <param name="Output">受预算约束的预演结果。</param>
+/// <param name="Reason">跳过或失败的安全说明。</param>
+public sealed record ApprovalActionPreview(string Id, string Type, string Status, JsonElement? Output, string? Reason);
 public sealed record ApprovalSimulationStep(string NodeId, string NodeName, NodeType NodeType, string Status,
     IReadOnlyList<Assignee> ResolvedAssignees, IReadOnlyList<Assignee> ExcludedAssignees,
     IReadOnlyList<ApprovalSimulationEvaluation> Evaluations, string? BlockReason)
 {
     public IReadOnlyList<ApprovalSimulationAssignment> Assignments { get; init; } = [];
     public IReadOnlyList<ApproverResolutionTrace> ResolutionTrace { get; init; } = [];
+    /// <summary>Action 节点中的有序预演步骤。</summary>
+    public IReadOnlyList<ApprovalActionPreview>? Actions { get; init; }
 }
 public sealed record ApprovalSimulationResult(bool IsValid, bool IsComplete, IReadOnlyList<ApprovalSimulationStep> Steps,
     IReadOnlyList<string> Errors, IReadOnlyList<string> Warnings);
@@ -29,6 +39,7 @@ public sealed class ApprovalSimulationService
     private readonly ApprovalDefinitionService _definitions;
     private readonly ApprovalAssigneeService _assignees;
     private readonly IConditionEvaluator _conditions;
+    private readonly ApprovalExtensionCatalog _extensions;
 
     internal ApprovalSimulationService(ApprovalDbContextAccessor accessor, ApprovalDefinitionService definitions,
         ApprovalExtensionCatalog extensions, IApprovalIdentityProvider identity, ApprovalOptions options,
@@ -36,6 +47,7 @@ public sealed class ApprovalSimulationService
     {
         _accessor = accessor;
         _definitions = definitions;
+        _extensions = extensions;
         var unit = accessor.UnitOfWork;
         _conditions = ApprovalHostServices.Conditions(unit, conditions);
         _assignees = new(ApprovalHostServices.Identity(unit, identity), extensions.Resolvers, options,
@@ -68,6 +80,15 @@ public sealed class ApprovalSimulationService
             var formJson = request.FormData.ValueKind == System.Text.Json.JsonValueKind.Undefined ? "{}" : request.FormData.GetRawText();
             if (_definitions.DefinitionExtension is { } extension) formJson = extension.NormalizeSimulationData(flow, formJson);
             var form = FormData.Parse(formJson);
+            using var formDocument = JsonDocument.Parse(formJson);
+            var structure = FlowStructure.Analyze(flow);
+            var state = new ExecutionState();
+            var count = 0;
+            void CountStep()
+            {
+                if (++count > ApprovalAutomaticTraversal.MaxAutoSteps)
+                    throw ApprovalAutomaticTraversal.Invalid("流程自动推进步数超限，请检查流程定义");
+            }
             var context = new ApprovalInstanceContext
             {
                 DefinitionKey = "", BusinessType = "", BusinessKey = "", InitiatorId = _accessor.ActorId,
@@ -85,6 +106,24 @@ public sealed class ApprovalSimulationService
                 var trace = new List<ApproverResolutionTrace>();
                 var status = "Visited";
                 string? reason = null;
+                List<ApprovalActionPreview>? actionPreviews = null;
+                if (node.Type == NodeType.Action)
+                {
+                    actionPreviews = [];
+                    foreach (var step in node.Actions!)
+                    {
+                        CountStep();
+                        var preview = await PreviewActionAsync(context, state, structure, node, step, formDocument.RootElement, token);
+                        actionPreviews.Add(preview);
+                        if (preview.Status == "Failed" && step.FailurePolicy != ActionFailurePolicy.Continue ||
+                            preview.Status == "Skipped" && step.OutputKey is not null)
+                        {
+                            status = "Blocked";
+                            reason = preview.Reason;
+                            break;
+                        }
+                    }
+                }
                 if (node.Type is NodeType.Approval or NodeType.Cc)
                 {
                     var target = node;
@@ -115,27 +154,26 @@ public sealed class ApprovalSimulationService
                     }
                     if (assigned.Any(a => a.Kind == AssigneeKind.Role)) warnings.Add($"节点 {node.Id} 保留角色任务；展示的是任务分配对象，不代表每个角色成员都有资格。考虑角色实际成员时应以宿主当前目录为准。");
                 }
-                steps[^1] = new(node.Id, node.Name, node.Type, status, assigned, excluded, [], reason) { Assignments = assignments, ResolutionTrace = trace };
+                steps[^1] = new(node.Id, node.Name, node.Type, status, assigned, excluded, [], reason)
+                    { Assignments = assignments, ResolutionTrace = trace, Actions = actionPreviews };
                 return status is not ("RequiresDecision" or "Blocked");
             }
             if (request.NodeId is { } nodeId)
             {
                 var node = flow.GetNode(nodeId);
-                if (node.Type is not (NodeType.Approval or NodeType.Cc)) throw ApprovalAutomaticTraversal.Invalid("只能预览审批或抄送节点");
+                if (node.Type is not (NodeType.Approval or NodeType.Cc or NodeType.Action))
+                    throw ApprovalAutomaticTraversal.Invalid("只能预览审批、抄送或动作节点");
                 await Enter(node, ct);
                 return new(steps.All(s => s.Status != "Blocked"), false, steps, [], warnings);
             }
-            var joins = new Dictionary<string, JoinState>();
-            var count = 0;
-            var traversal = new ApprovalAutomaticTraversal(flow, FlowStructure.Analyze(flow), _conditions, joins, () => true,
-                () => { if (++count > ApprovalAutomaticTraversal.MaxAutoSteps) throw ApprovalAutomaticTraversal.Invalid("流程自动推进步数超限，请检查流程定义"); }, Enter,
+            var traversal = new ApprovalAutomaticTraversal(flow, structure, _conditions, state.Joins, () => true, CountStep, Enter,
                 (node, expression, match, next) =>
                 {
                     var last = steps[^1];
                     steps[^1] = last with { Evaluations = [.. last.Evaluations, new(expression, match, next)] };
-                }) { Form = () => form };
+                }) { Form = node => ApprovalActionExecutor.ConditionVariables(flow, structure, state, node, formJson) };
             var end = await traversal.AdvanceAsync(flow.StartNodeId, ct);
-            foreach (var join in joins)
+            foreach (var join in state.Joins)
                 steps.Add(new(join.Key, flow.GetNode(join.Key).Name, NodeType.Join, "Waiting", [], [], [],
                     $"等待并行分支到达汇聚（{join.Value.ArrivedBranches.Count}/{join.Value.Expected}）；人工决策后的路径未模拟"));
             return new(steps.All(s => s.Status != "Blocked"), end is not null, steps, [], warnings.Distinct().ToArray());
@@ -147,5 +185,33 @@ public sealed class ApprovalSimulationService
         }
         catch (System.Text.Json.JsonException)
         { return new(false, false, steps, ["模拟输入不是有效 JSON"], warnings); }
+    }
+
+    private async Task<ApprovalActionPreview> PreviewActionAsync(ApprovalInstanceContext instance, ExecutionState state,
+        FlowStructure structure, FlowNode node, ActionStep step, JsonElement form, CancellationToken ct)
+    {
+        if (_extensions.Actions[step.Type] is not IApprovalActionPreviewHandler handler)
+            return new(step.Id, step.Type, "Skipped", null, "动作未注册只读预演");
+        var context = new ApprovalActionContext(Guid.Empty, instance.DefinitionKey, 0, instance.BusinessType, instance.BusinessKey,
+            instance.InitiatorId, _accessor.ActorId, node.Id, node.Name, step.Id, 0, instance.Title, instance.Status, Guid.Empty,
+            step.ConfigVersion, form, JsonSerializer.SerializeToElement(state.OutputsFor(structure, node.Id)), step.Mode);
+        try
+        {
+            var result = await handler.PreviewAsync(context, step.Config, ct);
+            ct.ThrowIfCancellationRequested();
+            if (result.Succeeded)
+            {
+                var output = result.Output;
+                if (output is { } value && value.GetRawText().Length > ApprovalActionValidation.MaxOutputBytes)
+                    return new(step.Id, step.Type, "Failed", null, "动作预演输出超过预算");
+                if (!handler.ProvidesOutput || step.Mode == ActionExecutionMode.Async)
+                    return new(step.Id, step.Type, "Skipped", output, "仅显示动作计划，未产生正式输出");
+                if (step.OutputKey is { } key)
+                    ApprovalActionExecutor.StoreOutput(state, key, node.Id, output ?? JsonSerializer.SerializeToElement<object?>(null));
+                return new(step.Id, step.Type, "Succeeded", output, null);
+            }
+        }
+        catch (Exception) when (!ct.IsCancellationRequested) { }
+        return new(step.Id, step.Type, "Failed", null, "动作预演失败");
     }
 }

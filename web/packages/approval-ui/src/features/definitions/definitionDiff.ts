@@ -108,7 +108,7 @@ function compareFields(path: string, before: FlowDefinition['form'], after: Flow
 }
 
 const ruleFields = new Set(['mode', 'approvers', 'emptyApproverPolicy', 'allowAddSign', 'allowReturn', 'allowTransfer',
-  'requireComment', 'requireQualifiedAssignee', 'notifications', 'timeout'])
+  'requireComment', 'requireQualifiedAssignee', 'notifications', 'timeout', 'actions'])
 
 export function compareDefinitionVersions(base: ApprovalDefinition, target: ApprovalDefinition) {
   if (!base.isPublished || !target.isPublished || base.key !== target.key || base.id === target.id) {
