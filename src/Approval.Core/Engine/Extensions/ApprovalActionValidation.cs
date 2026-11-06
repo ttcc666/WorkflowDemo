@@ -23,7 +23,7 @@ internal static partial class ApprovalActionValidation
     internal static bool IsId(string? value) => value is not null && Id().IsMatch(value);
 
     internal static void Validate(FlowDefinition flow, List<string> errors,
-        Func<IReadOnlyDictionary<string, IApprovalActionHandler>>? actions, bool dispatchEnabled)
+        Func<IReadOnlyDictionary<string, IApprovalActionHandler>>? actions, bool dispatchEnabled, IReadOnlySet<string>? userFields)
     {
         var outputs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var node in flow.Nodes.Values)
@@ -59,13 +59,14 @@ internal static partial class ApprovalActionValidation
                     (step.Mode != ActionExecutionMode.Sync || !OutputKey().IsMatch(key) || !outputs.Add(key)))
                     errors.Add($"{location} 的输出键无效、重复或用于异步步骤");
 
-                if (FindError(step, actions?.Invoke()) is { } error) errors.Add($"{location}：{error}");
+                if (FindError(step, actions?.Invoke(), userFields) is { } error) errors.Add($"{location}：{error}");
             }
         }
         if (outputs.Count > MaxOutputs) errors.Add($"流程最多配置 {MaxOutputs} 个动作输出");
     }
 
-    internal static string? FindError(ActionStep step, IReadOnlyDictionary<string, IApprovalActionHandler>? handlers)
+    internal static string? FindError(ActionStep step, IReadOnlyDictionary<string, IApprovalActionHandler>? handlers,
+        IReadOnlySet<string>? userFields)
     {
         if (!IsId(step.Type) || handlers is null || !handlers.TryGetValue(step.Type, out var handler))
             return "动作类型未注册";
@@ -88,6 +89,8 @@ internal static partial class ApprovalActionValidation
                 new JsonDocumentOptions { MaxDepth = 24, AllowDuplicateProperties = false });
         }
         catch (JsonException) { return "动作配置包含重复字段或嵌套过深"; }
-        return handler.ValidateConfig(step.ConfigVersion, step.Mode, step.Config).FirstOrDefault();
+        return (handler is Actions.NotificationActionHandler notification
+            ? notification.ValidateConfig(step.ConfigVersion, step.Config, userFields)
+            : handler.ValidateConfig(step.ConfigVersion, step.Mode, step.Config)).FirstOrDefault();
     }
 }

@@ -79,7 +79,7 @@ public sealed partial class ApprovalEngine
             new ApprovalDisplaySettings(options.DisplayTimeZone, options.InstanceUrlFormat, options.GlobalVariables), _clock, logger);
         _tasks = new(_db, _unit, _events, _clock);
         _navigator = new(_assignees, ApprovalHostServices.Conditions(_unit, evaluator), _tasks, _events,
-            new ApprovalActionExecutor(accessor, extensions, _events, _clock, logger));
+            new ApprovalActionExecutor(accessor, extensions, _events, _clock, logger, definitionExtension));
         DefinitionExtension = definitionExtension;
         Lifecycle = lifecycle;
         _assignees.UserStatus = ApprovalHostServices.Status(_unit, userStatus);

@@ -147,9 +147,11 @@ public sealed partial class DatabaseContractTests
         var outbox = await verify.Set<ApprovalOutboxMessage>().ToListAsync();
         var decisionOutbox = outbox.Where(m => !originalOutbox.Contains(m.Id)).ToList();
         Assert.Equal(5, decisionOutbox.Count);
-        foreach (var description in new[] { "Approve", "Complete", "NodeEntered", "Completed", "Decision notice" })
+        foreach (var description in new[] { "Approve", "Complete", "NodeEntered", "Completed", "NotificationRequested" })
             Assert.Single(decisionOutbox, m => m.Description == description);
-        Assert.Single(decisionOutbox, m => m.PayloadJson.Contains("\"eventType\":\"NotificationRequested\"", StringComparison.Ordinal));
+        var notice = Assert.Single(decisionOutbox, m => m.PayloadJson.Contains("\"eventType\":\"NotificationRequested\"", StringComparison.Ordinal));
+        using var noticePayload = System.Text.Json.JsonDocument.Parse(notice.PayloadJson);
+        Assert.Equal("Decision notice", noticePayload.RootElement.GetProperty("notification").GetProperty("title").GetString());
         await using var businessScope = host.CreateAsyncScope();
         var business = await businessScope.ServiceProvider.GetRequiredService<AtomicContractContext>().Set<AtomicHostRecord>().ToListAsync();
         Assert.Single(business, r => r.Value == 10); Assert.Single(business, r => r.Id == winner.Marker);

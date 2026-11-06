@@ -5,7 +5,9 @@ flowchart LR
   E["ApprovalEngine"] --> P["ApprovalEvent"] --> O["审批事务内持久 Outbox"] --> H["IApprovalEventHandler"] --> C["宿主邮件 / 推送 / 企业消息 / 内部通知"]
 ```
 
-`ApprovalOutboxMessage.PayloadJson` 保存当前 `ApprovalEvent` 的 JSON，属性使用 camelCase，枚举以字符串输出。事件包含稳定的 `Id`、实例、定义版本、业务键、操作人、状态和时间，`Id` 与 Outbox 消息 ID 一致。任务创建事件可包含接收人。流程通知规则直接生成 `EventType` 为 `NotificationRequested` 的事件，`Notification` 携带内容及已解析用户，`DeliveryTarget` 是宿主声明的路由提示。
+`ApprovalOutboxMessage.PayloadJson` 保存投递正文。`Host` 目标保存 `ApprovalEvent`，`WorkflowAction` 保存动作执行快照。事件包含稳定的 `Id`、实例、定义版本、业务键、操作人、状态和时间，`Id` 与 Outbox 消息 ID 一致。任务创建事件可包含接收人。通知生成 `EventType` 为 `NotificationRequested` 的事件，`Notification` 携带内容及已解析用户，`DeliveryTarget` 是宿主声明的路由提示。
+
+`GET /api/approval/outbox` 使用 `approval.outbox.read` 返回运维元数据。`GET /api/approval/outbox/{id}/payload` 还要求 `approval.instance.read-sensitive`、查询范围和 `Full` 实例访问级别，成功时返回 `{ "payloadJson": "..." }` 和 `Cache-Control: no-store`。动作快照和已渲染通知可包含参与人看不到的字段。原文只支持能验证实例归属的 `Host` 与 `WorkflowAction`。无实例归属或未知目标只提供列表摘要。
 
 `NotificationTargets` 向设计器提供路由提示名称。宿主实现 `IApprovalEventHandler.HandleAsync(ApprovalEvent, CancellationToken)`，负责将事件路由到自己的邮件、推送或企业消息渠道。
 

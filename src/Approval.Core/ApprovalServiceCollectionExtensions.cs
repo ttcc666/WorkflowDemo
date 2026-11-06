@@ -117,7 +117,7 @@ public static class ApprovalServiceCollectionExtensions
             sp.GetRequiredService<ApprovalOptions>(), sp.GetRequiredService<TimeProvider>(), sp.GetRequiredService<ILogger<ApprovalOutboxService>>(),
             sp.GetRequiredService<IApprovalScopeFactory>(), sp.GetRequiredService<ApprovalOutboxSignal>(),
             options.Outbox.EnableDispatcher ? sp.GetRequiredService<IApprovalEventHandler>() : null,
-            sp.GetRequiredService<ApprovalExtensionCatalog>()));
+            sp.GetRequiredService<ApprovalExtensionCatalog>(), () => sp.GetRequiredService<IApprovalAccessPolicy>()));
         services.AddSingleton<Approval.Core.Diagnostics.ApprovalBackgroundState>();
         services.AddSingleton<ApprovalBackgroundRunner>();
         // 后台任务：注册为单例以便宿主 / 测试直接调用 DispatchOnceAsync、ScanOnceAsync

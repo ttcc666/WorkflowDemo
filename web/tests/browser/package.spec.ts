@@ -494,7 +494,12 @@ test('packaged designer inserts an Action node and publishes calculation, SQL, H
   await expect(page.getByText('动作执行记录', { exact: true })).toBeVisible()
   await expect(page.getByText(/已入队 ·/)).toBeVisible()
   await page.getByRole('link', { name: '查看此实例的 Outbox' }).click()
-  await expect(page.getByRole('row').filter({ hasText: 'Http/step4' })).toBeVisible()
+  const delivery = page.getByRole('row').filter({ hasText: 'Http/step4' })
+  await expect(delivery).toBeVisible()
+  const retried = page.waitForResponse(r => /\/api\/approval\/outbox\/[^/]+\/retry$/.test(new URL(r.url()).pathname))
+  await delivery.getByRole('button', { name: '重试', exact: true }).click()
+  expect((await retried).status()).toBe(204)
+  await expect(page.getByText('已安排重新投递')).toBeVisible()
 })
 
 test('packaged purchase example prepares stock and queues ERP only after approval', async ({ request }) => {
@@ -520,6 +525,7 @@ test('packaged purchase example prepares stock and queues ERP only after approva
   const queued = (await outbox()).items.filter((item: { target: string }) => item.target === 'WorkflowAction')
   expect(queued).toHaveLength(1)
   expect(queued[0]).toMatchObject({ nodeId: 'deliver', description: 'Http/erp', status: 'Pending' })
+  expect(queued[0]).not.toHaveProperty('payloadJson')
   const messages = await json(request, '/api/approval/messages', 'alice')
   expect(messages).toEqual(expect.arrayContaining([expect.objectContaining({
     instanceId, title: '采购审批已完成', content: 'P001 · 金额 58000 · 风险 high',

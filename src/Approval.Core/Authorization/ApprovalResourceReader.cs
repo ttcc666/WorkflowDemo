@@ -18,7 +18,8 @@ internal sealed class ApprovalResourceReader(
         if (resource.TaskId is { } taskId)
             instanceId = (await db.Set<ApprovalTask>().AsNoTracking().SingleOrDefaultAsync(t => t.Id == taskId, ct) ?? throw Missing()).InstanceId;
         if (resource.OutboxId is { } outboxId)
-            instanceId = (await db.Set<ApprovalOutboxMessage>().AsNoTracking().SingleOrDefaultAsync(m => m.Id == outboxId, ct) ?? throw Missing()).InstanceId;
+            instanceId = (await db.Set<ApprovalOutboxMessage>().Where(m => m.Id == outboxId)
+                .Select(m => new { m.InstanceId }).SingleOrDefaultAsync(ct) ?? throw Missing()).InstanceId;
         if (resource.MessageId is { } messageId)
             instanceId = (await db.Set<ApprovalMessage>().AsNoTracking().SingleOrDefaultAsync(m => m.Id == messageId, ct) ?? throw Missing()).InstanceId;
         if (instanceId is { } id)

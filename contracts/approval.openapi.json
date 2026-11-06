@@ -1031,7 +1031,10 @@
             ]
           },
           "payloadJson": {
-            "type": "string"
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "status": {
             "$ref": "#/components/schemas/OutboxStatus"
@@ -1046,7 +1049,6 @@
           "instanceId",
           "nodeId",
           "description",
-          "payloadJson",
           "status",
           "attempts",
           "maxAttempts",
@@ -1055,6 +1057,17 @@
           "createdAt",
           "completedAt",
           "concurrencyStamp"
+        ],
+        "type": "object"
+      },
+      "ApprovalOutboxPayloadResponse": {
+        "properties": {
+          "payloadJson": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "payloadJson"
         ],
         "type": "object"
       },
@@ -10179,6 +10192,106 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PagedResultOfApprovalOutboxMessageResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "410": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Gone"
+          },
+          "503": {
+            "content": {
+              "application/problem\u002Bjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "tags": [
+          "Approval"
+        ]
+      }
+    },
+    "/api/approval/outbox/{id}/payload": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApprovalOutboxPayloadResponse"
                 }
               }
             },

@@ -65,6 +65,7 @@ function appendVariable(name: string) {
             </template>
             可引用表单字段，支持 ==、!=、&gt;、&lt;、&amp;&amp;、||。示例：
             <code v-for="e in examples" :key="e" class="example" @click="emit('update', { expression: e })">{{ e }}</code>
+            <div>含动作的流程可用 <code>workflow.form</code> 访问表单，使用 <code>workflow.outputs</code> 访问当前分支可见的动作输出。</div>
           </div>
         </el-form-item>
         <el-form-item label="优先级（数字越小越先匹配）">

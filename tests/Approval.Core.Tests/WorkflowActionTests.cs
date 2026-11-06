@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Approval.Core.Abstractions;
 using Approval.Core.Definitions;
 using Approval.Core.Domain;
@@ -164,6 +165,68 @@ public sealed class WorkflowActionTests
         flow["nodes"]!["condition"]!["branches"]![0]!["expression"] = "outputs.risk.GetType() != null";
         var failure = await Assert.ThrowsAsync<ApprovalException>(() => host.PublishAsync("reflection", flow.ToJsonString()));
         Assert.Contains("不能读取 CLR 类型", failure.Message);
+    }
+
+    [Fact]
+    public async Task Condition_preserves_colliding_bare_fields_and_can_use_explicit_workflow_paths()
+    {
+        await using var host = CreateHost();
+        var flow = WithCondition("form == 2 && outputs == \"form.amount\" && workflow.form.amount >= 100 && workflow.outputs.review.level == \"high\"");
+        flow["form"] = JsonNode.Parse("""{"fields":[{"key":"form","label":"Form","type":"Number"},{"key":"outputs","label":"Outputs","type":"Text"}]}""");
+        await host.PublishAsync("condition", flow.ToJsonString());
+        var instance = await host.StartAsync("condition", "PO", "alice", new { form = 2, outputs = "form.amount", amount = 125 });
+        Assert.Equal("review", Assert.Single((await host.GetInstanceAsync(instance.Id)).Tasks).NodeId);
+    }
+
+    [Theory]
+    [InlineData("Workflow", "workflow.outputs.review.level == \"high\"", "保留 workflow")]
+    [InlineData("FoRm", "form.amount >= 100", "旧别名 'form'")]
+    [InlineData("form", "(form).amount >= 100", "旧别名 'form'")]
+    [InlineData("OUTPUTS", "outputs.review.level == \"high\"", "旧别名 'outputs'")]
+    public async Task Publish_diagnoses_case_insensitive_namespace_conflicts(string field, string expression, string expected)
+    {
+        await using var host = CreateHost();
+        var flow = WithCondition(expression);
+        flow["form"] = JsonNode.Parse($$"""{"fields":[{"key":"{{field}}","label":"Field","type":"Text"}]}""");
+        var error = await Assert.ThrowsAsync<ApprovalException>(() => host.PublishAsync("condition", flow.ToJsonString()));
+        Assert.Contains(expected, error.Message);
+    }
+
+    [Theory]
+    [InlineData("{\"amount\":125,\"FORM\":2}", "旧别名 'form'")]
+    [InlineData("{\"amount\":125,\"WORKFLOW\":2}", "保留 workflow")]
+    public async Task Schemaless_runtime_detects_conflicts_and_rolls_back_prior_actions(string input, string expected)
+    {
+        await using var host = CreateHost();
+        await host.PublishAsync("condition", Definition);
+        var error = await Assert.ThrowsAsync<ApprovalException>(() => host.StartAsync("condition", "PO", "alice", input));
+        Assert.Contains(expected, error.Message);
+        await host.RunAsync(async sp =>
+        {
+            var db = sp.GetRequiredService<TestDbContext>();
+            Assert.False(await db.Set<TestRecord>().AnyAsync());
+            Assert.False(await db.Set<ApprovalInstance>().AnyAsync());
+        });
+    }
+
+    [Fact]
+    public async Task Action_free_flow_can_use_legacy_fields_named_like_action_namespaces()
+    {
+        await using var host = CreateHost();
+        var flow = WithCondition("form.amount == 2 && outputs == 3 && workflow == 4");
+        var nodes = flow["nodes"]!.AsObject();
+        nodes.Remove("action");
+        nodes["start"]!["next"] = "condition";
+        await host.PublishAsync("condition", flow.ToJsonString());
+        var instance = await host.StartAsync("condition", "PO", "alice", new { form = new { amount = 2 }, outputs = 3, workflow = 4 });
+        Assert.Equal("review", Assert.Single((await host.GetInstanceAsync(instance.Id)).Tasks).NodeId);
+    }
+
+    private static JsonNode WithCondition(string expression)
+    {
+        var flow = JsonNode.Parse(Definition)!;
+        flow["nodes"]!["condition"]!["branches"]![0]!["expression"] = expression;
+        return flow;
     }
 
     private static TestHost CreateHost() => new(build: b => b.AddActionHandler<RiskHandler>().AddActionHandler<RiskHandler>());

@@ -27,7 +27,7 @@ internal sealed class ApprovalRuntimeNavigator(
                 events.AddLog(operation, instance, node, ApprovalAction.NodeEntered, ApprovalEngine.SystemOperator, "进入节点");
                 if (node.Type == NodeType.Action)
                 {
-                    await actions.ExecuteAsync(operation, instance, structure, node, token);
+                    await actions.ExecuteAsync(operation, instance, structure, flow, node, token);
                     return true;
                 }
                 var form = FormData.Parse(instance.FormDataJson);

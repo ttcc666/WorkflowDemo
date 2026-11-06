@@ -56,7 +56,7 @@ internal static class ApprovalEndpointPermissions
             ("GET", "/tasks/{id:guid}/return-targets") => ApprovalPermissions.TaskReturn,
             ("GET", "/messages" or "/messages/unread-count") => ApprovalPermissions.MessageRead,
             ("POST", "/messages/{id:guid}/read" or "/messages/read-all") => ApprovalPermissions.MessageWrite,
-            ("GET", "/outbox") => ApprovalPermissions.OutboxRead,
+            ("GET", "/outbox" or "/outbox/{id:guid}/payload") => ApprovalPermissions.OutboxRead,
             ("POST", "/outbox/{id:guid}/retry") => ApprovalPermissions.OutboxRetry,
             ("GET", "/admin/instances") => ApprovalPermissions.InstanceReadAll,
             ("GET", "/admin/users/{userId}/tasks") => ApprovalPermissions.TaskReassignBulk,
@@ -82,7 +82,7 @@ internal static class ApprovalEndpointPermissions
             _ when path.Contains("/instances/{id:guid}", StringComparison.Ordinal) => "instance",
             "/files/{id:guid}" => "file",
             "/forms/drafts/{id:guid}" => "draft",
-            "/outbox/{id:guid}/retry" => "outbox",
+            "/outbox/{id:guid}/retry" or "/outbox/{id:guid}/payload" => "outbox",
             "/messages/{id:guid}/read" => "message",
             _ => null
         };

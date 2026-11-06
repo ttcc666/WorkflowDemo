@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using System.Dynamic;
 using Approval.Core.Abstractions;
 using Approval.Core.Conditions;
 using Approval.Core.Definitions;
@@ -14,13 +15,13 @@ internal sealed record ApprovalActionRuntime(ApprovalOperationContext Operation,
     ApprovalEventWriter Events, ExecutionState State);
 
 internal sealed class ApprovalActionExecutor(ApprovalDbContextAccessor accessor, ApprovalExtensionCatalog extensions,
-    ApprovalEventWriter events, TimeProvider clock, ILogger<ApprovalEngine> logger)
+    ApprovalEventWriter events, TimeProvider clock, ILogger<ApprovalEngine> logger, IApprovalDefinitionExtension? definitionExtension)
 {
     private static readonly JsonElement EmptyObject = JsonSerializer.SerializeToElement(new { });
     private readonly ApprovalUnitOfWork _unit = accessor.UnitOfWork;
 
     internal async Task ExecuteAsync(ApprovalOperationContext operation, ApprovalInstance instance, FlowStructure structure,
-        FlowNode node, CancellationToken ct)
+        FlowDefinition flow, FlowNode node, CancellationToken ct)
     {
         var state = operation.StateOf(instance);
         using var document = JsonDocument.Parse(instance.FormDataJson);
@@ -36,8 +37,27 @@ internal sealed class ApprovalActionExecutor(ApprovalDbContextAccessor accessor,
                 : Guid.ParseExact(ApprovalCommandHash.Of(instance.Id.ToString("N"), node.Id, step.Id)[..32], "N");
             if (step.Mode == ActionExecutionMode.Async && state.QueuedActions?.Contains(executionId) == true) continue;
             string? configError;
-            using (_unit.Extension()) configError = ApprovalActionValidation.FindError(step, extensions.Actions);
-            if (configError is not null) throw ApprovalAutomaticTraversal.Invalid($"动作 '{node.Id}/{step.Id}' 配置已不可用");
+            Exception? validationFailure = null;
+            try
+            {
+                using var extension = _unit.Extension();
+                var handlers = extensions.Actions;
+                var userFields = ApprovalActionValidation.IsId(step.Type) && handlers.GetValueOrDefault(step.Type) is Actions.NotificationActionHandler
+                    ? definitionExtension?.UserFields(flow) : null;
+                configError = ApprovalActionValidation.FindError(step, handlers, userFields);
+            }
+            catch (Exception ex)
+            {
+                configError = "InvalidActionSnapshot";
+                validationFailure = ex;
+            }
+            ct.ThrowIfCancellationRequested();
+            if (configError is not null)
+            {
+                ApprovalActionDiagnostics.Failure(logger, instance.Id, node.Id, step.Id, executionId, null, step.Type, step.Mode,
+                    "InvalidActionSnapshot", validationFailure);
+                throw ApprovalAutomaticTraversal.Invalid($"动作 '{node.Id}/{step.Id}' 配置已不可用");
+            }
             var context = new ApprovalActionContext(instance.Id, instance.DefinitionKey, instance.DefinitionVersion,
                 instance.BusinessType, instance.BusinessKey, instance.InitiatorId, accessor.ActorId, node.Id, node.Name,
                 step.Id, instance.Round, instance.Title, instance.Status, executionId, step.ConfigVersion,
@@ -56,6 +76,7 @@ internal sealed class ApprovalActionExecutor(ApprovalDbContextAccessor accessor,
             var startedAt = clock.GetUtcNow();
             var timestamp = clock.GetTimestamp();
             string? failure = null;
+            Exception? exception = null;
             var bytes = 0;
             try
             {
@@ -65,19 +86,22 @@ internal sealed class ApprovalActionExecutor(ApprovalDbContextAccessor accessor,
                 else
                     using (_unit.Extension()) result = await handler.ExecuteAsync(context, step.Config, ct);
                 ct.ThrowIfCancellationRequested();
-                if (!result.Succeeded) failure = "Rejected";
+                if (!result.Succeeded) failure = "ActionRejected";
                 else if (step.OutputKey is { } key)
                 {
                     var value = result.Output ?? JsonSerializer.SerializeToElement<object?>(null);
                     bytes = StoreOutput(state, key, node.Id, value);
                 }
             }
-            catch (Exception)
+            catch (Exception ex)
             {
                 ct.ThrowIfCancellationRequested();
                 failure = "ExecutionFailed";
+                exception = ex;
             }
 
+            if (failure is not null)
+                ApprovalActionDiagnostics.Failure(logger, instance.Id, node.Id, step.Id, executionId, null, step.Type, step.Mode, failure, exception);
             var completedAt = clock.GetUtcNow();
             var details = JsonSerializer.Serialize(new
             {
@@ -86,11 +110,7 @@ internal sealed class ApprovalActionExecutor(ApprovalDbContextAccessor accessor,
                 durationMs = clock.GetElapsedTime(timestamp).TotalMilliseconds, outputBytes = bytes
             }, JsonSerializerOptions.Web);
             if (failure is not null && step.FailurePolicy != ActionFailurePolicy.Continue)
-            {
-                logger.LogWarning("审批动作执行失败。InstanceId={InstanceId} NodeId={NodeId} ActionId={ActionId} ExecutionId={ExecutionId} Reason={Reason}",
-                    instance.Id, node.Id, step.Id, executionId, failure);
                 throw new ApprovalException($"动作 '{node.Id}/{step.Id}' 执行失败（{failure}）") { Code = ApprovalErrorCode.InvalidOperation };
-            }
             events.AddLog(operation, instance, ApprovalAction.ActionExecuted, accessor.ActorId, null, node.Id, node.Name, details);
         }
     }
@@ -100,12 +120,18 @@ internal sealed class ApprovalActionExecutor(ApprovalDbContextAccessor accessor,
     {
         var form = FormData.Parse(formJson);
         if (!flow.Nodes.Values.Any(n => n.Type == NodeType.Action)) return form;
+        if (form.ContainsKey(ActionConditionNamespace.Name))
+            throw ApprovalAutomaticTraversal.Invalid("含动作节点的流程保留 workflow 条件命名空间，请重命名同名表单字段");
+        if (ActionConditionNamespace.FindAliasConflict(node, form.ContainsKey) is { } conflict)
+            throw ApprovalAutomaticTraversal.Invalid(conflict);
         var variables = new Dictionary<string, object?>(form, StringComparer.OrdinalIgnoreCase);
-        variables.Remove("form");
-        variables.Remove("outputs");
         using var document = JsonDocument.Parse(formJson);
-        variables.Add("form", FormData.Convert(document.RootElement));
-        variables.Add("outputs", FormData.Convert(JsonSerializer.SerializeToElement(state.OutputsFor(structure, node.Id))));
+        IDictionary<string, object?> workflow = new ExpandoObject();
+        workflow.Add("form", FormData.Convert(document.RootElement));
+        workflow.Add("outputs", FormData.Convert(JsonSerializer.SerializeToElement(state.OutputsFor(structure, node.Id))));
+        variables.Add(ActionConditionNamespace.Name, workflow);
+        variables.TryAdd("form", workflow["form"]);
+        variables.TryAdd("outputs", workflow["outputs"]);
         return variables;
     }
 

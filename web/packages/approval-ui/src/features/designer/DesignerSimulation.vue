@@ -42,7 +42,9 @@ watch([inputJson, live, visible], (_, __, onCleanup) => {
 
 <template>
   <el-dialog v-model="visible" :title="isActionPreview ? '动作预演' : nodeId ? '审批人解析预览' : '流程模拟'" width="min(1280px, 94vw)" top="4vh" destroy-on-close>
-    <el-alert type="info" :closable="false" title="使用当前账号预演草稿，不创建真实申请。遇到人工审批后暂停，后续路径尚未验证。" />
+    <el-alert type="info" :closable="false" :title="isActionPreview
+      ? '从开始节点预演自动路径，累积上游输出，到达目标动作后停止。遇到人工审批时，该分支暂停。'
+      : '使用当前账号预演草稿，不创建真实申请。遇到人工审批后暂停，后续路径尚未验证。'" />
     <div class="simulation">
       <FlowViewer class="simulation__graph" height="var(--simulation-graph-height)" :definition-json="json" :simulation-steps="result?.steps" />
       <section class="simulation__content" aria-label="模拟输入与结果">
@@ -59,7 +61,7 @@ watch([inputJson, live, visible], (_, __, onCleanup) => {
           <el-alert :type="result.isValid ? result.isComplete ? 'success' : 'info' : 'error'" :closable="false" :title="summary" />
           <p v-for="item in result.errors" :key="item">{{ item }}</p>
           <details v-if="result.warnings.length" class="simulation__details"><summary>查看预演范围与提示（{{ result.warnings.length }}）</summary><p v-for="item in result.warnings" :key="item">{{ item }}</p></details>
-          <h3>{{ nodeId ? '解析结果' : '访问路径' }}</h3>
+          <h3>{{ isActionPreview ? '到目标动作的路径' : nodeId ? '解析结果' : '访问路径' }}</h3>
           <el-timeline class="simulation__steps">
             <el-timeline-item v-for="(step, index) in result.steps" :key="index" :type="statusType(step.status)">
               <div class="simulation__step-title"><strong>{{ step.nodeName || step.nodeId }}</strong><el-tag :type="statusType(step.status)" size="small">{{ statusLabels[step.status] ?? '未知状态' }}</el-tag></div>

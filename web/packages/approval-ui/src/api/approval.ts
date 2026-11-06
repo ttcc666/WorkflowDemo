@@ -24,6 +24,7 @@ import type {
   ListQuery,
   MyTaskResult,
   OutboxMessage,
+  OutboxPayload,
   PagedResult,
   ReassignResult,
   ReturnTarget,
@@ -166,6 +167,8 @@ export function createApprovalApi(
 
     outbox: (query: ListQuery = {}, signal?: AbortSignal) =>
       http.get<PagedResult<OutboxMessage>>(api(`/outbox${queryString(query)}`), signal),
+    outboxPayload: (id: string, signal?: AbortSignal) =>
+      http.get<OutboxPayload>(api(`/outbox/${encodeURIComponent(id)}/payload`), signal),
     retryOutbox: (id: string, operationId: string) => http.post(api(`/outbox/${id}/retry`), {}, commandHeaders(operationId)),
 
     // ───── 管理（仅管理员）─────

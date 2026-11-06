@@ -119,7 +119,7 @@ public static partial class FlowDefinitionValidator
                 errors.Add($"节点 '{key}' 的岗位资格要求只能用于人工审批，不能设置自动通过");
         }
 
-        ApprovalActionValidation.Validate(definition, errors, context.ActionHandlers, context.ActionDispatchEnabled);
+        ApprovalActionValidation.Validate(definition, errors, context.ActionHandlers, context.ActionDispatchEnabled, userFields);
         if (errors.Count == 0) CheckReachabilityAndCycles(definition, errors);
         if (errors.Count == 0) errors.AddRange(FlowStructure.Analyze(definition).Errors);
         return errors;

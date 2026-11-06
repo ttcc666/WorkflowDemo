@@ -1,4 +1,5 @@
 using Approval.Core.Definitions;
+using Approval.Core.Persistence;
 using Approval.Core.Templates;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -71,6 +72,7 @@ public static partial class FormSchemaValidator
                 errors.Add($"「{node}」按表单字段 '{rule.Value}' 取人，但表单中没有该人员字段（User / Users）");
         }
 
+        ApprovalFormsBridge.ValidateActionConditionFields(definition, keys, errors);
         if (definition.Settings is { } settings) ValidateSettings(errors, settings, keys, form is not null);
     }
 

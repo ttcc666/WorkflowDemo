@@ -1,5 +1,7 @@
 using Approval.Core.Abstractions;
 using Approval.Core.Authorization;
+using Approval.Core.Conditions;
+using Approval.Core.Definitions;
 using Approval.Core.Domain;
 using Approval.Core.Engine;
 
@@ -40,4 +42,6 @@ internal sealed class ApprovalFormsBridge(ApprovalDbContextAccessor accessor)
     internal static TimeProvider Clock(ApprovalDbContextAccessor accessor, TimeProvider provider) => ApprovalHostServices.Clock(accessor.UnitOfWork, provider);
 
     internal static void RegisterForms(Type draft, Type file) => ApprovalWriteAuthorization.RegisterForms(draft, file);
+    internal static void ValidateActionConditionFields(FlowDefinition definition, IReadOnlySet<string> fields, List<string> errors) =>
+        ActionConditionNamespace.Validate(definition, fields, errors);
 }

@@ -95,6 +95,14 @@ public sealed class ApprovalSimulationService
                 Status = InstanceStatus.Running, FormDataJson = formJson
             };
             if (request.RuleIndex is not null && request.NodeId is null) throw ApprovalAutomaticTraversal.Invalid("规则预览必须指定节点");
+            var targetNode = request.NodeId is { } nodeId ? flow.GetNode(nodeId) : null;
+            if (targetNode is not null && targetNode.Type is not (NodeType.Approval or NodeType.Cc or NodeType.Action))
+                throw ApprovalAutomaticTraversal.Invalid("只能预览审批、抄送或动作节点");
+            var actionTarget = targetNode is { Type: NodeType.Action } ? targetNode : null;
+            if (actionTarget is not null && request.RuleIndex is not null)
+                throw ApprovalAutomaticTraversal.Invalid("动作节点预演不接受规则序号");
+            var reachedTarget = false;
+            var upstreamFailed = false;
             async Task<bool> Enter(FlowNode node, CancellationToken token)
             {
                 token.ThrowIfCancellationRequested();
@@ -120,6 +128,7 @@ public sealed class ApprovalSimulationService
                         {
                             status = "Blocked";
                             reason = preview.Reason;
+                            upstreamFailed = true;
                             break;
                         }
                     }
@@ -156,27 +165,34 @@ public sealed class ApprovalSimulationService
                 }
                 steps[^1] = new(node.Id, node.Name, node.Type, status, assigned, excluded, [], reason)
                     { Assignments = assignments, ResolutionTrace = trace, Actions = actionPreviews };
-                return status is not ("RequiresDecision" or "Blocked");
+                reachedTarget = node.Id == actionTarget?.Id;
+                return !reachedTarget && status is not ("RequiresDecision" or "Blocked");
             }
-            if (request.NodeId is { } nodeId)
+            if (targetNode is not null && actionTarget is null)
             {
-                var node = flow.GetNode(nodeId);
-                if (node.Type is not (NodeType.Approval or NodeType.Cc or NodeType.Action))
-                    throw ApprovalAutomaticTraversal.Invalid("只能预览审批、抄送或动作节点");
-                await Enter(node, ct);
+                await Enter(targetNode, ct);
                 return new(steps.All(s => s.Status != "Blocked"), false, steps, [], warnings);
             }
-            var traversal = new ApprovalAutomaticTraversal(flow, structure, _conditions, state.Joins, () => true, CountStep, Enter,
+            var traversal = new ApprovalAutomaticTraversal(flow, structure, _conditions, state.Joins,
+                () => actionTarget is null || (!reachedTarget && !upstreamFailed), CountStep, Enter,
                 (node, expression, match, next) =>
                 {
                     var last = steps[^1];
                     steps[^1] = last with { Evaluations = [.. last.Evaluations, new(expression, match, next)] };
                 }) { Form = node => ApprovalActionExecutor.ConditionVariables(flow, structure, state, node, formJson) };
             var end = await traversal.AdvanceAsync(flow.StartNodeId, ct);
-            foreach (var join in state.Joins)
-                steps.Add(new(join.Key, flow.GetNode(join.Key).Name, NodeType.Join, "Waiting", [], [], [],
-                    $"等待并行分支到达汇聚（{join.Value.ArrivedBranches.Count}/{join.Value.Expected}）；人工决策后的路径未模拟"));
-            return new(steps.All(s => s.Status != "Blocked"), end is not null, steps, [], warnings.Distinct().ToArray());
+            if (!reachedTarget)
+                foreach (var join in state.Joins)
+                    steps.Add(new(join.Key, flow.GetNode(join.Key).Name, NodeType.Join, "Waiting", [], [], [],
+                        $"等待并行分支到达汇聚（{join.Value.ArrivedBranches.Count}/{join.Value.Expected}）"));
+            if (actionTarget is not null && !reachedTarget)
+            {
+                var blocker = steps.FirstOrDefault(s => s.Status == "Blocked") ??
+                    steps.FirstOrDefault(s => s.Status == "RequiresDecision") ?? steps.FirstOrDefault(s => s.Status == "Waiting");
+                var reason = blocker is null ? "当前条件选择的路径未经过目标动作" : $"未到达目标动作，上游节点 '{blocker.NodeId}'：{blocker.BlockReason}";
+                steps.Add(new(actionTarget.Id, actionTarget.Name, NodeType.Action, "Blocked", [], [], [], reason));
+            }
+            return new(steps.All(s => s.Status != "Blocked"), actionTarget is null && end is not null, steps, [], warnings.Distinct().ToArray());
         }
         catch (ApprovalException ex) when (ex.Code is ApprovalErrorCode.InvalidDefinition or ApprovalErrorCode.InvalidOperation or ApprovalErrorCode.Validation)
         {

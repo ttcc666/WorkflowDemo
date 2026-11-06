@@ -125,6 +125,12 @@ internal static class MessageEndpoints
             return new PagedResult<ApprovalOutboxMessageResponse>(pageResult.Items.Select(ApprovalOutboxMessageResponse.From).ToArray(), pageResult.Total, pageResult.Page, pageResult.PageSize);
         });
 
+        group.MapGet("/outbox/{id:guid}/payload", async (Guid id, HttpContext http, ApprovalOutboxService o, CancellationToken ct) =>
+        {
+            http.Response.Headers.CacheControl = "no-store";
+            return new ApprovalOutboxPayloadResponse(await o.GetPayloadAsync(id, ct));
+        });
+
         group.MapPost("/outbox/{id:guid}/retry", async (Guid id, HttpContext http, ApprovalOutboxService o,
             CancellationToken ct) =>
         {

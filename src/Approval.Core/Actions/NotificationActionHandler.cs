@@ -30,7 +30,9 @@ internal sealed class NotificationActionHandler(IEnumerable<IApproverResolver> r
 
     public bool ProvidesOutput => false;
 
-    public IReadOnlyList<string> ValidateConfig(int version, JsonElement config)
+    public IReadOnlyList<string> ValidateConfig(int version, JsonElement config) => ValidateConfig(version, config, null);
+
+    internal IReadOnlyList<string> ValidateConfig(int version, JsonElement config, IReadOnlySet<string>? userFields)
     {
         try
         {
@@ -44,7 +46,14 @@ internal sealed class NotificationActionHandler(IEnumerable<IApproverResolver> r
                 return ["Notification 接收人、渠道或模板无效"];
             var errors = new List<string>();
             foreach (var recipient in value.Recipients)
-                FlowDefinitionValidator.ValidateRuleValue(errors, "Notification 接收人", recipient, _recipientContext, null);
+            {
+                if ((string.Equals(recipient.Type, "FormField", StringComparison.OrdinalIgnoreCase) ||
+                     _recipientContext.ApproverDescriptors?.GetValueOrDefault(recipient.Type)?.ValueKind == ApproverValueKind.FormUserField) &&
+                    (string.IsNullOrWhiteSpace(recipient.Value) || userFields?.Contains(recipient.Value) != true))
+                    errors.Add($"Notification 接收人引用了无效的人员字段 '{recipient.Value}'，必须选择人员字段（User / Users）");
+                else
+                    FlowDefinitionValidator.ValidateRuleValue(errors, "Notification 接收人", recipient, _recipientContext, userFields);
+            }
             return errors;
         }
         catch (JsonException) { return ["Notification 配置无效"]; }

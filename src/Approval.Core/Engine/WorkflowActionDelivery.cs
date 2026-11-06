@@ -11,4 +11,7 @@ internal sealed record WorkflowActionDelivery(int Version, string Type, Approval
 
 // Only fixed engine codes and HTTP status numbers may cross the action delivery error boundary.
 internal sealed class WorkflowActionDeliveryException(string code, int? httpStatus = null)
-    : Exception(httpStatus is { } status ? $"{code} ({status})" : code);
+    : Exception(httpStatus is { } status ? $"{code} ({status})" : code)
+{
+    internal string Code { get; } = code;
+}

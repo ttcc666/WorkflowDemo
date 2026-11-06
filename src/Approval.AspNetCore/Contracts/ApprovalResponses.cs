@@ -85,14 +85,15 @@ public sealed record ApprovalMessageResponse(
         value.Id, value.UserId, value.Title, value.Content, value.Event, value.InstanceId, value.NodeId, value.IsRead, value.CreatedAt, value.ReadAt);
 }
 
-/// <summary>ApprovalOutboxMessage 的 HTTP 快照；保持既有 JSON 字段与 UTC 日期表示。</summary>
+/// <summary>投递记录的运维元数据。普通列表响应省略正文。</summary>
 public sealed record ApprovalOutboxMessageResponse(
     Guid Id,
     string Target,
     Guid? InstanceId,
     string? NodeId,
     string? Description,
-    string PayloadJson,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    string? PayloadJson,
     OutboxStatus Status,
     int Attempts,
     int MaxAttempts,
@@ -102,9 +103,20 @@ public sealed record ApprovalOutboxMessageResponse(
     DateTime? CompletedAt,
     long ConcurrencyStamp)
 {
+    // The legacy payload slot can be read when present, but list JSON may omit it entirely.
+    [System.Text.Json.Serialization.JsonConstructor]
+    private ApprovalOutboxMessageResponse(Guid id, string target, Guid? instanceId, string? nodeId, string? description,
+        OutboxStatus status, int attempts, int maxAttempts, DateTime nextAttemptAt, string? lastError, DateTime createdAt,
+        DateTime? completedAt, long concurrencyStamp)
+        : this(id, target, instanceId, nodeId, description, null, status, attempts, maxAttempts, nextAttemptAt, lastError,
+            createdAt, completedAt, concurrencyStamp) { }
+
     public static ApprovalOutboxMessageResponse From(ApprovalOutboxMessage value) => new(
-        value.Id, value.Target, value.InstanceId, value.NodeId, value.Description, value.PayloadJson, value.Status, value.Attempts, value.MaxAttempts, value.NextAttemptAt, value.LastError, value.CreatedAt, value.CompletedAt, value.ConcurrencyStamp);
+        value.Id, value.Target, value.InstanceId, value.NodeId, value.Description, null, value.Status, value.Attempts, value.MaxAttempts, value.NextAttemptAt, value.LastError, value.CreatedAt, value.CompletedAt, value.ConcurrencyStamp);
 }
+
+/// <summary>经过独立授权读取的投递正文。</summary>
+public sealed record ApprovalOutboxPayloadResponse(string PayloadJson);
 
 /// <summary>经过查看权限和字段权限过滤的审批详情。</summary>
 public sealed record ApprovalInstanceResponse(

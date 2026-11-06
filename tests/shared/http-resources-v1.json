@@ -26,7 +26,6 @@
     "instanceId": "10000000-0000-0000-0000-000000000001",
     "nodeId": "review",
     "description": "通知",
-    "payloadJson": "{\"id\":\"one\"}",
     "status": "Failed",
     "attempts": 3,
     "maxAttempts": 5,

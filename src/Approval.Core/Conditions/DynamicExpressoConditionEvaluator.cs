@@ -16,6 +16,7 @@ public sealed class DynamicExpressoConditionEvaluator : IConditionEvaluator
         try
         {
             var interpreter = CreateInterpreter();
+            var qualifiedRoots = ActionConditionNamespace.QualifiedRoots(expression);
             foreach (var identifier in interpreter.DetectIdentifiers(expression).UnknownIdentifiers)
             {
                 var escaped = System.Text.RegularExpressions.Regex.Escape(identifier);
@@ -23,7 +24,7 @@ public sealed class DynamicExpressoConditionEvaluator : IConditionEvaluator
                     ? "" : System.Text.RegularExpressions.Regex.IsMatch(expression, "(?:!\\s*" + escaped + "\\b|\\b" + escaped + "\\s*(?:&&|\\|\\||$))")
                     || System.Text.RegularExpressions.Regex.IsMatch(expression, escaped + "\\s*(?:==|!=)\\s*(?:true|false)\\b|\\b(?:true|false)\\s*(?:==|!=)\\s*" + escaped)
                     ? false : 0m;
-                if (System.Text.RegularExpressions.Regex.IsMatch(expression, "\\b" + escaped + "\\s*\\.")) sample = new System.Dynamic.ExpandoObject();
+                if (qualifiedRoots.Contains(identifier)) sample = new ExpandoObject();
                 interpreter.SetVariable(identifier, sample);
             }
             var parsed = interpreter.Parse(expression);

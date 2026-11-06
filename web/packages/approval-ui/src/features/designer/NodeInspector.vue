@@ -116,7 +116,7 @@ const modeHelp: Record<ApproveMode, string> = {
 
           <div v-if="data.type === 'Condition'" class="inspector__help">
             点击从该节点出发的连线，设置分支条件与优先级。条件都不满足时走默认分支。
-            条件中可使用表单字段与动作输出变量，如 <code>amount &gt; 5000</code>、<code>outputs.risk.level == "high"</code>。
+            条件可直接引用表单字段，如 <code>amount &gt; 5000</code>。含动作的流程还可使用 <code>workflow.form.amount</code> 和 <code>workflow.outputs.risk.level</code>。
           </div>
         </el-form>
         <ActionStepsEditor v-if="data.type === 'Action'" :key="nodeId" :node-id="nodeId" :steps="data.actions ?? []"

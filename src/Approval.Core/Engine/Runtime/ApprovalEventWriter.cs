@@ -130,7 +130,7 @@ internal sealed class ApprovalEventWriter(
             var title = Truncate(Render(string.IsNullOrWhiteSpace(rule.Title) ? NotificationDefaults.Titles[evt] : rule.Title, variables), 200);
             var content = Truncate(Render(string.IsNullOrWhiteSpace(rule.Content) ? NotificationDefaults.Contents[evt] : rule.Content, variables), 4000);
             SendNotifications(operation, evt, instance, node, info, rule.Channels, recipients, title, content,
-                variables.GetValueOrDefault("link") as string, sent, hideDescription: false);
+                variables.GetValueOrDefault("link") as string, sent);
         }
     }
 
@@ -145,12 +145,12 @@ internal sealed class ApprovalEventWriter(
         var info = new EventInfo(current) { OperatorId = operatorId };
         var recipients = await ResolveRecipientsAsync(rule, instance, node, FormData.Parse(instance.FormDataJson), current, ct);
         return SendNotifications(operation, NotifyEvent.Action, instance, node, info, rule.Channels, recipients,
-            Truncate(title, 200), Truncate(content, 4000), null, [], hideDescription: true);
+            Truncate(title, 200), Truncate(content, 4000), null, []);
     }
 
     private bool SendNotifications(ApprovalOperationContext operation, NotifyEvent evt, ApprovalInstance instance, FlowNode? node,
         EventInfo info, List<string> channels, List<string> recipients, string title, string content, string? link,
-        HashSet<(string Channel, string User, string Content)> sent, bool hideDescription)
+        HashSet<(string Channel, string User, string Content)> sent)
     {
         var queued = false;
         foreach (var channel in channels.Distinct(StringComparer.OrdinalIgnoreCase))
@@ -164,7 +164,7 @@ internal sealed class ApprovalEventWriter(
             else if (_channels.Contains(channel))
             {
                 queued = true;
-                AddOutbox(operation, "Host", instance, node, hideDescription ? "NotificationRequested" : title,
+                AddOutbox(operation, "Host", instance, node, "NotificationRequested",
                     id => new ApprovalEvent(id, "NotificationRequested", instance.Id, instance.DefinitionId, instance.DefinitionVersion,
                         instance.BusinessType, instance.BusinessKey, instance.Status, node?.Id, node?.Name, null,
                         info.OperatorId ?? SystemOperator, info.Comment, Now)

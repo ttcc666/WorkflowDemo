@@ -1206,6 +1206,7 @@ Approval.Core.Engine.ApprovalOutboxService
   Method System.Threading.Tasks.Task RetryAsync(System.Guid, System.Threading.CancellationToken) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull default=null]
   Method System.Threading.Tasks.Task`1[Approval.Core.Engine.PagedResult`1[Approval.Core.Domain.ApprovalOutboxMessage]] ListAsync(Approval.Core.Engine.OutboxQuery, Approval.Core.Engine.PageRequest, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull<NotNull/NotNull>>; args=NotNull/NotNull,Nullable/Nullable default=null,NotNull/NotNull default=null]
   Method System.Threading.Tasks.Task`1[System.Int32] ProcessDueAsync(System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull default=null]
+  Method System.Threading.Tasks.Task`1[System.String] GetPayloadAsync(System.Guid, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull,NotNull/NotNull default=null]
   Method System.TimeSpan RetryDelay(Int32) [return=NotNull/NotNull; args=NotNull/NotNull]
 Approval.Core.Engine.ApprovalQueryService
   Constructor Void .ctor(Approval.Core.Persistence.ApprovalDbContextAccessor, Approval.Core.Abstractions.IApprovalIdentityProvider, Approval.Core.Abstractions.IApprovalAccessPolicy, Approval.Core.ApprovalOptions, System.TimeProvider, Approval.Core.Abstractions.IApprovalDataProjection) [args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,Nullable/Nullable default=null]

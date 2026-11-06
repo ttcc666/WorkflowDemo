@@ -11,7 +11,11 @@
 | Notification | 同步记录，外部渠道异步投递 | 复用审批站内信和宿主通知渠道 |
 | 自定义 C# | 由 Handler 声明 | 宿主业务逻辑和扩展 |
 
-`outputKey` 在整份定义中唯一。同步成功的输出可通过 `outputs.risk.level` 访问。表单字段可用 `form.amount`，无动作的已有流程继续使用原来的 `amount`。动作输入还可使用 `instance`、`business`、`initiator`、`node` 和 `operator`。路径支持点分属性和零基数组索引。`{{path}}` 单独占据 JSON 值时保留数字、布尔、对象和数组类型。嵌在文本中时渲染为文本。
+`outputKey` 在整份定义中唯一。动作配置和模板用 `form.amount` 访问表单，用 `outputs.risk.level` 访问当前步骤可见的同步输出，还可用 `instance`、`business`、`initiator`、`node` 和 `operator`。路径支持点分属性和零基数组索引。`{{path}}` 单独占据 JSON 值时保留数字、布尔、对象和数组类型。嵌在文本中时渲染为文本。
+
+条件表达式始终可直接访问表单字段，如 `amount > 5000`。含动作的流程可用 `workflow.form.amount` 和 `workflow.outputs.risk.level`，并保留没有同名字段时的 `form.*` 和 `outputs.*` 别名。存在同名字段时，裸字段值继续有效。旧的限定路径若有歧义，需用 `workflow.form` 或 `workflow.outputs` 明确来源。`workflow` 为含动作流程保留，表单字段冲突按不区分大小写检查。
+
+单点 Action 预演从开始节点沿自动路径运行，累积可见的上游预演输出，到达目标后停止。人工审批、未选中的分支、上游失败和缺少预演结果会在路径上说明。异步动作可展示预演计划。Notification 的 `FormField` 接收人必须引用 `User` 或 `Users` 字段。Forms 入口会验证并规范化人员输入，直接调用 Core 的可信宿主负责提供经校验的表单快照。
 
 Mapping 的每条规则包含 `source`、`target` 和可选 `transform`。可用转换包括 Copy、String、Number、Boolean、Date、Array 和 Object。`default` 处理缺失和空值，`omitNull` 省略空值，`precision` 指定小数位。Array 可以用 `filterPath` 和 `filterEquals` 过滤，Array 和 Object 可以通过 `items` 添加相对路径规则。
 

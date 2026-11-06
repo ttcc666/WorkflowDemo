@@ -48,7 +48,9 @@ public sealed class HttpResponseContractTests
         var values = Read("http-resources-v1.json");
         AssertJson(values["definition"]!, JsonSerializer.SerializeToNode(ApprovalDefinitionResponse.From(values["definition"]!.Deserialize<ApprovalDefinition>(Json)!), Json)!);
         AssertJson(values["message"]!, JsonSerializer.SerializeToNode(ApprovalMessageResponse.From(values["message"]!.Deserialize<ApprovalMessage>(Json)!), Json)!);
-        AssertJson(values["outbox"]!, JsonSerializer.SerializeToNode(ApprovalOutboxMessageResponse.From(values["outbox"]!.Deserialize<ApprovalOutboxMessage>(Json)!), Json)!);
+        var storedOutbox = values["outbox"]!.DeepClone();
+        storedOutbox["payloadJson"] = "{\"secret\":\"stored-only\"}";
+        AssertJson(values["outbox"]!, JsonSerializer.SerializeToNode(ApprovalOutboxMessageResponse.From(storedOutbox.Deserialize<ApprovalOutboxMessage>(Json)!), Json)!);
     }
 
     private static JsonNode Read(string name) =>
