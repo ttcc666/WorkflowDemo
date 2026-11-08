@@ -6,8 +6,24 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
-    "types": ["element-plus/global"],
-    "paths": { "@/*": ["./src/*"], "@ui/*": ["../../packages/approval-ui/src/*"] }
+    "types": [
+      "element-plus/global"
+    ],
+    "paths": {
+      "@/*": [
+        "./src/*"
+      ],
+      "@ui/*": [
+        "../../packages/approval-ui/src/*"
+      ],
+      "@demo-shared/*": [
+        "../../demo-shared/*"
+      ]
+    }
   },
-  "include": ["src/**/*.ts", "src/**/*.vue", "env.d.ts"]
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.vue",
+    "env.d.ts"
+  ]
 }

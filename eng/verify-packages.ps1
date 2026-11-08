@@ -18,12 +18,15 @@ New-Item -ItemType 'Directory' -Path $packages -Force | Out-Null
 if (-not $SkipBuild) {
     Invoke-CheckedCommand 'dotnet' @('build', 'Workflow.slnx', '--configuration', 'Release') $repositoryRoot
     Invoke-CheckedCommand 'pnpm' @('build:lib') $webRoot
+    Invoke-CheckedCommand 'pnpm' @('--filter', '@approval/shared', 'build') $webRoot
 }
 foreach ($package in $allPackages) {
     Invoke-CheckedCommand 'dotnet' @('pack', ('src/' + $package), '--configuration', 'Release', '--no-build', '--output', $packages) $repositoryRoot
 }
 $tarball = Join-Path $packages ('approval-ui-' + $version + '.tgz')
 Invoke-CheckedCommand 'pnpm' @('pack', '--out', $tarball) (Join-Path $webRoot 'packages/approval-ui')
+$sharedTarball = Join-Path $packages ('approval-shared-' + $version + '.tgz')
+Invoke-CheckedCommand 'pnpm' @('pack', '--out', $sharedTarball) (Join-Path $webRoot 'packages/approval-shared')
 
 $consumerRoot = Join-Path $repositoryRoot ('output/engineering/consumer-' + [Guid]::NewGuid().ToString('N'))
 $apiRoot = Join-Path $consumerRoot 'api'
@@ -158,12 +161,21 @@ $packagePath = Join-Path $uiRoot 'package.json'
 $package = Get-Content -LiteralPath $packagePath -Raw | ConvertFrom-Json
 $package.name = 'approval-package-consumer'
 $package.dependencies.'@approval/ui' = 'file:./approval-ui.tgz'
+$package.dependencies.'@approval/shared' = 'file:./approval-shared.tgz'
+$package | Add-Member -NotePropertyName 'pnpm' -NotePropertyValue @{ overrides = @{ '@approval/shared' = 'file:./approval-shared.tgz' } } -Force
 foreach ($section in @('dependencies', 'devDependencies')) {
     foreach ($dependency in $package.$section.PSObject.Properties) { $dependency.Value = $dependency.Value -replace '^[~^]', '' }
 }
 $package | Add-Member -NotePropertyName 'packageManager' -NotePropertyValue 'pnpm@10.20.0' -Force
 $package | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $packagePath
 Copy-Item -LiteralPath $tarball -Destination (Join-Path $uiRoot 'approval-ui.tgz')
+Copy-Item -LiteralPath $sharedTarball -Destination (Join-Path $uiRoot 'approval-shared.tgz')
+Copy-HostSources (Join-Path $webRoot 'demo-shared') (Join-Path $uiRoot 'demo-shared')
+$consumerAppConfigPath = Join-Path $uiRoot 'tsconfig.app.json'
+$consumerAppConfig = Get-Content -LiteralPath $consumerAppConfigPath -Raw | ConvertFrom-Json
+$consumerAppConfig.compilerOptions.paths.'@demo-shared/*' = @('./demo-shared/*')
+$consumerAppConfig.compilerOptions.paths.PSObject.Properties.Remove('@ui/*')
+$consumerAppConfig | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $consumerAppConfigPath
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'consumer.vite.config.ts') -Destination (Join-Path $uiRoot 'vite.config.ts')
 $main = Join-Path $uiRoot 'src/main.ts'
 ('import ''@approval/ui/style.css''' + [Environment]::NewLine + (Get-Content -LiteralPath $main -Raw)) | Set-Content -LiteralPath $main

@@ -1,37 +1,14 @@
 import { computed, effectScope, shallowRef, watch } from 'vue'
-import { registerClientCleanup, useApprovalClient, type ApprovalClient } from '@ui/client'
-import type { ApprovalMe } from '@ui/contracts/api'
+import { getApprovalClientCore, registerClientCleanup, useApprovalClient, type ApprovalClient } from '@ui/client'
 
 const users = new WeakMap<ApprovalClient, ReturnType<typeof createUserState>>()
-
 function createUserState(client: ApprovalClient) {
-  const me = shallowRef<ApprovalMe | null>(null)
+  const core = getApprovalClientCore(client)
+  const me = shallowRef(core.me.value)
   const scope = effectScope(true)
-  let controller: AbortController | null = null
-
-  async function load() {
-    controller?.abort()
-    const current = (controller = new AbortController())
-    try {
-      const result = await client.api.me(current.signal)
-      if (current === controller) me.value = result
-    } catch {
-      if (current === controller) me.value = null
-    }
-  }
-
-  registerClientCleanup(client, () => {
-    scope.stop()
-    controller?.abort()
-    controller = null
-    me.value = null
-    users.delete(client)
-  })
-  scope.run(() => watch(client.userKey, () => {
-    me.value = null
-    void load()
-  }, { immediate: true, flush: 'sync' }))
-
+  const unsubscribe = core.me.subscribe(() => { me.value = core.me.value })
+  scope.run(() => watch(client.userKey, () => { me.value = null; void core.reloadUser() }, { immediate: true, flush: 'sync' }))
+  registerClientCleanup(client, () => { scope.stop(); unsubscribe(); me.value = null; users.delete(client) })
   return {
     me: computed(() => me.value),
     userId: computed(() => me.value?.userId ?? ''),
@@ -42,11 +19,9 @@ function createUserState(client: ApprovalClient) {
     canViewDefinitions: computed(() => me.value?.canViewDefinitions ?? false),
     formsEnabled: computed(() => me.value?.formsEnabled ?? false),
     formBusinessType: computed(() => me.value?.formBusinessType ?? null),
-    reload: load,
+    reload: core.reloadUser,
   }
 }
-
-/** 同一客户端共享当前用户；身份切换会取消旧请求，应用释放后停止监听。 */
 export function useApprovalUser() {
   const client = useApprovalClient()
   let state = users.get(client)

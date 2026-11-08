@@ -3,7 +3,20 @@
   "compilerOptions": {
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.test.tsbuildinfo",
     "noEmit": true,
-    "types": ["element-plus/global", "node"]
+    "types": [
+      "element-plus/global",
+      "node"
+    ],
+    "paths": {
+      "@/*": ["./src/*"],
+      "@ui/*": ["../../packages/approval-ui/src/*"],
+      "@demo-shared/*": [
+        "../../demo-shared/*"
+      ]
+    }
   },
-  "include": ["tests/**/*.ts", "env.d.ts"]
+  "include": [
+    "tests/**/*.ts",
+    "env.d.ts"
+  ]
 }

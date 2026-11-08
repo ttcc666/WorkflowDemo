@@ -6,7 +6,18 @@
     "dev": "pnpm --filter approval-demo dev",
     "build": "pnpm --filter approval-demo build",
     "build:lib": "pnpm --filter @approval/ui build",
+    "dev:react": "pnpm --filter approval-react-demo dev",
+    "build:react": "pnpm --filter approval-react-demo build",
+    "build:react-lib": "pnpm --filter @approval/shared build && pnpm --filter @approval/react-ui build",
+    "typecheck:react": "pnpm --filter @approval/shared typecheck && pnpm --filter @approval/react-ui typecheck && pnpm --filter approval-react-demo typecheck",
+    "test:react": "pnpm --filter @approval/shared test && pnpm --filter @approval/react-ui test && pnpm --filter approval-react-demo test",
+    "test:e2e:react": "node scripts/react-e2e.mjs",
+    "test:e2e:parity": "node scripts/react-e2e.mjs",
+    "test:e2e:packed": "node scripts/react-e2e.mjs --packed",
+    "verify:react-package": "node ../eng/verify-react-package.mjs",
     "check:boundaries": "node ../eng/check-boundaries.mjs",
+    "check:ui:react": "node scripts/react-ui-audit.mjs",
+    "test:ui:react": "node --test scripts/react-ui-audit.test.mjs",
     "test:boundaries": "node --test ../eng/check-boundaries.test.mjs ../eng/resolve-declaration-imports.test.mjs",
     "contracts:check": "node scripts/contracts.mjs",
     "contracts:update": "node scripts/contracts.mjs --update",
@@ -14,6 +25,7 @@
     "test": "pnpm -r test"
   },
   "devDependencies": {
+    "@approval/shared": "workspace:*",
     "@playwright/test": "1.64.1",
     "openapi-typescript": "7.13.0"
   }

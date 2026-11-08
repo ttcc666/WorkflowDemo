@@ -1,10 +1,1 @@
-/** 流程图模型统一入口；协议、画布适配和算法分别维护。 */
-export type * from '@ui/contracts/flow'
-export * from './flowElements'
-export * from './flowPresentation'
-export * from './flowSerialization'
-export * from './flowLayout'
-export * from './flowGraph'
-export * from './flowDefaults'
-export * from './flowRuntime'
-export * from './flowVersion'
+export * from '@approval/shared/features/flow/flowModel'

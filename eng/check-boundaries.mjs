@@ -13,23 +13,36 @@ function within(directory, target) {
 }
 
 /** Check actual TS import/export/type-query nodes, including imports in Vue scripts. */
-export function boundaryViolations(file, source, { contractsRoot, appsRoot, appPackages }) {
+export function boundaryViolations(file, source, { contractsRoot, appsRoot, appPackages, kind = 'vue', sharedRoot }) {
   const contract = within(contractsRoot, file)
   const sourceRoot = dirname(contractsRoot)
   const uiCode = ['components', 'composables', 'features', 'views'].some(area => within(join(sourceRoot, area), file))
   const scripts = file.endsWith('.vue')
     ? [...source.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)].map(match => match[1]).join('\n')
     : source
-  const syntax = ts.createSourceFile(file, scripts, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS)
+  const syntax = ts.createSourceFile(file, scripts, ts.ScriptTarget.Latest, true, file.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS)
   const violations = []
   const check = (specifier, values = []) => {
     const target = specifier.startsWith('@ui/') ? resolve(sourceRoot, specifier.slice('@ui/'.length))
       : specifier.startsWith('.') || isAbsolute(specifier) ? resolve(dirname(file), specifier) : null
-    if (contract && (!target || !within(contractsRoot, target))) {
+    const sharedContract = kind !== 'shared' && /^@approval\/shared\/contracts(?:\/|$)/.test(specifier)
+    if (contract && !sharedContract && (!target || !within(contractsRoot, target))) {
       violations.push({ specifier, reason: 'contracts may depend only on other contract files' })
     }
-    if (specifier.startsWith('@/') || (target && within(appsRoot, target)) || appPackages.some(name => specifier === name || specifier.startsWith(`${name}/`))) {
+    if (kind === 'shared' && (/^(react|react-dom|react-router|vue|vue-router|element-plus|@vue-flow|@xyflow|@approval\/(ui|react-ui))($|\/)/.test(specifier) || specifier.endsWith('.vue'))) {
+      violations.push({ specifier, reason: 'shared must not depend on UI frameworks or components' })
+    }
+    if (kind === 'react' && (/^(vue|vue-router|element-plus|@element-plus|@vue-flow|@approval\/ui)($|\/)/.test(specifier) || specifier.endsWith('.vue'))) {
+      violations.push({ specifier, reason: 'React must not depend on Vue or Element Plus, including type imports' })
+    }
+    if (target && sharedRoot && within(sharedRoot, target) && !within(sourceRoot, target)) {
+      violations.push({ specifier, reason: 'cross-package dependencies must use public package exports' })
+    }
+    if (specifier.startsWith('@/') || specifier.startsWith('@demo-shared') || (target && (within(appsRoot, target) || within(join(repositoryRoot, 'web/demo-shared'), target))) || appPackages.some(name => specifier === name || specifier.startsWith(`${name}/`))) {
       violations.push({ specifier, reason: 'the UI library must not depend on a host application' })
+    }
+    if (target && within(join(repositoryRoot, 'web/packages'), target) && !within(dirname(sourceRoot), target)) {
+      violations.push({ specifier, reason: 'cross-package dependencies must use public package exports' })
     }
     const module = target ? relative(sourceRoot, target).replaceAll('\\', '/').replace(/\.ts$/, '') : specifier
     const ambient = {
@@ -71,28 +84,34 @@ async function sourceFiles(directory) {
   const groups = await Promise.all(entries.map(async entry => {
     const path = join(directory, entry.name)
     if (entry.isDirectory()) return sourceFiles(path)
-    return /\.(ts|vue)$/.test(entry.name) && !/\.test\.ts$/.test(entry.name) ? [path] : []
+    return /\.(ts|tsx|vue)$/.test(entry.name) && !/\.test\.tsx?$/.test(entry.name) ? [path] : []
   }))
   return groups.flat()
 }
 
 async function main() {
-  const sourceRoot = join(repositoryRoot, 'web/packages/approval-ui/src')
   const appsRoot = join(repositoryRoot, 'web/apps')
   const apps = await readdir(appsRoot, { withFileTypes: true })
   const appPackages = await Promise.all(apps.filter(entry => entry.isDirectory()).map(async entry =>
     JSON.parse(await readFile(join(appsRoot, entry.name, 'package.json'), 'utf8')).name))
-  const roots = { contractsRoot: join(sourceRoot, 'contracts'), appsRoot, appPackages }
-  const files = await sourceFiles(sourceRoot)
+  const packages = [['approval-ui', 'vue'], ['approval-shared', 'shared'], ['approval-react-ui', 'react']]
+  const sharedRoot = join(repositoryRoot, 'web/packages/approval-shared/src')
+  let checked = 0
   let failures = 0
-  for (const file of files) {
-    for (const violation of boundaryViolations(file, await readFile(file, 'utf8'), roots)) {
-      console.error(`${relative(repositoryRoot, file)}: ${violation.specifier}: ${violation.reason}`)
-      failures++
+  for (const [name, kind] of packages) {
+    const sourceRoot = join(repositoryRoot, 'web/packages', name, 'src')
+    const roots = { contractsRoot: join(sourceRoot, 'contracts'), appsRoot, appPackages, kind, sharedRoot }
+    const files = await sourceFiles(sourceRoot)
+    checked += files.length
+    for (const file of files) {
+      for (const violation of boundaryViolations(file, await readFile(file, 'utf8'), roots)) {
+        console.error(`${relative(repositoryRoot, file)}: ${violation.specifier}: ${violation.reason}`)
+        failures++
+      }
     }
   }
   if (failures) process.exitCode = 1
-  else console.log(`Dependency boundaries passed: ${files.length} source files checked.`)
+  else console.log(`Dependency boundaries passed: ${checked} source files checked.`)
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) await main()

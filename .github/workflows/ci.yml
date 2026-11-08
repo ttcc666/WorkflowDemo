@@ -59,5 +59,9 @@ jobs:
             output/engineering/consumer-*/browser/results.json
             output/engineering/consumer-*/browser/**/*.png
             output/engineering/consumer-*/browser/**/*.zip
+            output/engineering/react-consumer-*/verification.json
+            output/playwright/react-*/results.json
+            output/playwright/react-*/**/*.png
+            output/playwright/react-*/**/*.zip
             output/engineering/consumer-*/embedded-host/verification.json
             output/reference-host/**/smoke.json

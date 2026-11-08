@@ -12,6 +12,28 @@ test('allows contracts to compose neighboring protocol types', () => {
   assert.deepEqual(boundaryViolations(join(roots.contractsRoot, 'index.ts'), source, roots), [])
 })
 
+test('React rejects Vue runtime and type dependencies while allowing the shared public package', () => {
+  const react = { ...roots, kind: 'react' }
+  const file = join(sourceRoot, 'features/Screen.tsx')
+  assert.deepEqual(boundaryViolations(file, "import type { Ref } from 'vue'; import { Item } from '@approval/ui'; import { Data } from '@approval/shared'; export const view = <div />", react).map(item => item.reason), [
+    'React must not depend on Vue or Element Plus, including type imports',
+    'React must not depend on Vue or Element Plus, including type imports',
+  ])
+})
+
+test('shared rejects both framework implementations and Demo support modules', () => {
+  const shared = { ...roots, kind: 'shared' }
+  assert.deepEqual(boundaryViolations(join(sourceRoot, 'model.ts'), "import { useState } from 'react'; import { session } from '@demo-shared/demo'", shared).map(item => item.reason), [
+    'shared must not depend on UI frameworks or components',
+    'the UI library must not depend on a host application',
+  ])
+})
+
+test('Vue contract facades may re-export only the shared contracts subpath', () => {
+  assert.deepEqual(boundaryViolations(join(roots.contractsRoot, 'api.ts'), "export type * from '@approval/shared/contracts/api'", roots), [])
+  assert.deepEqual(boundaryViolations(join(roots.contractsRoot, 'api.ts'), "export * from '@approval/shared/api/approval'", roots).map(item => item.reason), ['contracts may depend only on other contract files'])
+})
+
 test('rejects UI and feature imports from contracts including type queries', () => {
   const source = "import type { Ref } from 'vue'; export type Form = import('../features/forms/formModel').FormSchema"
   assert.deepEqual(boundaryViolations(join(roots.contractsRoot, 'flow.ts'), source, roots).map(v => v.specifier), ['vue', '../features/forms/formModel'])

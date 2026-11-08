@@ -10,6 +10,7 @@ TestResults/
 # 前端
 node_modules/
 web/packages/*/dist/
+web/apps/react-demo/dist/
 samples/Certificate.Api/wwwroot/
 # 演示附件存储目录
 App_Data/

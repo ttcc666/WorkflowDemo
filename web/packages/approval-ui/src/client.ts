@@ -1,7 +1,8 @@
 import { computed, effectScope, watch, hasInjectionContext, inject, type App, type ComputedRef, type InjectionKey } from 'vue'
-import { createApprovalApi, type ApprovalApiClient } from './api/approval'
-import { createHttpClient, type ApprovalHttpClient } from './api/http'
+import type { ApprovalApiClient } from './api/approval'
+import type { ApprovalHttpClient } from './api/http'
 import { approvalIdentityKey, resolveApprovalUIOptions, type ApprovalUIOptions, type ResolvedApprovalUIOptions } from './config'
+import { createApprovalClientCore, type ApprovalClientCore } from '@approval/shared/client'
 
 export interface ApprovalClient {
   readonly api: ApprovalApiClient
@@ -16,6 +17,14 @@ export interface ApprovalClient {
 
 export const approvalClientKey: InjectionKey<ApprovalClient> = Symbol('approval-client')
 const resources = new WeakMap<ApprovalClient, Set<() => void>>()
+const cores = new WeakMap<ApprovalClient, ApprovalClientCore>()
+
+/** Framework-neutral state owned by this Vue client; not part of the public root exports. */
+export function getApprovalClientCore(client: ApprovalClient) {
+  const core = cores.get(client)
+  if (!core) throw new Error('审批客户端未初始化')
+  return core
+}
 
 /** 包内共享状态在客户端释放时清理；不绑定到第一个使用它的组件。 */
 export function registerClientCleanup(client: ApprovalClient, cleanup: () => void) {
@@ -59,9 +68,12 @@ function managedClient(
 export function createApprovalClient(options: ApprovalUIOptions = {}): ApprovalClient {
   const resolved = resolveApprovalUIOptions(options)
   const config = () => resolved
-  const transport = createHttpClient(config)
-  const api = createApprovalApi(transport, config)
-  return managedClient(config, () => transport, () => api)
+  const core = createApprovalClientCore(resolved)
+  const client = managedClient(config, () => core.http, () => core.api)
+  cores.set(client, core)
+  const stop = watch(client.userKey, () => core.updateOptions(resolved), { flush: 'sync' })
+  registerClientCleanup(client, () => { stop(); core.dispose(); cores.delete(client) })
+  return client
 }
 
 /** 在 setup 中获取客户端并保留引用，事件和异步回调继续使用同一实例。 */

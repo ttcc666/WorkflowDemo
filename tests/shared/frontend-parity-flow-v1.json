@@ -1,0 +1,507 @@
+{
+  "schemaVersion": 1,
+  "startNodeId": "start",
+  "settings": {
+    "startable": true,
+    "category": "双前端验收",
+    "description": "全部字段、节点与 Action",
+    "titleTemplate": "验收 {form.productCode}"
+  },
+  "form": {
+    "fields": [
+      {
+        "key": "productCode",
+        "label": "产品编码",
+        "type": "Text",
+        "required": true,
+        "defaultValue": "P001",
+        "maxLength": 40,
+        "span": 12
+      },
+      {
+        "key": "description",
+        "label": "说明",
+        "type": "TextArea",
+        "span": 24,
+        "maxLength": 1000
+      },
+      {
+        "key": "quantity",
+        "label": "数量",
+        "type": "Number",
+        "min": 1,
+        "max": 99,
+        "precision": 0,
+        "defaultValue": 2,
+        "span": 12
+      },
+      {
+        "key": "amount",
+        "label": "金额",
+        "type": "Money",
+        "min": 0,
+        "max": 10000,
+        "precision": 2,
+        "defaultValue": 200,
+        "span": 12
+      },
+      {
+        "key": "total",
+        "label": "总额",
+        "type": "Formula",
+        "formula": "quantity * amount + items_price_sum",
+        "precision": 2,
+        "span": 12
+      },
+      {
+        "key": "date",
+        "label": "日期",
+        "type": "Date",
+        "span": 12
+      },
+      {
+        "key": "period",
+        "label": "日期区间",
+        "type": "DateRange",
+        "span": 24
+      },
+      {
+        "key": "choice",
+        "label": "选择",
+        "type": "Select",
+        "options": [
+          {
+            "label": "甲",
+            "value": "a"
+          },
+          {
+            "label": "乙",
+            "value": "b"
+          }
+        ],
+        "span": 12
+      },
+      {
+        "key": "choices",
+        "label": "多选",
+        "type": "MultiSelect",
+        "options": [
+          {
+            "label": "甲",
+            "value": "a"
+          },
+          {
+            "label": "乙",
+            "value": "b"
+          }
+        ],
+        "span": 12
+      },
+      {
+        "key": "radio",
+        "label": "单选",
+        "type": "Radio",
+        "options": [
+          {
+            "label": "甲",
+            "value": "a"
+          },
+          {
+            "label": "乙",
+            "value": "b"
+          }
+        ],
+        "span": 12
+      },
+      {
+        "key": "accepted",
+        "label": "确认",
+        "type": "Switch",
+        "span": 12
+      },
+      {
+        "key": "person",
+        "label": "单人人员",
+        "type": "User",
+        "span": 12
+      },
+      {
+        "key": "people",
+        "label": "多人人员",
+        "type": "Users",
+        "span": 12
+      },
+      {
+        "key": "items",
+        "label": "明细",
+        "type": "Table",
+        "span": 24,
+        "maxRows": 20,
+        "columns": [
+          {
+            "key": "name",
+            "label": "项目",
+            "type": "Text",
+            "required": true
+          },
+          {
+            "key": "quantity",
+            "label": "行数量",
+            "type": "Number",
+            "precision": 0
+          },
+          {
+            "key": "price",
+            "label": "行金额",
+            "type": "Money",
+            "precision": 2,
+            "sum": true
+          },
+          {
+            "key": "date",
+            "label": "行日期",
+            "type": "Date"
+          },
+          {
+            "key": "choice",
+            "label": "行选择",
+            "type": "Select",
+            "options": [
+              {
+                "label": "甲",
+                "value": "a"
+              }
+            ]
+          },
+          {
+            "key": "subtotal",
+            "label": "行计算",
+            "type": "Formula",
+            "formula": "price * 2",
+            "precision": 2
+          }
+        ]
+      },
+      {
+        "key": "attachments",
+        "label": "附件",
+        "type": "File",
+        "maxFiles": 3,
+        "accept": [
+          "txt",
+          "pdf"
+        ],
+        "span": 24
+      },
+      {
+        "key": "help",
+        "label": "说明文字",
+        "type": "Description",
+        "help": "共享 Schema 的完整字段验收",
+        "span": 24
+      },
+      {
+        "key": "secret",
+        "label": "仅发起人可见",
+        "type": "Text",
+        "span": 12
+      }
+    ]
+  },
+  "nodes": {
+    "start": {
+      "id": "start",
+      "name": "开始",
+      "type": "Start",
+      "next": "prep",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    "prep": {
+      "id": "prep",
+      "name": "计算查询映射",
+      "type": "Action",
+      "next": "condition",
+      "actions": [
+        {
+          "id": "risk",
+          "name": "risk",
+          "type": "JavaScript",
+          "mode": "Sync",
+          "configVersion": 1,
+          "failurePolicy": "Fail",
+          "outputKey": "risk",
+          "config": {
+            "script": "function execute(context) { return { amount: context.form.amount, score: context.form.amount > 100 ? 2 : 1 }; }"
+          }
+        },
+        {
+          "id": "stock",
+          "name": "stock",
+          "type": "Sql",
+          "mode": "Sync",
+          "configVersion": 1,
+          "failurePolicy": "Fail",
+          "outputKey": "stock",
+          "config": {
+            "dataSource": "warehouse",
+            "queryId": "inventory.available",
+            "parameters": {
+              "productCode": "{{form.productCode}}"
+            }
+          }
+        },
+        {
+          "id": "map",
+          "name": "map",
+          "type": "Mapping",
+          "mode": "Sync",
+          "configVersion": 1,
+          "failurePolicy": "Fail",
+          "outputKey": "erp",
+          "config": {
+            "mappings": [
+              {
+                "source": "form.productCode",
+                "target": "productCode"
+              },
+              {
+                "source": "outputs.stock.rows[0].quantity",
+                "target": "quantity",
+                "transform": "Number",
+                "precision": 0
+              },
+              {
+                "source": "outputs.risk.score",
+                "target": "risk",
+                "transform": "Number",
+                "default": 0
+              }
+            ]
+          }
+        },
+        {
+          "id": "host",
+          "name": "host",
+          "type": "HostEcho",
+          "mode": "Sync",
+          "configVersion": 3,
+          "failurePolicy": "Fail",
+          "outputKey": "host",
+          "config": {
+            "label": "react-host",
+            "enabled": true
+          }
+        },
+        {
+          "id": "read",
+          "name": "read",
+          "type": "Http",
+          "mode": "Sync",
+          "configVersion": 1,
+          "failurePolicy": "Fail",
+          "outputKey": "read",
+          "config": {
+            "endpoint": "read-model",
+            "method": "GET",
+            "timeoutSeconds": 5
+          }
+        }
+      ],
+      "position": {
+        "x": 270,
+        "y": 0
+      }
+    },
+    "condition": {
+      "id": "condition",
+      "name": "金额判断",
+      "type": "Condition",
+      "branches": [
+        {
+          "priority": 1,
+          "expression": "amount > 100",
+          "next": "parallel"
+        },
+        {
+          "priority": 99,
+          "expression": null,
+          "next": "direct"
+        }
+      ],
+      "position": {
+        "x": 540,
+        "y": 0
+      }
+    },
+    "parallel": {
+      "id": "parallel",
+      "name": "并行审批",
+      "type": "Parallel",
+      "branches": [
+        {
+          "priority": 1,
+          "expression": null,
+          "next": "review"
+        },
+        {
+          "priority": 2,
+          "expression": null,
+          "next": "finance"
+        }
+      ],
+      "position": {
+        "x": 0,
+        "y": 160
+      }
+    },
+    "review": {
+      "id": "review",
+      "name": "负责人审批",
+      "type": "Approval",
+      "mode": "Any",
+      "approvers": [
+        {
+          "type": "User",
+          "value": "dave"
+        }
+      ],
+      "requireComment": true,
+      "fieldPermissions": {
+        "amount": "Editable",
+        "secret": "Hidden"
+      },
+      "next": "join",
+      "position": {
+        "x": 270,
+        "y": 160
+      }
+    },
+    "finance": {
+      "id": "finance",
+      "name": "财务审批",
+      "type": "Approval",
+      "mode": "All",
+      "approvers": [
+        {
+          "type": "User",
+          "value": "fiona"
+        }
+      ],
+      "fieldPermissions": {
+        "secret": "Hidden"
+      },
+      "next": "join",
+      "position": {
+        "x": 540,
+        "y": 160
+      }
+    },
+    "direct": {
+      "id": "direct",
+      "name": "普通审批",
+      "type": "Approval",
+      "mode": "Sequential",
+      "approvers": [
+        {
+          "type": "User",
+          "value": "dave"
+        }
+      ],
+      "next": "cc",
+      "position": {
+        "x": 0,
+        "y": 320
+      }
+    },
+    "join": {
+      "id": "join",
+      "name": "汇聚",
+      "type": "Join",
+      "next": "cc",
+      "position": {
+        "x": 270,
+        "y": 320
+      }
+    },
+    "cc": {
+      "id": "cc",
+      "name": "抄送发起人",
+      "type": "Cc",
+      "approvers": [
+        {
+          "type": "Initiator",
+          "value": ""
+        }
+      ],
+      "next": "delivery",
+      "position": {
+        "x": 540,
+        "y": 320
+      }
+    },
+    "delivery": {
+      "id": "delivery",
+      "name": "提交后投递",
+      "type": "Action",
+      "next": "end",
+      "actions": [
+        {
+          "id": "http",
+          "name": "http",
+          "type": "Http",
+          "mode": "Async",
+          "configVersion": 1,
+          "failurePolicy": "Retry",
+          "config": {
+            "endpoint": "erp",
+            "method": "POST",
+            "timeoutSeconds": 5,
+            "body": {
+              "order": "{{outputs.erp}}",
+              "host": "{{outputs.host.label}}",
+              "read": "{{outputs.read.body.value}}"
+            }
+          }
+        },
+        {
+          "id": "notify",
+          "name": "notify",
+          "type": "Notification",
+          "mode": "Sync",
+          "configVersion": 1,
+          "failurePolicy": "Fail",
+          "config": {
+            "recipients": [
+              {
+                "type": "Initiator",
+                "value": ""
+              }
+            ],
+            "channels": [
+              "InApp",
+              "Webhook"
+            ],
+            "title": "审批完成",
+            "content": "产品 {{form.productCode}} 已审批"
+          }
+        }
+      ],
+      "position": {
+        "x": 0,
+        "y": 480
+      }
+    },
+    "end": {
+      "id": "end",
+      "name": "结束",
+      "type": "End",
+      "position": {
+        "x": 270,
+        "y": 480
+      }
+    }
+  }
+}

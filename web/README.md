@@ -21,7 +21,7 @@ web/
 
 例如 `src/composables/useCommandIntent.ts` 的单元测试放在 `tests/composables/useCommandIntent.test.ts`。测试通过源码别名引用被测模块；测试之间的辅助代码可用同目录相对导入。共享协议用例继续复用仓库根目录 `tests/shared/` 的 JSON 数据。
 
-Vitest 只发现各包的 `tests/**/*.test.ts`。`pnpm typecheck` 同时检查源码和测试；发布构建只处理源码，不生成测试声明。独立包消费者复制时跳过 `tests/`。
+Vitest 发现各包的 `tests/**/*.test.ts`，React 包同时发现 `.test.tsx`。`pnpm typecheck` 同时检查源码和测试；发布构建只处理源码，不生成测试声明。独立包消费者复制时跳过 `tests/`。
 
 在 `web/` 下运行：
 
@@ -33,6 +33,23 @@ pnpm --filter '@approval/ui' exec vitest run 'tests/composables/useCommandIntent
 ```
 
 ## 导入路径
+
+React 宿主使用 `@approval/react-ui`，Vue 宿主继续使用 `@approval/ui`。两套 UI 共享无框架的 `@approval/shared`；两套 Demo 的业务 API 位于 `demo-shared/`。React 包内采用相对导入，发布声明无需宿主源码别名。React 安装、认证、路由、扩展和样式见 [宿主集成](../docs/react-integration.md)，逐项功能见 [功能对照](packages/approval-react-ui/FEATURE_PARITY.md)。
+
+在 `web/` 运行 React：
+
+```powershell
+pnpm 'dev:react'
+pnpm 'typecheck:react'
+pnpm 'test:react'
+pnpm 'build:react-lib'
+pnpm 'build:react'
+pnpm 'verify:react-package'
+pnpm 'test:e2e:react'
+pnpm 'test:e2e:packed'
+```
+
+Vue / React 浏览器测试分别使用 `playwright.config.ts` / `playwright.react.config.ts`，各自使用隔离宿主；原 Vue 配置明确排除 React 用例。
 
 | 使用位置 | 路径别名 | 指向 |
 | --- | --- | --- |
