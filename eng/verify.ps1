@@ -20,6 +20,7 @@ if ($Scope -in @('All', 'Backend')) {
     # Each project keeps its own concurrent tests; avoid cross-project contention of their bounded watchdogs.
     Invoke-CheckedCommand 'dotnet' @('test', 'Workflow.slnx', '--no-build', '--no-restore', '--configuration', 'Release', '--verbosity', 'minimal', '-m:1')
     Invoke-CheckedCommand 'dotnet' @('ef', 'migrations', 'has-pending-model-changes', '--project', 'samples/Approval.Certificate', '--startup-project', 'samples/Certificate.Api', '--configuration', 'Release', '--no-build')
+    Invoke-CheckedCommand 'dotnet' @('ef', 'migrations', 'has-pending-model-changes', '--project', 'samples/Approval.MultiTenantHost', '--configuration', 'Release', '--no-build')
     foreach ($provider in @('Sqlite', 'MySql', 'SqlServer', 'PostgreSql')) {
         Invoke-CheckedCommand 'dotnet' @('ef', 'migrations', 'has-pending-model-changes', '--project', 'samples/Approval.ReferenceHost', '--context', ($provider + 'ReferenceContext'), '--configuration', 'Release', '--no-build')
         Invoke-CheckedCommand 'dotnet' @('ef', 'migrations', 'has-pending-model-changes', '--project', 'tests/Approval.Database.Tests', '--context', ($provider + 'ContractContext'), '--configuration', 'Release', '--no-build')

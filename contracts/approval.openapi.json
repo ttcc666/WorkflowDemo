@@ -3851,7 +3851,7 @@
   },
   "info": {
     "title": "Approval Workflow",
-    "version": "0.3.0"
+    "version": "0.4.1"
   },
   "openapi": "3.1.1",
   "paths": {

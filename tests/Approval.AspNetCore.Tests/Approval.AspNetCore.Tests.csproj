@@ -22,6 +22,9 @@
     <Compile Include="../shared/FlowFixtureAuthorization.cs" Link="Infrastructure/FlowFixtureAuthorization.cs" />
     <Compile Include="../shared/ReferenceHostScenario.cs" Link="Infrastructure/ReferenceHostScenario.cs" />
     <None Include="../../samples/Approval.ReferenceHost/appsettings.json" Link="ReferenceHostConfiguration.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../samples/Approval.MultiTenantHost/appsettings.json" Link="MultiTenantConfiguration.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../samples/Approval.MultiTenantHost/appsettings.Development.json" Link="MultiTenantDevelopmentConfiguration.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../samples/Approval.MultiTenantHost/expense-flow.json" Link="MultiTenantExpenseFlow.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
@@ -34,4 +37,7 @@
   </ItemGroup>
 
   <ItemGroup><ProjectReference Include="../../src/Approval.Forms.AspNetCore/Approval.Forms.AspNetCore.csproj" /></ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../samples/Approval.MultiTenantHost/Approval.MultiTenantHost.csproj" />
+  </ItemGroup>
 </Project>

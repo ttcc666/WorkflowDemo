@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "startNodeId": "start",
+  "settings": { "startable": true },
+  "nodes": {
+    "start": { "type": "Start", "name": "提交报销", "next": "review" },
+    "review": { "type": "Approval", "name": "租户内审批", "approvers": [{ "type": "Role", "value": "Reviewer" }], "next": "end" },
+    "end": { "type": "End", "name": "完成" }
+  }
+}

@@ -30,7 +30,8 @@ Core 不应自行建立宿主用户表、组织架构、角色体系、管理员
 
 - 当前目标是**单宿主、单应用实例的嵌入式审批引擎**，由宿主提供组织架构和权限。
 - 这不代表禁止正常并发 HTTP 请求。数据库事务、乐观并发令牌、唯一约束、幂等键及冲突处理必须继续正确工作。
-- 不要自行引入多租户 / TenantId 体系、租约 / Lease、分布式 Worker 选主、分布式调度、额外后台服务、独立消息平台、Redis、MediatR、通用 Repository 或微服务拆分。
+- 宿主可以通过 `IApprovalHostScopeProvider` 和 `ConfigureApprovalPartition()` 接入共享数据库的数据分区；租户目录、可信租户解析、分区值与过滤仍由宿主负责。Core 不建立 TenantId / 租户管理体系，不依赖 Finbuckle。
+- 不要自行引入租约 / Lease、分布式 Worker 选主、分布式调度、额外后台服务、独立消息平台、Redis、MediatR、通用 Repository 或微服务拆分。
 - 不要增加审批归档、历史清理、附件删除、数据保留期等后台职责。当前 ApprovalWorker 只负责 Outbox 投递和审批超时扫描。
 - 只有明确的产品需求、可验证的业务场景和架构决策，才能改变上述边界；不要因“通用框架通常会有”而添加功能。
 

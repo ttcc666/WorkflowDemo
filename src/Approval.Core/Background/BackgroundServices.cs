@@ -20,7 +20,11 @@ public sealed class ApprovalOutboxDispatcher(ApprovalBackgroundRunner sweeper)
         ct.ThrowIfCancellationRequested();
         if (Options?.Outbox.EnableDispatcher == false) return;
         if (ValidateHost is not null) await ValidateHost(ct);
-        await sweeper.RunAsync("outbox", (sp, token) => sp.GetRequiredService<ApprovalOutboxService>().ProcessDueAsync(token), ct);
+        await sweeper.RunAsync("outbox", async (sp, token) =>
+        {
+            _ = sp.GetRequiredService<IApprovalIdentityProvider>();
+            return await sp.GetRequiredService<ApprovalOutboxService>().ProcessDueAsync(token);
+        }, ct);
     }
 }
 

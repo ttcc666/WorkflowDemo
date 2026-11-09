@@ -71,6 +71,7 @@ public static class ApprovalServiceCollectionExtensions
         services.TryAddScoped<ApprovalExecutionContext>();
         services.TryAddScoped<IApprovalActorContext>(sp => sp.GetRequiredService<ApprovalExecutionContext>());
         services.TryAddSingleton<IApprovalScopeFactory, ApprovalScopeFactory>();
+        services.TryAddSingleton<IApprovalHostScopeProvider, DefaultApprovalHostScopeProvider>();
         services.TryAddScoped<IApprovalAccessPolicy, DefaultApprovalAccessPolicy>();
     }
 

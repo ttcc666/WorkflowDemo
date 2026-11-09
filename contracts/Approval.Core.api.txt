@@ -474,6 +474,12 @@ Approval.Core.Abstractions.IApprovalDefinitionExtension
   Method Void Validate(Approval.Core.Definitions.FlowDefinition, System.Collections.Generic.List`1[System.String]) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull<NotNull/NotNull>]
 Approval.Core.Abstractions.IApprovalEventHandler
   Method System.Threading.Tasks.Task HandleAsync(Approval.Core.Abstractions.ApprovalEvent, System.Threading.CancellationToken) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull]
+Approval.Core.Abstractions.IApprovalHostScope
+  Method System.IDisposable Enter() [return=NotNull/NotNull; args=]
+  Property System.String PartitionKey [Nullable/Unknown]
+Approval.Core.Abstractions.IApprovalHostScopeProvider
+  Method Approval.Core.Abstractions.IApprovalHostScope Capture() [return=NotNull/NotNull; args=]
+  Method System.Threading.Tasks.Task`1[System.Collections.Generic.IReadOnlyList`1[Approval.Core.Abstractions.IApprovalHostScope]] GetBackgroundScopesAsync(System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull<NotNull/NotNull>>; args=NotNull/NotNull default=null]
 Approval.Core.Abstractions.IApprovalIdentityProvider
   Method System.Threading.Tasks.Task`1[System.Boolean] IsInRoleAsync(System.String, System.String, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull]
   Method System.Threading.Tasks.Task`1[System.Collections.Generic.IReadOnlyList`1[System.String]] GetRolesAsync(System.String, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull<NotNull/NotNull>>; args=NotNull/NotNull,NotNull/NotNull]
@@ -485,6 +491,8 @@ Approval.Core.Abstractions.IApprovalOrganizationProvider
   Method System.Threading.Tasks.Task`1[Approval.Core.Abstractions.ApprovalDepartment] GetParentDepartmentAsync(System.String, System.Threading.CancellationToken) [return=NotNull/NotNull<Nullable/Nullable>; args=NotNull/NotNull,NotNull/NotNull]
   Method System.Threading.Tasks.Task`1[System.Collections.Generic.IReadOnlyList`1[System.String]] GetDepartmentLeadersAsync(System.String, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull<NotNull/NotNull>>; args=NotNull/NotNull,NotNull/NotNull]
   Method System.Threading.Tasks.Task`1[System.String] GetManagerAsync(System.String, System.Threading.CancellationToken) [return=NotNull/NotNull<Nullable/Nullable>; args=NotNull/NotNull,NotNull/NotNull]
+Approval.Core.Abstractions.IApprovalPartitionContext
+  Property System.String PartitionKey [NotNull/Unknown]
 Approval.Core.Abstractions.IApprovalPermissionProvider
   Method System.Threading.Tasks.Task`1[System.Boolean] AuthorizeAsync(Approval.Core.Abstractions.ApprovalPermissionRequest, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull,NotNull/NotNull]
 Approval.Core.Abstractions.IApprovalQueryScope
@@ -596,7 +604,7 @@ Approval.Core.Authorization.DefaultApprovalPermissionProvider
   Constructor Void .ctor() [args=]
   Method System.Threading.Tasks.Task`1[System.Boolean] AuthorizeAsync(Approval.Core.Abstractions.ApprovalPermissionRequest, System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull,NotNull/NotNull]
 Approval.Core.Background.ApprovalBackgroundRunner
-  Constructor Void .ctor(Approval.Core.Abstractions.IApprovalScopeFactory, Approval.Core.Diagnostics.ApprovalBackgroundState, System.TimeProvider, Microsoft.Extensions.Logging.ILogger`1[Approval.Core.Background.ApprovalBackgroundRunner]) [args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull<NotNull/NotNull>]
+  Constructor Void .ctor(Approval.Core.Abstractions.IApprovalScopeFactory, Approval.Core.Diagnostics.ApprovalBackgroundState, System.TimeProvider, Microsoft.Extensions.Logging.ILogger`1[Approval.Core.Background.ApprovalBackgroundRunner], Approval.Core.Abstractions.IApprovalHostScopeProvider) [args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull,NotNull/NotNull<NotNull/NotNull>,NotNull/NotNull]
   Method System.Threading.Tasks.Task`1[System.Int32] RunAsync(System.String, System.Func`3[System.IServiceProvider,System.Threading.CancellationToken,System.Threading.Tasks.Task`1[System.Int32]], System.Threading.CancellationToken) [return=NotNull/NotNull<NotNull/NotNull>; args=NotNull/NotNull,NotNull/NotNull<NotNull/NotNull,NotNull/NotNull,NotNull/NotNull<NotNull/NotNull>>,NotNull/NotNull default=null]
 Approval.Core.Background.ApprovalOutboxDispatcher
   Constructor Void .ctor(Approval.Core.Background.ApprovalBackgroundRunner) [args=NotNull/NotNull]
@@ -1762,6 +1770,8 @@ Approval.Core.Persistence.ApprovalDbContextAccessor
 Approval.Core.Persistence.ApprovalModelBuilderExtensions
   Method Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder UseUtcDateTimes(Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder) [return=NotNull/NotNull; args=NotNull/NotNull]
   Method Microsoft.EntityFrameworkCore.ModelBuilder ConfigureApproval(Microsoft.EntityFrameworkCore.ModelBuilder, System.String) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull default="Approval"]
+Approval.Core.Persistence.ApprovalPartitionModelExtensions
+  Method Microsoft.EntityFrameworkCore.ModelBuilder ConfigureApprovalPartition(Microsoft.EntityFrameworkCore.ModelBuilder, System.String, System.Type[]) [return=NotNull/NotNull; args=NotNull/NotNull,NotNull/NotNull,NotNull/NotNull[NotNull/NotNull]]
 Approval.Core.Persistence.ApprovalPersistence
   Method Microsoft.EntityFrameworkCore.DbContextOptionsBuilder UseApproval(Microsoft.EntityFrameworkCore.DbContextOptionsBuilder) [return=NotNull/NotNull; args=NotNull/NotNull]
   Method Microsoft.EntityFrameworkCore.DbContextOptionsBuilder`1[TContext] UseApproval[TContext](Microsoft.EntityFrameworkCore.DbContextOptionsBuilder`1[TContext]) [return=NotNull/NotNull<Unknown/Unknown>; args=NotNull/NotNull<Unknown/Unknown>]

@@ -179,15 +179,27 @@ public static class ApprovalPersistence
         public static readonly ApprovalQueryGuard Instance = new();
 
         public Expression QueryCompilationStarting(Expression queryExpression, QueryExpressionEventData eventData)
-        { new GuardVisitor().Visit(queryExpression); return queryExpression; }
+        {
+            var guard = new GuardVisitor();
+            guard.Visit(queryExpression);
+            // Navigation expansion and auto includes run after this interceptor. The partitioned
+            // context, not the current shape of the expression, owns the filter boundary.
+            if (guard.RemovesFilters && eventData.Context?.Model.FindAnnotation(ApprovalPartitionModelExtensions.PartitionAnnotation) is not null)
+                throw new InvalidOperationException("审批分区 DbContext 禁止移除查询过滤器");
+            return queryExpression;
+        }
 
         internal sealed class GuardVisitor : ExpressionVisitor
         {
+            public bool RemovesFilters { get; private set; }
             private static readonly HashSet<System.Reflection.MethodInfo> BulkMethods = typeof(RelationalQueryableExtensions).GetMethods()
                 .Where(m => m.IsGenericMethodDefinition && m.Name is "ExecuteUpdate" or "ExecuteUpdateAsync" or "ExecuteDelete" or "ExecuteDeleteAsync").ToHashSet();
 
             protected override Expression VisitMethodCall(MethodCallExpression node)
             {
+                if (node.Method.DeclaringType == typeof(EntityFrameworkQueryableExtensions)
+                    && node.Method.Name == nameof(EntityFrameworkQueryableExtensions.IgnoreQueryFilters))
+                    RemovesFilters = true;
                 if (node.Method.IsGenericMethod && BulkMethods.Contains(node.Method.GetGenericMethodDefinition()))
                 {
                     var target = node.Method.GetGenericArguments()[0];

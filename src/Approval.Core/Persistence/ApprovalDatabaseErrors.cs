@@ -35,6 +35,8 @@ internal static class ApprovalDatabaseErrors
     {
         if (error is DbUpdateConcurrencyException || !error.Entries.Any(e => e.Entity is T)) return false;
         var entity = db.Model.FindEntityType(typeof(T));
+        if (!primary && entity?.FindAnnotation(ApprovalPartitionModelExtensions.PartitionAnnotation)?.Value is string partition)
+            properties = [partition, .. properties];
         var table = entity?.GetTableName();
         var constraint = primary ? entity?.FindPrimaryKey()?.GetName() : entity?.GetIndexes()
             .FirstOrDefault(i => i.IsUnique && i.Properties.Select(p => p.Name).SequenceEqual(properties))?.GetDatabaseName();
