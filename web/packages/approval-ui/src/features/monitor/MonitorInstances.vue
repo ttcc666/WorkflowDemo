@@ -19,7 +19,7 @@ const { api: approvalApi, userKey } = useApprovalClient()
 /** 流程监控：全部流程的分页搜索（状态、流程、发起人、关键字、发起日期），进行中的可终止。 */
 defineProps<{ flows: FlowSummary[] }>()
 
-const intent = useCommandIntent('monitor-terminate')
+const intent = useCommandIntent('monitor-terminate', { permission: 'approval.instance.terminate' })
 const { can } = useApprovalUser()
 const router = useRouter()
 const initiator = shallowRef<string | null>(null)
@@ -40,6 +40,7 @@ function reset() {
 const open = (id: string) => router.push({ name: approvalRouteNames.detail, params: { id } })
 
 async function terminate(row: InstanceListItem) {
+  if (!can('approval.instance.terminate') || !['Running', 'Returned'].includes(row.status)) return
   const owner = userKey.value
   let reason: string
   try {

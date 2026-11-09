@@ -17,6 +17,7 @@ export function ActionScriptEditor({
   fields?: string[];
 }) {
   const host = useRef<HTMLDivElement>(null);
+  const initialValue = useRef(value);
   const editor = useRef<EditorView | null>(null);
   const callback = useRef(onChange);
   callback.current = onChange;
@@ -65,7 +66,7 @@ export function ActionScriptEditor({
     };
     const view = new EditorView({
       parent: host.current!,
-      doc: value,
+      doc: initialValue.current,
       extensions: [
         basicSetup,
         javascript(),
@@ -86,7 +87,7 @@ export function ActionScriptEditor({
     });
     editor.current = view;
     setFormatting(false);
-    setError(check(value));
+    setError(check(initialValue.current));
     return () => {
       view.destroy();
       editor.current = null;

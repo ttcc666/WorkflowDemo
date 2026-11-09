@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
 import {
   emptyFilters,
@@ -22,20 +22,20 @@ export function usePagedList<T>(
   prefix = "",
   enabled = true,
 ) {
-  const identity = useApprovalIdentity();
+  useApprovalIdentity();
   const client = useApprovalClient();
   const owner = JSON.stringify([
     client.config().apiBase,
     client.identity.value,
   ]);
   const [params, setParams] = useSearchParams();
-  const applied = readListState(Object.fromEntries(params), prefix, 20);
-  const key = JSON.stringify(applied);
+  const key = JSON.stringify(readListState(Object.fromEntries(params), prefix, 20));
+  const applied = useMemo(() => JSON.parse(key) as ReturnType<typeof readListState>, [key]);
   const [filters, setFilters] = useState(applied.filters);
   useEffect(() => {
     setFilters(applied.filters);
-  }, [key]);
-  function patch(next: ListFilters, page: number, size: number) {
+  }, [applied.filters]);
+  const patch = useCallback((next: ListFilters, page: number, size: number) => {
     setFilters(next);
     setParams(
       (previous) => {
@@ -60,7 +60,7 @@ export function usePagedList<T>(
       },
       { replace: true },
     );
-  }
+  }, [prefix, setParams]);
   useEffect(() => {
     let owners = listOwners.get(client);
     if (!owners) listOwners.set(client, (owners = new Map()));
@@ -68,7 +68,7 @@ export function usePagedList<T>(
     owners.set(prefix, owner);
     if (previous !== undefined && previous !== owner && applied.page !== 1)
       patch(applied.filters, 1, applied.pageSize);
-  }, [identity]);
+  }, [client, prefix, owner, applied.page, applied.pageSize, applied.filters, patch]);
   const data = useAsyncData(
     (signal) =>
       loader(

@@ -36,7 +36,7 @@ export function createHttpClient(
     const controller = new AbortController()
     pending.add(controller)
     function verifyIdentity() {
-      if (controller.signal.aborted || identity !== approvalIdentityKey(getConfig())) throw new DOMException('身份已切换或请求已取消', 'AbortError')
+      if (controller.signal.aborted || options.signal?.aborted || identity !== approvalIdentityKey(getConfig())) throw new DOMException('身份已切换或请求已取消', 'AbortError')
     }
     try {
     const headers: Record<string, string> = { ...config.headers?.(), ...options.headers }
@@ -47,6 +47,7 @@ export function createHttpClient(
     if (typeof body === 'string') headers['Content-Type'] = 'application/json'
 
     const signal = options.signal ? AbortSignal.any([controller.signal, options.signal]) : controller.signal
+    verifyIdentity()
     const response = await (config.fetcher ?? fetch)(url, { method, headers, body, signal })
     verifyIdentity()
 

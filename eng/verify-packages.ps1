@@ -28,7 +28,10 @@ Invoke-CheckedCommand 'pnpm' @('pack', '--out', $tarball) (Join-Path $webRoot 'p
 $sharedTarball = Join-Path $packages ('approval-shared-' + $version + '.tgz')
 Invoke-CheckedCommand 'pnpm' @('pack', '--out', $sharedTarball) (Join-Path $webRoot 'packages/approval-shared')
 
-$consumerRoot = Join-Path $repositoryRoot ('output/engineering/consumer-' + [Guid]::NewGuid().ToString('N'))
+$consumerId = [Guid]::NewGuid().ToString('N')
+$consumerRoot = Join-Path $repositoryRoot ('output/engineering/consumer-' + $consumerId)
+# Copy tasks may reject 260-character package asset paths on Windows. Keep a unique isolated cache closer to the root.
+$consumerPackages = Join-Path $repositoryRoot ('output/n/' + $consumerId)
 $apiRoot = Join-Path $consumerRoot 'api'
 $sampleRoot = Join-Path $consumerRoot 'samples/Approval.Certificate'
 $referenceRoot = Join-Path $consumerRoot 'samples/Approval.ReferenceHost'
@@ -114,7 +117,7 @@ $project | Set-Content -LiteralPath (Join-Path $apiRoot 'Certificate.Api.csproj'
 foreach ($name in $allPackages) {
     Copy-Item -LiteralPath (Join-Path $packages ($name + '.' + $version + '.nupkg')) -Destination $feed
 }
-Invoke-CheckedCommand 'dotnet' @('build', 'Certificate.Api.csproj', '--configuration', 'Release', ('-p:RestorePackagesPath=' + (Join-Path $consumerRoot 'nuget-packages'))) $apiRoot
+Invoke-CheckedCommand 'dotnet' @('build', 'Certificate.Api.csproj', '--configuration', 'Release', ('-p:RestorePackagesPath=' + $consumerPackages)) $apiRoot
 $deps = Get-Content -LiteralPath (Join-Path $apiRoot 'bin/Release/net10.0/Certificate.Api.deps.json') -Raw | ConvertFrom-Json
 foreach ($name in $frameworkPackages) {
     if ($deps.libraries.($name + '/' + $version).type -ne 'package') { throw ('Consumer did not load a NuGet package: ' + $name) }
@@ -144,7 +147,7 @@ foreach ($reference in $referenceProject.SelectNodes('/Project/ItemGroup/Project
     $reference.ParentNode.ReplaceChild($packageReference, $reference) | Out-Null
 }
 $referenceProject.Save($referenceProjectPath)
-Invoke-CheckedCommand 'dotnet' @('build', 'Approval.ReferenceHost.csproj', '--configuration', 'Release', ('-p:RestorePackagesPath=' + (Join-Path $consumerRoot 'nuget-packages'))) $referenceRoot
+Invoke-CheckedCommand 'dotnet' @('build', 'Approval.ReferenceHost.csproj', '--configuration', 'Release', ('-p:RestorePackagesPath=' + $consumerPackages)) $referenceRoot
 $referenceDeps = Get-Content -LiteralPath (Join-Path $referenceRoot 'bin/Release/net10.0/Approval.ReferenceHost.deps.json') -Raw | ConvertFrom-Json
 foreach ($name in $frameworkPackages) {
     $dependency = $referenceDeps.libraries.($name + '/' + $version)
@@ -203,7 +206,7 @@ foreach ($reference in $embeddedProject.SelectNodes('/Project/ItemGroup/PackageR
     }
 }
 $embeddedProject.Save($embeddedProjectPath)
-Invoke-CheckedCommand 'dotnet' @('build', 'EmbeddedHost.csproj', '--configuration', 'Release', ('-p:RestorePackagesPath=' + (Join-Path $consumerRoot 'nuget-packages'))) $embeddedRoot
+Invoke-CheckedCommand 'dotnet' @('build', 'EmbeddedHost.csproj', '--configuration', 'Release', ('-p:RestorePackagesPath=' + $consumerPackages)) $embeddedRoot
 $embeddedDeps = Get-Content -LiteralPath (Join-Path $embeddedRoot 'bin/Release/net10.0/EmbeddedHost.deps.json') -Raw | ConvertFrom-Json
 if (@($embeddedDeps.libraries.PSObject.Properties.Name | Where-Object { $_ -like 'Approval.Forms/*' -or $_ -like 'Approval.Forms.AspNetCore/*' -or $_ -like 'Approval.Testing/*' }).Count -gt 0) { throw 'Embedded consumer implicitly depends on Forms or Approval.Testing.' }
 foreach ($name in @('Approval.Core', 'Approval.AspNetCore')) {
@@ -245,7 +248,7 @@ try {
     }
 }
 finally { $archive.Dispose() }
-Invoke-CheckedCommand 'dotnet' @('build', 'TestingHost.csproj', '--configuration', 'Release', ('-p:RestorePackagesPath=' + (Join-Path $consumerRoot 'nuget-packages'))) $testingRoot
+Invoke-CheckedCommand 'dotnet' @('build', 'TestingHost.csproj', '--configuration', 'Release', ('-p:RestorePackagesPath=' + $consumerPackages)) $testingRoot
 $testingDeps = Get-Content -LiteralPath (Join-Path $testingRoot 'bin/Release/net10.0/TestingHost.deps.json') -Raw | ConvertFrom-Json
 foreach ($name in @('Approval.Core', 'Approval.Testing')) {
     $dependency = $testingDeps.libraries.($name + '/' + $version)

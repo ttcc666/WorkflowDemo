@@ -4,6 +4,7 @@ import { computed, shallowRef, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useCommandIntent } from '@ui/composables/useCommandIntent'
 import { useApprovalClient } from '@ui/client'
+import { useApprovalUser } from '@ui/composables/useApprovalUser'
 import { errorMessage } from '@ui/api/http'
 import type { ReassignResult, TodoItem } from '@ui/contracts/api'
 import UserPicker from '@ui/components/UserPicker.vue'
@@ -11,8 +12,12 @@ import { useAsyncData } from '@ui/composables/useAsyncData'
 import { formatDateTime, taskStatusLabels } from '@ui/utils/labels'
 
 // 批量命令可能已逐实例提交；即使后续返回 4xx，也不能据此丢弃恢复键。
-const intent = useCommandIntent('bulk-reassign', { retainOnError: true })
+const intent = useCommandIntent('bulk-reassign', { retainOnError: true, permission: 'approval.task.reassign-bulk' })
 const { api: approvalApi, userKey } = useApprovalClient()
+const { can } = useApprovalUser()
+const allowed = computed(() => can('approval.task.reassign-bulk'))
+const pendingRevision = shallowRef(0)
+const pendingScope = computed(() => { void userKey.value; void pendingRevision.value; return intent.pendingScopes()[0] ?? intent.pending.value ?? (fromUser.value && intent.hasPending(fromUser.value) ? fromUser.value : null) })
 
 /** 离职交接：选择原处理人 → 预览其未完成的待办 → 选择新处理人 → 确认批量改派（不含角色任务）。 */
 const fromUser = shallowRef<string | null>(null)
@@ -20,19 +25,27 @@ const toUser = shallowRef<string | null>(null)
 const reason = shallowRef('离职交接')
 const submitting = shallowRef(false)
 const result = shallowRef<ReassignResult | null>(null)
+const submittedRequest = shallowRef<{ from: string; to: string; reason: string } | null>(null)
 
 const preview = useAsyncData(
-  async (signal) => (fromUser.value ? approvalApi.userTasks(fromUser.value, { pageSize: 100 }, signal) : null),
-  { watch: [fromUser] },
+  async (signal) => (fromUser.value && allowed.value ? approvalApi.userTasks(fromUser.value, { pageSize: 100 }, signal) : null),
+  { watch: [fromUser, allowed], notifyError: false, resetOnReload: true },
 )
-watch(fromUser, () => (result.value = null))
-watch(userKey, () => { fromUser.value = null; toUser.value = null; reason.value = '离职交接'; result.value = null }, { flush: 'sync' })
+watch([fromUser, toUser, reason], () => (result.value = null), { flush: 'sync' })
+watch(userKey, () => { intent.pending.value = null; submittedRequest.value = null; fromUser.value = null; toUser.value = null; reason.value = '离职交接'; result.value = null }, { flush: 'sync' })
 
 const tasks = computed<TodoItem[]>(() => preview.data.value?.items ?? [])
 const total = computed(() => preview.data.value?.total ?? 0)
-const canSubmit = computed(() => !!fromUser.value && !!toUser.value && !!reason.value.trim() && fromUser.value !== toUser.value && (total.value > 0 || intent.hasPending(fromUser.value!)))
+const canSubmit = computed(() => allowed.value && pendingScope.value === null && !preview.loading.value && !preview.error.value && !!fromUser.value && !!toUser.value && !!reason.value.trim() && fromUser.value !== toUser.value && total.value > 0 && tasks.value.length > 0)
 
-function recover(value: unknown) { result.value = value as ReassignResult; void preview.reload() }
+function recover(value: unknown, scope: string) {
+  const original = submittedRequest.value
+  if (original?.from === scope) { fromUser.value = original.from; toUser.value = original.to; reason.value = original.reason }
+  else if (scope !== fromUser.value) { fromUser.value = scope; toUser.value = null }
+  result.value = value as ReassignResult
+  void preview.reload()
+}
+function resetResult() { pendingRevision.value++; result.value = null; submittedRequest.value = null; void preview.reload() }
 
 async function submit() {
   if (!canSubmit.value || submitting.value) return
@@ -45,7 +58,9 @@ async function submit() {
     submitting.value = false
     return
   }
-  if (owner !== userKey.value) { submitting.value = false; return }
+  if (owner !== userKey.value || !allowed.value) { submitting.value = false; return }
+  submittedRequest.value = body
+  result.value = null
   try {
     result.value = await intent.run(body.from, body, (payload, key) => approvalApi.reassignUser(payload.from, payload.to, payload.reason, key))
     ElMessage.success(`已改派 ${result.value.count} 条待办`)
@@ -59,17 +74,17 @@ async function submit() {
 </script>
 
 <template>
-  <CommandRecovery :intent="intent" :busy="submitting" @recovered="recover" />
+  <CommandRecovery v-if="allowed" :intent="intent" :scope="pendingScope" :description="pendingScope ? `原交出人员：${pendingScope}` : undefined" :busy="submitting" @recovered="recover" @reset="resetResult" />
   <div class="handover">
     <el-form label-position="top" class="handover__form" @submit.prevent>
       <el-form-item label="原处理人" required>
-        <UserPicker v-model="fromUser" placeholder="选择离职或长期不在的人员" />
+        <UserPicker v-model="fromUser" :disabled="submitting || !allowed" placeholder="选择离职或长期不在的人员" />
       </el-form-item>
       <el-form-item label="新处理人" required>
-        <UserPicker v-model="toUser" :exclude="fromUser ? [fromUser] : []" placeholder="选择接手人员" />
+        <UserPicker v-model="toUser" :disabled="submitting || !allowed" :exclude="fromUser ? [fromUser] : []" placeholder="选择接手人员" />
       </el-form-item>
       <el-form-item label="原因" required>
-        <el-input v-model="reason" maxlength="200" />
+        <el-input v-model="reason" :disabled="submitting || !allowed" maxlength="200" />
       </el-form-item>
       <el-form-item label=" ">
         <el-button type="primary" :disabled="!canSubmit" :loading="submitting" @click="submit">确认改派</el-button>
@@ -88,6 +103,7 @@ async function submit() {
     </el-alert>
 
     <template v-if="fromUser">
+      <el-alert v-if="preview.error.value" type="error" :closable="false" :title="errorMessage(preview.error.value)"><el-button :disabled="submitting" @click="preview.reload">重试预览</el-button></el-alert>
       <div class="handover__title">{{ fromUser }} 的未完成待办（{{ total }}）</div>
       <el-table v-loading="preview.loading.value" :data="tasks" size="small" empty-text="没有未完成的待办">
         <el-table-column prop="title" label="标题" min-width="220" show-overflow-tooltip />

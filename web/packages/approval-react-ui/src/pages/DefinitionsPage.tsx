@@ -57,7 +57,7 @@ export default function DefinitionsPage() {
   const [versions, setVersions] = useState<string | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
-  const intent = useCommandIntent("definition-copy");
+  const intent = useCommandIntent("copy-definition", { permission: "approval.definition.design" });
   const filtered = (definitions.data ?? []).filter((item) =>
     (item.name + " " + item.key)
       .toLowerCase()
@@ -68,6 +68,7 @@ export default function DefinitionsPage() {
     categories.reload();
   }
   function create() {
+    if (!user.can("approval.definition.design")) return;
     if (
       !key.trim() ||
       !name.trim() ||
@@ -82,7 +83,7 @@ export default function DefinitionsPage() {
     );
   }
   async function copyDefinition() {
-    if (!copy || !key.trim() || !name.trim() || busy) return;
+    if (!copy || !key.trim() || !name.trim() || busy || !user.can("approval.definition.design")) return;
     setBusy(true);
     setError(null);
     try {
@@ -95,6 +96,7 @@ export default function DefinitionsPage() {
         },
         (body, id) => api.copyDefinition(copy.key, body, id),
       );
+      if (!intent.isCurrent()) return;
       setDialog(null);
       refresh();
       navigate("../designer/" + result.key);

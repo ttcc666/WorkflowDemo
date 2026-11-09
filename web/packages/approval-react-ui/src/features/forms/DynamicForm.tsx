@@ -482,7 +482,7 @@ export function DynamicForm({
         return Object.keys(next).length === 0;
       },
     }),
-    [schema, value, readonly, JSON.stringify(editableFields)],
+    [schema, value, readonly, editableFields],
   );
   function update(key: string, next: unknown) {
     const values = cloneField({ ...value, [key]: next });
@@ -507,7 +507,7 @@ export function DynamicForm({
     if (!editing) return;
     const next = cloneField(value);
     if (applyFormulas(schema, next)) onChange(next);
-  }, [schema, value, editing]);
+  }, [schema, value, editing, onChange]);
   if (!schema.fields.length) return <EmptyState text="没有表单字段" />;
   return (
     <FieldGroup className="ar-form-grid">

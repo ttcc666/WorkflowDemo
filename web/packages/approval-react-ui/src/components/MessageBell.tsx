@@ -38,7 +38,7 @@ export function MessageBell({
     [open],
     open && user.can("approval.message.read"),
   );
-  const intent = useCommandIntent("message-read");
+  const intent = useCommandIntent("message", { permission: "approval.message.write" });
   useEffect(() => {
     setOpen(false);
     setError(null);
@@ -47,7 +47,7 @@ export function MessageBell({
   useEffect(() => {
     const timer = window.setInterval(count.reload, 10000);
     return () => window.clearInterval(timer);
-  }, [client]);
+  }, [count.reload]);
   function refresh() {
     count.reload();
     messages.reload();

@@ -14,7 +14,7 @@ const { api: approvalApi, userKey: approvalUserKey, config: approvalConfig } = u
 
 /** 投递记录：外部渠道通知与可靠事件的投递状态、重试（分页，状态与页码同步到地址栏）。宿主可通过 outboxPanel 选项在下方追加面板。 */
 const { can } = useApprovalUser()
-const intent = useCommandIntent('outbox-retry')
+const intent = useCommandIntent('outbox-retry', { permission: 'approval.outbox.retry' })
 const outboxPanel = approvalConfig().outboxPanel
 
 const outbox = usePagedList((query, signal) => approvalApi.outbox(query, signal), {
@@ -30,6 +30,7 @@ const timer = window.setInterval(refresh, 3000)
 onBeforeUnmount(() => window.clearInterval(timer))
 
 async function retry(message: OutboxMessage) {
+  if (!can('approval.outbox.retry') || message.status === 'Succeeded') return
   try {
     await intent.run(message.id, {}, (_, operationId) => approvalApi.retryOutbox(message.id, operationId))
     ElMessage.success('已安排重新投递')

@@ -71,6 +71,8 @@ async function restartPublish() {
 }
 const fromId = computed(() => route.query.from as string | undefined)
 const name = shallowRef('')
+const savedName = shallowRef('')
+const dirty = computed(() => designer.dirty.value || name.value.trim() !== savedName.value)
 const version = shallowRef<number | null>(null)
 
 // 加载：?from=<定义ID> 基于历史版本编辑；否则取最新版本；不存在则新建。完整定义由宿主敏感读取能力授权。
@@ -83,6 +85,7 @@ watch(userKey, () => {
   previewDefinition.value = newFlowDefinition()
   designer.load(newFlowDefinition())
   name.value = ''
+  savedName.value = ''
   version.value = null
   governance.state.value = null
   changeNote.value = ''
@@ -97,7 +100,7 @@ const loader = useAsyncData(
       if (!fromId.value && governance.state.value?.draftJson) return { name: governance.state.value.name, version: governance.state.value.lastVersion, definitionJson: governance.state.value.draftJson }
       return fromId.value ? await approvalApi.definitionById(fromId.value, signal) : await approvalApi.latestDefinition(flowKey.value)
     } catch (e) {
-      if (e instanceof ApiError && e.status === 404) return null
+      if (e instanceof ApiError && e.status === 404 && !fromId.value && (governance.state.value?.lastVersion ?? 0) === 0) return null
       throw e
     }
   },
@@ -108,9 +111,11 @@ watch(loader.data, (definition) => {
   if (definition === undefined) return
   designer.load(definition ? (JSON.parse(definition.definitionJson) as FlowDefinition) : newFlowDefinition())
   name.value = definition?.name ?? (route.query.name as string) ?? flowKey.value
+  savedName.value = name.value.trim()
   version.value = definition?.version ?? null
   canvas.value?.fitView()
 })
+const ready = computed(() => canLoad.value && !loader.loading.value && !loader.error.value && loader.data.value !== undefined)
 
 const emptyMeta: ApprovalMeta = {
   approverTypes: [],
@@ -181,17 +186,24 @@ const upstreamActions = computed(() => {
 const validating = shallowRef(false)
 const publishing = shallowRef(false)
 async function saveDraft() {
+  if (!ready.value || saving.value || publishing.value || !canGovern('approval.definition.design')) return
   if (!name.value.trim()) return ElMessage.warning('请填写流程名称')
+  const owner = userKey.value, key = flowKey.value
+  const submittedName = name.value.trim()
+  const definition = designer.buildDefinition()
   saving.value = true
   try {
-    await governance.save(name.value.trim(), JSON.stringify(designer.buildDefinition()), fromId.value ?? governance.state.value?.draftSourceDefinitionId ?? governance.state.value?.activeDefinitionId ?? null)
-    designer.markSaved()
+    await governance.save(submittedName, JSON.stringify(definition), fromId.value ?? governance.state.value?.draftSourceDefinitionId ?? governance.state.value?.activeDefinitionId ?? null)
+    if (owner !== userKey.value || key !== flowKey.value) return
+    savedName.value = submittedName
+    designer.markSaved(definition)
     ElMessage.success('设计草稿已保存；发起审批仍使用当前选用的发布版本')
   } catch (error) { ElMessage.error(errorMessage(error)) }
   finally { saving.value = false }
 }
 
 async function validate() {
+  if (!ready.value) return { ok: false, definition: null }
   validating.value = true
   try {
     return await designer.validate(can('approval.definition.validate'))
@@ -204,6 +216,7 @@ async function validate() {
 }
 
 async function publish() {
+  if (!ready.value || publishing.value || saving.value || !canGovern('approval.definition.publish')) return
   const identity = userKey.value
   if (!name.value.trim()) return ElMessage.warning('请填写流程名称')
   const { ok, definition } = await validate()
@@ -223,7 +236,8 @@ async function publish() {
       await governance.save(name.value.trim(), JSON.stringify(definition), fromId.value ?? governance.state.value?.draftSourceDefinitionId ?? governance.state.value?.activeDefinitionId ?? null)
     const result = await governance.publish(changeNote.value.trim())
     version.value = result.version
-    designer.markSaved()
+    savedName.value = governance.state.value?.name ?? name.value.trim()
+    designer.markSaved(governance.state.value?.draftJson ? JSON.parse(governance.state.value.draftJson) as FlowDefinition : definition)
     ElMessage.success(`已发布 ${result.key} v${result.version}`)
     if (fromId.value) await router.replace({ query: {} })
   } catch (e) {
@@ -236,7 +250,7 @@ async function publish() {
 // ───── 未保存提醒 ─────
 
 onBeforeRouteLeave(async () => {
-  if (!designer.dirty.value) return true
+  if (!dirty.value) return true
   try {
     await ElMessageBox.confirm('有未保存的修改，离开后将丢失。确定离开？', '提示', { type: 'warning' })
     return true
@@ -246,7 +260,7 @@ onBeforeRouteLeave(async () => {
 })
 
 const onBeforeUnload = (e: BeforeUnloadEvent) => {
-  if (designer.dirty.value) e.preventDefault()
+  if (dirty.value) e.preventDefault()
 }
 window.addEventListener('beforeunload', onBeforeUnload)
 onBeforeUnmount(() => window.removeEventListener('beforeunload', onBeforeUnload))
@@ -256,12 +270,14 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', onBeforeUnload)
   <CommandRecovery :intent="intent" :busy="saving || publishing" @recovered="loader.reload" />
   <el-alert v-if="me && (!canViewDefinitions || !can('approval.definition.design'))" type="warning" :closable="false" show-icon title="没有流程设计或定义读取权限" />
   <div v-else v-loading="loader.loading.value" class="designer">
+    <el-alert v-if="loader.error.value" type="error" :closable="false" :title="errorMessage(loader.error.value)"><el-button @click="loader.reload">重试加载流程</el-button></el-alert>
     <el-card shadow="never" body-class="designer__toolbar-body">
       <DesignerToolbar
         v-model:name="name"
         :flow-key="flowKey"
         :version="version"
-        :dirty="designer.dirty.value"
+        :dirty="dirty"
+        :disabled="!ready"
         :validating="validating"
         :publishing="publishing"
         :saving="saving"
@@ -297,16 +313,16 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', onBeforeUnload)
       <el-tab-pane label="发起设置" name="settings" />
     </el-tabs>
 
-    <div v-if="tab === 'form'" class="designer__form">
+    <div v-if="ready && tab === 'form'" class="designer__form">
       <FormDesigner :model-value="designer.form.value" @update:model-value="designer.updateForm" />
     </div>
 
-    <el-card v-if="tab === 'settings'" shadow="never" class="designer__settings">
+    <el-card v-if="ready && tab === 'settings'" shadow="never" class="designer__settings">
       <FlowSettingsPanel :model-value="designer.settings.value" :form="designer.form.value" :roles="directory.roles.value"
         @update:model-value="designer.updateSettings" />
     </el-card>
 
-    <div v-show="tab === 'flow'" class="designer__body">
+    <div v-if="ready" v-show="tab === 'flow'" class="designer__body">
       <aside class="designer__side">
         <NodePalette @add="addNode" />
       </aside>

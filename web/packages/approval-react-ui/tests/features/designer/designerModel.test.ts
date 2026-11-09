@@ -8,6 +8,22 @@ import {
   type ApprovalActionMeta,
 } from "@approval/shared";
 
+it('acknowledges only the persisted designer snapshot and preserves edits made while saving', () => {
+  const model = createDesignerModel();
+  model.updateNode('start', { name: '提交时的节点' });
+  const persisted = model.definition();
+  model.updateForm({ fields: [{ key: 'later', label: '保存期间的新字段', type: 'Text' }] });
+  model.markSaved(persisted);
+  expect(model.definition().form?.fields[0]?.key).toBe('later');
+  expect(model.definition().nodes.start.name).toBe('提交时的节点');
+  expect(model.state.value.dirty).toBe(true);
+  model.undo();
+  expect(model.definition()).toEqual(persisted);
+  expect(model.state.value.dirty).toBe(false);
+  model.redo();
+  expect(model.state.value.dirty).toBe(true);
+});
+
 it("staggers click-added nodes like Vue and places palette drops at the exact requested center", () => {
   const model = createDesignerModel();
   const click = model.addNode("Approval", { x: 300, y: 160 });

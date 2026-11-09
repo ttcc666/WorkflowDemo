@@ -40,7 +40,7 @@ try {
   console.log('Isolated React / Vue test host ready; evidence: ' + output)
   if (process.argv.includes('--serve')) await new Promise(resolve => { process.once('SIGINT', resolve); process.once('SIGTERM', resolve) })
   else {
-    const tests = spawn(process.execPath, [join(web, 'node_modules/@playwright/test/cli.js'), 'test', '--config', 'playwright.react.config.ts', ...process.argv.slice(2).filter(arg => arg !== '--packed')], { cwd: web, windowsHide: true, stdio: 'inherit', env: { ...process.env, APPROVAL_SMOKE_API: apiUrl, APPROVAL_REACT_URL: uiUrl, APPROVAL_VUE_URL: apiUrl, APPROVAL_SMOKE_OUTPUT: output, APPROVAL_TEST_ROOT: root } })
+    const tests = spawn(process.execPath, [join(web, 'node_modules/@playwright/test/cli.js'), 'test', '--config', 'playwright.react.config.ts', ...process.argv.slice(2).filter(arg => arg !== '--packed')], { cwd: web, windowsHide: true, stdio: 'inherit', env: { ...process.env, APPROVAL_SMOKE_API: apiUrl, APPROVAL_REACT_URL: uiUrl, APPROVAL_VUE_URL: apiUrl, APPROVAL_SMOKE_OUTPUT: output, APPROVAL_TEST_ROOT: root, APPROVAL_PACKED_CONSUMER: packed ? '1' : '0' } })
     const [code] = await once(tests, 'exit')
     if (code !== 0) throw new Error('React parity acceptance failed; see ' + output)
   }

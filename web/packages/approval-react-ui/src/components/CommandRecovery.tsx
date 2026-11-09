@@ -8,6 +8,7 @@ export function CommandRecovery({
   recovered,
   onRecoveringChange,
   onReset,
+  description,
 }: {
   intent: ReturnType<typeof useCommandIntent>
   scope?: string | null
@@ -15,6 +16,7 @@ export function CommandRecovery({
   recovered: (value: unknown, scope: string) => void
   onRecoveringChange?: (recovering: boolean) => void
   onReset?: () => void
+  description?: string
 }) {
   const [recovering, setRecovering] = useState(false)
   const retrying = useRef(false)
@@ -29,7 +31,8 @@ export function CommandRecovery({
     onRecoveringChange?.(true)
     setError(null)
     try {
-      recovered(await intent.retry(scope), scope)
+      const result = await intent.retry(scope)
+      if (intent.isCurrent()) recovered(result, scope)
     } catch (cause) {
       setError(cause)
     } finally {
@@ -41,8 +44,12 @@ export function CommandRecovery({
   return (
     <Card>
       <strong>上次提交结果尚未确认</strong>
+      {description && <p>{description}</p>}
+      <p role="status">恢复状态：{recovering ? '正在按原内容确认结果' : intent.canRetry(scope) ? '原请求仍在本页，可恢复' : '需要人工核对，禁止自动重试'}</p>
       <p>
-        {intent.canRetry(scope)
+        {intent.hasConflictingPending(scope)
+          ? '检测到多笔未确认操作，请人工核对全部结果，禁止自动重试。'
+          : intent.canRetry(scope)
           ? '可按原内容和原键重试。'
           : '当前页面已无原请求正文，请核对已提交记录。'}
       </p>

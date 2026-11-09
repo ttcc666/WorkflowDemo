@@ -4,6 +4,7 @@ import {
   useEffect,
   useLayoutEffect,
   useMemo,
+  useRef,
   useSyncExternalStore,
   type ComponentType,
   type ReactNode,
@@ -54,8 +55,9 @@ export function ApprovalProvider({
   client?: ApprovalClient
   children: ReactNode
 }) {
+  const initialOptions = useRef(options);
   const client = useMemo(
-    () => supplied ?? createApprovalClient(options),
+    () => supplied ?? createApprovalClient(initialOptions.current),
     [supplied],
   )
   const key = options.userKey?.() ?? supplied?.identity.value ?? ''

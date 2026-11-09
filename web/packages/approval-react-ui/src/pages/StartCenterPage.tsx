@@ -68,7 +68,7 @@ export default function StartCenterPage() {
     [user.can("approval.draft.read")],
     user.formsEnabled && user.can("approval.draft.read"),
   );
-  const intent = useCommandIntent("draft-delete");
+  const intent = useCommandIntent("draft-delete", { permission: "approval.draft.delete" });
   const [keyword, setKeyword] = useState("");
   const [category, setCategory] = useState("");
   const [view, setView] = useState("applications");
@@ -77,7 +77,7 @@ export default function StartCenterPage() {
   const previewData = useAsyncData(
     (signal) => api.draft(previewDraft!.id, signal),
     [previewDraft?.id],
-    !!previewDraft,
+    !!previewDraft && user.formsEnabled && user.can("approval.draft.read"),
   );
   const summaryValues = Object.values(
     parseFormValues(previewData.data?.formDataJson),
@@ -103,7 +103,7 @@ export default function StartCenterPage() {
       (!category || (flow.category || "其他") === category),
   );
   async function remove() {
-    if (!selected || busy) return;
+    if (!selected || busy || !user.can("approval.draft.delete")) return;
     setBusy(true);
     setError(null);
     try {

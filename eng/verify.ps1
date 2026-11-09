@@ -41,6 +41,7 @@ if ($Scope -in @('All', 'Frontend')) {
         Invoke-CheckedCommand 'pnpm' @('install', '--frozen-lockfile') $webRoot
     }
     Invoke-CheckedCommand 'pnpm' @('check:boundaries') $webRoot
+    Invoke-CheckedCommand 'pnpm' @('lint') $webRoot
     Invoke-CheckedCommand 'pnpm' @('check:ui:react') $webRoot
     Invoke-CheckedCommand 'pnpm' @('test:ui:react') $webRoot
     Invoke-CheckedCommand 'pnpm' @('test:boundaries') $webRoot

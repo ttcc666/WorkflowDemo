@@ -57,6 +57,20 @@ function ApprovalApp({ userId, token }: { userId: string; token: string }) {
 
 九个相对路由可挂到宿主布局 children：`workbench`、`approvals/:id`、`start`、`start/:key`、`definitions`、`designer/:key`、`monitor`、`outbox`、`diagnostics`。使用 React Router 的 data router（`createBrowserRouter/createMemoryRouter`），设计器与申请页用 blocker 提示未保存离开。页面 lazy 加载。
 
+也可直接导入单个页面，挂到宿主自己的 Router；不必安装完整菜单、Demo 或全部九个路由。发布产物提供九个页面的 JavaScript 与声明入口：
+
+```tsx
+import WorkbenchPage from '@approval/react-ui/pages/WorkbenchPage'
+import ApprovalDetailPage from '@approval/react-ui/pages/ApprovalDetailPage'
+
+const router = createBrowserRouter([{ path: '/workflow', children: [
+  { path: 'workbench', Component: WorkbenchPage },
+  { path: 'approvals/:id', Component: ApprovalDetailPage },
+] }])
+```
+
+页面仍使用 React Router 提供 params 和搜索参数；申请页与设计器需要 data router。页面内默认导航使用相邻 `workbench`、`approvals/:id`、`start/:key`、`definitions`、`designer/:key` 等相对路径，宿主应映射其实际启用的入口。独立 `eng/consumers/react-standalone` 夹具使用 Hash Router 和少量页面验证集成，不依赖 Demo 路由工厂。
+
 MessageBell 默认放在该审批布局路由中，详情导航会保留宿主挂载路径；放在其他全局布局时可传 `detailPath={(id) => '/workflow/approvals/' + id}`。
 
 `headers/fetcher` 每次请求读取最新配置，fetcher 接收原始 RequestInit 并返回 Response，保留 AbortSignal、401、ProblemDetails、204、Blob 和上传响应。不要把业务响应、Token 或表单正文写入 localStorage。
@@ -90,9 +104,15 @@ React 的 getter 没有 Vue 自动依赖追踪：切换身份时宿主必须更�
 
 ## 写操作与恢复
 
+异步写操作可能在页面离开后返回。`useCommandIntent().isCurrent()` 检查命令所在组件是否仍挂载、身份与客户端版本是否仍匹配；应用结果或导航前应复核它。请求已成功返回的原键仍按正常确认清理，页面离开不会触发另一笔写操作或把宿主导航回旧页面。
+
 API 写方法要求 OperationId，经 `Idempotency-Key` 发送。一次意图生成一个键；网络 / 5xx / CommitOutcomeUnknown 保留原键、原请求和路由，禁止通过换键盲重试。`useCommandIntent` / `CommandRecovery` 提供此流程，sessionStorage 仅保存键、摘要和状态，原正文及回调只在页面内存。
 
 页面已丢失原正文时只能核对结果并恢复原内容，不能宣称一键恢复。校验 / 并发冲突显示当前错误并按页面规则刷新。文件上传仍是既有非请求幂等例外，不自动重试外部存储写入。
+
+共享层统一两套前端的命令命名空间，并读取旧 React 的 `user-reassign`、`cc-read`、`form-start`、`message-read`、`definition-import`、`definition-copy` 记录。读取不会删除旧记录；发现同一对象有多笔不同未确认键时阻止提交，要求人工核对全部结果。只有原操作成功确认或用户明确核对后开始新意图时才清理对应记录。交接恢复卡片会在刷新后显示原交出人员；已丢失正文的历史记录禁止自动重试。
+
+`useCommandIntent` 支持 `permission` 或 `canExecute(scope)`，提交和原键重试都会重新检查当前权限。该 UI 检查用于避免过期交互，后端仍负责可信授权。
 
 Action 类型 / 配置版本 / 模式从 `/meta.actions` 获取。HTTP 使用宿主登记目标，SQL 使用登记只读查询；不提供任意 URL / SQL 旁路。同步 GET 可提供 statusCode/body；HTTP 预演只展示计划。Action 预演 API 按节点顺序运行，编辑器可以定位节点中的步骤；ruleIndex 只用于审批人规则。
 

@@ -65,6 +65,7 @@ import {
 export default function StartFormPage() {
   const { key = "" } = useParams();
   const [params, setParams] = useSearchParams();
+  const routeDraft = params.get("draft");
   const navigate = useNavigate();
   const client = useApprovalClient();
   const identity = useApprovalIdentity();
@@ -98,12 +99,11 @@ export default function StartFormPage() {
   const snapshot = JSON.stringify([values, comment.trim()]);
   const dirty = !!start.data && snapshot !== saved;
   useEffect(() => {
-    const next = params.get("draft");
-    if (next !== draftId) {
-      setDraftId(next);
-      setOpenedDraft(next);
+    if (routeDraft !== draftId) {
+      setDraftId(routeDraft);
+      setOpenedDraft(routeDraft);
     }
-  }, [params.get("draft")]);
+  }, [routeDraft, draftId]);
   useEffect(() => {
     setValues({});
     setComment("");
@@ -128,7 +128,7 @@ export default function StartFormPage() {
     setSaved(JSON.stringify([next, (draft.data?.comment ?? "").trim()]));
     if (draft.data?.adjusted)
       setNotice("流程已更新，草稿已按最新表单调整，请检查后提交");
-  }, [start.data, draft.data]);
+  }, [start.data, draft.data, openedDraft]);
   const current = useRef({ values, comment, snapshot, draftId, dirty });
   current.current = { values, comment, snapshot, draftId, dirty };
   async function save(silent = false) {
@@ -155,7 +155,7 @@ export default function StartFormPage() {
             id,
           ),
       );
-      if (owner !== client.generation) return;
+      if (owner !== client.generation || !intent.isCurrent()) return;
       setDraftId(result.draftId);
       setSavedAt(result.updatedAt);
       setSaved(body.snapshot);
@@ -220,7 +220,7 @@ export default function StartFormPage() {
             id,
           ),
       );
-      if (owner === client.generation) {
+      if (owner === client.generation && intent.isCurrent()) {
         setSaved(snapshot);
         navigate("../approvals/" + result.instanceId);
       }
