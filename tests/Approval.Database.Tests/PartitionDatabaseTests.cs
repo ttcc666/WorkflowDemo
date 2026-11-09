@@ -189,17 +189,24 @@ public sealed partial class DatabaseContractTests
             foreach (var foreign in new[] { "instance", "draft" })
             {
                 await using var db = new PartitionStorageContext(options, "alpha");
+                // Match ApprovalUnitOfWork: an explicit transaction owns all flushes.
+                await using var transaction = await db.Database.BeginTransactionAsync();
                 var own = await db.Set<ApprovalInstance>().SingleAsync(); own.Title = "must-roll-back";
+                await db.SaveChangesAsync();
                 db.AddOwned(PartitionFile(instances[foreign == "instance" ? "bravo" : "alpha"], drafts[foreign == "draft" ? "bravo" : "alpha"]));
                 var error = await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
                 AssertPartitionConstraint(error, unique: false);
+                await transaction.RollbackAsync();
             }
             await using (var db = new PartitionStorageContext(options, "alpha"))
             {
+                await using var transaction = await db.Database.BeginTransactionAsync();
                 var category = await db.Set<PartitionCategory>().SingleAsync(r => r.Code == "shared");
                 category.Description = "must-roll-back";
+                await db.SaveChangesAsync();
                 db.AddOwned(new PartitionItem { Id = Guid.NewGuid(), CategoryCode = "bravo-private" });
                 AssertPartitionConstraint(await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync()), unique: false);
+                await transaction.RollbackAsync();
             }
             await using (var verify = new PartitionStorageContext(options, "alpha"))
             {
