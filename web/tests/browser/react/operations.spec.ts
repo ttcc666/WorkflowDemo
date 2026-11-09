@@ -1,21 +1,34 @@
 import { chooseOption } from "./ui-controls";
-import { expect, test } from "@playwright/test";
+import {
+  expect,
+  test,
+  type Page,
+  type APIRequestContext,
+} from "@playwright/test";
 const base = () => process.env.APPROVAL_SMOKE_API!;
 const headers = (user = "admin") => ({
   "X-User-Id": user,
   "Idempotency-Key": crypto.randomUUID(),
 });
-test("React monitor performs real bulk handover and diagnostics and carbon copy reads stay per user", async ({
+async function monitorOperations({
   page,
   request,
-}) => {
+}: {
+  page: Page;
+  request: APIRequestContext;
+}) {
   const flow = {
     schemaVersion: 1,
     startNodeId: "start",
     settings: { startable: true },
     form: {
       fields: [
-        { key: "name", label: "名称", type: "Text", defaultValue: "交接验收" },
+        {
+          key: "name",
+          label: "名称",
+          type: "Text",
+          defaultValue: "交接验收",
+        },
       ],
     },
     nodes: {
@@ -73,6 +86,38 @@ test("React monitor performs real bulk handover and diagnostics and carbon copy 
     .getByRole("option", { name: /Dan/ })
     .click();
   await page.getByRole("textbox", { name: "交接原因" }).fill("交接验收");
+  const handoverRequests: { key: string | undefined; body: unknown }[] = [];
+  page.on("request", (request) => {
+    if (
+      request.method() === "POST" &&
+      /\/admin\/users\/[^/]+\/reassign$/.test(new URL(request.url()).pathname)
+    )
+      handoverRequests.push({
+        key: request.headers()["idempotency-key"],
+        body: request.postDataJSON() as unknown,
+      });
+  });
+  // Selecting the receiver as the new sender must clear the conflicting receiver.
+  await from.getByRole("combobox").fill("dan");
+  await page
+    .getByRole("listbox", { name: "人员搜索结果" })
+    .getByRole("option", { name: /Dan/ })
+    .click();
+  await expect(to.getByRole("button", { name: "删除 Dan" })).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "批量改派", exact: true }),
+  ).toBeDisabled();
+  expect(handoverRequests).toHaveLength(0);
+  await from.getByRole("combobox").fill("dave");
+  await page
+    .getByRole("listbox", { name: "人员搜索结果" })
+    .getByRole("option", { name: /Dave/ })
+    .click();
+  await to.getByRole("combobox").fill("dan");
+  await page
+    .getByRole("listbox", { name: "人员搜索结果" })
+    .getByRole("option", { name: /Dan/ })
+    .click();
   await page.getByRole("button", { name: "批量改派", exact: true }).click();
   await page
     .getByRole("alertdialog", { name: "批量交接", exact: true })
@@ -91,6 +136,15 @@ test("React monitor performs real bulk handover and diagnostics and carbon copy 
     )
     .toBe("dan");
   void assigned;
+  expect(handoverRequests).toHaveLength(1);
+  expect(handoverRequests[0]!.body).toEqual({
+    toUserId: "dan",
+    reason: "交接验收",
+  });
+  expect(handoverRequests[0]!.key).toBeTruthy();
+  await expect(
+    page.getByRole("heading", { name: "交接结果", exact: true }),
+  ).toBeVisible();
   const task = await (
     await request.get(base() + `/api/approval/instances/${id}/my-task`, {
       headers: headers("dan"),
@@ -116,8 +170,13 @@ test("React monitor performs real bulk handover and diagnostics and carbon copy 
   await expect(
     page.getByRole("combobox", { name: "演示用户" }),
   ).toHaveAttribute("data-value", "dave");
-  await page
-    .getByRole("button", { name: copy.title || copy.businessKey, exact: true })
+  const copyRow = page.getByRole("row").filter({ hasText: copy.businessKey });
+  await expect(copyRow).toHaveCount(1);
+  await copyRow
+    .getByRole("button", {
+      name: copy.title || copy.businessKey,
+      exact: true,
+    })
     .click();
   await expect(page).toHaveURL(new RegExp("/approvals/" + id));
   const daveCopies = await (
@@ -149,4 +208,11 @@ test("React monitor performs real bulk handover and diagnostics and carbon copy 
   await expect(
     page.getByRole("heading", { name: "统计摘要", exact: true }),
   ).toBeVisible();
-});
+}
+
+for (const width of [1280, 390]) {
+  test(`React monitor performs real bulk handover and diagnostics and carbon copy reads stay per user at ${width}`, async ({ page, request }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await monitorOperations({ page, request });
+  });
+}

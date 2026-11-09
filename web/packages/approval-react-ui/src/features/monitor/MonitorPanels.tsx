@@ -1,5 +1,5 @@
 import { DatePicker } from "../../components/ui/extended";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useIsMobile } from "../../hooks/use-mobile";
 import {
   Accordion,
@@ -8,8 +8,17 @@ import {
   AccordionContent,
 } from "../../components/shadcn/accordion";
 import { localDayStart } from "@approval/shared/features/lists/listModel";
-import { formatDateTime, instanceStatusLabels } from "@approval/shared";
-import { useApprovalClient, useApprovalUser } from "../../client";
+import {
+  durationText,
+  formatDateTime,
+  instanceStatusLabels,
+  type ApprovalStatistics,
+} from "@approval/shared";
+import {
+  useApprovalClient,
+  useApprovalIdentity,
+  useApprovalUser,
+} from "../../client";
 import { useAsyncData } from "../../hooks/useAsyncData";
 import { usePagedList } from "../../hooks/usePagedList";
 import { useCommandIntent } from "../../hooks/useCommandIntent";
@@ -22,8 +31,9 @@ import {
   ConfirmDialog,
   ErrorState,
   Field,
-  Input,
+  Loading,
   Pagination,
+  Select,
   Textarea,
 } from "../../components/ui/primitives";
 import { FieldGroup } from "../../components/shadcn/field";
@@ -73,7 +83,26 @@ export function MonitorInstances() {
         reset={list.reset}
         flows={flows.data ?? []}
         overdue
-      />
+        loading={list.loading}
+      >
+        <Field label="发起人">
+          <UserPicker
+            label="搜索发起人"
+            value={list.filters.initiatorId ? [list.filters.initiatorId] : []}
+            disabled={list.loading}
+            onChange={(ids) => {
+              if (list.loading) return;
+              const filters = { ...list.filters, initiatorId: ids[0] ?? "" };
+              list.setFilters(filters);
+              const { fromError, toError } = validateDateFilters(
+                filters.from,
+                filters.to,
+              );
+              if (!fromError && !toError) list.search(filters);
+            }}
+          />
+        </Field>
+      </ListFilterBar>
       <ErrorState error={error || list.error} retry={list.reload} />
       <DataTable
         rows={list.items}
@@ -151,13 +180,31 @@ export function MonitorInstances() {
     </div>
   );
 }
+function defaultStatisticsFilters() {
+  const end = new Date();
+  const start = new Date(end);
+  start.setDate(start.getDate() - 29);
+  const date = (value: Date) =>
+    `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
+  return { from: date(start), to: date(end), key: "" };
+}
+
 export function MonitorStatistics() {
   const { api } = useApprovalClient();
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
+  const user = useApprovalUser();
+  const identity = useApprovalIdentity();
+  const [applied, setApplied] = useState(defaultStatisticsFilters);
+  const [from, setFrom] = useState(applied.from);
+  const [to, setTo] = useState(applied.to);
   const [key, setKey] = useState("");
-  const [applied, setApplied] = useState({ from: "", to: "", key: "" });
   const [checked, setChecked] = useState(false);
+  const allowed = user.can("approval.statistics.read");
+  const flows = useAsyncData((signal) => api.flows(signal), [], allowed);
+  const [lastSuccessful, setLastSuccessful] = useState<{
+    result: ApprovalStatistics;
+    filters: typeof applied;
+    owner: string;
+  } | null>(null);
   const mobile = useIsMobile(701);
   const [sections, setSections] = useState<string[]>([
     "flows",
@@ -169,10 +216,13 @@ export function MonitorStatistics() {
     [mobile],
   );
   const next = { from: from.trim(), to: to.trim(), key: key.trim() };
-  const { fromError, toError } = validateDateFilters(next.from, next.to);
+  const dates = validateDateFilters(next.from, next.to);
+  const fromError =
+    dates.fromError || (!next.from ? "请选择开始日期" : undefined);
+  const toError = dates.toError || (!next.to ? "请选择结束日期" : undefined);
   const data = useAsyncData(
-    (signal) =>
-      api.statistics(
+    async (signal) => ({
+      result: await api.statistics(
         {
           from: applied.from ? localDayStart(applied.from) : undefined,
           to: applied.to ? localDayStart(applied.to, 1) : undefined,
@@ -180,87 +230,147 @@ export function MonitorStatistics() {
         },
         signal,
       ),
+      filters: applied,
+    }),
     [applied],
+    allowed,
   );
-  function apply() {
+  useEffect(() => {
+    if (data.data) setLastSuccessful({ ...data.data, owner: identity });
+  }, [data.data, identity]);
+  const successful =
+    data.data ??
+    (allowed && lastSuccessful?.owner === identity ? lastSuccessful : null);
+  const result = successful?.result;
+  function apply(filters = next) {
     setChecked(true);
-    if (fromError || toError) return;
-    if (JSON.stringify(applied) === JSON.stringify(next)) data.reload();
-    else setApplied(next);
+    const errors = validateDateFilters(filters.from, filters.to);
+    if (
+      !allowed ||
+      !filters.from ||
+      !filters.to ||
+      errors.fromError ||
+      errors.toError
+    )
+      return;
+    if (JSON.stringify(applied) === JSON.stringify(filters)) {
+      if (!data.loading) data.reload();
+    } else setApplied(filters);
   }
   function reset() {
-    setFrom("");
-    setTo("");
+    if (data.loading || !allowed) return;
+    const defaults = defaultStatisticsFilters();
+    setFrom(defaults.from);
+    setTo(defaults.to);
     setKey("");
     setChecked(false);
-    if (!applied.from && !applied.to && !applied.key) data.reload();
-    else setApplied({ from: "", to: "", key: "" });
+    if (JSON.stringify(applied) === JSON.stringify(defaults)) data.reload();
+    else setApplied(defaults);
   }
   return (
     <div className="ar-stack">
       <form
-        className="ar-page-filter-toolbar"
         onSubmit={(event) => {
           event.preventDefault();
           apply();
         }}
       >
-        <Field
-          label="开始日期"
-          error={checked ? (fromError ?? undefined) : undefined}
-        >
-          <DatePicker
-            label="统计开始日期"
-            showInputError={false}
-            value={from}
-            onChange={(nextValue) => setFrom(nextValue)}
-          />
-        </Field>
-        <Field
-          label="结束日期"
-          error={checked ? (toError ?? undefined) : undefined}
-        >
-          <DatePicker
-            label="统计结束日期"
-            showInputError={false}
-            value={to}
-            onChange={(nextValue) => setTo(nextValue)}
-          />
-        </Field>
-        <Field label="流程 Key">
-          <Input
-            aria-label="统计流程 Key"
-            value={key}
-            placeholder="按流程 Key 筛选"
-            onChange={(event) => setKey(event.target.value)}
-          />
-        </Field>
-        <Button type="submit">刷新统计</Button>
-        <Button onClick={reset}>重置筛选</Button>
+        <FieldGroup className="ar-page-filter-toolbar approval:flex-row">
+          <Field
+            label="开始日期"
+            error={checked ? (fromError ?? undefined) : undefined}
+          >
+            <DatePicker
+              label="统计开始日期"
+              showInputError={false}
+              value={from}
+              onChange={(nextValue) => setFrom(nextValue)}
+            />
+          </Field>
+          <Field
+            label="结束日期"
+            error={checked ? (toError ?? undefined) : undefined}
+          >
+            <DatePicker
+              label="统计结束日期"
+              showInputError={false}
+              value={to}
+              onChange={(nextValue) => setTo(nextValue)}
+            />
+          </Field>
+          <Field label="审批流程">
+            <Select
+              aria-label="统计流程"
+              value={key}
+              placeholder="全部流程"
+              options={(flows.data ?? []).map((flow) => ({
+                value: flow.key,
+                label: flow.name,
+              }))}
+              disabled={flows.loading || !allowed}
+              onValueChange={(value) => {
+                setKey(value);
+                apply({ ...next, key: value });
+              }}
+            />
+          </Field>
+          <Button type="submit" disabled={data.loading || !allowed}>
+            刷新统计
+          </Button>
+          <Button onClick={reset} disabled={data.loading || !allowed}>
+            重置筛选
+          </Button>
+        </FieldGroup>
       </form>
       {JSON.stringify(next) !== JSON.stringify(applied) && (
         <p role="status">筛选修改尚未生效，请点击刷新统计。</p>
       )}
+      {successful && (
+        <p>
+          当前统计：{successful.filters.from} 至 {successful.filters.to} ·{" "}
+          {successful.filters.key
+            ? (flows.data?.find((flow) => flow.key === successful.filters.key)
+                ?.name ?? successful.filters.key)
+            : "全部流程"}
+          。按发起日期统计，耗时只计已结束的流程。
+        </p>
+      )}
+      {data.loading && <Loading />}
+      <ErrorState error={flows.error} retry={flows.reload} />
       <ErrorState error={data.error} retry={data.reload} />
-      {data.data && (
+      {result && (
         <>
           <Card title="统计摘要">
             <Metrics
               items={[
-                { label: "申请总数", value: data.data.summary.total },
-                { label: "运行中", value: data.data.summary.running },
-                { label: "已通过", value: data.data.summary.approved },
-                { label: "已驳回", value: data.data.summary.rejected },
-                { label: "已退回", value: data.data.summary.returned },
-                { label: "超期待办", value: data.data.overdueTasks },
+                { label: "申请总数", value: result.summary.total },
+                { label: "运行中", value: result.summary.running },
+                { label: "已通过", value: result.summary.approved },
+                { label: "已驳回", value: result.summary.rejected },
+                { label: "已退回", value: result.summary.returned ?? "—" },
+                { label: "已撤回", value: result.summary.withdrawn },
+                { label: "已终止", value: result.summary.terminated },
+                { label: "超期待办", value: result.overdueTasks },
+                {
+                  label: "通过率",
+                  value:
+                    result.approvalRate == null
+                      ? "—"
+                      : result.approvalRate.toFixed(1) + "%",
+                },
+                {
+                  label: "平均审批耗时",
+                  value: durationText(result.summary.averageMinutes),
+                },
+                {
+                  label: "P90 耗时",
+                  value: durationText(result.summary.p90Minutes),
+                },
               ]}
             />
             <p>
-              通过率{" "}
-              {data.data.approvalRate == null
-                ? "—"
-                : data.data.approvalRate.toFixed(1) + "%"}
-              {data.data.truncated ? " · 部分统计已截断" : ""}
+              90% 的流程在 {durationText(result.summary.p90Minutes)} 内完成。
+              {result.truncated ? " · 部分统计已截断" : ""}
             </p>
           </Card>
           <Accordion
@@ -273,7 +383,7 @@ export function MonitorStatistics() {
                 <AccordionTrigger>查看各流程明细</AccordionTrigger>
                 <AccordionContent>
                   <DataTable
-                    rows={data.data.flows}
+                    rows={result.flows}
                     rowKey={(row) => row.definitionKey}
                     columns={[
                       {
@@ -292,24 +402,39 @@ export function MonitorStatistics() {
                         render: (row) => row.running,
                       },
                       {
+                        key: "returned",
+                        label: "已退回",
+                        render: (row) => row.returned ?? "—",
+                      },
+                      {
                         key: "approved",
-                        label: "通过",
+                        label: "已通过",
                         render: (row) => row.approved,
                       },
                       {
                         key: "rejected",
-                        label: "驳回",
+                        label: "已驳回",
                         render: (row) => row.rejected,
                       },
                       {
+                        key: "withdrawn",
+                        label: "已撤回",
+                        render: (row) => row.withdrawn,
+                      },
+                      {
+                        key: "terminated",
+                        label: "已终止",
+                        render: (row) => row.terminated,
+                      },
+                      {
                         key: "average",
-                        label: "平均耗时（分钟）",
-                        render: (row) => row.averageMinutes ?? "—",
+                        label: "平均耗时",
+                        render: (row) => durationText(row.averageMinutes),
                       },
                       {
                         key: "p90",
-                        label: "P90（分钟）",
-                        render: (row) => row.p90Minutes ?? "—",
+                        label: "P90 耗时",
+                        render: (row) => durationText(row.p90Minutes),
                       },
                     ]}
                     loading={data.loading}
@@ -326,7 +451,7 @@ export function MonitorStatistics() {
                 <AccordionTrigger>查看各节点明细</AccordionTrigger>
                 <AccordionContent>
                   <DataTable
-                    rows={data.data.nodes}
+                    rows={result.nodes}
                     rowKey={(row) => row.definitionKey + ":" + row.nodeId}
                     columns={[
                       {
@@ -351,8 +476,8 @@ export function MonitorStatistics() {
                       },
                       {
                         key: "average",
-                        label: "平均耗时（分钟）",
-                        render: (row) => row.averageMinutes.toFixed(1),
+                        label: "平均耗时",
+                        render: (row) => durationText(row.averageMinutes),
                       },
                     ]}
                     loading={data.loading}
@@ -369,7 +494,7 @@ export function MonitorStatistics() {
                 <AccordionTrigger>查看待办积压明细</AccordionTrigger>
                 <AccordionContent>
                   <DataTable
-                    rows={data.data.backlog}
+                    rows={result.backlog}
                     rowKey={(row) => row.assigneeKind + ":" + row.assigneeValue}
                     columns={[
                       {
@@ -409,7 +534,10 @@ export function MonitorStatistics() {
   );
 }
 export function HandoverPanel() {
-  const { api } = useApprovalClient();
+  const client = useApprovalClient();
+  const { api } = client;
+  const user = useApprovalUser();
+  const identity = useApprovalIdentity();
   const [from, setFrom] = useState<string[]>([]);
   const [to, setTo] = useState<string[]>([]);
   const [reason, setReason] = useState("");
@@ -417,7 +545,7 @@ export function HandoverPanel() {
   const preview = useAsyncData(
     (signal) => api.userTasks(from[0]!, { page, pageSize: 20 }, signal),
     [from[0], page],
-    !!from[0],
+    !!from[0] && user.can("approval.task.reassign-bulk"),
   );
   const intent = useCommandIntent("user-reassign", { retainOnError: true });
   const [confirm, setConfirm] = useState(false);
@@ -426,8 +554,35 @@ export function HandoverPanel() {
     ReturnType<typeof api.reassignUser>
   > | null>(null);
   const [error, setError] = useState<unknown>(null);
+  const submitting = useRef(false);
+  const active = useRef(true);
+  useEffect(() => {
+    setFrom([]);
+    setTo([]);
+    setReason("");
+    setPage(1);
+    setResult(null);
+    setError(null);
+    setConfirm(false);
+    setBusy(false);
+    submitting.current = false;
+  }, [identity]);
+  useEffect(() => {
+    active.current = true;
+    return () => {
+      active.current = false;
+    };
+  }, []);
+  const canSubmit =
+    !!from[0] &&
+    !!to[0] &&
+    from[0] !== to[0] &&
+    !!reason.trim() &&
+    user.can("approval.task.reassign-bulk");
   async function handover() {
-    if (!from[0] || !to[0] || !reason.trim() || busy) return;
+    if (!canSubmit || submitting.current) return;
+    const owner = client.generation;
+    submitting.current = true;
     setBusy(true);
     setError(null);
     try {
@@ -436,14 +591,19 @@ export function HandoverPanel() {
         { from: from[0], to: to[0], reason },
         (body, id) => api.reassignUser(body.from, body.to, body.reason, id),
       );
+      if (!active.current || client.generation !== owner) return;
       setResult(result);
       setConfirm(false);
       preview.reload();
     } catch (cause) {
+      if (!active.current || client.generation !== owner) return;
       setError(cause);
       preview.reload();
     } finally {
-      setBusy(false);
+      if (active.current && client.generation === owner) {
+        submitting.current = false;
+        setBusy(false);
+      }
     }
   }
   return (
@@ -452,16 +612,33 @@ export function HandoverPanel() {
       <FieldGroup className="ar-handover-form">
         <Field label="交出人员">
           <UserPicker
+            label="搜索交出人员"
             value={from}
+            disabled={busy || !user.can("approval.task.reassign-bulk")}
             onChange={(ids) => {
+              if (busy) return;
               setFrom(ids);
+              if (ids[0] && ids[0] === to[0]) setTo([]);
               setPage(1);
               setResult(null);
             }}
           />
         </Field>
-        <Field label="接收人员">
-          <UserPicker value={to} onChange={setTo} excludedUsers={from} />
+        <Field
+          label="接收人员"
+          error={
+            from[0] && from[0] === to[0]
+              ? "交出人员和接收人员不能相同"
+              : undefined
+          }
+        >
+          <UserPicker
+            label="搜索接收人员"
+            value={to}
+            onChange={setTo}
+            excludedUsers={from}
+            disabled={busy || !user.can("approval.task.reassign-bulk")}
+          />
         </Field>
       </FieldGroup>
       <ErrorState error={error || preview.error} retry={preview.reload} />
@@ -495,11 +672,12 @@ export function HandoverPanel() {
         <Textarea
           aria-label="交接原因"
           value={reason}
+          disabled={busy}
           onChange={(event) => setReason(event.target.value)}
         />
       </Field>
       <Button
-        disabled={!from[0] || !to[0] || !reason.trim() || busy}
+        disabled={!canSubmit || busy}
         variant="primary"
         onClick={() => setConfirm(true)}
       >

@@ -1,55 +1,149 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { expect, it, vi } from "vitest";
-import { ApprovalProvider } from "../../src/client";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { ApprovalProvider, createApprovalClient } from "../../src/client";
 import { MonitorStatistics } from "../../src/features/monitor/MonitorPanels";
 
-function show(firstFails = false) {
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date(2026, 10, 9, 0, 30));
+});
+afterEach(() => vi.useRealTimers());
+const summary = {
+  definitionKey: "",
+  definitionName: "全部",
+  total: 42,
+  running: 2,
+  approved: 25,
+  rejected: 4,
+  returned: 3,
+  withdrawn: 5,
+  terminated: 3,
+  averageMinutes: 90,
+  p90Minutes: 2880,
+};
+function statistics(
+  averageMinutes: number | null = 90,
+  p90Minutes: number | null = 2880,
+  total = 42,
+) {
+  return {
+    summary: { ...summary, averageMinutes, p90Minutes, total },
+    approvalRate: 78.1,
+    overdueTasks: 6,
+    flows: [
+      {
+        ...summary,
+        definitionKey: "expense",
+        definitionName: "费用审批",
+        total: 12,
+      },
+    ],
+    nodes: [],
+    backlog: [],
+    truncated: false,
+  };
+}
+function show(
+  firstFails = false,
+  durations: [number | null, number | null] = [90, 2880],
+  allowed = true,
+  flowState: "success" | "failure" | "empty" = "success",
+) {
   const queries: URLSearchParams[] = [];
-  const fetcher = vi.fn(async (input: string | URL | Request) => {
-    const url = new URL(String(input), "http://example.test");
-    if (url.pathname.endsWith("/admin/statistics"))
-      queries.push(url.searchParams);
-    if (url.pathname.endsWith("/admin/statistics") && firstFails) {
-      firstFails = false;
-      return new Response(
-        JSON.stringify({ title: "服务暂不可用", status: 503 }),
-        {
-          status: 503,
-          headers: { "Content-Type": "application/problem+json" },
-        },
-      );
-    }
-    return new Response(
-      JSON.stringify({
-        summary: {
-          total: 42,
-          running: 2,
-          approved: 40,
-          rejected: 0,
-          returned: 0,
-        },
-        approvalRate: 95,
-        overdueTasks: 0,
-        flows: [],
-        nodes: [],
-        backlog: [],
-        truncated: false,
-      }),
-    );
-  });
+  let failNext = firstFails;
+  let hold = false;
+  const pending: {
+    signal: AbortSignal;
+    resolve: (response: Response) => void;
+  }[] = [];
+  const fetcher = vi.fn(
+    async (input: string | URL | Request, init?: RequestInit) => {
+      const url = new URL(String(input), "http://example.test");
+      if (url.pathname.endsWith("/me"))
+        return new Response(
+          JSON.stringify({
+            userId: "admin",
+            capabilities: { "approval.statistics.read": allowed },
+          }),
+        );
+      if (url.pathname.endsWith("/flows")) {
+        if (flowState === "failure") {
+          flowState = "success";
+          return new Response(
+            JSON.stringify({ title: "流程列表暂不可用", status: 503 }),
+            {
+              status: 503,
+              headers: { "Content-Type": "application/problem+json" },
+            },
+          );
+        }
+        return new Response(
+          JSON.stringify(
+            flowState === "empty"
+              ? []
+              : [
+                  { key: "expense", name: "费用审批" },
+                  { key: "leave", name: "请假审批" },
+                ],
+          ),
+        );
+      }
+      if (url.pathname.endsWith("/admin/statistics"))
+        queries.push(url.searchParams);
+      if (url.pathname.endsWith("/admin/statistics") && hold)
+        return new Promise<Response>((resolve) =>
+          pending.push({ resolve, signal: init!.signal as AbortSignal }),
+        );
+      if (url.pathname.endsWith("/admin/statistics") && failNext) {
+        failNext = false;
+        return new Response(
+          JSON.stringify({ title: "服务暂不可用", status: 503 }),
+          {
+            status: 503,
+            headers: { "Content-Type": "application/problem+json" },
+          },
+        );
+      }
+      return new Response(JSON.stringify(statistics(...durations)));
+    },
+  );
+  const client = createApprovalClient({ fetcher });
   render(
-    <ApprovalProvider options={{ fetcher }}>
+    <ApprovalProvider client={client}>
       <MonitorStatistics />
     </ApprovalProvider>,
   );
-  return queries;
+  return {
+    client,
+    queries,
+    fetcher,
+    pending,
+    failNext: () => {
+      failNext = true;
+    },
+    hold: () => {
+      hold = true;
+    },
+  };
+}
+async function chooseFlow(name: string) {
+  const user = userEvent.setup();
+  await user.click(screen.getByRole("combobox", { name: "统计流程" }));
+  await user.click(screen.getByRole("option", { name }));
 }
 
 it.each(["2026-", "2026-02-30", "2025-02-29", "0000-01-01", "10000-01-01"])(
   "invalid statistics date %s keeps the last result and never queries",
   async (value) => {
-    const queries = show();
+    const { queries } = show();
     await screen.findByText("42", { exact: true });
     expect(queries).toHaveLength(1);
     fireEvent.change(screen.getByRole("textbox", { name: "统计开始日期" }), {
@@ -69,7 +163,7 @@ it.each(["2026-", "2026-02-30", "2025-02-29", "0000-01-01", "10000-01-01"])(
 );
 
 it("statistics retry uses the applied query even when the editable date is incomplete", async () => {
-  const queries = show(true);
+  const { queries } = show(true);
   await screen.findByText("服务暂不可用");
   fireEvent.change(screen.getByRole("textbox", { name: "统计开始日期" }), {
     target: { value: "2026-" },
@@ -77,7 +171,11 @@ it("statistics retry uses the applied query even when the editable date is incom
   await userEvent.setup().click(screen.getByRole("button", { name: "重试" }));
   await screen.findByText("42", { exact: true });
   expect(queries).toHaveLength(2);
-  expect([...queries[1]!.keys()]).toEqual([]);
+  expect(Object.fromEntries(queries[1]!)).toEqual(
+    Object.fromEntries(queries[0]!),
+  );
+  expect(queries[1]!.get("from")).toBe(new Date(2026, 9, 11).toISOString());
+  expect(queries[1]!.get("to")).toBe(new Date(2026, 10, 10).toISOString());
   expect(screen.getByRole("textbox", { name: "统计开始日期" })).toHaveValue(
     "2026-",
   );
@@ -87,7 +185,7 @@ it("statistics retry uses the applied query even when the editable date is incom
 });
 
 it("reversed statistics dates show field feedback without applying a query", async () => {
-  const queries = show();
+  const { queries } = show();
   await screen.findByText("42", { exact: true });
   fireEvent.change(screen.getByRole("textbox", { name: "统计开始日期" }), {
     target: { value: "2026-11-10" },
@@ -103,16 +201,13 @@ it("reversed statistics dates show field feedback without applying a query", asy
 });
 
 it("valid leap day statistics apply local inclusive bounds and reset both the query and inputs", async () => {
-  const queries = show();
+  const { queries } = show();
   await screen.findByText("42", { exact: true });
   fireEvent.change(screen.getByRole("textbox", { name: "统计开始日期" }), {
     target: { value: "2024-02-29" },
   });
   fireEvent.change(screen.getByRole("textbox", { name: "统计结束日期" }), {
     target: { value: "2024-02-29" },
-  });
-  fireEvent.change(screen.getByRole("textbox", { name: "统计流程 Key" }), {
-    target: { value: " expense " },
   });
   expect(queries).toHaveLength(1);
   const user = userEvent.setup();
@@ -138,11 +233,250 @@ it("valid leap day statistics apply local inclusive bounds and reset both the qu
     to.getSeconds(),
     to.getMilliseconds(),
   ]).toEqual([2024, 2, 1, 0, 0, 0, 0]);
-  expect(queries[1]!.get("definitionKey")).toBe("expense");
-  await user.click(screen.getByRole("button", { name: "重置筛选" }));
+  await waitFor(() =>
+    expect(screen.getByRole("combobox", { name: "统计流程" })).toBeEnabled(),
+  );
+  await chooseFlow("费用审批");
   await waitFor(() => expect(queries).toHaveLength(3));
-  expect([...queries[2]!.keys()]).toEqual([]);
-  expect(screen.getByRole("textbox", { name: "统计开始日期" })).toHaveValue("");
-  expect(screen.getByRole("textbox", { name: "统计结束日期" })).toHaveValue("");
-  expect(screen.getByRole("textbox", { name: "统计流程 Key" })).toHaveValue("");
+  expect(queries[2]!.get("definitionKey")).toBe("expense");
+  expect(queries[2]!.get("from")).toBe(queries[1]!.get("from"));
+  expect(queries[2]!.get("to")).toBe(queries[1]!.get("to"));
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "重置筛选" })).toBeEnabled(),
+  );
+  await user.click(screen.getByRole("button", { name: "重置筛选" }));
+  await waitFor(() => expect(queries).toHaveLength(4));
+  expect(Object.fromEntries(queries[3]!)).toEqual({
+    from: new Date(2026, 9, 11).toISOString(),
+    to: new Date(2026, 10, 10).toISOString(),
+  });
+  expect(screen.getByRole("textbox", { name: "统计开始日期" })).toHaveValue(
+    "2026-10-11",
+  );
+  expect(screen.getByRole("textbox", { name: "统计结束日期" })).toHaveValue(
+    "2026-11-09",
+  );
+  expect(screen.getByRole("combobox", { name: "统计流程" })).toHaveAttribute(
+    "data-value",
+    "",
+  );
+});
+
+it("default statistics explicitly query the last 30 local dates including today once", async () => {
+  const { queries } = show();
+  await screen.findByText("42", { exact: true });
+  expect(queries).toHaveLength(1);
+  expect(Object.fromEntries(queries[0]!)).toEqual({
+    from: new Date(2026, 9, 11).toISOString(),
+    to: new Date(2026, 10, 10).toISOString(),
+  });
+  expect(screen.getByRole("textbox", { name: "统计开始日期" })).toHaveValue(
+    "2026-10-11",
+  );
+  expect(screen.getByRole("textbox", { name: "统计结束日期" })).toHaveValue(
+    "2026-11-09",
+  );
+  expect(
+    screen.getByText(/当前统计：2026-10-11 至 2026-11-09 · 全部流程/),
+  ).toBeInTheDocument();
+});
+it("statistics show all real status metrics and shared readable duration units", async () => {
+  show();
+  await screen.findByText("42", { exact: true });
+  for (const [label, value] of [
+    ["已撤回", "5"],
+    ["已终止", "3"],
+    ["已退回", "3"],
+    ["通过率", "78.1%"],
+    ["平均审批耗时", "1.5 小时"],
+    ["P90 耗时", "2 天"],
+  ]) {
+    const metric = screen
+      .getAllByRole("listitem")
+      .find((item) => within(item).queryByText(label!) !== null);
+    expect(metric).toBeDefined();
+    expect(
+      within(metric!).getByText(value!, { exact: true }),
+    ).toBeInTheDocument();
+  }
+  const table = screen.getAllByRole("table")[0]!;
+  const headers = within(table)
+    .getAllByRole("columnheader")
+    .map((cell) => cell.textContent);
+  expect(headers).toEqual(
+    expect.arrayContaining([
+      "总数",
+      "运行中",
+      "已退回",
+      "已通过",
+      "已驳回",
+      "已撤回",
+      "已终止",
+      "平均耗时",
+      "P90 耗时",
+    ]),
+  );
+  const row = within(table).getByRole("row", { name: /费用审批/ });
+  expect(
+    within(row)
+      .getAllByRole("cell")
+      .map((cell) => cell.textContent),
+  ).toEqual([
+    "费用审批",
+    "12",
+    "2",
+    "3",
+    "25",
+    "4",
+    "5",
+    "3",
+    "1.5 小时",
+    "2 天",
+  ]);
+});
+it.each([
+  { average: null, p90: null, averageText: "-", p90Text: "-" },
+  { average: 0, p90: 45, averageText: "0 分钟", p90Text: "45 分钟" },
+])(
+  "duration values $average and $p90 keep unknown values distinct from zero",
+  async ({ average, p90, averageText, p90Text }) => {
+    show(false, [average, p90]);
+    await screen.findByText("42", { exact: true });
+    const metrics = screen.getAllByRole("listitem");
+    expect(
+      within(
+        metrics.find((item) => within(item).queryByText("平均审批耗时"))!,
+      ).getByText(averageText, { exact: true }),
+    ).toBeInTheDocument();
+    expect(
+      within(
+        metrics.find((item) => within(item).queryByText("P90 耗时"))!,
+      ).getByText(p90Text, { exact: true }),
+    ).toBeInTheDocument();
+  },
+);
+it("flow selection applies its definition key with dates and clearing queries all flows", async () => {
+  const { queries } = show();
+  await screen.findByText("42", { exact: true });
+  await chooseFlow("费用审批");
+  await waitFor(() => expect(queries).toHaveLength(2));
+  expect(Object.fromEntries(queries[1]!)).toEqual({
+    ...Object.fromEntries(queries[0]!),
+    definitionKey: "expense",
+  });
+  await waitFor(() =>
+    expect(screen.getByText(/当前统计：.*费用审批/)).toBeInTheDocument(),
+  );
+  await chooseFlow("全部流程");
+  await waitFor(() => expect(queries).toHaveLength(3));
+  expect(Object.fromEntries(queries[2]!)).toEqual(
+    Object.fromEntries(queries[0]!),
+  );
+});
+it("a failed query keeps the last successful statistics and the actual successful filter range", async () => {
+  const view = show();
+  await screen.findByText("42", { exact: true });
+  view.failNext();
+  fireEvent.change(screen.getByRole("textbox", { name: "统计开始日期" }), {
+    target: { value: "2026-11-01" },
+  });
+  expect(
+    screen.getByText("筛选修改尚未生效，请点击刷新统计。"),
+  ).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "刷新统计" }));
+  await screen.findByText("服务暂不可用");
+  expect(view.queries).toHaveLength(2);
+  expect(screen.getByText("42", { exact: true })).toBeInTheDocument();
+  expect(
+    screen.getByText(/当前统计：2026-10-11 至 2026-11-09/),
+  ).toBeInTheDocument();
+});
+it("new flow queries cancel stale requests and pending refresh cannot submit duplicates", async () => {
+  const view = show();
+  await screen.findByText("42", { exact: true });
+  view.hold();
+  await chooseFlow("费用审批");
+  await waitFor(() => expect(view.pending).toHaveLength(1));
+  expect(screen.getByRole("button", { name: "刷新统计" })).toBeDisabled();
+  fireEvent.click(screen.getByRole("button", { name: "刷新统计" }));
+  expect(view.queries).toHaveLength(2);
+  await chooseFlow("请假审批");
+  await waitFor(() => expect(view.pending).toHaveLength(2));
+  expect(view.pending[0]!.signal.aborted).toBe(true);
+  await act(async () =>
+    view.pending[1]!.resolve(
+      new Response(JSON.stringify(statistics(90, 2880, 99))),
+    ),
+  );
+  await screen.findByText("99", { exact: true });
+  await act(async () =>
+    view.pending[0]!.resolve(
+      new Response(JSON.stringify(statistics(90, 2880, 77))),
+    ),
+  );
+  expect(screen.queryByText("77", { exact: true })).not.toBeInTheDocument();
+  expect(screen.getByText("99", { exact: true })).toBeInTheDocument();
+  expect(view.queries).toHaveLength(3);
+});
+it("an empty statistics date is rejected and never silently uses a backend default", async () => {
+  const { queries } = show();
+  await screen.findByText("42", { exact: true });
+  fireEvent.change(screen.getByRole("textbox", { name: "统计结束日期" }), {
+    target: { value: "" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "刷新统计" }));
+  expect(screen.getByText("请选择结束日期")).toBeInTheDocument();
+  expect(queries).toHaveLength(1);
+});
+it("users without statistics permission never request administrative data", async () => {
+  const { queries, fetcher } = show(false, [90, 2880], false);
+  await waitFor(() => expect(fetcher).toHaveBeenCalled());
+  expect(queries).toHaveLength(0);
+  expect(screen.getByRole("button", { name: "刷新统计" })).toBeDisabled();
+  expect(screen.queryByText("42", { exact: true })).not.toBeInTheDocument();
+});
+it("flow list failure keeps statistics available and retry reloads only the flow options", async () => {
+  const view = show(false, [90, 2880], true, "failure");
+  await screen.findByText("流程列表暂不可用");
+  await screen.findByText("42", { exact: true });
+  fireEvent.click(screen.getByRole("button", { name: "重试" }));
+  await waitFor(() =>
+    expect(screen.queryByText("流程列表暂不可用")).not.toBeInTheDocument(),
+  );
+  await chooseFlow("费用审批");
+  await waitFor(() => expect(view.queries).toHaveLength(2));
+  expect(
+    view.fetcher.mock.calls.filter(([url]) => String(url).endsWith("/flows")),
+  ).toHaveLength(2);
+  expect(view.queries[1]!.get("definitionKey")).toBe("expense");
+});
+it("an empty flow list still offers all flows and keeps the default statistics", async () => {
+  const view = show(false, [90, 2880], true, "empty");
+  await screen.findByText("42", { exact: true });
+  await userEvent
+    .setup()
+    .click(screen.getByRole("combobox", { name: "统计流程" }));
+  expect(screen.getAllByRole("option")).toHaveLength(1);
+  expect(screen.getByRole("option", { name: "全部流程" })).toBeInTheDocument();
+  expect(view.queries).toHaveLength(1);
+});
+it("identity changes clear retained statistics and late old responses cannot replace the new result", async () => {
+  const view = show();
+  await screen.findByText("42", { exact: true });
+  view.hold();
+  fireEvent.click(screen.getByRole("button", { name: "刷新统计" }));
+  await waitFor(() => expect(view.pending).toHaveLength(1));
+  await act(async () => {
+    view.client.updateOptions({ userKey: () => "other-user" });
+    await view.client.reloadUser();
+  });
+  expect(screen.queryByText("42", { exact: true })).not.toBeInTheDocument();
+  await waitFor(() => expect(view.pending).toHaveLength(2));
+  expect(view.pending[0]!.signal.aborted).toBe(true);
+  await act(async () => view.pending[1]!.resolve(new Response(JSON.stringify(statistics(90, 2880, 99)))));
+  await screen.findByText("99", { exact: true });
+  await act(async () => view.pending[0]!.resolve(new Response(JSON.stringify(statistics(90, 2880, 77)))));
+  expect(screen.queryByText("77", { exact: true })).not.toBeInTheDocument();
+  expect(screen.getByText("99", { exact: true })).toBeInTheDocument();
+  expect(view.queries).toHaveLength(3);
 });

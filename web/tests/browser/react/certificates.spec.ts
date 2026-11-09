@@ -25,11 +25,22 @@ test("React certificate Demo creates a real request completes three approval sta
   await page.getByRole("button", { name: "提交审核", exact: true }).click();
   await page.getByRole("link", { name: "查看审批详情", exact: true }).click();
   await expect(page).toHaveURL(/\/approvals\//);
-  for (const user of ["dave", "quinn", "leo"]) {
+  const approvalRequests: string[] = [];
+  page.on("request", (request) => {
+    if (request.method() === "POST" && /\/tasks\/[^/]+\/approve$/.test(new URL(request.url()).pathname))
+      approvalRequests.push(request.url());
+  });
+  for (const [index, user] of ["dave", "quinn", "leo"].entries()) {
     await chooseOption(page.getByRole("combobox", { name: "演示用户" }), user);
     await page.getByRole("button", { name: "同意", exact: true }).click();
     await page.getByRole("textbox", { name: "审批意见" }).fill("同意");
+    const submitted = page.waitForResponse((response) =>
+      response.request().method() === "POST" && /\/tasks\/[^/]+\/approve$/.test(new URL(response.url()).pathname),
+    );
     await page.getByRole("button", { name: "确认同意", exact: true }).click();
+    const response = await submitted;
+    expect(response.status()).toBe(204);
+    expect(approvalRequests).toHaveLength(index + 1);
     await expect(
       page.getByRole("dialog", { name: "同意", exact: true }),
     ).toHaveCount(0);

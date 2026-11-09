@@ -8,6 +8,153 @@ import {
   type Page,
 } from "@playwright/test";
 
+for (const width of [1280, 390]) {
+  test(`monitor filters statistics and URL tabs at ${width} use real API parameters and preserve permissions`, async ({
+    page,
+    request,
+  }) => {
+    const data = await dataset(request);
+    await page.addInitScript(() => {
+      if (!localStorage.getItem("approval-demo-user"))
+        localStorage.setItem("approval-demo-user", "admin");
+    });
+    await page.setViewportSize({ width, height: 900 });
+    const statisticsRequests: URL[] = [];
+    const instanceRequests: URL[] = [];
+    page.on("request", (request) => {
+      const url = new URL(request.url());
+      if (url.pathname.endsWith("/admin/statistics"))
+        statisticsRequests.push(url);
+      if (url.pathname.endsWith("/admin/instances")) instanceRequests.push(url);
+    });
+    await page.goto("/monitor?tab=statistics&keep=1&monitor_keyword=layout");
+    await expect(
+      page.getByRole("tab", { name: "统计", exact: true }),
+    ).toHaveAttribute("aria-selected", "true");
+    await expect(
+      page.getByRole("heading", { name: "统计摘要", exact: true }),
+    ).toBeVisible();
+    const dates = await page.evaluate(() => {
+      const today = new Date();
+      const start = new Date(
+        today.getFullYear(),
+        today.getMonth(),
+        today.getDate() - 29,
+      );
+      const end = new Date(
+        today.getFullYear(),
+        today.getMonth(),
+        today.getDate() + 1,
+      );
+      const text = (day: Date) =>
+        `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, "0")}-${String(day.getDate()).padStart(2, "0")}`;
+      return {
+        from: start.toISOString(),
+        to: end.toISOString(),
+        startText: text(start),
+        endText: text(today),
+      };
+    });
+    expect(statisticsRequests).toHaveLength(1);
+    expect(statisticsRequests[0]!.searchParams.get("from")).toBe(dates.from);
+    expect(statisticsRequests[0]!.searchParams.get("to")).toBe(dates.to);
+    await expect(
+      page.getByRole("textbox", { name: "统计开始日期" }),
+    ).toHaveValue(dates.startText);
+    await expect(
+      page.getByRole("textbox", { name: "统计结束日期" }),
+    ).toHaveValue(dates.endText);
+    await chooseOption(
+      page.getByRole("combobox", { name: "统计流程" }),
+      data.key,
+    );
+    await expect.poll(() => statisticsRequests.length).toBe(2);
+    expect(statisticsRequests[1]!.searchParams.get("definitionKey")).toBe(
+      data.key,
+    );
+    expect(statisticsRequests[1]!.searchParams.get("from")).toBe(dates.from);
+    await expect(page.getByRole("button", { name: "刷新统计" })).toBeEnabled();
+    const beforeInvalid = statisticsRequests.length;
+    await page
+      .getByRole("textbox", { name: "统计开始日期" })
+      .fill("2026-02-30");
+    await expect(
+      page.getByText("筛选修改尚未生效，请点击刷新统计。"),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "刷新统计" }).click();
+    await expect(
+      page.getByRole("textbox", { name: "统计开始日期" }),
+    ).toHaveAttribute("aria-invalid", "true");
+    expect(statisticsRequests).toHaveLength(beforeInvalid);
+    await expect(
+      page.getByRole("heading", { name: "统计摘要", exact: true }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "重置筛选" }).click();
+    await expect.poll(() => statisticsRequests.length).toBe(3);
+    expect(statisticsRequests[2]!.searchParams.has("definitionKey")).toBe(
+      false,
+    );
+    await expect(
+      page.getByRole("textbox", { name: "统计开始日期" }),
+    ).toHaveValue(dates.startText);
+    await page.getByRole("tab", { name: "全部流程", exact: true }).click();
+    await expect(page.locator('.ar-data-table[aria-busy="true"]')).toHaveCount(
+      0,
+    );
+    await chooseOption(
+      page.getByRole("combobox", { name: "流程筛选" }),
+      data.key,
+    );
+    await page.getByRole("textbox", { name: "关键词" }).fill("");
+    const initiator = page.getByRole("group", { name: "发起人", exact: true });
+    await initiator.getByRole("combobox").fill("alice");
+    await page
+      .getByRole("listbox", { name: "人员搜索结果" })
+      .getByRole("option", { name: /Alice/ })
+      .click();
+    await expect
+      .poll(() => instanceRequests.at(-1)?.searchParams.get("initiatorId"))
+      .toBe("alice");
+    expect(instanceRequests.at(-1)!.searchParams.get("definitionKey")).toBe(
+      data.key,
+    );
+    expect(instanceRequests.at(-1)!.searchParams.get("page")).toBe("1");
+    await expect(page.locator('.ar-data-table[aria-busy="true"]')).toHaveCount(
+      0,
+    );
+    await initiator.getByRole("button", { name: "删除 Alice" }).click();
+    await expect
+      .poll(() => instanceRequests.at(-1)?.searchParams.has("initiatorId"))
+      .toBe(false);
+    await page.getByRole("tab", { name: "离职交接", exact: true }).click();
+    expect(new URL(page.url()).searchParams.get("tab")).toBe("handover");
+    expect(new URL(page.url()).searchParams.get("keep")).toBe("1");
+    await page.reload();
+    await expect(
+      page.getByRole("tab", { name: "离职交接", exact: true }),
+    ).toHaveAttribute("aria-selected", "true");
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true);
+    const beforeDenied = instanceRequests.length + statisticsRequests.length;
+    await chooseOption(
+      page.getByRole("combobox", { name: "演示用户" }),
+      "alice",
+    );
+    await page.goto("/monitor?tab=statistics");
+    await expect(page.getByRole("combobox", { name: "演示用户" })).toHaveAttribute("data-value", "alice");
+    await expect(page.getByText("没有流程监控权限", { exact: true })).toBeVisible();
+    await expect(
+      page.getByRole("tab", { name: "统计", exact: true }),
+    ).toHaveCount(0);
+    expect(instanceRequests.length + statisticsRequests.length).toBe(
+      beforeDenied,
+    );
+  });
+}
+
 const base = () => process.env.APPROVAL_SMOKE_API!;
 const headers = (user = "admin") => ({
   "X-User-Id": user,
@@ -399,11 +546,10 @@ test("statistics renders authoritative percentage units and keeps a missing appr
   await login(page, "admin");
   await page.goto("/monitor");
   await page.getByRole("tab", { name: "统计", exact: true }).click();
-  await page
-    .getByRole("textbox", { name: "统计流程 Key", exact: true })
-    .fill("certificate.create");
-  await page.getByRole("button", { name: "刷新统计", exact: true }).click();
-  await expect(page.getByText(/^通过率/)).toHaveText("通过率 100.0%");
+  await chooseOption(page.getByRole("combobox", { name: "统计流程", exact: true }), "certificate.create");
+  const rate = page.getByRole("listitem").filter({ has: page.getByText("通过率", { exact: true }) });
+  await expect(rate).toHaveCount(1);
+  await expect(rate.locator("strong")).toHaveText("100.0%");
   await page.route("**/api/approval/admin/statistics*", (route) =>
     route.fulfill({
       status: 200,
@@ -412,7 +558,7 @@ test("statistics renders authoritative percentage units and keeps a missing appr
     }),
   );
   await page.getByRole("button", { name: "刷新统计", exact: true }).click();
-  await expect(page.getByText(/^通过率/)).toHaveText("通过率 —");
+  await expect(rate.locator("strong")).toHaveText("—");
 });
 
 test("the scoped theme renders rounded small controls and filter surfaces", async ({

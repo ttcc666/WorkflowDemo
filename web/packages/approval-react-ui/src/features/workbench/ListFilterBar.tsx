@@ -3,7 +3,7 @@ import { Search, RotateCcw } from "lucide-react";
 import { instanceStatusLabels, type FlowSummary } from "@approval/shared";
 import type { ListFilters } from "@approval/shared/features/lists/listModel";
 import { Checkbox, Field, Select } from "../../components/ui/primitives";
-import { useId, useState } from "react";
+import { useId, useState, type ReactNode } from "react";
 import { validateDateFilters } from "./dateFilters";
 import { Button } from "../../components/shadcn/button";
 import { FieldGroup } from "../../components/shadcn/field";
@@ -22,6 +22,8 @@ export function ListFilterBar({
   overdue = false,
   dates = true,
   status = true,
+  children,
+  loading = false,
 }: {
   filters: ListFilters;
   onChange: (filters: ListFilters) => void;
@@ -31,6 +33,8 @@ export function ListFilterBar({
   overdue?: boolean;
   dates?: boolean;
   status?: boolean;
+  children?: ReactNode;
+  loading?: boolean;
 }) {
   const keywordId = useId();
   const [checked, setChecked] = useState(false);
@@ -41,7 +45,7 @@ export function ListFilterBar({
       onSubmit={(event) => {
         event.preventDefault();
         setChecked(true);
-        if (fromError || toError) return;
+        if (loading || fromError || toError) return;
         search();
       }}
     >
@@ -121,6 +125,7 @@ export function ListFilterBar({
             </Field>
           </>
         )}
+        {children}
       </FieldGroup>
       <div className="ar-list-filter-actions">
         {overdue && (
@@ -133,13 +138,14 @@ export function ListFilterBar({
             只看超期
           </Checkbox>
         )}
-        <Button type="submit">
+        <Button type="submit" disabled={loading}>
           <Search data-icon="inline-start" />
           搜索
         </Button>
         <Button
           type="button"
           variant="outline"
+          disabled={loading}
           onClick={() => {
             setChecked(false);
             reset();

@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect } from "react";
+import { useSearchParams } from "react-router";
 import { useApprovalUser } from "../client";
 import { Card, EmptyState, Tabs } from "../components/ui/primitives";
 import { PageHeader } from "../components/ui/PageHeader";
@@ -26,10 +27,22 @@ export default function MonitorPage() {
       permission: "approval.task.reassign-bulk",
     },
   ].filter((tab) => user.can(tab.permission));
-  const [selected, setSelected] = useState("instances");
+  const [params, setParams] = useSearchParams();
+  const selected = params.get("tab");
   const tab = tabs.some((tab) => tab.value === selected)
     ? selected
     : tabs[0]?.value;
+  useEffect(() => {
+    if (!user.me || !tab || selected === tab) return;
+    setParams(
+      (previous) => {
+        const next = new URLSearchParams(previous);
+        next.set("tab", tab);
+        return next;
+      },
+      { replace: true },
+    );
+  }, [user.me, tab, selected, setParams]);
   if (!tab) return <EmptyState text="没有流程监控权限" />;
   return (
     <div className="ar-product-page">
@@ -38,7 +51,21 @@ export default function MonitorPage() {
         eyebrow="流程管理"
         description="查询运行中的审批，查看处理统计与待办交接。"
       />
-      <Tabs value={tab} onChange={setSelected} tabs={tabs} />
+      <Tabs
+        value={tab}
+        onChange={(value) => {
+          if (!tabs.some((item) => item.value === value)) return;
+          setParams(
+            (previous) => {
+              const next = new URLSearchParams(previous);
+              next.set("tab", value);
+              return next;
+            },
+            { replace: true },
+          );
+        }}
+        tabs={tabs}
+      />
       {tab === "instances" ? (
         <Card
           title="实例列表"

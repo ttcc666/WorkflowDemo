@@ -103,6 +103,9 @@ export default function ApprovalDetailPage() {
       flow = JSON.parse(definition.data.definitionJson) as FlowDefinition;
   } catch {}
   const current = instance.data;
+  const BusinessPanel = current
+    ? client.options().businessPanels?.[current.businessType]
+    : undefined;
   const visibleForm =
     flow?.form && current
       ? withoutFields(flow.form, current.hiddenFields ?? [])
@@ -120,6 +123,7 @@ export default function ApprovalDetailPage() {
     if (
       input.kind === "approve" &&
       editable.length &&
+      !BusinessPanel &&
       !formRef.current?.validate()
     )
       return false;
@@ -248,7 +252,6 @@ export default function ApprovalDetailPage() {
     ) : (
       <Loading />
     );
-  const BusinessPanel = client.options().businessPanels?.[current.businessType];
   const initiatorName = initiator.data?.[0]?.name ?? current.initiatorId;
   const currentNode = current.currentNodeId
     ? (flow?.nodes[current.currentNodeId]?.name ?? current.currentNodeId)
@@ -352,7 +355,12 @@ export default function ApprovalDetailPage() {
       <div className="ar-detail-layout">
         <div className="ar-detail-content">
           <section id={sectionIds.content}>
-            {visibleForm ? (
+            {BusinessPanel ? (
+              <BusinessPanel
+                key={`${current.id}:${current.status}`}
+                businessKey={current.businessKey}
+              />
+            ) : visibleForm ? (
               <Card
                 title={
                   <span className="ar-section-title">
@@ -371,8 +379,6 @@ export default function ApprovalDetailPage() {
                   errors={fieldErrors}
                 />
               </Card>
-            ) : BusinessPanel ? (
-              <BusinessPanel businessKey={current.businessKey} />
             ) : (
               <Card title="业务内容">
                 <pre style={{ whiteSpace: "pre-wrap" }}>
