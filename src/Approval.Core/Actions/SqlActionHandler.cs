@@ -68,6 +68,10 @@ internal sealed class SqlActionHandler(IServiceProvider services, ApprovalDbCont
 
     public async Task<ApprovalActionResult> ExecuteAsync(ApprovalActionContext context, JsonElement config, CancellationToken ct)
     {
+        // A registered read-only query can still read every tenant. The existing SQL contract
+        // has no trusted partition binding, so it cannot be used in a partitioned workflow.
+        if (ApprovalPartitionGuard.IsPartitioned(accessor.Context))
+            throw new InvalidOperationException("分区审批禁止执行无法证明租户范围的 SQL 动作");
         var value = Read(config);
         var registration = _queries[(value.DataSource, value.QueryId)];
         var query = registration.Query;

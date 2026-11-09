@@ -8,7 +8,7 @@ public static class ApprovalPartitionModelExtensions
 {
     internal const string PartitionAnnotation = "Approval:PartitionProperty";
 
-    /// <summary>按宿主已配置的分区属性扩宽审批索引、候选键和外键；宿主仍负责可信分区值、查询过滤和写入校验。</summary>
+    /// <summary>配置分区写入条件、不可变性、索引、候选键和外键；宿主提供可信分区值与查询过滤。</summary>
     public static ModelBuilder ConfigureApprovalPartition(this ModelBuilder modelBuilder, string propertyName, params Type[] additionalTypes)
     {
         ArgumentNullException.ThrowIfNull(modelBuilder);
@@ -33,12 +33,13 @@ public static class ApprovalPartitionModelExtensions
                 throw new InvalidOperationException("审批分区属性必须为非空字符串");
         }
         var partitioned = entities.ToHashSet();
+        foreach (var foreignKey in modelBuilder.Model.GetEntityTypes().SelectMany(e => e.GetForeignKeys()))
+            if (partitioned.Contains(foreignKey.PrincipalEntityType) && !partitioned.Contains(foreignKey.DeclaringEntityType))
+                throw new InvalidOperationException($"分区实体 {foreignKey.PrincipalEntityType.Name} 被非分区实体引用，请先将引用方建模为显式分区实体");
         var keysToExpand = entities.SelectMany(e => e.GetKeys()).Distinct()
             .Where(k => !k.IsPrimaryKey() && k.Properties.All(p => p.Name != propertyName)).ToArray();
         foreach (var key in keysToExpand)
         {
-            if (key.GetReferencingForeignKeys().Any(fk => !partitioned.Contains(fk.DeclaringEntityType)))
-                throw new InvalidOperationException($"分区候选键 {key.DeclaringEntityType.Name} 被非分区实体引用，请先将引用方纳入分区模型");
             var existing = key.DeclaringEntityType.FindKey(new[] { key.DeclaringEntityType.FindProperty(propertyName)! }.Concat(key.Properties).ToArray());
             if (existing is null) continue;
             foreach (var annotation in key.GetAnnotations())
@@ -78,6 +79,9 @@ public static class ApprovalPartitionModelExtensions
         {
             var partition = entity.FindProperty(propertyName)!;
             entity.SetAnnotation(PartitionAnnotation, propertyName);
+            // SaveChanges predicates must constrain attached rows as well as queried rows.
+            partition.IsConcurrencyToken = true;
+            partition.SetAfterSaveBehavior(PropertySaveBehavior.Throw);
             foreach (var index in entity.GetIndexes().ToArray())
             {
                 if (index.Properties.Contains(partition)) continue;

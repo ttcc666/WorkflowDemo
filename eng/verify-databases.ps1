@@ -117,6 +117,8 @@ try {
             throw ('Required database contract test was not executed: ' + $required)
         }
     }
+    $partitionSecurity = @($definitions | Where-Object { $_.TestMethod.name -eq 'PartitionSecurity_ProviderRejectsAttacksAndPreservesOtherTenant' })
+    if ($partitionSecurity.Count -ne 14) { throw ('Expected all 14 partition security cases, found ' + $partitionSecurity.Count) }
     $validated = $true
     Write-Host ('Database verification succeeded: {0}, Passed: {1}, Failed: {2}, Skipped: {3}' -f $Provider, $counters.passed, $counters.failed, $counters.notExecuted)
 }

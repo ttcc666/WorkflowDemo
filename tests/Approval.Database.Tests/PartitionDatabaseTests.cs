@@ -1,5 +1,6 @@
 using System.Linq.Expressions;
 using Approval.Core.Domain;
+using Approval.Core.Abstractions;
 using Approval.Core.Persistence;
 using Approval.Forms;
 using Approval.Forms.Attachments;
@@ -15,7 +16,7 @@ public sealed partial class DatabaseContractTests
 {
     // Offline storage fixture: exercise real provider constraints in fixture-owned prefixed tables.
     // Application write authorization is covered by MultiTenantHostTests, not bypassed in a host.
-    private sealed class PartitionStorageContext(DbContextOptions<PartitionStorageContext> options, string partition) : DbContext(options)
+    private sealed class PartitionStorageContext(DbContextOptions<PartitionStorageContext> options, string partition) : DbContext(options), IApprovalPartitionContext
     {
         public string PartitionKey { get; } = partition;
         protected override void OnModelCreating(ModelBuilder model)
@@ -68,7 +69,7 @@ public sealed partial class DatabaseContractTests
     private sealed class PartitionCategory { public Guid Id { get; set; } public string Code { get; set; } = ""; public string Description { get; set; } = "initial"; }
     private sealed class PartitionItem { public Guid Id { get; set; } public string CategoryCode { get; set; } = ""; }
 
-    private static DbContextOptions<PartitionStorageContext> PartitionOptions(string provider, string connection)
+    private static DbContextOptions<PartitionStorageContext> PartitionOptions(string provider, string connection, bool guarded = false)
     {
         var builder = new DbContextOptionsBuilder<PartitionStorageContext>();
         switch (provider)
@@ -79,6 +80,7 @@ public sealed partial class DatabaseContractTests
             case "Sqlite": builder.UseSqlite(connection); break;
             default: throw new InvalidOperationException("Unknown partition provider");
         }
+        if (guarded) builder.UseApproval();
         return builder.Options;
     }
 

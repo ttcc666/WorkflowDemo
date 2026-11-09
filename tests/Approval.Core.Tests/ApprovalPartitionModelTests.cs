@@ -9,6 +9,34 @@ namespace Approval.Core.Tests;
 
 public sealed class ApprovalPartitionModelTests
 {
+    [Fact]
+    public void PrimaryKey_NonpartitionedReferenceRejectsBeforeChangingModel()
+    {
+        var model = Model();
+        var row = model.Entity<HostRow>();
+        row.Ignore(r => r.Details); row.HasKey(r => r.Id);
+        row.HasOne<ApprovalInstance>().WithMany().HasForeignKey(r => r.InstanceId);
+        var error = Assert.Throws<InvalidOperationException>(() => model.ConfigureApprovalPartition("TenantId"));
+        Assert.Contains("非分区实体引用", error.Message);
+        AssertUnchanged(model);
+    }
+
+    [Fact]
+    public void OwnedReference_WithoutPartitionRejectsBeforeChangingModel()
+    {
+        var model = Model();
+        var row = model.Entity<HostRow>();
+        row.HasKey(r => r.Id); row.Property<string>("TenantId").IsRequired();
+        row.OwnsOne(r => r.Details, owned =>
+        {
+            owned.ToTable("OwnedNotes"); owned.Property<Guid>("HostId");
+            owned.WithOwner().HasForeignKey("HostId"); owned.HasKey("HostId");
+        });
+        var error = Assert.Throws<InvalidOperationException>(() => model.ConfigureApprovalPartition("TenantId", typeof(HostRow)));
+        Assert.Contains("非分区实体引用", error.Message);
+        AssertUnchanged(model);
+    }
+
     [Theory]
     [InlineData("unmapped")]
     [InlineData("owned")]
