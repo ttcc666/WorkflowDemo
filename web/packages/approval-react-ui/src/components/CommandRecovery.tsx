@@ -1,43 +1,53 @@
-import { Card } from './ui/primitives'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import type { useCommandIntent } from '../hooks/useCommandIntent'
-import { Button, ConfirmDialog, ErrorState } from './ui/primitives'
+import { Button, Card, ConfirmDialog, ErrorState } from './ui/primitives'
 export function CommandRecovery({
   intent,
+  scope = intent.pending,
   busy,
   recovered,
+  onRecoveringChange,
+  onReset,
 }: {
   intent: ReturnType<typeof useCommandIntent>
+  scope?: string | null
   busy?: boolean
-  recovered: () => void
+  recovered: (value: unknown, scope: string) => void
+  onRecoveringChange?: (recovering: boolean) => void
+  onReset?: () => void
 }) {
   const [recovering, setRecovering] = useState(false)
-  const [confirm, setConfirm] = useState(false)
+  const retrying = useRef(false)
+  const [confirmScope, setConfirmScope] = useState<string | null>(null)
   const [error, setError] = useState<unknown>(null)
-  if (!intent.pending) return null
+  if (scope === null) return null
   async function retry() {
-    if (busy || recovering) return
+    if (scope === null || busy || retrying.current || !intent.canRetry(scope))
+      return
+    retrying.current = true
     setRecovering(true)
+    onRecoveringChange?.(true)
     setError(null)
     try {
-      await intent.retry()
-      recovered()
+      recovered(await intent.retry(scope), scope)
     } catch (cause) {
       setError(cause)
     } finally {
+      retrying.current = false
       setRecovering(false)
+      onRecoveringChange?.(false)
     }
   }
   return (
     <Card>
       <strong>上次提交结果尚未确认</strong>
       <p>
-        {intent.canRetry()
+        {intent.canRetry(scope)
           ? '可按原内容和原键重试。'
-          : '当前页面已无原请求正文，请核对已提交记录并恢复原内容。'}
+          : '当前页面已无原请求正文，请核对已提交记录。'}
       </p>
       <div className="ar-row">
-        {intent.canRetry() && (
+        {intent.canRetry(scope) && (
           <Button
             busy={recovering}
             disabled={busy}
@@ -46,18 +56,27 @@ export function CommandRecovery({
             按原内容重试上次操作
           </Button>
         )}
-        <Button disabled={busy || recovering} onClick={() => setConfirm(true)}>
+        <Button
+          disabled={busy || recovering}
+          onClick={() => setConfirmScope(scope)}
+        >
           核对结果后开始新操作
         </Button>
       </div>
       <ErrorState error={error} />
       <ConfirmDialog
-        open={confirm}
-        onOpenChange={setConfirm}
+        open={confirmScope === scope}
+        onOpenChange={(open) => {
+          if (!open) setConfirmScope(null)
+        }}
         title="开始新操作"
+        busy={busy || recovering}
         confirm={() => {
-          intent.reset(intent.pending!)
-          setConfirm(false)
+          if (busy || retrying.current || confirmScope !== scope) return
+          intent.reset(scope)
+          setConfirmScope(null)
+          setError(null)
+          onReset?.()
         }}
       >
         确认已核对原操作结果，且当前操作是新的业务意图。新键可能产生另一条业务记录。

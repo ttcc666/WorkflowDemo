@@ -14,6 +14,7 @@ import {
   instanceStatusLabels,
   taskStatusLabels,
   type ApprovalStatistics,
+  type ReassignResult,
 } from "@approval/shared";
 import {
   useApprovalClient,
@@ -625,27 +626,61 @@ export function MonitorStatistics() {
 }
 
 const defaultHandoverReason = "离职交接";
+const handoverPageSizes = [20, 50, 100];
+
+function isReassignResult(value: unknown): value is ReassignResult {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "count" in value &&
+    typeof value.count === "number" &&
+    "skipped" in value &&
+    Array.isArray(value.skipped) &&
+    value.skipped.every(
+      (skip: unknown) =>
+        typeof skip === "object" &&
+        skip !== null &&
+        "taskId" in skip &&
+        typeof skip.taskId === "string" &&
+        "instanceId" in skip &&
+        typeof skip.instanceId === "string" &&
+        "nodeName" in skip &&
+        typeof skip.nodeName === "string" &&
+        "reason" in skip &&
+        typeof skip.reason === "string" &&
+        "title" in skip &&
+        (skip.title === null || typeof skip.title === "string"),
+    )
+  );
+}
 
 export function HandoverPanel() {
   const client = useApprovalClient();
   const { api } = client;
   const user = useApprovalUser();
   const identity = useApprovalIdentity();
+  const generation = client.generation;
   const [from, setFrom] = useState<string[]>([]);
   const [to, setTo] = useState<string[]>([]);
   const [reason, setReason] = useState(defaultHandoverReason);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  const [previewRevision, setPreviewRevision] = useState(0);
+  const fromId = from[0] ?? "";
+  const toId = to[0] ?? "";
+  const normalizedReason = reason.trim();
+  const allowed = user.can("approval.task.reassign-bulk");
   const preview = useAsyncData(
-    (signal) => api.userTasks(from[0]!, { page, pageSize: 20 }, signal),
-    [from[0], page],
-    !!from[0] && user.can("approval.task.reassign-bulk"),
+    (signal) => api.userTasks(fromId, { page, pageSize }, signal),
+    [fromId, page, pageSize, previewRevision],
+    !!fromId && allowed,
   );
   const intent = useCommandIntent("user-reassign", { retainOnError: true });
+  const pendingScope =
+    intent.pending ?? (fromId && intent.hasPending(fromId) ? fromId : null);
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<Awaited<
-    ReturnType<typeof api.reassignUser>
-  > | null>(null);
+  const [result, setResult] = useState<ReassignResult | null>(null);
   const [error, setError] = useState<unknown>(null);
   const submitting = useRef(false);
   const active = useRef(true);
@@ -654,6 +689,7 @@ export function HandoverPanel() {
     setTo([]);
     setReason(defaultHandoverReason);
     setPage(1);
+    setPageSize(20);
     setResult(null);
     setError(null);
     setConfirm(false);
@@ -667,49 +703,92 @@ export function HandoverPanel() {
     };
   }, []);
   const canSubmit =
-    !!from[0] &&
-    !!to[0] &&
-    from[0] !== to[0] &&
-    !!reason.trim() &&
-    user.can("approval.task.reassign-bulk");
+    !!fromId &&
+    !!toId &&
+    fromId !== toId &&
+    !!normalizedReason &&
+    allowed &&
+    pendingScope === null &&
+    !preview.loading &&
+    !preview.error &&
+    (preview.data?.total ?? 0) > 0 &&
+    (preview.data?.items.length ?? 0) > 0;
+  function reloadPreview() {
+    setPreviewRevision((previous) => previous + 1);
+  }
+  function setWorking(working: boolean) {
+    if (!active.current || client.generation !== generation) return;
+    submitting.current = working;
+    setBusy(working);
+  }
+  function recovered(value: unknown, scope: string) {
+    if (!active.current || client.generation !== generation) return;
+    if (!isReassignResult(value)) {
+      setError(new Error("交接结果格式异常，请核对已提交记录。"));
+    } else {
+      setResult(value);
+      setError(null);
+    }
+    if (scope !== fromId) {
+      setFrom([scope]);
+      setTo([]);
+      setPage(1);
+    } else {
+      reloadPreview();
+    }
+  }
   async function handover() {
-    if (!canSubmit || submitting.current) return;
-    const owner = client.generation;
-    submitting.current = true;
-    setBusy(true);
+    if (
+      !confirm ||
+      !canSubmit ||
+      submitting.current ||
+      client.generation !== generation ||
+      intent.hasPending(fromId)
+    )
+      return;
+    setWorking(true);
     setError(null);
     try {
       const result = await intent.run(
-        from[0],
-        { from: from[0], to: to[0], reason },
+        fromId,
+        { from: fromId, to: toId, reason: normalizedReason },
         (body, id) => api.reassignUser(body.from, body.to, body.reason, id),
       );
-      if (!active.current || client.generation !== owner) return;
+      if (!active.current || client.generation !== generation) return;
       setResult(result);
-      setConfirm(false);
-      preview.reload();
+      reloadPreview();
     } catch (cause) {
-      if (!active.current || client.generation !== owner) return;
+      if (!active.current || client.generation !== generation) return;
       setError(cause);
-      preview.reload();
+      reloadPreview();
     } finally {
-      if (active.current && client.generation === owner) {
-        submitting.current = false;
-        setBusy(false);
-      }
+      if (active.current && client.generation === generation) setConfirm(false);
+      setWorking(false);
     }
   }
   return (
     <div className="ar-stack">
-      <CommandRecovery intent={intent} busy={busy} recovered={preview.reload} />
+      {allowed && (
+        <CommandRecovery
+          intent={intent}
+          scope={pendingScope}
+          busy={busy}
+          recovered={recovered}
+          onRecoveringChange={setWorking}
+          onReset={() => {
+            setError(null);
+            reloadPreview();
+          }}
+        />
+      )}
       <FieldGroup className="ar-handover-form">
         <Field label="交出人员">
           <UserPicker
             label="搜索交出人员"
             value={from}
-            disabled={busy || !user.can("approval.task.reassign-bulk")}
+            disabled={busy || !allowed}
             onChange={(ids) => {
-              if (busy) return;
+              if (submitting.current || !allowed) return;
               setFrom(ids);
               if (ids[0] && ids[0] === to[0]) setTo([]);
               setPage(1);
@@ -728,13 +807,16 @@ export function HandoverPanel() {
           <UserPicker
             label="搜索接收人员"
             value={to}
-            onChange={setTo}
+            onChange={(ids) => {
+              if (!submitting.current && allowed) setTo(ids);
+            }}
             excludedUsers={from}
-            disabled={busy || !user.can("approval.task.reassign-bulk")}
+            disabled={busy || !allowed}
           />
         </Field>
       </FieldGroup>
-      <ErrorState error={error || preview.error} retry={preview.reload} />
+      <ErrorState error={error} />
+      <ErrorState error={preview.error} retry={busy ? undefined : reloadPreview} />
       <DataTable
         rows={preview.data?.items ?? []}
         loading={preview.loading}
@@ -766,13 +848,23 @@ export function HandoverPanel() {
         ]}
         error={preview.error}
       />
-      {preview.data && (
+      {fromId && allowed && (
         <Pagination
           page={page}
-          pageSize={20}
+          pageSize={pageSize}
+          pageSizes={handoverPageSizes}
           total={preview.data?.total}
-          onChange={setPage}
-          loading={preview.loading}
+          onChange={(nextPage, nextSize) => {
+            if (
+              submitting.current ||
+              preview.loading ||
+              !handoverPageSizes.includes(nextSize)
+            )
+              return;
+            setPage(nextSize === pageSize ? nextPage : 1);
+            setPageSize(nextSize);
+          }}
+          loading={busy || preview.loading}
         />
       )}
       <Field label="交接原因" required>
@@ -780,8 +872,10 @@ export function HandoverPanel() {
           aria-label="交接原因"
           maxLength={200}
           value={reason}
-          disabled={busy}
-          onChange={(event) => setReason(event.target.value)}
+          disabled={busy || !allowed}
+          onChange={(event) => {
+            if (!submitting.current && allowed) setReason(event.target.value);
+          }}
         />
       </Field>
       <ul className="approval:list-disc approval:pl-5 approval:text-sm approval:text-muted-foreground">
@@ -822,12 +916,38 @@ export function HandoverPanel() {
       )}
       <ConfirmDialog
         open={confirm}
-        onOpenChange={setConfirm}
+        onOpenChange={(open) => {
+          if (!submitting.current) setConfirm(open);
+        }}
         title="批量交接"
         busy={busy}
+        confirmDisabled={!canSubmit}
         confirm={() => void handover()}
       >
-        每个实例独立提交；部分完成后按原键和原内容恢复。
+        <dl>
+          <div>
+            <dt className="approval:inline">交出人员：</dt>
+            <dd className="approval:inline">{fromId}</dd>
+          </div>
+          <div>
+            <dt className="approval:inline">接收人员：</dt>
+            <dd className="approval:inline">{toId}</dd>
+          </div>
+          <div>
+            <dt className="approval:inline">待交接任务：</dt>
+            <dd className="approval:inline">{preview.data?.total ?? "—"} 条</dd>
+          </div>
+          <div>
+            <dt className="approval:inline">交接原因：</dt>
+            <dd className="approval:inline approval:wrap-anywhere">
+              {normalizedReason}
+            </dd>
+          </div>
+        </dl>
+        <p>
+          只改派指派给交出人员本人的待办，角色任务不在范围内。已完成或不符合改派条件的任务会跳过。
+          每个实例独立提交。部分完成或结果未知时，请按原内容和原幂等键恢复。
+        </p>
       </ConfirmDialog>
     </div>
   );

@@ -356,6 +356,7 @@ export function ConfirmDialog({
   title,
   children,
   confirm,
+  confirmDisabled,
   busy,
 }: {
   open: boolean;
@@ -363,6 +364,7 @@ export function ConfirmDialog({
   title: string;
   children: ReactNode;
   confirm: () => void;
+  confirmDisabled?: boolean;
   busy?: boolean;
 }) {
   const previousFocus = useRef<HTMLElement | null>(null);
@@ -392,7 +394,12 @@ export function ConfirmDialog({
           <Button onClick={() => onOpenChange(false)} disabled={busy}>
             取消
           </Button>
-          <Button variant="primary" busy={busy} onClick={confirm}>
+          <Button
+            variant="primary"
+            busy={busy}
+            disabled={confirmDisabled}
+            onClick={confirm}
+          >
             确认
           </Button>
         </UiAlertDialog.AlertDialogFooter>

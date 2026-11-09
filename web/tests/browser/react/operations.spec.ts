@@ -1,5 +1,10 @@
 import { chooseOption } from "./ui-controls";
-import { formatDateTime, taskStatusLabels, type TodoItem } from "@approval/shared";
+import {
+  formatDateTime,
+  taskStatusLabels,
+  type ReassignResult,
+  type TodoItem,
+} from "@approval/shared";
 import {
   expect,
   test,
@@ -151,13 +156,23 @@ async function monitorOperations({
   await expect(reason).toHaveValue("离职交接");
   await reason.fill("交".repeat(201));
   await expect(reason).toHaveValue("交".repeat(200));
+  const resized = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return url.pathname.endsWith("/admin/users/dave/tasks") &&
+      url.searchParams.get("page") === "1" &&
+      url.searchParams.get("pageSize") === "50" &&
+      response.ok();
+  });
+  await chooseOption(page.getByRole("combobox", { name: "每页条数" }), "50");
+  const resizedData = await (await resized).json();
+  await expect(page.getByText(`共 ${resizedData.total} 条`, { exact: true })).toBeVisible();
   const to = page.getByRole("group", { name: "接收人员", exact: true });
   await to.getByRole("combobox").fill("dan");
   await page
     .getByRole("listbox", { name: "人员搜索结果" })
     .getByRole("option", { name: /Dan/ })
     .click();
-  await reason.fill("交接验收");
+  await reason.fill("  交接验收  ");
   const handoverRequests: { key: string | undefined; body: unknown }[] = [];
   page.on("request", (request) => {
     if (
@@ -190,11 +205,27 @@ async function monitorOperations({
     .getByRole("listbox", { name: "人员搜索结果" })
     .getByRole("option", { name: /Dan/ })
     .click();
-  await page.getByRole("button", { name: "批量改派", exact: true }).click();
-  await page
-    .getByRole("alertdialog", { name: "批量交接", exact: true })
-    .getByRole("button", { name: "确认", exact: true })
-    .click();
+  const reassignPath = "/api/approval/admin/users/dave/reassign";
+  let committedResult: ReassignResult | undefined;
+  await page.route("**" + reassignPath, async (route) => {
+    const committed = await route.fetch();
+    expect(committed.ok()).toBe(true);
+    committedResult = await committed.json();
+    await route.fulfill({
+      status: 503,
+      contentType: "application/problem+json",
+      json: { title: "交接响应丢失", status: 503 },
+    });
+  }, { times: 1 });
+  const handover = page.getByRole("button", { name: "批量改派", exact: true });
+  await handover.click();
+  const confirmation = page.getByRole("alertdialog", { name: "批量交接", exact: true });
+  await expect(confirmation).toContainText("交出人员：dave");
+  await expect(confirmation).toContainText("接收人员：dan");
+  await expect(confirmation).toContainText("交接原因：交接验收");
+  await confirmation.getByRole("button", { name: "确认", exact: true }).click();
+  await expect(page.getByText("交接响应丢失", { exact: true })).toBeVisible();
+  await expect(handover).toBeDisabled();
   const assigned = await expect
     .poll(
       async () =>
@@ -214,9 +245,26 @@ async function monitorOperations({
     reason: "交接验收",
   });
   expect(handoverRequests[0]!.key).toBeTruthy();
+  const replay = page.waitForResponse((response) =>
+    new URL(response.url()).pathname === reassignPath &&
+    response.request().method() === "POST" && response.ok(),
+  );
+  await page.getByRole("button", { name: "按原内容重试上次操作", exact: true }).click();
+  const replayedResult = (await (await replay).json()) as ReassignResult;
+  expect(replayedResult).toEqual(committedResult);
   await expect(
     page.getByRole("heading", { name: "交接结果", exact: true }),
   ).toBeVisible();
+  expect(handoverRequests).toEqual([handoverRequests[0], handoverRequests[0]]);
+  await expect(
+    page.getByRole("listitem").filter({ hasText: "已改派任务" })
+      .getByText(String(replayedResult.count), { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("listitem").filter({ hasText: "跳过任务" })
+      .getByText(String(replayedResult.skipped.length), { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText("交接响应丢失", { exact: true })).toHaveCount(0);
   const task = await (
     await request.get(base() + `/api/approval/instances/${id}/my-task`, {
       headers: headers("dan"),
