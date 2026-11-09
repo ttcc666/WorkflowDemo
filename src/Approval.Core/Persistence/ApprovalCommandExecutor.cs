@@ -9,13 +9,21 @@ using System.Text.Json;
 namespace Approval.Core.Persistence;
 
 internal sealed class ApprovalCommandExecutor<TContext>(IServiceScopeFactory scopes,
-    IApprovalActorContext actor, ApprovalOptions options, TimeProvider clock, TContext callerContext) : IApprovalCommandExecutor where TContext : DbContext
+    IApprovalActorContext actor, ApprovalOptions options, TimeProvider clock, TContext callerContext,
+    IApprovalHostScopeProvider hostScopes) : IApprovalCommandExecutor where TContext : DbContext
 {
     private static readonly JsonSerializerOptions Json = JsonSerializerOptions.Web;
 
     public async Task<T> ExecuteAsync<T>(ApprovalCommand command, Func<IServiceProvider, CancellationToken, Task<T>> operation, CancellationToken ct = default)
     {
         ApprovalUnitOfWork.RejectExtensionReentry(callerContext);
+        var hostContext = hostScopes.Capture();
+        using var hostScope = hostContext.Enter();
+        if (callerContext.Model.FindAnnotation(ApprovalPartitionModelExtensions.PartitionAnnotation) is not null
+            && (string.IsNullOrWhiteSpace(hostContext.PartitionKey)
+                || callerContext is not IApprovalPartitionContext partitionContext
+                || !string.Equals(partitionContext.PartitionKey, hostContext.PartitionKey, StringComparison.Ordinal)))
+            throw new ApprovalException("缺少匹配的可信宿主分区上下文") { Code = ApprovalErrorCode.Forbidden };
         if (string.IsNullOrWhiteSpace(command.Kind) || command.Kind.Length > 100 || command.Scope.Length > 2000)
             throw new ArgumentException("命令类型/范围无效", nameof(command));
         var key = command.OperationId;
@@ -28,7 +36,8 @@ internal sealed class ApprovalCommandExecutor<TContext>(IServiceScopeFactory sco
         var grants = actor is IApprovalSystemActorContext system ? system.AllowedPermissions.ToArray() : [];
         var hash = ApprovalCommandHash.Payload(command.Payload);
         var lookup = ApprovalCommandHash.Of(identity.ActorId, command.Kind, command.Scope, key);
-        var seed = ApprovalCommandHash.Of(lookup);
+        var seed = hostContext.PartitionKey is { } partition
+            ? ApprovalCommandHash.Of(partition, lookup) : ApprovalCommandHash.Of(lookup);
         var definitions = new Dictionary<string, Guid>(StringComparer.Ordinal);
 
         AsyncServiceScope CreateScope()

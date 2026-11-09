@@ -1,5 +1,7 @@
 # 嵌入已有宿主
 
+共享数据库中的宿主多租户接入见[宿主数据分区](host-data-partitioning.md)。使用现有宿主租户体系，Core 仅处理可信执行上下文传播、审批分区约束与逐范围后台执行。
+
 2026-11-03 上下文重构改变了 C# 扩展签名，接入或升级时按 [上下文 API 迁移](backend-context-api-migration.md) 修改业务、resolver、准备和投影实现；HTTP JSON 与数据库模型保持不变。
 
 先 AddDbContext<TContext>，再 AddApprovalWorkflow<TContext>；TContext 可以继承 DbContext、IdentityDbContext 或自定义基类。OnModelCreating 先调用宿主 base，再 ConfigureApproval，可选 ConfigureApprovalForms，然后继续宿主自己的模型配置。

@@ -78,6 +78,7 @@ Forms 保留动态字段、公式、明细、字段权限、规范化、草稿�
 
 - [架构与依赖](docs/architecture.md)
 - [宿主接入](docs/embedded-host-integration.md)
+- [共享数据库多租户宿主示例](samples/Approval.MultiTenantHost/README.md)
 - [事务与幂等](docs/transactions-and-idempotency.md)
 - [权限](docs/permissions.md)、[事件](docs/events.md)、[Forms](docs/forms.md)
 - [0.3 升级与数据保留](docs/upgrade-0.3.md)

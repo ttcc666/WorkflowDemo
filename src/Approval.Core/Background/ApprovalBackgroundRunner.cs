@@ -6,7 +6,7 @@ using Microsoft.Extensions.Logging;
 namespace Approval.Core.Background;
 
 public sealed class ApprovalBackgroundRunner(IApprovalScopeFactory scopes, ApprovalBackgroundState state,
-    TimeProvider clock, ILogger<ApprovalBackgroundRunner> logger)
+    TimeProvider clock, ILogger<ApprovalBackgroundRunner> logger, IApprovalHostScopeProvider hostScopes)
 {
     private readonly ConcurrentDictionary<string, byte> _running = new(StringComparer.Ordinal);
 
@@ -18,9 +18,24 @@ public sealed class ApprovalBackgroundRunner(IApprovalScopeFactory scopes, Appro
         try
         {
             state.Start(worker, clock.GetUtcNow().UtcDateTime);
-            await using var scope = await scopes.CreateAsync(ct);
-            var result = await operation(scope.ServiceProvider, ct);
-            state.End(worker, clock.GetUtcNow().UtcDateTime, true); return result;
+            var result = 0;
+            var succeeded = true;
+            foreach (var context in await hostScopes.GetBackgroundScopesAsync(ct))
+            {
+                ct.ThrowIfCancellationRequested();
+                try
+                {
+                    using var hostScope = context.Enter();
+                    await using var scope = await scopes.CreateAsync(ct);
+                    result += await operation(scope.ServiceProvider, ct);
+                }
+                catch (Exception ex) when (!ct.IsCancellationRequested)
+                {
+                    succeeded = false;
+                    logger.LogError(ex, "审批后台 {Worker} 在宿主分区 {Partition} 失败", worker, context.PartitionKey);
+                }
+            }
+            state.End(worker, clock.GetUtcNow().UtcDateTime, succeeded); return result;
         }
         catch (Exception ex)
         {

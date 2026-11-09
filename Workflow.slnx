@@ -4,6 +4,7 @@
     <Project Path="eng/Approval.ContractTool/Approval.ContractTool.csproj" />
   </Folder>
   <Folder Name="/samples/">
+    <Project Path="samples/Approval.MultiTenantHost/Approval.MultiTenantHost.csproj" />
     <Project Path="samples/Approval.ReferenceHost/Approval.ReferenceHost.csproj" />
     <Project Path="samples/Approval.Certificate/Approval.Certificate.csproj" />
     <Project Path="samples/Certificate.Api/Certificate.Api.csproj" />
