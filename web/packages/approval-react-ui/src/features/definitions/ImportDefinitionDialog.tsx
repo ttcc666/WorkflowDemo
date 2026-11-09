@@ -135,9 +135,7 @@ export function ImportDefinitionDialog({
       <CommandRecovery
         intent={intent}
         busy={busy}
-        recovered={() => {
-          if (key) imported(key)
-        }}
+        recovered={(_value, scope) => imported(scope)}
       />
       <Field label="流程定义文件">
         <Input

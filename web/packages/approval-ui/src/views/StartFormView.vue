@@ -115,6 +115,7 @@ const timer = window.setInterval(() => {
 onBeforeUnmount(() => window.clearInterval(timer))
 
 async function recover(value: unknown, scope: string) {
+  if (scope !== `draft:${key.value}` && scope !== `start:${key.value}`) return
   if (!value || typeof value !== 'object') return
   if (scope.startsWith('start:') && 'instanceId' in value && typeof value.instanceId === 'string') {
     await router.push({ name: approvalRouteNames.detail, params: { id: value.instanceId } })

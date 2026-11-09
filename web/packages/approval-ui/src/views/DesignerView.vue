@@ -116,6 +116,7 @@ watch(loader.data, (definition) => {
   canvas.value?.fitView()
 })
 const ready = computed(() => canLoad.value && !loader.loading.value && !loader.error.value && loader.data.value !== undefined)
+function recover(_value: unknown, scope: string) { if (scope === flowKey.value || scope === `draft:${flowKey.value}`) void loader.reload() }
 
 const emptyMeta: ApprovalMeta = {
   approverTypes: [],
@@ -267,7 +268,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', onBeforeUnload)
 </script>
 
 <template>
-  <CommandRecovery :intent="intent" :busy="saving || publishing" @recovered="loader.reload" />
+  <CommandRecovery :intent="intent" :busy="saving || publishing" @recovered="recover" />
   <el-alert v-if="me && (!canViewDefinitions || !can('approval.definition.design'))" type="warning" :closable="false" show-icon title="没有流程设计或定义读取权限" />
   <div v-else v-loading="loader.loading.value" class="designer">
     <el-alert v-if="loader.error.value" type="error" :closable="false" :title="errorMessage(loader.error.value)"><el-button @click="loader.reload">重试加载流程</el-button></el-alert>

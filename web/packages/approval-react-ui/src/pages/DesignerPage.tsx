@@ -306,7 +306,7 @@ function DesignerEditor() {
     return <ErrorState error={new Error("没有流程设计或定义读取权限")} />;
   return (
     <div className="ar-product-page ar-studio-page">
-      <CommandRecovery intent={intent} busy={busy} recovered={loaded.reload} />
+      <CommandRecovery intent={intent} busy={busy} recovered={(_value, scope) => { if (scope === key || scope === `draft:${key}`) loaded.reload(); }} />
       <PageHeader
         title="流程设计器"
         eyebrow="流程管理"

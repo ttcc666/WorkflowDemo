@@ -30,5 +30,6 @@ export function useCommandIntent(
     intent.pending.getSnapshot,
     intent.pending.getSnapshot,
   )
+  useSyncExternalStore(intent.revision.subscribe, intent.revision.getSnapshot, intent.revision.getSnapshot)
   return { ...intent, pending, isCurrent: () => active.current && identity === `${client.identity.value}:${client.version.value}` }
 }

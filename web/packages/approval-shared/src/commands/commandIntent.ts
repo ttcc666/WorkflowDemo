@@ -28,14 +28,19 @@ function canonical(value: unknown): unknown {
   return value
 }
 const memory = new Map<string, string>()
+const memoryStorage: IntentStorage = { get length() { return memory.size }, key: index => [...memory.keys()][index] ?? null, getItem: key => memory.get(key) ?? null, setItem: (key, value) => { memory.set(key, value) }, removeItem: key => { memory.delete(key) } }
 const failedWrites = new WeakMap<IntentStorage, Map<string, string | null>>()
+const storageChanges = new WeakMap<IntentStorage, { revision: ReturnType<typeof createStateCell<number>>; keys: Set<string> }>()
 function defaultStorage(): IntentStorage {
   try { if (typeof window !== 'undefined') return window.sessionStorage } catch { /* Private browsing may disable storage. */ }
-  return { get length() { return memory.size }, key: index => [...memory.keys()][index] ?? null, getItem: key => memory.get(key) ?? null, setItem: (key, value) => { memory.set(key, value) }, removeItem: key => { memory.delete(key) } }
+  return memoryStorage
 }
 /** One key per logical intent. Only a digest and opaque key are kept; request bodies are never persisted. */
 export function createCommandIntent(identity: () => string, options: { storage?: IntentStorage; generate?: () => string; retainOnError?: boolean; aliases?: () => readonly string[]; scopeAliases?: (scope: string) => readonly string[]; canExecute?: (scope: string) => boolean } = {}) {
   const storage = options.storage ?? defaultStorage()
+  const changes = storageChanges.get(storage) ?? { revision: createStateCell(0), keys: new Set<string>() }
+  storageChanges.set(storage, changes)
+  const notify = () => { changes.revision.value++ }
   const fallback = failedWrites.get(storage) ?? new Map<string, string | null>()
   failedWrites.set(storage, fallback)
   const generate = options.generate ?? (() => crypto.randomUUID())
@@ -52,6 +57,7 @@ export function createCommandIntent(identity: () => string, options: { storage?:
     try { const value = JSON.parse(stored ?? 'null'); return value && typeof value.key === 'string' && typeof value.fingerprint === 'string' ? value : undefined } catch { return undefined }
   }
   function save(key: string, value?: Intent) {
+    if (value) changes.keys.add(key); else changes.keys.delete(key)
     fallback.set(key, value ? JSON.stringify(value) : null)
     try {
       if (value) storage.setItem(key, JSON.stringify(value)); else storage.removeItem(key)
@@ -66,8 +72,9 @@ export function createCommandIntent(identity: () => string, options: { storage?:
     return values[0] ? { ...values[0], uncertain: values.some(value => value.uncertain) } : undefined
   }
   function clear(scope: string) { for (const key of storageKeys(scope)) save(key) }
+  function clearPending(scope: string) { if (pending.value !== null && [scope, ...options.scopeAliases?.(scope) ?? []].includes(pending.value)) pending.value = pendingScopes()[0] ?? null }
   function pendingScopes() {
-    const keys = new Set(fallback.keys())
+    const keys = new Set([...changes.keys, ...fallback.keys()])
     try { for (let index = 0; index < (storage.length ?? 0); index++) { const key = storage.key?.(index); if (key) keys.add(key) } } catch { /* Use page memory when browser storage is inaccessible. */ }
     const prefixes = [identity(), ...options.aliases?.() ?? []].map(storagePrefix)
     const scopes = new Set<string>()
@@ -95,15 +102,18 @@ export function createCommandIntent(identity: () => string, options: { storage?:
       const intent = previous ?? { key: generate(), fingerprint, uncertain: false }
       save(key, intent); pending.value = scope
       retries.set(key, () => run(scope, JSON.parse(json) as P, send))
+      notify()
       try {
         const result = await send(body, intent.key)
         if (identity() !== owner) throw new DOMException('身份已切换', 'AbortError')
-        clear(scope); pending.value = null
+        clear(scope); clearPending(scope)
         retries.delete(key)
+        notify()
         return result
       } catch (error) {
-        if (!options.retainOnError && !intent.uncertain && error instanceof ApiError && error.status < 500 && error.code !== 'CommitOutcomeUnknown') { clear(scope); pending.value = null; retries.delete(key) }
+        if (!options.retainOnError && !intent.uncertain && error instanceof ApiError && error.status < 500 && error.code !== 'CommitOutcomeUnknown') { clear(scope); clearPending(scope); retries.delete(key) }
         else { intent.uncertain = true; save(key, intent) }
+        notify()
         throw error
       }
     } finally { running.delete(key) }
@@ -114,6 +124,6 @@ export function createCommandIntent(identity: () => string, options: { storage?:
     if (!replay) throw new Error('当前页面没有原请求内容，请核对记录后恢复原内容')
     return replay()
   }
-  return { run, pending, pendingScopes, retry, canRetry, hasConflictingPending: (scope: string) => { try { previousIntent(scope); return false } catch { return true } }, hasPending: (scope: string) => records(scope).length > 0, reset: (scope: string) => { clear(scope); retries.delete(storageKey(scope)); pending.value = null } }
+  return { run, pending, revision: changes.revision, pendingScopes, retry, canRetry, hasConflictingPending: (scope: string) => { try { previousIntent(scope); return false } catch { return true } }, hasPending: (scope: string) => records(scope).length > 0, reset: (scope: string) => { clear(scope); retries.delete(storageKey(scope)); clearPending(scope); notify() } }
 }
 export type CommandIntent = ReturnType<typeof createCommandIntent>

@@ -286,7 +286,8 @@ export default function StartFormPage() {
       <CommandRecovery
         intent={intent}
         busy={busy}
-        recovered={() => {
+        recovered={(_value, scope) => {
+          if (scope !== `draft:${key}` && scope !== `start:${key}`) return;
           start.reload();
           draft.reload();
         }}
