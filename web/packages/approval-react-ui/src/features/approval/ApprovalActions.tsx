@@ -62,6 +62,7 @@ export function ApprovalActions({
   changes,
   userId,
   busy,
+  approveBlocked = false,
   onAction,
 }: {
   instance: ApprovalInstance;
@@ -73,6 +74,7 @@ export function ApprovalActions({
   changes: string[];
   userId: string;
   busy: boolean;
+  approveBlocked?: boolean;
   onAction: (input: ApprovalActionInput) => Promise<boolean>;
 }) {
   const [dialog, setDialog] = useState<{
@@ -130,7 +132,7 @@ export function ApprovalActions({
                   ? "danger"
                   : "default"
             }
-            disabled={busy}
+            disabled={busy || (kind === "approve" && approveBlocked)}
             onClick={() => setDialog({ kind, task: task ?? undefined })}
           >
             {titles[kind]}
@@ -175,7 +177,8 @@ export function ApprovalActions({
                   ? instance.tasks.find((item) => item.id === dialog.task?.id)
                       ?.capabilities?.["approval.task.reassign"] === true
                   : dialog.task?.id === task?.id &&
-                    capabilities[`approval.task.${dialog.kind}`] === true
+                    capabilities[`approval.task.${dialog.kind}`] === true &&
+                    (dialog.kind !== "approve" || !approveBlocked)
           }
           close={() => setDialog(null)}
           confirm={onAction}

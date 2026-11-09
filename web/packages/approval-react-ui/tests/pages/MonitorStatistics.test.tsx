@@ -8,8 +8,15 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import type { ApprovalStatistics } from "@approval/shared";
 import { ApprovalProvider, createApprovalClient } from "../../src/client";
 import { MonitorStatistics } from "../../src/features/monitor/MonitorPanels";
+
+type StatisticsFixture = Omit<ApprovalStatistics, "nodes"> & {
+  nodes: (Omit<ApprovalStatistics["nodes"][number], "averageMinutes"> & {
+    averageMinutes: number | null;
+  })[];
+};
 
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date"] });
@@ -56,6 +63,7 @@ function show(
   durations: [number | null, number | null] = [90, 2880],
   allowed = true,
   flowState: "success" | "failure" | "empty" = "success",
+  overrides: Partial<StatisticsFixture> = {},
 ) {
   const queries: URLSearchParams[] = [];
   let failNext = firstFails;
@@ -112,7 +120,7 @@ function show(
           },
         );
       }
-      return new Response(JSON.stringify(statistics(...durations)));
+      return new Response(JSON.stringify({ ...statistics(...durations), ...overrides }));
     },
   );
   const client = createApprovalClient({ fetcher });
@@ -134,6 +142,80 @@ function show(
     },
   };
 }
+
+function distribution(total: number, average: number | null, count: number) {
+  return {
+    flows: [{ ...summary, definitionKey: "expense", definitionName: "费用审批", total }],
+    nodes: [{
+      definitionKey: "expense", definitionName: "费用审批",
+      nodeId: "review", nodeName: "审核", handled: 4, overdue: 1,
+      averageMinutes: average,
+    }],
+    backlog: [{
+      assigneeKind: "User" as const, assigneeValue: "dave",
+      count, overdue: 1, oldestCreatedAt: "2026-11-01T00:00:00Z",
+    }],
+  };
+}
+
+function fillOf(name: string) {
+  return screen.getByRole("img", { name }).querySelector("span[style]");
+}
+
+it("statistics bars scale each series against its own maximum and retain API values", async () => {
+  const first = distribution(8, 15, 3);
+  const second = distribution(16, 60, 12);
+  show(false, [90, 2880], true, "success", {
+    flows: [...first.flows, { ...second.flows[0]!, definitionKey: "leave", definitionName: "请假审批" }],
+    nodes: [...first.nodes, { ...second.nodes[0]!, nodeId: "final", nodeName: "复核" }],
+    backlog: [...first.backlog, { ...second.backlog[0]!, assigneeKind: "Role", assigneeValue: "审计" }],
+  });
+  await screen.findByRole("img", { name: "费用审批：总数 8 条" });
+  expect(fillOf("费用审批：总数 8 条")).toHaveStyle({ width: "50%" });
+  expect(fillOf("请假审批：总数 16 条")).toHaveStyle({ width: "100%" });
+  expect(fillOf("费用审批 · 审核：平均耗时 15 分钟")).toHaveStyle({ width: "25%" });
+  expect(fillOf("费用审批 · 复核：平均耗时 60 分钟")).toHaveStyle({ width: "100%" });
+  expect(fillOf("dave：待办 3 条")).toHaveStyle({ width: "25%" });
+  expect(fillOf("角色：审计：待办 12 条")).toHaveStyle({ width: "100%" });
+  expect(screen.getByRole("img", { name: "费用审批 · 复核：平均耗时 60 分钟" })).toHaveTextContent("1 小时");
+});
+
+it("empty statistics series report no rows and render no bars", async () => {
+  const { queries } = show(false, [null, null], true, "success", { flows: [] });
+  await screen.findByText("该时间范围内没有流程");
+  expect(screen.getByText("暂无已处理的任务")).toBeVisible();
+  expect(screen.getByText("当前没有待办")).toBeVisible();
+  expect(screen.queryByRole("img", { name: /总数|平均耗时|待办/ })).not.toBeInTheDocument();
+  expect(queries).toHaveLength(1);
+});
+
+it("zero statistics values have zero-width fills while a null node duration is unknown", async () => {
+  const zero = distribution(0, 0, 0);
+  show(false, [null, null], true, "success", {
+    ...zero,
+    nodes: [...zero.nodes, {
+      ...zero.nodes[0]!, nodeId: "unknown", nodeName: "未知节点", averageMinutes: null,
+    }],
+  });
+  await screen.findByRole("img", { name: "费用审批：总数 0 条" });
+  expect(fillOf("费用审批：总数 0 条")).toHaveStyle({ width: "0%" });
+  expect(fillOf("费用审批 · 审核：平均耗时 0 分钟")).toHaveStyle({ width: "0%" });
+  expect(fillOf("dave：待办 0 条")).toHaveStyle({ width: "0%" });
+  const unknown = within(screen.getByRole("row", { name: /未知节点/ }));
+  expect(unknown.getByText("-", { exact: true })).toBeVisible();
+  expect(unknown.getByText("费用审批 · 未知节点：平均耗时 无数据")).toBeInTheDocument();
+  expect(unknown.queryByRole("img")).not.toBeInTheDocument();
+  expect(screen.queryByText(/90% 的流程在/)).not.toBeInTheDocument();
+});
+
+it("truncated statistics explain the limit and metric definitions without recomputing the API rate", async () => {
+  show(false, [90, 2880], true, "success", { truncated: true, approvalRate: 12.3 });
+  const alert = await screen.findByRole("alert");
+  expect(alert).toHaveTextContent("统计数据已截断，只统计最早的 10 万条记录。建议缩小时间范围。");
+  expect(screen.getByText("12.3%")).toBeVisible();
+  expect(screen.getByText("通过率 = 已通过 /（已通过 + 已驳回 + 已终止），撤回不计入分母。")).toBeVisible();
+  expect(screen.getByText("超时任务指超过时限才处理，或者当前已经超时的待办。")).toBeVisible();
+});
 async function chooseFlow(name: string) {
   const user = userEvent.setup();
   await user.click(screen.getByRole("combobox", { name: "统计流程" }));

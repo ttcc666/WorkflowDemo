@@ -547,12 +547,14 @@ export function Loading() {
 export function Pagination({
   page,
   pageSize,
+  pageSizes = [20, 50, 100],
   total,
   loading,
   onChange,
 }: {
   page: number;
   pageSize: number;
+  pageSizes?: readonly number[];
   total: number | undefined;
   loading?: boolean;
   onChange: (page: number, size: number) => void;
@@ -570,7 +572,7 @@ export function Pagination({
         aria-label="每页条数"
         value={pageSize}
         disabled={loading}
-        options={[20, 50, 100].map((size) => ({
+        options={pageSizes.map((size) => ({
           value: String(size),
           label: `${size} / 页`,
         }))}

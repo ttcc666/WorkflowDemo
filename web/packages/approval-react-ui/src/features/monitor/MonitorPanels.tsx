@@ -12,6 +12,7 @@ import {
   durationText,
   formatDateTime,
   instanceStatusLabels,
+  taskStatusLabels,
   type ApprovalStatistics,
 } from "@approval/shared";
 import {
@@ -37,6 +38,7 @@ import {
   Textarea,
 } from "../../components/ui/primitives";
 import { FieldGroup } from "../../components/shadcn/field";
+import { Alert, AlertDescription } from "../../components/shadcn/alert";
 import { DataTable } from "../../components/ui/DataTable";
 import { Metrics } from "../../components/ui/Metrics";
 import { ListFilterBar } from "../workbench/ListFilterBar";
@@ -129,9 +131,19 @@ export function MonitorInstances() {
             ),
           },
           {
+            key: "initiator",
+            label: "申请人",
+            render: (row) => row.initiatorId,
+          },
+          {
             key: "time",
             label: "创建时间",
             render: (row) => formatDateTime(row.createdAt),
+          },
+          {
+            key: "completed",
+            label: "完成时间",
+            render: (row) => formatDateTime(row.completedAt),
           },
           {
             key: "action",
@@ -156,6 +168,7 @@ export function MonitorInstances() {
       <Pagination
         page={list.page}
         pageSize={list.pageSize}
+        pageSizes={[10, 20, 50, 100]}
         total={list.total}
         onChange={list.paginate}
         loading={list.loading}
@@ -180,6 +193,42 @@ export function MonitorInstances() {
     </div>
   );
 }
+
+function StatisticBar({
+  value,
+  max,
+  text,
+  label,
+}: {
+  value: number | null;
+  max: number;
+  text: string | number;
+  label: string;
+}) {
+  if (value == null)
+    return (
+      <>
+        <span aria-hidden="true">{text}</span>
+        <span className="approval:sr-only">{label}</span>
+      </>
+    );
+  return (
+    <div
+      role="img"
+      aria-label={label}
+      className="approval:flex approval:min-w-0 approval:items-center approval:gap-2"
+    >
+      <span className="approval:shrink-0 approval:tabular-nums">{text}</span>
+      <span className="approval:h-2 approval:min-w-8 approval:flex-1 approval:rounded-full approval:bg-muted">
+        <span
+          className="approval:block approval:h-full approval:rounded-full approval:bg-primary"
+          style={{ width: `${max > 0 ? (value / max) * 100 : 0}%` }}
+        />
+      </span>
+    </div>
+  );
+}
+
 function defaultStatisticsFilters() {
   const end = new Date();
   const start = new Date(end);
@@ -242,6 +291,13 @@ export function MonitorStatistics() {
     data.data ??
     (allowed && lastSuccessful?.owner === identity ? lastSuccessful : null);
   const result = successful?.result;
+  const maxFlowTotal =
+    result?.flows.reduce((max, row) => Math.max(max, row.total), 0) ?? 0;
+  const maxNodeMinutes =
+    result?.nodes.reduce((max, row) => Math.max(max, row.averageMinutes ?? 0), 0) ??
+    0;
+  const maxBacklog =
+    result?.backlog.reduce((max, row) => Math.max(max, row.count), 0) ?? 0;
   function apply(filters = next) {
     setChecked(true);
     const errors = validateDateFilters(filters.from, filters.to);
@@ -340,6 +396,13 @@ export function MonitorStatistics() {
       <ErrorState error={data.error} retry={data.reload} />
       {result && (
         <>
+          {result.truncated && (
+            <Alert>
+              <AlertDescription>
+                统计数据已截断，只统计最早的 10 万条记录。建议缩小时间范围。
+              </AlertDescription>
+            </Alert>
+          )}
           <Card title="统计摘要">
             <Metrics
               items={[
@@ -369,9 +432,12 @@ export function MonitorStatistics() {
               ]}
             />
             <p>
-              90% 的流程在 {durationText(result.summary.p90Minutes)} 内完成。
-              {result.truncated ? " · 部分统计已截断" : ""}
+              通过率 = 已通过 /（已通过 + 已驳回 + 已终止），撤回不计入分母。
             </p>
+            <p>超时任务指超过时限才处理，或者当前已经超时的待办。</p>
+            {result.summary.p90Minutes != null && (
+              <p>90% 的流程在 {durationText(result.summary.p90Minutes)} 内完成。</p>
+            )}
           </Card>
           <Accordion
             type="multiple"
@@ -384,6 +450,7 @@ export function MonitorStatistics() {
                 <AccordionContent>
                   <DataTable
                     rows={result.flows}
+                    empty="该时间范围内没有流程"
                     rowKey={(row) => row.definitionKey}
                     columns={[
                       {
@@ -394,7 +461,14 @@ export function MonitorStatistics() {
                       {
                         key: "total",
                         label: "总数",
-                        render: (row) => row.total,
+                        render: (row) => (
+                          <StatisticBar
+                            value={row.total}
+                            max={maxFlowTotal}
+                            text={row.total}
+                            label={`${row.definitionName}：总数 ${row.total} 条`}
+                          />
+                        ),
                       },
                       {
                         key: "running",
@@ -452,6 +526,7 @@ export function MonitorStatistics() {
                 <AccordionContent>
                   <DataTable
                     rows={result.nodes}
+                    empty="暂无已处理的任务"
                     rowKey={(row) => row.definitionKey + ":" + row.nodeId}
                     columns={[
                       {
@@ -477,7 +552,14 @@ export function MonitorStatistics() {
                       {
                         key: "average",
                         label: "平均耗时",
-                        render: (row) => durationText(row.averageMinutes),
+                        render: (row) => (
+                          <StatisticBar
+                            value={row.averageMinutes}
+                            max={maxNodeMinutes}
+                            text={durationText(row.averageMinutes)}
+                            label={`${row.definitionName} · ${row.nodeName}：平均耗时 ${row.averageMinutes == null ? "无数据" : `${row.averageMinutes} 分钟`}`}
+                          />
+                        ),
                       },
                     ]}
                     loading={data.loading}
@@ -495,6 +577,7 @@ export function MonitorStatistics() {
                 <AccordionContent>
                   <DataTable
                     rows={result.backlog}
+                    empty="当前没有待办"
                     rowKey={(row) => row.assigneeKind + ":" + row.assigneeValue}
                     columns={[
                       {
@@ -508,7 +591,14 @@ export function MonitorStatistics() {
                       {
                         key: "count",
                         label: "待办数量",
-                        render: (row) => row.count,
+                        render: (row) => (
+                          <StatisticBar
+                            value={row.count}
+                            max={maxBacklog}
+                            text={row.count}
+                            label={`${row.assigneeKind === "Role" ? "角色：" : ""}${row.assigneeValue}：待办 ${row.count} 条`}
+                          />
+                        ),
                       },
                       {
                         key: "overdue",
@@ -533,6 +623,9 @@ export function MonitorStatistics() {
     </div>
   );
 }
+
+const defaultHandoverReason = "离职交接";
+
 export function HandoverPanel() {
   const client = useApprovalClient();
   const { api } = client;
@@ -540,7 +633,7 @@ export function HandoverPanel() {
   const identity = useApprovalIdentity();
   const [from, setFrom] = useState<string[]>([]);
   const [to, setTo] = useState<string[]>([]);
-  const [reason, setReason] = useState("");
+  const [reason, setReason] = useState(defaultHandoverReason);
   const [page, setPage] = useState(1);
   const preview = useAsyncData(
     (signal) => api.userTasks(from[0]!, { page, pageSize: 20 }, signal),
@@ -559,7 +652,7 @@ export function HandoverPanel() {
   useEffect(() => {
     setFrom([]);
     setTo([]);
-    setReason("");
+    setReason(defaultHandoverReason);
     setPage(1);
     setResult(null);
     setError(null);
@@ -655,7 +748,21 @@ export function HandoverPanel() {
             label: "待办",
             render: (row) => row.title || row.businessKey,
           },
+          { key: "flow", label: "所属流程", render: (row) => row.definitionName },
           { key: "node", label: "节点", render: (row) => row.nodeName },
+          {
+            key: "status",
+            label: "任务状态",
+            render: (row) => (
+              <Badge status={row.status}>{taskStatusLabels[row.status]?.text}</Badge>
+            ),
+          },
+          { key: "initiator", label: "申请人", render: (row) => row.initiatorId },
+          {
+            key: "time",
+            label: "到达时间",
+            render: (row) => formatDateTime(row.createdAt),
+          },
         ]}
         error={preview.error}
       />
@@ -671,11 +778,17 @@ export function HandoverPanel() {
       <Field label="交接原因" required>
         <Textarea
           aria-label="交接原因"
+          maxLength={200}
           value={reason}
           disabled={busy}
           onChange={(event) => setReason(event.target.value)}
         />
       </Field>
+      <ul className="approval:list-disc approval:pl-5 approval:text-sm approval:text-muted-foreground">
+        <li>只改派指派给本人的待办，包括依次审批中尚未轮到的任务和等待加签的任务。角色任务不在交接范围内。</li>
+        <li>新处理人是申请发起人，或已是当前节点审批人时会跳过。处理时限不会重置。</li>
+        <li>部分完成或结果未知时，必须使用原来的交接内容和幂等键恢复。</li>
+      </ul>
       <Button
         disabled={!canSubmit || busy}
         variant="primary"

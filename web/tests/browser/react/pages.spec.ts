@@ -1,6 +1,7 @@
 import { chooseOption } from "./ui-controls";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { formatDateTime, type ApprovalStatistics, type InstanceListItem } from "@approval/shared";
 import {
   expect,
   test,
@@ -267,6 +268,104 @@ async function login(page: Page, user: string) {
     user,
   );
 }
+
+test("mobile monitor pagination and dark statistics render real instance and task data", async ({
+  page,
+  request,
+}) => {
+  const data = await dataset(request);
+  const finished = await request.post(base() + `/api/approval/forms/${data.key}/start`, {
+    headers: headers("alice"),
+    data: { formData: { productCode: "MONITOR-COMPLETE", quantity: 1, amount: 100 } },
+  });
+  expect(finished.ok()).toBe(true);
+  const { instanceId: finishedId } = await finished.json();
+  const taskResponse = await request.get(base() + `/api/approval/instances/${finishedId}/my-task`, {
+    headers: headers("dave"),
+  });
+  expect(taskResponse.ok()).toBe(true);
+  const { task } = await taskResponse.json();
+  const approval = await request.post(base() + `/api/approval/tasks/${task.id}/approve`, {
+    headers: headers("dave"),
+    data: { comment: "统计验收", formData: null },
+  });
+  expect(approval.status()).toBe(204);
+
+  await login(page, "admin");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.emulateMedia({ colorScheme: "dark" });
+  await page.goto(`/monitor?keep=1&monitor_page=2&monitor_definitionKey=${data.key}`);
+  const sizes = page.getByRole("combobox", { name: "每页条数" });
+  const firstPage = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return url.pathname.endsWith("/admin/instances") &&
+      url.searchParams.get("page") === "1" &&
+      url.searchParams.get("pageSize") === "10" && response.ok();
+  });
+  await chooseOption(sizes, "10");
+  const listResponse = await firstPage;
+  expect(new URL(listResponse.url()).searchParams.get("definitionKey")).toBe(data.key);
+  const params = new URL(page.url()).searchParams;
+  expect(params.get("monitor_pageSize")).toBe("10");
+  expect(params.has("monitor_page")).toBe(false);
+  expect(params.get("keep")).toBe("1");
+  const { items } = (await listResponse.json()) as { items: InstanceListItem[] };
+  const running = items.find((item) => item.id === data.instanceId)!;
+  const completed = items.find((item) => item.id === finishedId)!;
+  expect(running).toMatchObject({ initiatorId: "alice", completedAt: null });
+  expect(completed).toMatchObject({ initiatorId: "alice", completedAt: expect.any(String) });
+  const openRow = page.getByRole("row").filter({ hasText: running.title || running.businessKey });
+  const closedRow = page.getByRole("row").filter({ hasText: completed.title || completed.businessKey });
+  await expect(openRow.locator('[data-column="initiator"]')).toHaveText(running.initiatorId);
+  await expect(openRow.locator('[data-column="completed"]')).toHaveText("-");
+  await expect(closedRow.locator('[data-column="completed"]')).toHaveText(formatDateTime(completed.completedAt));
+  await openRow.getByRole("button", { name: "终止流程" }).click();
+  const terminate = page.getByRole("alertdialog", { name: "终止流程" });
+  await expect(terminate).toBeVisible();
+  await terminate.getByRole("button", { name: "取消" }).click();
+  await expect(closedRow.getByRole("button", { name: "终止流程" })).toHaveCount(0);
+
+  // Apply the host palette through the scoped theme tokens used by the packed UI.
+  await page.addStyleTag({ content: `
+    .approval-react {
+      --background: #151a20;
+      --card: #1e2630;
+      --foreground: #f3f6fa;
+      --primary: rgb(100, 180, 255);
+      --muted: rgb(45, 57, 70);
+      --muted-foreground: #bdc7d4;
+    }
+  ` });
+  const statisticsResponse = page.waitForResponse((response) =>
+    new URL(response.url()).pathname.endsWith("/admin/statistics") && response.ok(),
+  );
+  await page.getByRole("tab", { name: "统计", exact: true }).click();
+  const stats = (await (await statisticsResponse).json()) as ApprovalStatistics;
+  const flow = stats.flows.find((item) => item.definitionKey === data.key)!;
+  const node = stats.nodes.find((item) => item.definitionKey === data.key)!;
+  const backlog = stats.backlog.find((item) => item.assigneeValue === "dave")!;
+  expect(flow.total).toBe(2);
+  expect(node.averageMinutes).not.toBeNull();
+  expect(backlog.count).toBeGreaterThan(0);
+  for (const name of ["查看各流程明细", "查看各节点明细", "查看待办积压明细"]) {
+    const toggle = page.getByRole("button", { name });
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await toggle.click();
+  }
+  const bars = [
+    page.getByRole("img", { name: `${flow.definitionName}：总数 ${flow.total} 条` }),
+    page.getByRole("img", { name: `${node.definitionName} · ${node.nodeName}：平均耗时 ${node.averageMinutes} 分钟` }),
+    page.getByRole("img", { name: `dave：待办 ${backlog.count} 条` }),
+  ];
+  for (const bar of bars) {
+    await expect(bar).toBeVisible();
+    const fill = bar.locator("span[style]");
+    await expect(fill).toHaveCSS("background-color", "rgb(100, 180, 255)");
+    await expect(bar.locator("span:has(> span[style])")).toHaveCSS("background-color", "rgb(45, 57, 70)");
+    expect((await bar.boundingBox())!.x + (await bar.boundingBox())!.width).toBeLessThanOrEqual(390);
+  }
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+});
 const surfaces = [
   { key: "workbench", path: "workbench", title: /^审批工作台$/, user: "dave" },
   { key: "detail", path: "detail", title: /^界面检查/, user: "dave" },

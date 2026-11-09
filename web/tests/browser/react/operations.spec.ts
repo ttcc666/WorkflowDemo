@@ -1,4 +1,5 @@
 import { chooseOption } from "./ui-controls";
+import { formatDateTime, taskStatusLabels, type TodoItem } from "@approval/shared";
 import {
   expect,
   test,
@@ -10,6 +11,53 @@ const headers = (user = "admin") => ({
   "X-User-Id": user,
   "Idempotency-Key": crypto.randomUUID(),
 });
+
+test("the Certificate business panel approves without a dynamic form using one real request", async ({
+  page,
+  request,
+}) => {
+  const certNo = "PANEL-" + crypto.randomUUID().slice(0, 8);
+  const created = await request.post(base() + "/api/certificates", {
+    headers: headers("alice"),
+    data: {
+      certNo, name: "业务面板审批验收", holder: "示例持有人", certType: "Normal",
+      issueDate: "2026-01-01", expireDate: "2027-12-31",
+    },
+  });
+  expect(created.status()).toBe(202);
+  const { requestId } = await created.json();
+  const detail = await request.get(base() + "/api/certificate-requests/" + requestId, {
+    headers: headers("alice"),
+  });
+  expect(detail.ok()).toBe(true);
+  const { approval: { id } } = await detail.json();
+  const myTask = await request.get(base() + `/api/approval/instances/${id}/my-task`, {
+    headers: headers("dave"),
+  });
+  expect(myTask.ok()).toBe(true);
+  const { task } = await myTask.json();
+  const approvalPath = `/api/approval/tasks/${task.id}/approve`;
+  const writes: { key: string | undefined; body: unknown }[] = [];
+  page.on("request", (call) => {
+    if (call.method() === "POST" && new URL(call.url()).pathname === approvalPath)
+      writes.push({ key: call.headers()["idempotency-key"], body: call.postDataJSON() });
+  });
+  await page.addInitScript(() => localStorage.setItem("approval-demo-user", "dave"));
+  await page.goto(`/approvals/${id}`);
+  await expect(page.getByRole("heading", { name: "证书申请内容" })).toBeVisible();
+  await expect(page.getByText(certNo, { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "同意", exact: true }).click();
+  const response = page.waitForResponse((reply) =>
+    new URL(reply.url()).pathname === approvalPath && reply.request().method() === "POST",
+  );
+  await page.getByRole("button", { name: "确认同意", exact: true }).click();
+  expect((await response).status()).toBe(204);
+  await expect(page.getByText("操作已完成", { exact: true })).toBeVisible();
+  expect(writes).toHaveLength(1);
+  expect(writes[0]).toEqual({ key: expect.any(String), body: { comment: "", formData: null } });
+  await expect(page.getByRole("button", { name: "同意", exact: true })).toHaveCount(0);
+});
+
 async function monitorOperations({
   page,
   request,
@@ -17,10 +65,11 @@ async function monitorOperations({
   page: Page;
   request: APIRequestContext;
 }) {
+  const title = "交接预览 " + crypto.randomUUID().slice(0, 8);
   const flow = {
     schemaVersion: 1,
     startNodeId: "start",
-    settings: { startable: true },
+    settings: { startable: true, titleTemplate: title },
     form: {
       fields: [
         {
@@ -75,17 +124,40 @@ async function monitorOperations({
   await page.getByRole("tab", { name: "离职交接", exact: true }).click();
   const from = page.getByRole("group", { name: "交出人员", exact: true });
   await from.getByRole("combobox").fill("dave");
+  const previewResponse = page.waitForResponse((response) =>
+    new URL(response.url()).pathname.endsWith("/admin/users/dave/tasks") &&
+    response.request().method() === "GET" && response.ok(),
+  );
   await page
     .getByRole("listbox", { name: "人员搜索结果" })
     .getByRole("option", { name: /Dave/ })
     .click();
+  const preview = await previewResponse;
+  const previewQuery = new URL(preview.url()).searchParams;
+  expect(Object.fromEntries(previewQuery)).toEqual({ page: "1", pageSize: "20" });
+  const { items } = (await preview.json()) as { items: TodoItem[] };
+  const taskPreview = items.find((item) => item.instanceId === id)!;
+  expect(taskPreview).toMatchObject({ title, nodeName: "审批", initiatorId: "alice" });
+  const row = page.getByRole("row").filter({ hasText: title });
+  await expect(row.locator('[data-column="flow"]')).toHaveText(taskPreview.definitionName);
+  await expect(row.locator('[data-column="node"]')).toHaveText(taskPreview.nodeName);
+  await expect(row.locator('[data-column="status"]')).toHaveText(taskStatusLabels[taskPreview.status].text);
+  await expect(row.locator('[data-column="initiator"]')).toHaveText(taskPreview.initiatorId);
+  await expect(row.locator('[data-column="time"]')).toHaveText(formatDateTime(taskPreview.createdAt));
+  expect(await row.evaluate((element) => element.getBoundingClientRect().right)).toBeLessThanOrEqual(
+    page.viewportSize()!.width,
+  );
+  const reason = page.getByRole("textbox", { name: "交接原因" });
+  await expect(reason).toHaveValue("离职交接");
+  await reason.fill("交".repeat(201));
+  await expect(reason).toHaveValue("交".repeat(200));
   const to = page.getByRole("group", { name: "接收人员", exact: true });
   await to.getByRole("combobox").fill("dan");
   await page
     .getByRole("listbox", { name: "人员搜索结果" })
     .getByRole("option", { name: /Dan/ })
     .click();
-  await page.getByRole("textbox", { name: "交接原因" }).fill("交接验收");
+  await reason.fill("交接验收");
   const handoverRequests: { key: string | undefined; body: unknown }[] = [];
   page.on("request", (request) => {
     if (

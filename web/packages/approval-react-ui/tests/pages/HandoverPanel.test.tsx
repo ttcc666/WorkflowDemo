@@ -6,18 +6,25 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
-import { ApprovalProvider } from "../../src/client";
+import { formatDateTime } from "@approval/shared";
+import { ApprovalProvider, createApprovalClient } from "../../src/client";
 import type { UserPickerProps } from "../../src/components/UserPicker";
 import { HandoverPanel } from "../../src/features/monitor/MonitorPanels";
 
 afterEach(() => sessionStorage.clear());
+const createdAt = "2026-11-01T08:30:00Z";
+
 function show(allowed = true, fails = false, slow = false) {
   const posts: { path: string; body: unknown; key: string | null }[] = [];
   let finish: ((response: Response) => void) | undefined;
   const fetcher = vi.fn(
     async (input: string | URL | Request, init?: RequestInit) => {
-      const path = new URL(String(input), "http://test.local").pathname;
+      const { pathname: path, searchParams } = new URL(
+        String(input),
+        "http://test.local",
+      );
       if (init?.method === "POST") {
         posts.push({
           path,
@@ -48,15 +55,19 @@ function show(allowed = true, fails = false, slow = false) {
                 capabilities: { "approval.task.reassign-bulk": allowed },
               }
             : {
-                items: [
+                items: searchParams.get("page") === "2" ? [] : [
                   {
                     taskId: "task",
                     instanceId: "instance",
                     title: "待交接申请",
+                    definitionName: "费用审批",
                     nodeName: "审核",
+                    status: "Suspended",
+                    initiatorId: "dave",
+                    createdAt,
                   },
                 ],
-                total: 1,
+                total: 21,
               },
         ),
       );
@@ -77,8 +88,9 @@ function show(allowed = true, fails = false, slow = false) {
       </>
     );
   }
+  const client = createApprovalClient({ fetcher, userPicker: Picker });
   const view = render(
-    <ApprovalProvider options={{ fetcher, userPicker: Picker }}>
+    <ApprovalProvider client={client}>
       <HandoverPanel />
     </ApprovalProvider>,
   );
@@ -86,6 +98,7 @@ function show(allowed = true, fails = false, slow = false) {
     ...view,
     posts,
     fetcher,
+    client,
     complete: () => act(async () => finish?.(result())),
   };
 }
@@ -105,7 +118,7 @@ function result() {
     }),
   );
 }
-async function choose(from: string, to: string) {
+async function choose(from: string, to: string, reason = "交接验收") {
   await waitFor(() =>
     expect(
       within(screen.getByRole("group", { name: "交出人员" })).getByRole(
@@ -126,10 +139,79 @@ async function choose(from: string, to: string) {
       { name: "选择 " + to },
     ),
   );
-  fireEvent.change(screen.getByRole("textbox", { name: "交接原因" }), {
-    target: { value: "交接验收" },
-  });
+  if (reason) {
+    fireEvent.change(screen.getByRole("textbox", { name: "交接原因" }), {
+      target: { value: reason },
+    });
+  }
 }
+
+it("handover preview renders task details and requests the next page for the same user", async () => {
+  const { fetcher } = show();
+  await choose("alice", "bob");
+  const row = within(await screen.findByRole("row", { name: /待交接申请/ }));
+  for (const value of ["费用审批", "审核", "等待加签", "dave", formatDateTime(createdAt)])
+    expect(row.getByRole("cell", { name: value })).toBeInTheDocument();
+  expect(row.getByText("等待加签")).toHaveAttribute("data-status", "Suspended");
+  fireEvent.click(screen.getByRole("button", { name: "下一页" }));
+  expect(screen.getByRole("table").parentElement?.parentElement).toHaveAttribute("aria-busy", "true");
+  await screen.findByText("此人员没有待交接任务");
+  const requests = fetcher.mock.calls
+    .map(([url]) => new URL(String(url), "http://test.local"))
+    .filter((url) => url.pathname.endsWith("/admin/users/alice/tasks"));
+  expect(requests.map((url) => Object.fromEntries(url.searchParams))).toEqual([
+    { page: "1", pageSize: "20" },
+    { page: "2", pageSize: "20" },
+  ]);
+  expect(screen.queryByText("待交接申请")).not.toBeInTheDocument();
+});
+
+it("handover submits the default reason and explains the scope and recovery rules", async () => {
+  const { posts } = show();
+  await choose("alice", "bob", "");
+  expect(screen.getByRole("textbox", { name: "交接原因" })).toHaveValue("离职交接");
+  const rules = screen.getByText(/只改派指派给本人的待办/).parentElement!;
+  for (const rule of [
+    "只改派指派给本人的待办",
+    "依次审批中尚未轮到的任务",
+    "等待加签的任务",
+    "角色任务不在交接范围内",
+    "新处理人是申请发起人，或已是当前节点审批人时会跳过",
+    "处理时限不会重置",
+    "部分完成或结果未知时，必须使用原来的交接内容和幂等键恢复",
+  ]) expect(rules).toHaveTextContent(rule);
+  fireEvent.click(screen.getByRole("button", { name: "批量改派" }));
+  fireEvent.click(screen.getByRole("button", { name: "确认" }));
+  await screen.findByRole("heading", { name: "交接结果" });
+  expect(posts).toHaveLength(1);
+  expect(posts[0]?.body).toEqual({ toUserId: "bob", reason: "离职交接" });
+});
+
+it("the reason caps user input at 200 characters and identity changes clear the handover", async () => {
+  const { client, posts } = show();
+  await choose("alice", "bob");
+  await screen.findByText("待交接申请");
+  const field = screen.getByRole("textbox", { name: "交接原因" });
+  const user = userEvent.setup();
+  fireEvent.change(field, { target: { value: "交".repeat(199) } });
+  expect(field).toHaveValue("交".repeat(199));
+  await user.type(field, "接替");
+  expect(field).toHaveValue("交".repeat(199) + "接");
+  fireEvent.click(screen.getByRole("button", { name: "批量改派" }));
+  fireEvent.click(screen.getByRole("button", { name: "确认" }));
+  await screen.findByRole("heading", { name: "交接结果" });
+  expect(posts[0]?.body).toEqual({ toUserId: "bob", reason: "交".repeat(199) + "接" });
+  await act(async () => {
+    client.updateOptions({ userKey: () => "other-admin" });
+    await client.reloadUser();
+  });
+  expect(screen.getByRole("textbox", { name: "交接原因" })).toHaveValue("离职交接");
+  expect(screen.getByText("搜索交出人员当前 空")).toBeInTheDocument();
+  expect(screen.getByText("搜索接收人员当前 空")).toBeInTheDocument();
+  expect(screen.getByText("选择交出人员后显示待办预览")).toBeInTheDocument();
+  expect(screen.queryByRole("heading", { name: "交接结果" })).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "批量改派" })).toBeDisabled();
+});
 it("different handover users submit once with an idempotency key and display skipped task results", async () => {
   const view = show();
   await choose("alice", "bob");

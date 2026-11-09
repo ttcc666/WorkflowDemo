@@ -111,6 +111,7 @@ export default function ApprovalDetailPage() {
       ? withoutFields(flow.form, current.hiddenFields ?? [])
       : undefined;
   const editable = task.data?.editableFields ?? [];
+  const needsEditableForm = editable.length > 0 && !BusinessPanel;
   const changes = changedFields(
     visibleForm,
     parseFormValues(current?.formDataJson),
@@ -122,8 +123,7 @@ export default function ApprovalDetailPage() {
     if (lock.current || !current) return false;
     if (
       input.kind === "approve" &&
-      editable.length &&
-      !BusinessPanel &&
+      needsEditableForm &&
       !formRef.current?.validate()
     )
       return false;
@@ -326,12 +326,8 @@ export default function ApprovalDetailPage() {
             data={values}
             changes={changes.map((field) => field.label)}
             userId={user.userId}
-            busy={
-              busy ||
-              definition.loading ||
-              task.loading ||
-              (editable.length > 0 && !visibleForm)
-            }
+            busy={busy || definition.loading || task.loading}
+            approveBlocked={needsEditableForm && !visibleForm}
             onAction={perform}
           />
         </div>
