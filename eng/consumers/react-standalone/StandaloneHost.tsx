@@ -25,12 +25,17 @@ const router = createHashRouter([
     ] },
   ] },
 ])
-const client = createApprovalClient({ apiBase: '/api/approval', headers: () => ({ 'X-User-Id': 'alice' }), userKey: () => 'alice', userPicker: HostPicker, businessPanels: { Form: OrderPanel } })
+const configuredTenant = new URLSearchParams(window.location.search).get('tenant')
+const initialApiBase = configuredTenant === 'A' ? '/api/tenant-a/approval' : configuredTenant === 'B' ? '/api/tenant-b/approval' : '/api/approval'
+const client = createApprovalClient({ apiBase: initialApiBase, headers: () => ({ 'X-User-Id': 'alice' }), userKey: () => 'alice', userPicker: HostPicker, businessPanels: { Form: OrderPanel } })
 function Host() {
   const [actor, setActor] = useState('alice')
-  useLayoutEffect(() => { client.updateOptions({ headers: () => ({ 'X-User-Id': actor }), userKey: () => actor }) }, [actor])
+  const [apiBase, setApiBase] = useState(initialApiBase)
+  useLayoutEffect(() => { client.updateOptions({ apiBase, headers: () => ({ 'X-User-Id': actor }), userKey: () => actor }) }, [actor, apiBase])
   return <><header style={{ padding: 16, color: 'rgb(20, 40, 60)', fontFamily: 'serif' }} data-testid="host-header">第三方业务系统
     <label>宿主身份<select value={actor} onChange={event => setActor(event.target.value)}><option value="alice">Alice</option><option value="bob">Bob</option></select></label>
+    <label>宿主 API Base<select value={apiBase} onChange={event => setApiBase(event.target.value)}><option value="/api/approval">默认</option><option value="/api/tenant-a/approval">A</option><option value="/api/tenant-b/approval">B</option></select></label>
+    <button onClick={() => { setActor('bob'); setApiBase('/api/tenant-b/approval') }}>切换身份和 API Base</button>
   </header><ApprovalProvider client={client} options={{ userKey: () => actor }}><RouterProvider router={router} /></ApprovalProvider></>
 }
 createRoot(document.getElementById('root')!).render(<Host />)

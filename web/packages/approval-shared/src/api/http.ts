@@ -27,16 +27,17 @@ interface RequestOptions {
 
 /** 创建独立的传输客户端；请求时读取 headers、fetcher 与错误处理。 */
 export function createHttpClient(
-  getConfig: () => Pick<ResolvedTransportOptions, 'headers' | 'fetcher' | 'onUnauthorized' | 'userKey'>,
+  getConfig: () => Pick<ResolvedTransportOptions, 'headers' | 'fetcher' | 'onUnauthorized' | 'userKey'> & Partial<Pick<ResolvedTransportOptions, 'apiBase'>>,
 ) {
   const pending = new Set<AbortController>()
   async function request<T>(method: string, url: string, options: RequestOptions = {}): Promise<T> {
     const config = getConfig()
     const identity = approvalIdentityKey(config)
+    const apiBase = config.apiBase
     const controller = new AbortController()
     pending.add(controller)
     function verifyIdentity() {
-      if (controller.signal.aborted || options.signal?.aborted || identity !== approvalIdentityKey(getConfig())) throw new DOMException('身份已切换或请求已取消', 'AbortError')
+      if (controller.signal.aborted || options.signal?.aborted || identity !== approvalIdentityKey(getConfig()) || apiBase !== getConfig().apiBase) throw new DOMException('身份或 API Base 已切换或请求已取消', 'AbortError')
     }
     try {
     const headers: Record<string, string> = { ...config.headers?.(), ...options.headers }

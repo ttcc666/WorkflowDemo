@@ -38,7 +38,11 @@ await writeFile(join(output, 'tsconfig.json'), JSON.stringify({ compilerOptions:
 await writeFile(join(output, 'vite.config.ts'), `import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { fileURLToPath, URL } from 'node:url'
-const proxy = { '/api': { target: process.env.APPROVAL_SMOKE_API ?? 'http://127.0.0.1:1', changeOrigin: true } }
+const proxy = {
+  '/api/tenant-a': { target: process.env.APPROVAL_SMOKE_API ?? 'http://127.0.0.1:1', changeOrigin: true, rewrite: (path: string) => path.replace('/api/tenant-a/approval', '/api/approval') },
+  '/api/tenant-b': { target: process.env.APPROVAL_TENANT_B_API ?? 'http://127.0.0.1:1', changeOrigin: true, rewrite: (path: string) => path.replace('/api/tenant-b/approval', '/api/approval') },
+  '/api': { target: process.env.APPROVAL_SMOKE_API ?? 'http://127.0.0.1:1', changeOrigin: true },
+}
 export default defineConfig({ plugins: [react()], resolve: { alias: { '@demo-shared': fileURLToPath(new URL('./demo-shared', import.meta.url)) } }, server: { proxy }, preview: { proxy }, build: { outDir: 'dist', emptyOutDir: true, rollupOptions: { input: ['index.html', 'host.html'] } } })
 `)
 await writeFile(join(output, 'src/contractsSmoke.tsx'), `import { FormField, createApprovalClient, type FlowDefinition, type FormSchema, type FormField as FieldModel } from '@approval/react-ui'

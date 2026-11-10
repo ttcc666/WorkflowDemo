@@ -15,6 +15,7 @@ import {
   type ApprovalClientCore,
 } from '@approval/shared/client'
 import type { ApprovalTransportOptions } from '@approval/shared'
+import { resolveTransportOptions } from '@approval/shared/transportOptions'
 import { TooltipProvider } from './components/shadcn/tooltip'
 
 export interface ApprovalUIOptions extends ApprovalTransportOptions {
@@ -63,18 +64,20 @@ export function ApprovalProvider({
     () => supplied ?? createApprovalClient(initialOptions.current),
     [supplied],
   )
-  const key = options.userKey?.() ?? supplied?.identity.value ?? ''
+  const identity = useClientIdentity(client)
+  const key = JSON.stringify([options.userKey?.() ?? supplied?.identity.value ?? '',
+    supplied ? client.config().apiBase : resolveTransportOptions(options).apiBase])
   const [previousKey, setPreviousKey] = useState(key)
   useLayoutEffect(() => { setPreviousKey(key) }, [key])
   useLayoutEffect(() => {
     if (!supplied) client.updateOptions(options)
   }, [client, supplied, key, options])
   useEffect(() => {
-    void client.reloadUser()
     return () => {
       if (!supplied) client.dispose()
     }
-  }, [client, key, supplied])
+  }, [client, supplied])
+  useEffect(() => { void client.reloadUser() }, [client, identity])
   return (
     <ClientContext.Provider value={client}>
       <IdentityChangeContext.Provider value={previousKey !== key}>
@@ -109,11 +112,7 @@ export function useApprovalUser() {
     client.userLoading.getSnapshot,
     () => false,
   )
-  useSyncExternalStore(
-    client.identity.subscribe,
-    client.identity.getSnapshot,
-    client.identity.getSnapshot,
-  )
+  useClientIdentity(client)
   return {
     me,
     error,
@@ -131,6 +130,9 @@ export function useApprovalUser() {
 }
 export function useApprovalIdentity() {
   const client = useApprovalClient()
+  return useClientIdentity(client)
+}
+function useClientIdentity(client: ApprovalClient) {
   const user = useSyncExternalStore(
     client.identity.subscribe,
     client.identity.getSnapshot,

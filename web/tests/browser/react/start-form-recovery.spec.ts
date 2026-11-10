@@ -191,3 +191,95 @@ for (const framework of ['React', 'Vue'] as const) {
     })
   }
 }
+
+const tenantBase = { A: '/api/tenant-a/approval', B: '/api/tenant-b/approval' }
+const tenantApiUrl = (tenant: 'A' | 'B') => (tenant === 'A' ? process.env.APPROVAL_SMOKE_API! : process.env.APPROVAL_TENANT_B_API!) + '/api/approval'
+async function tenantDefinition(request: APIRequestContext, key: string, tenant: 'A' | 'B') {
+  const response = await request.post(`${tenantApiUrl(tenant)}/definitions/${key}?name=${tenant} tenant form`, { headers: headers('admin'), data: {
+    schemaVersion: 1, startNodeId: 'start', settings: { startable: true },
+    form: { fields: [{ key: 'subject', label: '隔离主题', type: 'Text', required: true, defaultValue: tenant + ' default' }] },
+    nodes: { start: { id: 'start', name: '开始', type: 'Start', next: 'review' },
+      review: { id: 'review', name: '审批', type: 'Approval', approvers: [{ type: 'User', value: 'bob' }], next: 'end' },
+      end: { id: 'end', name: '结束', type: 'End' } },
+  } })
+  expect(response.ok(), await response.text()).toBe(true)
+}
+function hostQuery(page: Page) { return new URLSearchParams(new URL(page.url()).hash.split('?')[1]) }
+async function openTenantDraft(page: Page, request: APIRequestContext) {
+  const key = 'api-base-' + crypto.randomUUID()
+  await tenantDefinition(request, key, 'A'); await tenantDefinition(request, key, 'B')
+  const saved = await request.put(`${tenantApiUrl('A')}/forms/${key}/draft`, { headers: headers(), data: {
+    draftId: null, formData: { subject: 'A private draft' }, comment: 'A private note',
+  } })
+  expect(saved.ok()).toBe(true)
+  const { draftId } = await saved.json()
+  await page.goto(`/host.html?tenant=A#/embedded/start/${key}?draft=${draftId}&source=workbench&tab=mine`)
+  await expect(page.getByRole('textbox', { name: '隔离主题', exact: true })).toHaveValue('A private draft')
+  return { key, draftId }
+}
+async function assertTenantB(page: Page) {
+  await expect(page.getByRole('textbox', { name: '隔离主题', exact: true })).toHaveValue('B default')
+  expect(hostQuery(page).get('draft')).toBeNull()
+  expect(hostQuery(page).get('source')).toBe('workbench')
+  expect(hostQuery(page).get('tab')).toBe('mine')
+  await expect(page.getByRole('textbox', { name: '申请说明', exact: true })).toHaveValue('')
+  await expect(page.locator('.ar-save-state')).not.toContainText('最后保存')
+}
+test('same user API Base switch isolates an existing draft and fetches only tenant B form and permissions', async ({ page, request }) => {
+  const { key, draftId } = await openTenantDraft(page, request)
+  const urls: string[] = []
+  page.on('request', current => { urls.push(current.url()) })
+  await page.getByRole('combobox', { name: '宿主 API Base', exact: true }).selectOption(tenantBase.B)
+  await assertTenantB(page)
+  await expect(page.getByRole('combobox', { name: /^宿主身份/ })).toHaveValue('alice')
+  expect(urls.some(url => url.includes(tenantBase.B + '/forms/drafts/' + draftId))).toBe(false)
+  expect(urls.some(url => url.endsWith(tenantBase.B + '/me'))).toBe(true)
+  await page.getByRole('textbox', { name: '隔离主题', exact: true }).fill('B saved separately')
+  const saved = page.waitForResponse(response => response.url().endsWith(tenantBase.B + `/forms/${key}/draft`) && response.request().method() === 'PUT')
+  await page.getByRole('button', { name: '保存草稿', exact: true }).click()
+  expect((await saved).ok()).toBe(true)
+  const a = await request.get(`${tenantApiUrl('A')}/forms/drafts/${draftId}`, { headers: headers() })
+  expect(JSON.parse((await a.json()).formDataJson).subject).toBe('A private draft')
+  const b = await request.get(`${tenantApiUrl('B')}/forms/drafts`, { headers: headers() })
+  expect((await b.json()).filter((draft: { definitionKey: string }) => draft.definitionKey === key)).toHaveLength(1)
+})
+for (const operation of ['start', 'draft'] as const) {
+  for (const combined of [false, true]) {
+    for (const recovering of [false, true]) {
+    test(`late tenant A ${operation} ${recovering ? 'recovery' : 'response'} stays isolated after API Base ${combined ? 'and user' : 'only'} changes`, async ({ page, request }) => {
+      const { key, draftId } = await openTenantDraft(page, request)
+      let release!: () => void, arrived!: () => void, finished!: () => void, originalKey = '', calls = 0
+      const postedKeys: string[] = []
+      const reached = new Promise<void>(resolve => { arrived = resolve }), gate = new Promise<void>(resolve => { release = resolve }), settled = new Promise<void>(resolve => { finished = resolve })
+      await page.route(`**${tenantBase.A}/forms/${key}/${operation}`, async route => {
+        originalKey = route.request().headers()['idempotency-key']!
+        postedKeys.push(originalKey)
+        const response = await route.fetch()
+        expect(response.ok()).toBe(true)
+        if (recovering && ++calls === 1) { await route.abort('failed'); return }
+        arrived(); await gate; await route.fulfill({ response }); finished()
+      })
+      await page.getByRole('button', { name: operation === 'start' ? '提交申请' : '保存草稿', exact: true }).click()
+      if (recovering) await page.getByRole('button', { name: '按原内容重试上次操作', exact: true }).click()
+      await reached
+      const urls: string[] = []; page.on('request', current => { urls.push(current.url()) })
+      if (combined) await page.getByRole('button', { name: '切换身份和 API Base', exact: true }).click()
+      else await page.getByRole('combobox', { name: '宿主 API Base', exact: true }).selectOption(tenantBase.B)
+      await assertTenantB(page)
+      await page.getByRole('textbox', { name: '隔离主题', exact: true }).fill('B edited')
+      const chosen = page.url()
+      release(); await settled
+      await expect(page).toHaveURL(chosen)
+      await expect(page.getByRole('textbox', { name: '隔离主题', exact: true })).toHaveValue('B edited')
+      await expect(page.locator('.ar-save-state')).not.toContainText('最后保存')
+      expect(urls.some(url => url.includes(tenantBase.B + '/forms/drafts/' + draftId))).toBe(false)
+      const record = await page.evaluate(({ key, operation, base }) => sessionStorage.getItem(`approval.intent.v1:${encodeURIComponent(`alice:${base}:start-form`)}:${encodeURIComponent(`${operation}:${key}`)}`), { key, operation, base: tenantBase.A })
+      expect(JSON.parse(record!).key).toBe(originalKey)
+      expect(postedKeys).toEqual(Array.from({ length: recovering ? 2 : 1 }, () => originalKey))
+      expect(record).not.toContain('A private note')
+      const b = await request.get(`${tenantApiUrl('B')}/forms/drafts`, { headers: headers(combined ? 'bob' : 'alice') })
+      expect((await b.json()).filter((draft: { definitionKey: string }) => draft.definitionKey === key)).toHaveLength(0)
+    })
+    }
+  }
+}

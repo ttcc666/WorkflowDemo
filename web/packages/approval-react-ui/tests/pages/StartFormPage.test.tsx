@@ -6,7 +6,7 @@ import { createCommandIntent, formatDateTime } from '@approval/shared'
 import { ApprovalProvider, createApprovalClient } from '../../src/client'
 import StartFormPage from '../../src/pages/StartFormPage'
 
-afterEach(() => { sessionStorage.clear(); vi.restoreAllMocks() })
+afterEach(() => { sessionStorage.clear(); vi.restoreAllMocks(); vi.useRealTimers() })
 const updatedAt = '2026-11-10T03:04:05.1234567Z'
 const result = { start: { instanceId: 'original-instance' }, draft: { draftId: 'original-draft', updatedAt } }
 type Operation = keyof typeof result
@@ -235,4 +235,106 @@ it('keeps edits made after a lost draft response dirty when the original draft i
   await screen.findByText('有未保存的修改')
   expect(screen.getByRole('textbox', { name: '申请主题' })).toHaveValue('New unsaved edit')
   expect(api.posts[1]).toEqual(api.posts[0])
+})
+
+function tenantApi() {
+  const requests: { base: string; url: string; method: string; key: string | null; body?: Record<string, unknown> }[] = []
+  const writes = new Map<string, Record<string, unknown>>()
+  let hold = false, release!: (response: Response) => void
+  const fetcher = async (url: string, init: RequestInit) => {
+    const base = url.startsWith('/tenant-a/') ? 'A' : 'B'
+    const body = init.body ? JSON.parse(String(init.body)) as Record<string, unknown> : undefined
+    const key = new Headers(init.headers).get('Idempotency-Key')
+    requests.push({ base, url, method: init.method!, key, body })
+    if (init.method === 'PUT' || init.method === 'POST') {
+      const stored = writes.get(base + ':' + key)
+      if (stored) expect(body).toEqual(stored); else writes.set(base + ':' + key, body!)
+      const value = url.endsWith('/start') ? { instanceId: base + '-instance' } : { draftId: base + '-draft', updatedAt }
+      if (base === 'A' && hold) return new Promise<Response>(resolve => { release = resolve })
+      return Response.json(value)
+    }
+    if (url.endsWith('/me')) return Response.json({ userId: new Headers(init.headers).get('X-User-Id'), formsEnabled: true, roles: [base + '-role'],
+      capabilities: { 'approval.instance.start': true, 'approval.draft.write': true, 'approval.definition.publish': base === 'A' } })
+    if (url.includes('/drafts/')) return base === 'A' ? Response.json({ id: 'A-draft', formDataJson: '{"subject":"A saved"}', comment: 'A private note', updatedAt }) : Response.json({ title: 'wrong tenant draft' }, { status: 404 })
+    return Response.json({ key: 'flow', name: base + ' form', form: { fields: [{ key: 'subject', label: '申请主题', type: 'Text', required: true, defaultValue: base + ' default' }] }, settings: {} })
+  }
+  return { fetcher, requests, writes, hold: () => { hold = true }, release: (operation: Operation) => act(async () => release(Response.json(operation === 'start' ? { instanceId: 'A-instance' } : { draftId: 'A-draft', updatedAt }))) }
+}
+function tenantPage(api: ReturnType<typeof tenantApi>) {
+  const client = createApprovalClient({ apiBase: '/tenant-a/api/approval', userKey: () => 'alice', headers: () => ({ 'X-User-Id': 'alice' }), fetcher: api.fetcher })
+  const router = createMemoryRouter([{ path: '/start/:key', Component: StartFormPage }, { path: '/approvals/:id', element: <p>审批详情</p> }], {
+    initialEntries: ['/start/flow?draft=A-draft&source=workbench&tab=mine'],
+  })
+  render(<ApprovalProvider client={client}><RouterProvider router={router} /></ApprovalProvider>)
+  return { client, router }
+}
+function tenantIntent(base: 'A' | 'B', actor = 'alice') {
+  return createCommandIntent(() => `${actor}:/tenant-${base.toLowerCase()}/api/approval:start-form`)
+}
+async function changeTenant(client: ReturnType<typeof createApprovalClient>, actor = 'alice') {
+  await act(async () => { client.updateOptions({ apiBase: '/tenant-b/api/approval', userKey: () => actor, headers: () => ({ 'X-User-Id': actor }) }) })
+}
+it('same user API Base switch clears the old draft and query while loading only the new tenant form', async () => {
+  const api = tenantApi(), view = tenantPage(api)
+  await waitFor(() => expect(screen.getByRole('textbox', { name: '申请主题' })).toHaveValue('A saved'))
+  await changeTenant(view.client)
+  await waitFor(() => expect(screen.getByRole('textbox', { name: '申请主题' })).toHaveValue('B default'))
+  expect(view.client.identity.value).toBe('alice')
+  expect(view.router.state.location.search).toBe('?source=workbench&tab=mine')
+  expect(screen.getByRole('textbox', { name: '申请说明' })).toHaveValue('')
+  expect(screen.queryByText(/最后保存/)).not.toBeInTheDocument()
+  expect(api.requests.filter(request => request.base === 'B' && request.url.includes('/drafts/'))).toEqual([])
+  expect(api.requests.filter(request => request.base === 'B' && request.url.endsWith('/me'))).toHaveLength(1)
+})
+it.each(['start', 'draft'] as const)('late tenant A %s response cannot change tenant B or clear the A operation', async operation => {
+  const api = tenantApi(), view = tenantPage(api)
+  await waitFor(() => expect(screen.getByRole('textbox', { name: '申请主题' })).toHaveValue('A saved'))
+  api.hold()
+  fireEvent.click(screen.getByRole('button', { name: operation === 'start' ? '提交申请' : '保存草稿' }))
+  await waitFor(() => expect(api.writes.size).toBe(1))
+  const originalKey = api.requests.find(request => request.method === 'PUT' || request.method === 'POST')!.key
+  await changeTenant(view.client)
+  await waitFor(() => expect(screen.getByRole('textbox', { name: '申请主题' })).toHaveValue('B default'))
+  await api.release(operation)
+  expect(view.router.state.location.pathname).toBe('/start/flow')
+  expect(view.router.state.location.search).toBe('?source=workbench&tab=mine')
+  expect(screen.getByRole('textbox', { name: '申请主题' })).toHaveValue('B default')
+  expect(screen.queryByText(/最后保存/)).not.toBeInTheDocument()
+  expect(tenantIntent('A').hasPending(`${operation}:flow`)).toBe(true)
+  expect(tenantIntent('B').hasPending(`${operation}:flow`)).toBe(false)
+  expect(api.writes.size).toBe(1)
+  fireEvent.click(screen.getByRole('button', { name: '保存草稿' }))
+  await screen.findByText('草稿已保存')
+  const newWrite = api.requests.filter(request => request.base === 'B' && request.method === 'PUT')
+  expect(newWrite).toHaveLength(1)
+  expect(newWrite[0]!.key).not.toBe(originalKey)
+  expect(newWrite[0]!.body).toEqual({ draftId: null, formData: { subject: 'B default' }, comment: '' })
+  expect(tenantIntent('A').hasPending(`${operation}:flow`)).toBe(true)
+  expect([...Object.values(sessionStorage)].join()).not.toContain('A private note')
+})
+it('API Base and user switch together reloads new permissions without requesting the old draft', async () => {
+  const api = tenantApi(), view = tenantPage(api)
+  await waitFor(() => expect(screen.getByRole('textbox', { name: '申请主题' })).toHaveValue('A saved'))
+  await changeTenant(view.client, 'bob')
+  await waitFor(() => expect(screen.getByRole('textbox', { name: '申请主题' })).toHaveValue('B default'))
+  expect(view.client.me.value?.userId).toBe('bob')
+  expect(view.client.me.value?.roles).toEqual(['B-role'])
+  expect(view.client.me.value?.capabilities?.['approval.definition.publish']).toBe(false)
+  expect(api.requests.filter(request => request.base === 'B' && request.url.includes('/drafts/'))).toEqual([])
+  expect(view.router.state.location.search).toBe('?source=workbench&tab=mine')
+  expect(api.writes.size).toBe(0)
+})
+it('automatic draft saving after an API Base switch writes only the new tenant snapshot with no old draft ID', async () => {
+  vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
+  const api = tenantApi(), view = tenantPage(api)
+  await waitFor(() => expect(screen.getByRole('textbox', { name: '申请主题' })).toHaveValue('A saved'))
+  await changeTenant(view.client)
+  await waitFor(() => expect(screen.getByRole('textbox', { name: '申请主题' })).toHaveValue('B default'))
+  fireEvent.change(screen.getByRole('textbox', { name: '申请主题' }), { target: { value: 'B autosaved' } })
+  await act(async () => { await vi.advanceTimersByTimeAsync(30000) })
+  await waitFor(() => expect(api.writes.size).toBe(1))
+  expect(api.requests.filter(request => request.method === 'PUT').map(request => [request.base, request.body])).toEqual([
+    ['B', { draftId: null, formData: { subject: 'B autosaved' }, comment: '' }],
+  ])
+  expect(new URLSearchParams(view.router.state.location.search).get('draft')).toBe('B-draft')
 })

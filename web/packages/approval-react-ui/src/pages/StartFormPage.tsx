@@ -111,11 +111,14 @@ export default function StartFormPage() {
   });
   const pageVersion = useRef(0);
   const discardedDraft = useRef<string | null>(null);
-  const previousIdentity = useRef(client.identity.value);
+  const realm = JSON.stringify([client.identity.value, client.config().apiBase]);
+  const previousIdentity = useRef({ identity, realm });
   // Query navigation must wait for RouterProvider to subscribe after a remount.
   useEffect(() => {
-    if (!identityChanged && previousIdentity.current === client.identity.value) return;
-    previousIdentity.current = client.identity.value;
+    const previous = previousIdentity.current;
+    previousIdentity.current = { identity, realm };
+    // StrictMode disposal changes version but keeps the initial draft's realm.
+    if (!identityChanged && (previous.identity === identity || previous.realm === realm)) return;
     if (routeDraft) discardedDraft.current = routeDraft;
     setDraftId(null);
     setOpenedDraft(null);
@@ -124,7 +127,7 @@ export default function StartFormPage() {
       next.delete("draft");
       return next;
     }, { replace: true });
-  }, [client, identity, identityChanged, routeDraft, setParams]);
+  }, [identity, realm, identityChanged, routeDraft, setParams]);
   useLayoutEffect(() => {
     const version = ++pageVersion.current;
     return () => { pageVersion.current = version + 1; };
@@ -154,6 +157,7 @@ export default function StartFormPage() {
     }
   }, [routeDraft]);
   useEffect(() => {
+    recoveredSnapshot.current = "";
     setValues({});
     setComment("");
     setSaved("");
