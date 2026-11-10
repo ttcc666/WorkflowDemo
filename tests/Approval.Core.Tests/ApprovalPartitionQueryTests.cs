@@ -1,5 +1,6 @@
 using System.Linq.Expressions;
 using Approval.Core.Domain;
+using Approval.Core.Abstractions;
 using Approval.Core.Persistence;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -58,7 +59,7 @@ public sealed class ApprovalPartitionQueryTests
             await using var db = new PartitionContext(new DbContextOptionsBuilder<PartitionContext>().UseSqlite(connection).UseApproval().Options, tenant);
             Assert.Equal(new[] { tenant + "-private" }, await db.Set<SharedLink>().Select(l => l.Instance.Title).ToArrayAsync());
             Assert.Equal(tenant + "-private", Assert.Single(await db.Set<SharedLink>().ToListAsync()).Instance.Title);
-            Assert.Equal(1, (await db.Database.SqlQueryRaw<Probe>("SELECT 1 AS Value").SingleAsync()).Value);
+            await Assert.ThrowsAsync<InvalidOperationException>(() => db.Database.SqlQueryRaw<Probe>("SELECT 1 AS Value").SingleAsync());
         }
     }
 
@@ -72,6 +73,11 @@ public sealed class ApprovalPartitionQueryTests
         Assert.Equal(new[] { 1 }, await db.Set<GlobalRow>().Select(r => r.Id).ToArrayAsync());
         Assert.Equal(new[] { 1, 2 }, await db.Set<GlobalRow>().IgnoreQueryFilters().OrderBy(r => r.Id).Select(r => r.Id).ToArrayAsync());
         Assert.Equal(new[] { 1, 2 }, await db.Set<GlobalRow>().IgnoreQueryFilters(["SoftDelete"]).OrderBy(r => r.Id).Select(r => r.Id).ToArrayAsync());
+        Assert.Equal(2, await db.Database.SqlQueryRaw<int>("SELECT COUNT(*) AS Value FROM GlobalRow").SingleAsync());
+        Assert.Equal(1, await db.Set<GlobalRow>().ExecuteUpdateAsync(s => s.SetProperty(r => r.Deleted, true)));
+        Assert.Empty(await db.Set<GlobalRow>().ToArrayAsync());
+        Assert.Equal(2, await db.Database.ExecuteSqlRawAsync("UPDATE GlobalRow SET Deleted = 0"));
+        Assert.Equal(2, await db.Set<GlobalRow>().CountAsync());
     }
 
     private static async Task SeedAsync(SqliteConnection connection)
@@ -86,7 +92,9 @@ public sealed class ApprovalPartitionQueryTests
                 BusinessType = "Expense", BusinessKey = "EXP-001", InitiatorId = "alice", Title = tenant + "-private" };
             db.Entry(definition).Property("TenantId").CurrentValue = tenant;
             db.Entry(instance).Property("TenantId").CurrentValue = tenant;
-            db.AddRange(definition, instance, new SharedLink { Id = Guid.NewGuid(), InstanceId = instance.Id });
+            var link = new SharedLink { Id = Guid.NewGuid(), InstanceId = instance.Id };
+            db.Entry(link).Property("TenantId").CurrentValue = tenant;
+            db.AddRange(definition, instance, link);
         }
         await db.SaveChangesAsync();
     }
@@ -98,7 +106,7 @@ public sealed class ApprovalPartitionQueryTests
     {
         protected override void OnModelCreating(ModelBuilder model) => model.Entity<GlobalRow>().HasQueryFilter("SoftDelete", r => !r.Deleted);
     }
-    public sealed class PartitionContext(DbContextOptions<PartitionContext> options, string partition) : DbContext(options)
+    public sealed class PartitionContext(DbContextOptions<PartitionContext> options, string partition) : DbContext(options), IApprovalPartitionContext
     {
         public string PartitionKey { get; } = partition;
         protected override void OnModelCreating(ModelBuilder model)
@@ -106,14 +114,14 @@ public sealed class ApprovalPartitionQueryTests
             model.ConfigureApproval();
             model.Entity<SharedLink>().HasOne(l => l.Instance).WithMany().HasForeignKey(l => l.InstanceId);
             model.Entity<SharedLink>().Navigation(l => l.Instance).AutoInclude();
-            foreach (var entity in model.Model.GetEntityTypes().Where(e => typeof(IApprovalEntity).IsAssignableFrom(e.ClrType)).ToArray())
+            foreach (var entity in model.Model.GetEntityTypes().ToArray())
             {
                 model.Entity(entity.ClrType).Property<string>("TenantId").IsRequired();
                 var row = Expression.Parameter(entity.ClrType, "row");
                 var tenant = Expression.Call(typeof(EF), nameof(EF.Property), [typeof(string)], row, Expression.Constant("TenantId"));
                 model.Entity(entity.ClrType).HasQueryFilter(Expression.Lambda(Expression.Equal(tenant, Expression.Property(Expression.Constant(this), nameof(PartitionKey))), row));
             }
-            model.ConfigureApprovalPartition("TenantId");
+            model.ConfigureApprovalPartition("TenantId", typeof(SharedLink));
         }
     }
 }

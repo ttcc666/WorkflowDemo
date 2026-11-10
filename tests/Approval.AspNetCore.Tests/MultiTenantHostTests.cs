@@ -24,7 +24,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Approval.AspNetCore.Tests;
 
-public sealed class MultiTenantHostTests
+public sealed partial class MultiTenantHostTests
 {
     [Theory]
     [InlineData("healthy")]
@@ -457,7 +457,7 @@ public sealed class MultiTenantHostTests
             Assert.Contains("审批分区 DbContext 禁止移除查询过滤器", error.Message);
             Assert.Equal(alpha.InstanceId, (await db.Set<ApprovalInstance>().SingleAsync()).Id);
             await Assert.ThrowsAsync<InvalidOperationException>(() => db.Database.SqlQueryRaw<FilterProbe>("SELECT 1 AS Value").IgnoreQueryFilters().CountAsync());
-            Assert.Equal(1, await db.Database.SqlQueryRaw<FilterProbe>("SELECT 1 AS Value").CountAsync());
+            await Assert.ThrowsAsync<InvalidOperationException>(() => db.Database.SqlQueryRaw<FilterProbe>("SELECT 1 AS Value").CountAsync());
         });
     }
 

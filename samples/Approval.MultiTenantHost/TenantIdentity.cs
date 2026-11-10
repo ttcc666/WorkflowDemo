@@ -16,6 +16,8 @@ public sealed class TenantActor(IHttpContextAccessor http, TenantScopes scopes, 
         var principal = http.HttpContext?.User;
         if (principal?.Identity?.IsAuthenticated != true)
             throw new ApprovalException("缺少认证身份") { Code = ApprovalErrorCode.Unauthorized };
+        if (!string.Equals(scopes.FromPrincipal(principal).PartitionKey, scopes.Current, StringComparison.Ordinal))
+            throw new ApprovalException("认证身份与当前宿主租户不一致") { Code = ApprovalErrorCode.Forbidden };
         var users = principal.FindAll("sub").ToArray();
         if (users.Length != 1 || !directory.Require(scopes.Current).Users.Any(u => u.Id == users[0].Value && u.IsActive))
             throw new ApprovalException("当前租户用户不可用") { Code = ApprovalErrorCode.Forbidden };
@@ -37,14 +39,16 @@ public sealed class TenantPermissions(TenantScopes scopes, TenantDirectory direc
 
 public sealed class TenantUsers(TenantScopes scopes, TenantDirectory directory) : IApprovalIdentityProvider, IApprovalUserDirectory
 {
-    private readonly TenantDirectory.TenantEntry _tenant = directory.Require(scopes.Current);
-    private IReadOnlyList<ApprovalUser> Users => _tenant.Users.Select(u => new ApprovalUser(u.Id, u.Name, u.Roles) { IsActive = u.IsActive }).ToArray();
-    public Task<bool> IsInRoleAsync(string userId, string role, CancellationToken ct) => Task.FromResult(_tenant.Users.Any(u => u.Id == userId && u.IsActive && u.Roles.Contains(role)));
-    public Task<IReadOnlyList<string>> GetUserIdsInRoleAsync(string role, CancellationToken ct) => Task.FromResult<IReadOnlyList<string>>(_tenant.Users.Where(u => u.IsActive && u.Roles.Contains(role)).Select(u => u.Id).ToArray());
-    public Task<IReadOnlyList<string>> GetRolesAsync(string userId, CancellationToken ct) => Task.FromResult<IReadOnlyList<string>>(_tenant.Users.SingleOrDefault(u => u.Id == userId && u.IsActive)?.Roles ?? []);
+    private readonly string _partition = scopes.Current;
+    private TenantDirectory.TenantEntry Tenant => string.Equals(_partition, scopes.Current, StringComparison.Ordinal)
+        ? directory.Require(_partition) : throw new ApprovalException("用户目录不能跨宿主租户复用") { Code = ApprovalErrorCode.Forbidden };
+    private IReadOnlyList<ApprovalUser> Users => Tenant.Users.Select(u => new ApprovalUser(u.Id, u.Name, u.Roles) { IsActive = u.IsActive }).ToArray();
+    public Task<bool> IsInRoleAsync(string userId, string role, CancellationToken ct) => Task.FromResult(Tenant.Users.Any(u => u.Id == userId && u.IsActive && u.Roles.Contains(role)));
+    public Task<IReadOnlyList<string>> GetUserIdsInRoleAsync(string role, CancellationToken ct) => Task.FromResult<IReadOnlyList<string>>(Tenant.Users.Where(u => u.IsActive && u.Roles.Contains(role)).Select(u => u.Id).ToArray());
+    public Task<IReadOnlyList<string>> GetRolesAsync(string userId, CancellationToken ct) => Task.FromResult<IReadOnlyList<string>>(Tenant.Users.SingleOrDefault(u => u.Id == userId && u.IsActive)?.Roles ?? []);
     public Task<IReadOnlyList<ApprovalUser>> SearchUsersAsync(string? keyword, int take, CancellationToken ct) => Task.FromResult<IReadOnlyList<ApprovalUser>>(Users.Where(u => u.IsActive && (string.IsNullOrEmpty(keyword) || u.Id.Contains(keyword, StringComparison.OrdinalIgnoreCase) || u.Name.Contains(keyword, StringComparison.OrdinalIgnoreCase))).Take(take).ToArray());
     public Task<IReadOnlyList<ApprovalUser>> GetUsersAsync(IReadOnlyCollection<string> ids, CancellationToken ct) => Task.FromResult<IReadOnlyList<ApprovalUser>>(Users.Where(u => ids.Contains(u.Id)).ToArray());
-    public Task<IReadOnlyList<string>> ListRolesAsync(CancellationToken ct) => Task.FromResult<IReadOnlyList<string>>(_tenant.Users.Where(u => u.IsActive).SelectMany(u => u.Roles).Distinct().Order().ToArray());
+    public Task<IReadOnlyList<string>> ListRolesAsync(CancellationToken ct) => Task.FromResult<IReadOnlyList<string>>(Tenant.Users.Where(u => u.IsActive).SelectMany(u => u.Roles).Distinct().Order().ToArray());
 }
 
 public sealed class TenantDemoAuthentication(IOptionsMonitor<AuthenticationSchemeOptions> options, ILoggerFactory logger,

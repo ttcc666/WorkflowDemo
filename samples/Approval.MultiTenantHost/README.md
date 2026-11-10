@@ -66,11 +66,15 @@ Development 下的 Demo token 只用于演练，均来自 `appsettings.Developme
 
 生产配置默认使用 Jwt。必须配置 HTTPS Authority、Audience，由自己的身份提供者签发 `sub` 和 `tenant_id`，并替换示例租户目录。非 Development 环境拒绝 Demo 认证。
 
-`ConfigureApprovalPartition()` 扩宽索引、非主键候选键与复合外键，GUID 主键保留。自然候选键及其引用一起分区，原全局候选键移除；存在未纳入分区的引用方时拒绝配置。TenantId 属性、值生成、查询过滤与写入校验均由此示例宿主配置。所有审批实体及 `Expense` / `DeliveryReceipt` 采用同一边界；已创建的 DbContext 不能切换租户，也不能移除分区查询过滤或修改实体 TenantId。
+`ConfigureApprovalPartition()` 扩宽索引、非主键候选键与复合外键，GUID 主键保留。自然候选键及其引用一起分区，原全局候选键移除；存在未纳入分区的引用方（含主键关联和 Owned 关联）时拒绝配置。宿主提供 TenantId 属性、可信值生成与过滤；Core 统一配置分区不可变性、并发条件并校验分区写入。所有审批实体及 `Expense` / `DeliveryReceipt` 采用同一边界；已创建的 DbContext 不能切换租户，也不能移除分区查询过滤或修改实体 TenantId。
 
 报销完成回调优先读取当前 DbContext 已跟踪的业务对象，因此“开始 → 结束”等提交时立即完成的流程也能原子保存业务与审批状态。回调不自行 SaveChanges 或提交事务；回调失败时业务行、审批、日志、Outbox 和本次操作键预约一起回滚。
 
 TenantId 同时作为并发条件参与 UPDATE/DELETE；即使 Attach 的 ID 属于另一个租户，数据库也不会改到那条记录，整个 SaveChanges 事务会回滚。整个分区 DbContext 禁止任意 `IgnoreQueryFilters` 重载，包括从非分区实体发起的导航、Include、AutoInclude、组合查询与编译查询；非分区管理查询使用独立的非分区 Context。
+
+分区 Context 的 EF 原生 SQL 入口与内置 `Sql` 工作流动作默认拒绝；普通宿主业务字段的批量操作保留查询过滤，批量修改分区字段拒绝。不能使用 DbContext Pooling。过滤器使用 `分区字段 == context.PartitionKey`，软删除等条件以 `&&` 组合；不允许 `OR` 放宽范围或只配置软删除过滤。租户作用域释放按嵌套顺序执行，重复释放无副作用。
+
+此示例**不提供数据库 RLS**。直接 `GetDbConnection().CreateCommand()` 或独立数据库连接绕过 EF 拦截器；共享 SQLite 文件不能隔离同进程中持有连接的不可信代码。数据库级部署选项、权限要求及未覆盖边界见 [宿主数据分区](../../docs/host-data-partitioning.md#数据库级边界与部署前提)。生产验收不能仅以 EF 回归测试通过为依据。
 
 事件接收记录与 Outbox 确认同事务提交。日志是演示输出；真实邮件/消息等外部副作用仍须按稳定 Event.Id 去重，不承诺跨系统 exactly-once。仅有一个 ApprovalWorker，逐租户处理 Outbox 和超时扫描。一个运行期分区失败不会阻断其他分区，整轮心跳记为失败。
 

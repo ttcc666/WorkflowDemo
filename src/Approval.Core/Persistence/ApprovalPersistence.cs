@@ -2,6 +2,7 @@ using Approval.Core.Domain;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Query;
 using System.Data.Common;
 using System.Linq.Expressions;
 using System.Runtime.CompilerServices;
@@ -47,6 +48,7 @@ public static class ApprovalPersistence
             throw new InvalidOperationException("生命周期/业务回调不得自行 SaveChanges；由审批工作单元统一提交");
         }
         db.ChangeTracker.DetectChanges();
+        ApprovalPartitionGuard.ValidateWrites(db);
         var writes = state.Writes ??= new(db);
         writes.Validate();
         foreach (var entry in db.ChangeTracker.Entries<Approval.Core.Abstractions.IApprovalTrackedRevision>().Where(e => e.State == EntityState.Modified))
@@ -137,6 +139,12 @@ public static class ApprovalPersistence
         private static void Validate(DbCommand command, CommandEventData data)
         {
             if (data.Context is not { } context) return;
+            if (data.CommandSource != CommandSource.Migrations && ApprovalPartitionGuard.IsPartitioned(context))
+            {
+                ApprovalPartitionGuard.ValidateContext(context);
+                if (data.CommandSource is not (CommandSource.LinqQuery or CommandSource.SaveChanges or CommandSource.ExecuteUpdate or CommandSource.ExecuteDelete or CommandSource.ValueGenerator))
+                    throw new InvalidOperationException("审批分区 DbContext 禁止原生 SQL 或未知来源命令；迁移使用 EF Migration，离线维护使用独立管理连接");
+            }
             if (data.CommandSource == CommandSource.SaveChanges)
             {
                 State(context).Writes?.VerifySaving();
@@ -180,33 +188,81 @@ public static class ApprovalPersistence
 
         public Expression QueryCompilationStarting(Expression queryExpression, QueryExpressionEventData eventData)
         {
-            var guard = new GuardVisitor();
+            var partitioned = eventData.Context is { } db && ApprovalPartitionGuard.IsPartitioned(db);
+            var guard = new GuardVisitor(eventData.Context);
             guard.Visit(queryExpression);
             // Navigation expansion and auto includes run after this interceptor. The partitioned
             // context, not the current shape of the expression, owns the filter boundary.
-            if (guard.RemovesFilters && eventData.Context?.Model.FindAnnotation(ApprovalPartitionModelExtensions.PartitionAnnotation) is not null)
+            if (guard.RemovesFilters && partitioned)
                 throw new InvalidOperationException("审批分区 DbContext 禁止移除查询过滤器");
+            if (partitioned && guard.RawSql)
+                throw new InvalidOperationException("审批分区 DbContext 禁止原生 SQL 查询");
             return queryExpression;
         }
 
-        internal sealed class GuardVisitor : ExpressionVisitor
+        internal sealed class GuardVisitor(DbContext? context = null) : ExpressionVisitor
         {
+            private readonly DbContext? partitionContext = context is not null && ApprovalPartitionGuard.IsPartitioned(context) ? context : null;
             public bool RemovesFilters { get; private set; }
-            private static readonly HashSet<System.Reflection.MethodInfo> BulkMethods = typeof(RelationalQueryableExtensions).GetMethods()
-                .Where(m => m.IsGenericMethodDefinition && m.Name is "ExecuteUpdate" or "ExecuteUpdateAsync" or "ExecuteDelete" or "ExecuteDeleteAsync").ToHashSet();
+            public bool RawSql { get; private set; }
+
+            protected override Expression VisitExtension(Expression node)
+            {
+                // Use an allow list of EF roots, not SQL text. Provider-specific/raw/function roots
+                // cannot prove scope and are rejected, including composed SqlQuery/FromSql sources.
+                if (partitionContext is not null && node is QueryRootExpression
+                    && node.GetType() != typeof(EntityQueryRootExpression)
+                    && node is not InlineQueryRootExpression and not ParameterQueryRootExpression)
+                    RawSql = true;
+                return base.VisitExtension(node);
+            }
 
             protected override Expression VisitMethodCall(MethodCallExpression node)
             {
                 if (node.Method.DeclaringType == typeof(EntityFrameworkQueryableExtensions)
                     && node.Method.Name == nameof(EntityFrameworkQueryableExtensions.IgnoreQueryFilters))
                     RemovesFilters = true;
-                if (node.Method.IsGenericMethod && BulkMethods.Contains(node.Method.GetGenericMethodDefinition()))
+                if (node.Method.IsGenericMethod
+                    && (node.Method.DeclaringType == typeof(RelationalQueryableExtensions) || node.Method.DeclaringType == typeof(EntityFrameworkQueryableExtensions))
+                    && node.Method.Name is "ExecuteUpdate" or "ExecuteUpdateAsync" or "ExecuteDelete" or "ExecuteDeleteAsync")
                 {
                     var target = node.Method.GetGenericArguments()[0];
                     if (ApprovalWriteAuthorization.Protected(target))
-                        throw new InvalidOperationException("审批实体禁止通过 ExecuteUpdate / ExecuteDelete 批量改写或删除");
+                    {
+                        if (context is not null && State(context) is { ExtensionDepth: > 0 } state) state.Failed = true;
+                        throw new InvalidOperationException("审批表禁止通过批量操作或原生 SQL 写入；可信离线维护须使用独立连接");
+                    }
+                    if (partitionContext is not null && node.Method.Name is "ExecuteUpdate" or "ExecuteUpdateAsync")
+                        ValidateSetters(node.Arguments[1]);
                 }
                 return base.VisitMethodCall(node);
+            }
+
+            private void ValidateSetters(Expression setters)
+            {
+                if (setters is not NewArrayExpression array || array.Expressions.Count == 0)
+                    throw new InvalidOperationException("无法证明批量更新的分区安全性");
+                foreach (var setter in array.Expressions)
+                {
+                    if (setter is not NewExpression pair || pair.Arguments.Count != 2)
+                        throw new InvalidOperationException("无法证明批量更新的分区安全性");
+                    var selector = pair.Arguments[0];
+                    while (selector is UnaryExpression { NodeType: ExpressionType.Quote or ExpressionType.Convert } unary) selector = unary.Operand;
+                    if (selector is not LambdaExpression lambda)
+                        throw new InvalidOperationException("无法证明批量更新的分区安全性");
+                    var body = lambda.Body;
+                    while (body is UnaryExpression { NodeType: ExpressionType.Convert } convert) body = convert.Operand;
+                    var property = body switch
+                    {
+                        MemberExpression member => member.Member.Name,
+                        MethodCallExpression call when call.Method.DeclaringType == typeof(EF) && call.Method.Name == nameof(EF.Property)
+                            && call.Arguments[1] is ConstantExpression { Value: string name } => name,
+                        _ => null
+                    };
+                    if (property is null || partitionContext!.Model.GetEntityTypes().Any(e =>
+                        e.FindAnnotation(ApprovalPartitionModelExtensions.PartitionAnnotation)?.Value is string partition && partition == property))
+                        throw new InvalidOperationException("批量更新禁止修改分区属性或使用无法验证的属性选择器");
+                }
             }
         }
     }

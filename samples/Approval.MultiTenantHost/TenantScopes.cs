@@ -58,8 +58,10 @@ public sealed class TenantDirectory
 public sealed class TenantScopes(TenantDirectory directory) : IApprovalHostScopeProvider
 {
     private readonly TenantDirectory _directory = directory;
-    private readonly AsyncLocal<string?> _current = new();
-    public string Current => _current.Value ?? throw new ApprovalException("缺少可信宿主租户上下文") { Code = ApprovalErrorCode.Forbidden };
+    private sealed record Frame(string Partition, Frame? Previous);
+    private readonly AsyncLocal<Frame?> _current = new();
+    public string Current => _current.Value?.Partition is { } partition ? _directory.Require(partition).Id
+        : throw new ApprovalException("缺少可信宿主租户上下文") { Code = ApprovalErrorCode.Forbidden };
     public IApprovalHostScope Capture() => ForTenant(Current);
     public IApprovalHostScope ForTenant(string id) => new Scope(this, _directory.Require(id).Id);
     public Task<IReadOnlyList<IApprovalHostScope>> GetBackgroundScopesAsync(CancellationToken ct = default)
@@ -84,13 +86,22 @@ public sealed class TenantScopes(TenantDirectory directory) : IApprovalHostScope
         public IDisposable Enter()
         {
             owner._directory.Require(partition);
-            var previous = owner._current.Value;
-            owner._current.Value = partition;
-            return new Restore(owner, previous);
+            var frame = new Frame(partition, owner._current.Value);
+            owner._current.Value = frame;
+            return new Restore(owner, frame);
         }
     }
-    private sealed class Restore(TenantScopes owner, string? previous) : IDisposable
+    private sealed class Restore(TenantScopes owner, Frame frame) : IDisposable
     {
-        public void Dispose() => owner._current.Value = previous;
+        public void Dispose()
+        {
+            // Disposal belongs to the current ExecutionContext. A shared mutable disposed flag
+            // would let a child task prevent its parent from restoring the previous tenant.
+            if (ReferenceEquals(owner._current.Value, frame)) { owner._current.Value = frame.Previous; return; }
+            for (var active = owner._current.Value; active is not null; active = active.Previous)
+                if (ReferenceEquals(active, frame))
+                    throw new InvalidOperationException("宿主租户作用域必须按嵌套顺序释放");
+            // The frame has already been released in this asynchronous flow.
+        }
     }
 }
