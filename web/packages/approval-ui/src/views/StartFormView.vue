@@ -16,7 +16,10 @@ import { formatDateTime } from '@ui/utils/labels'
 
 const { api: approvalApi, userKey } = useApprovalClient()
 const { can } = useApprovalUser()
-const intent = useCommandIntent('start-form')
+const intent = useCommandIntent('start-form', {
+  canExecute: scope => (scope === `start:${key.value}` && can('approval.instance.start')) ||
+    (scope === `draft:${key.value}` && can('approval.draft.write')),
+})
 
 /**
  * 发起页：按流程的表单结构填写并提交；服务端字段错误回显到对应表单项。
@@ -56,6 +59,26 @@ const formRef = useTemplateRef<InstanceType<typeof DynamicForm>>('form')
 // 是否有未保存的修改：与上次加载 / 保存时的快照比较
 const snapshot = () => JSON.stringify([data.value, comment.value.trim()])
 const savedSnapshot = shallowRef('')
+let pageVersion = 0
+let recoveredSnapshot = ''
+watch([key, userKey], () => { pageVersion++ }, { flush: 'sync' })
+onBeforeUnmount(() => { pageVersion++ })
+
+function startResult(value: unknown) {
+  if (!value || typeof value !== 'object' || !('instanceId' in value) ||
+    typeof value.instanceId !== 'string' || !value.instanceId.trim())
+    throw new Error('申请恢复结果缺少有效的 instanceId，请核对原操作结果')
+  return { instanceId: value.instanceId }
+}
+function draftResult(value: unknown) {
+  if (!value || typeof value !== 'object' || !('draftId' in value) ||
+    typeof value.draftId !== 'string' || !value.draftId.trim() ||
+    !('updatedAt' in value) || typeof value.updatedAt !== 'string' ||
+    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,7})?(?:Z|[+-]\d{2}:\d{2})$/.test(value.updatedAt) ||
+    !Number.isFinite(Date.parse(value.updatedAt)))
+    throw new Error('草稿恢复结果缺少有效的 draftId 或 updatedAt，请核对原操作结果')
+  return { draftId: value.draftId, updatedAt: value.updatedAt }
+}
 watch(userKey, () => {
   draftId.value = null
   openedDraft.value = null
@@ -89,10 +112,17 @@ async function saveDraft(silent = false) {
   const definition = start.data.value
   if (!can('approval.draft.write') || !definition || saving.value || submitting.value) return false
   saving.value = true
+  const version = pageVersion
   const current = snapshot()
   try {
     const result = await intent.run(`draft:${definition.key}`, { draftId: draftId.value, formData: data.value, comment: comment.value.trim() },
-      (body, operationId) => approvalApi.saveDraft(definition.key, body.draftId, body.formData, body.comment, operationId))
+      async (body, operationId) => {
+        const value = await approvalApi.saveDraft(definition.key, body.draftId, body.formData, body.comment, operationId)
+        if (version !== pageVersion) throw new DOMException('页面或身份已变化', 'AbortError')
+        const result = draftResult(value)
+        recoveredSnapshot = JSON.stringify([body.formData, body.comment])
+        return result
+      })
     savedSnapshot.value = current
     savedAt.value = result.updatedAt
     if (draftId.value !== result.draftId) {
@@ -102,10 +132,10 @@ async function saveDraft(silent = false) {
     if (!silent) ElMessage.success('草稿已保存')
     return true
   } catch (e) {
-    ElMessage.error(`保存草稿失败：${errorMessage(e)}`)
+    if (version === pageVersion) ElMessage.error(`保存草稿失败：${errorMessage(e)}`)
     return false
   } finally {
-    saving.value = false
+    if (version === pageVersion) saving.value = false
   }
 }
 
@@ -115,13 +145,16 @@ const timer = window.setInterval(() => {
 onBeforeUnmount(() => window.clearInterval(timer))
 
 async function recover(value: unknown, scope: string) {
-  if (!value || typeof value !== 'object') return
-  if (scope.startsWith('start:') && 'instanceId' in value && typeof value.instanceId === 'string') {
-    await router.push({ name: approvalRouteNames.detail, params: { id: value.instanceId } })
-  } else if ('draftId' in value && typeof value.draftId === 'string') {
-    draftId.value = value.draftId
-    if ('updatedAt' in value && typeof value.updatedAt === 'string') savedAt.value = value.updatedAt
-    await router.replace({ query: { ...route.query, draft: value.draftId } })
+  if (scope === `start:${key.value}`) {
+    const result = startResult(value)
+    savedSnapshot.value = snapshot()
+    await router.push({ name: approvalRouteNames.detail, params: { id: result.instanceId } })
+  } else if (scope === `draft:${key.value}`) {
+    const result = draftResult(value)
+    draftId.value = result.draftId
+    savedAt.value = result.updatedAt
+    savedSnapshot.value = recoveredSnapshot
+    await router.replace({ query: { ...route.query, draft: result.draftId } })
   }
 }
 async function submit() {
@@ -133,17 +166,24 @@ async function submit() {
   if (identity !== userKey.value) return
 
   submitting.value = true
+  const version = pageVersion
   try {
     const { instanceId } = await intent.run(`start:${definition.key}`, { draftId: draftId.value, formData: data.value, comment: comment.value.trim() },
-      (body, operationId) => approvalApi.submitForm(definition.key, body.formData, body.comment, body.draftId, operationId))
+      async (body, operationId) => {
+        const value = await approvalApi.submitForm(definition.key, body.formData, body.comment, body.draftId, operationId)
+        if (version !== pageVersion) throw new DOMException('页面或身份已变化', 'AbortError')
+        return startResult(value)
+      })
     savedSnapshot.value = snapshot()
     ElMessage.success('已提交')
     await router.replace({ name: approvalRouteNames.detail, params: { id: instanceId } })
   } catch (e) {
-    if (e instanceof ApiError && e.errors) serverErrors.value = e.errors
-    ElMessage.error(errorMessage(e))
+    if (version === pageVersion) {
+      if (e instanceof ApiError && e.errors) serverErrors.value = e.errors
+      ElMessage.error(errorMessage(e))
+    }
   } finally {
-    submitting.value = false
+    if (version === pageVersion) submitting.value = false
   }
 }
 
@@ -182,7 +222,7 @@ const loadError = computed(() => start.error.value ?? draft.error.value)
 </script>
 
 <template>
-  <CommandRecovery :intent="intent" :busy="saving || submitting" @recovered="recover" />
+  <CommandRecovery :key="key" :intent="intent" :busy="saving || submitting" @recovered="recover" />
   <div v-loading="start.loading.value || draft.loading.value" class="start-form">
     <el-page-header title="返回" @back="backToCenter">
       <template #content>

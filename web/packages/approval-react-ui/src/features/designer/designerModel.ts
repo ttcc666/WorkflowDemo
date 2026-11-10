@@ -146,8 +146,8 @@ export function createDesignerModel(initial = newFlowDefinition()) {
         undefined,
         false,
       ),
-    markSaved() {
-      saved = snapshot();
+    markSaved(value = definition()) {
+      saved = JSON.stringify(value);
       sync();
     },
     setCanvas(nodes: FlowNode[], edges: FlowEdge[], record = true) {

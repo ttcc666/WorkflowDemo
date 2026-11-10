@@ -1,26 +1,19 @@
 <script setup lang="ts">
-import { shallowRef } from 'vue'
-import { ElMessage } from 'element-plus'
+import { computed, onScopeDispose } from 'vue'
+import { useApprovalClient } from '@ui/client'
 import type { CommandIntent } from '@ui/composables/useCommandIntent'
-import { errorMessage } from '@ui/api/http'
+import CommandRecoveryItem from './CommandRecoveryItem.vue'
 
-const props = defineProps<{ intent: CommandIntent; busy?: boolean }>()
-const emit = defineEmits<{ recovered: [result: unknown, scope: string] }>()
-const recovering = shallowRef(false)
-async function retry() {
-  const scope = props.intent.pending.value
-  if (recovering.value || props.busy || scope === null) return
-  recovering.value = true
-  try {
-    const result = await props.intent.retry(scope)
-    ElMessage.success('上次操作结果已确认')
-    emit('recovered', result, scope)
-  } catch (cause) { ElMessage.error(errorMessage(cause)) }
-  finally { recovering.value = false }
-}
+const props = defineProps<{ intent: CommandIntent; busy?: boolean; scope?: string | null; description?: string }>()
+const emit = defineEmits<{ recovered: [result: unknown, scope: string]; reset: [scope: string] }>()
+const { userKey } = useApprovalClient()
+let active = true
+onScopeDispose(() => { active = false })
+function recovered(value: unknown, scope: string) { if (active) emit('recovered', value, scope) }
+const scopes = computed(() => props.scope === undefined ? props.intent.pendingScopes() : props.scope === null ? [] : [props.scope])
 </script>
 <template>
-  <el-alert v-if="intent.pending.value && intent.canRetry()" type="warning" :closable="false" title="上次提交结果尚未确认；可按原内容重试。">
-    <el-button :loading="recovering" :disabled="busy" @click="retry">按原内容重试上次操作</el-button>
-  </el-alert>
+  <CommandRecoveryItem v-for="current in scopes" :key="`${userKey}:${current}`"
+    :intent="intent" :scope="current" :busy="busy" :description="description"
+    :recovered="recovered" :reset="scope => emit('reset', scope)" />
 </template>

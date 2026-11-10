@@ -68,3 +68,66 @@ it('keeps a failed storage deletion cleared within the current page', async () =
   expect(memory.values.size).toBe(1)
   expect(intent.pending.value).toBeNull()
 })
+
+it('same user API Base switch clears old permissions users and roles and ignores late tenant responses', async () => {
+  let releaseUser!: (value: Response) => void
+  const lateUser = new Promise<Response>(resolve => { releaseUser = resolve })
+  const client = createApprovalClientCore({ apiBase: '/a', userKey: () => 'alice', fetcher: async url => {
+    const tenant = url.startsWith('/a/') ? 'A' : 'B'
+    if (url.endsWith('/me')) return Response.json({ userId: 'alice', capabilities: { 'approval.instance.start': tenant === 'A' } })
+    if (url.endsWith('/directory/roles')) return Response.json([tenant + '-role'])
+    if (url.includes('keyword=late')) return lateUser
+    return Response.json([{ id: 'same-id', name: tenant + ' user', roles: [], isActive: true }])
+  } })
+  await client.reloadUser(); await client.directory.loadRoles(); await client.directory.search('now')
+  expect(client.me.value?.capabilities?.['approval.instance.start']).toBe(true)
+  expect(client.directory.displayName('same-id')).toBe('A user')
+  const oldUsers = client.directory.search('late')
+  client.updateOptions({ apiBase: '/b', userKey: () => 'alice', fetcher: client.config().fetcher })
+  expect(client.identity.value).toBe('alice')
+  expect(client.version.value).toBe(1)
+  expect(client.me.value).toBeNull()
+  expect(client.directory.displayName('same-id')).toBe('same-id')
+  await client.reloadUser(); await client.directory.loadRoles(); await client.directory.search('now')
+  releaseUser(Response.json([{ id: 'same-id', name: 'late A user', roles: [], isActive: true }]))
+  expect(await oldUsers).toEqual([])
+  expect(client.me.value?.capabilities?.['approval.instance.start']).toBe(false)
+  expect(client.directory.roles.value).toEqual(['B-role'])
+  expect(client.directory.displayName('same-id')).toBe('B user')
+  client.dispose()
+})
+it('a rejected old roles request cannot drop the new tenant in flight roles cache', async () => {
+  let oldReject!: (cause: Error) => void, newResolve!: (response: Response) => void
+  const old = new Promise<Response>((_resolve, reject) => { oldReject = reject })
+  const fresh = new Promise<Response>(resolve => { newResolve = resolve })
+  const fetcher = vi.fn((url: string) => url.startsWith('/a/') ? old : fresh)
+  const client = createApprovalClientCore({ apiBase: '/a', userKey: () => 'alice', fetcher })
+  const oldRequest = client.directory.loadRoles()
+  client.updateOptions({ apiBase: '/b', userKey: () => 'alice', fetcher })
+  const newRequest = client.directory.loadRoles()
+  oldReject(new Error('old connection failed')); await oldRequest
+  const sameRequest = client.directory.loadRoles()
+  expect(sameRequest).toBe(newRequest)
+  expect(fetcher.mock.calls.filter(([url]) => url.startsWith('/b/'))).toHaveLength(1)
+  newResolve(Response.json(['B-role'])); await newRequest
+  expect(client.directory.roles.value).toEqual(['B-role'])
+  client.dispose()
+})
+it('standalone HTTP rejects a response body parsed after the API Base changes for the same user', async () => {
+  let apiBase = '/a', release!: (body: string) => void
+  const body = new Promise<string>(resolve => { release = resolve })
+  const http = createHttpClient(() => ({ apiBase, userKey: () => 'alice', fetcher: async () => ({ ok: true, status: 200, text: () => body }) as Response }))
+  const request = http.get('/a/value').catch(cause => cause)
+  await Promise.resolve(); apiBase = '/b'; release('{"value":"A private data"}')
+  expect(await request).toMatchObject({ name: 'AbortError' })
+})
+it('normalizing a trailing slash preserves the same client version and cached permissions', async () => {
+  const fetcher = vi.fn(async () => Response.json({ userId: 'alice', capabilities: { 'approval.instance.start': true } }))
+  const client = createApprovalClientCore({ apiBase: '/a/', userKey: () => 'alice', fetcher })
+  await client.reloadUser()
+  client.updateOptions({ apiBase: '/a', userKey: () => 'alice', fetcher })
+  expect(client.version.value).toBe(0)
+  expect(client.me.value?.capabilities?.['approval.instance.start']).toBe(true)
+  expect(fetcher).toHaveBeenCalledTimes(1)
+  client.dispose()
+})

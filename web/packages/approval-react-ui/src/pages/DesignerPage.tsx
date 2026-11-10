@@ -95,19 +95,26 @@ const nodeIcons = {
 };
 export default function DesignerPage() {
   const { key = "" } = useParams();
+  const identity = useApprovalIdentity();
+  return <DesignerEditor key={JSON.stringify([key, identity])} />;
+}
+
+function DesignerEditor() {
+  const { key = "" } = useParams();
   const [query, setQuery] = useSearchParams();
   const from = query.get("from");
   const client = useApprovalClient();
   const identity = useApprovalIdentity();
   const user = useApprovalUser();
   const directory = useDirectory();
-  const model = useMemo(() => createDesignerModel(), [key, identity]);
+  const model = useMemo(() => createDesignerModel(), []);
   const canvas = useRef<FlowCanvasHandle>(null);
   const state = useSyncExternalStore(
     model.state.subscribe,
     model.state.getSnapshot,
   );
   const [name, setName] = useState(query.get("name") ?? key);
+  const [savedName, setSavedName] = useState(query.get("name") ?? key);
   const [governance, setGovernance] = useState<DefinitionGovernance | null>(
     null,
   );
@@ -126,7 +133,7 @@ export default function DesignerPage() {
     ruleIndex?: number;
     actionId?: string;
   } | null>(null);
-  const intent = useCommandIntent("definition-publish");
+  const intent = useCommandIntent("definition-publish", { permission: "approval.definition.design" });
   const can = (permission: string) =>
     governance?.capabilities?.[permission] ?? user.can(permission);
   const loaded = useAsyncData(
@@ -153,7 +160,7 @@ export default function DesignerPage() {
           definition: JSON.parse(definition.definitionJson) as FlowDefinition,
         };
       } catch (cause) {
-        if (!(cause instanceof ApiError && cause.status === 404)) throw cause;
+        if (!(cause instanceof ApiError && cause.status === 404) || from || (governance?.lastVersion ?? 0) > 0) throw cause;
         return {
           governance,
           name: query.get("name") ?? key,
@@ -169,30 +176,22 @@ export default function DesignerPage() {
     [],
     user.canViewDefinitions,
   );
-  useEffect(() => {
-    void directory.loadRoles();
-  }, [identity]);
+  const loadRoles = directory.loadRoles;
+  useEffect(() => { void loadRoles(); }, [identity, loadRoles]);
   useEffect(() => {
     if (loaded.data) {
       setGovernance(loaded.data.governance);
       setName(loaded.data.name);
+      setSavedName(loaded.data.name);
       model.load(loaded.data.definition);
     }
   }, [loaded.data, model]);
-  useEffect(() => {
-    setGovernance(null);
-    setName(query.get("name") ?? key);
-    setNote("");
-    setPreview(null);
-    setSimulation(null);
-    setError(null);
-    setNotice("");
-    setTab("flow");
-  }, [key, identity]);
-  const blocker = useBlocker(state.dirty);
+  const dirty = state.dirty || name.trim() !== savedName;
+  const ready = !!loaded.data && !loaded.loading && !loaded.error;
+  const blocker = useBlocker(dirty);
   useEffect(() => {
     function unload(event: BeforeUnloadEvent) {
-      if (model.state.value.dirty) {
+      if (dirty) {
         event.preventDefault();
         event.returnValue = "";
       }
@@ -219,8 +218,10 @@ export default function DesignerPage() {
       window.removeEventListener("beforeunload", unload);
       window.removeEventListener("keydown", shortcut);
     };
-  }, [model]);
+  }, [model, dirty]);
   async function save() {
+    if (!ready) throw new Error("流程尚未加载成功，请重试后编辑");
+    if (!can("approval.definition.design")) throw new ApiError("没有流程设计权限", 403);
     if (!name.trim()) throw new Error("请填写流程名称");
     const body = {
       name: name.trim(),
@@ -235,8 +236,10 @@ export default function DesignerPage() {
     const result = await intent.run(`draft:${key}`, body, (payload, id) =>
       client.api.saveDesignDraft(key, payload, id),
     );
+    if (!intent.isCurrent()) return result;
     setGovernance(result);
-    model.markSaved();
+    setSavedName(body.name);
+    model.markSaved(JSON.parse(body.definitionJson) as FlowDefinition);
     return result;
   }
   async function run(action: () => Promise<unknown>, text: string) {
@@ -246,9 +249,9 @@ export default function DesignerPage() {
     setError(null);
     try {
       await action();
-      if (owner === client.generation) setNotice(text);
+      if (owner === client.generation && intent.isCurrent()) setNotice(text);
     } catch (cause) {
-      if (owner === client.generation) {
+      if (owner === client.generation && intent.isCurrent()) {
         setError(cause);
         if (cause instanceof ApiError && cause.status === 409) {
           try {
@@ -257,10 +260,11 @@ export default function DesignerPage() {
         }
       }
     } finally {
-      if (owner === client.generation) setBusy(false);
+      if (owner === client.generation && intent.isCurrent()) setBusy(false);
     }
   }
   async function validate() {
+    if (!ready) throw new Error("流程尚未加载成功，请重试后编辑");
     const local = model.localErrors();
     const result = user.can("approval.definition.validate")
       ? await client.api.validate(JSON.stringify(model.definition()))
@@ -269,14 +273,19 @@ export default function DesignerPage() {
     return local.length + result.errors.length === 0;
   }
   async function publish() {
+    if (!can("approval.definition.publish")) throw new ApiError("没有流程发布权限", 403);
     if (!(await validate())) throw new Error("校验未通过，请修正后发布");
     const current = intent.pending === key ? governance : await save();
     if (!current?.draftJson) throw new Error("请先保存草稿");
     const result = await intent.run(
       key,
       { expectedRevision: current.revision, changeNote: note.trim() },
-      (body, id) => client.api.publishDesignDraft(key, body, id),
+      (body, id) => {
+        if (client.me.value?.capabilities?.["approval.definition.publish"] !== true) throw new ApiError("没有流程发布权限", 403);
+        return client.api.publishDesignDraft(key, body, id);
+      },
     );
+    if (!intent.isCurrent()) return;
     setGovernance({
       ...current,
       revision: current.revision + 1,
@@ -285,7 +294,7 @@ export default function DesignerPage() {
       draftSourceDefinitionId: result.id,
       hasDraftChanges: false,
     });
-    model.markSaved();
+    model.markSaved(JSON.parse(current.draftJson) as FlowDefinition);
     setPublishOpen(false);
     if (from) setQuery({});
   }
@@ -297,7 +306,7 @@ export default function DesignerPage() {
     return <ErrorState error={new Error("没有流程设计或定义读取权限")} />;
   return (
     <div className="ar-product-page ar-studio-page">
-      <CommandRecovery intent={intent} busy={busy} recovered={loaded.reload} />
+      <CommandRecovery intent={intent} busy={busy} recovered={(_value, scope) => { if (scope === key || scope === `draft:${key}`) loaded.reload(); }} />
       <PageHeader
         title="流程设计器"
         eyebrow="流程管理"
@@ -310,13 +319,14 @@ export default function DesignerPage() {
             <Input
               aria-label="流程名称"
               value={name}
+              disabled={!ready}
               onChange={(event) => setName(event.target.value)}
             />
           </Field>
           <Badge>
             {key} · v{governance?.lastVersion ?? "草稿"}
           </Badge>
-          {state.dirty && <Badge>未保存</Badge>}
+          {dirty && <Badge>未保存</Badge>}
         </div>
         <div className="ar-studio-actions">
           {mobile && tab === "flow" && (
@@ -324,15 +334,16 @@ export default function DesignerPage() {
               编辑节点 / 通知
             </Button>
           )}
-          <Button disabled={!state.canUndo} onClick={model.undo}>
+          <Button disabled={!ready || !state.canUndo} onClick={model.undo}>
             <Undo2 data-icon="inline-start" aria-hidden="true" />
             撤销
           </Button>
-          <Button disabled={!state.canRedo} onClick={model.redo}>
+          <Button disabled={!ready || !state.canRedo} onClick={model.redo}>
             <Redo2 data-icon="inline-start" aria-hidden="true" />
             重做
           </Button>
           <Button
+            disabled={!ready}
             onClick={() => {
               model.autoLayout();
               canvas.current?.fit();
@@ -342,26 +353,26 @@ export default function DesignerPage() {
             自动布局
           </Button>
           <Button
-            disabled={busy || !can("approval.definition.design")}
+            disabled={busy || !ready || !can("approval.definition.design")}
             onClick={() => void run(save, "设计草稿已保存")}
           >
             <Save data-icon="inline-start" aria-hidden="true" />
             保存草稿
           </Button>
           <Button
-            disabled={busy || !user.can("approval.definition.validate")}
+            disabled={busy || !ready || !user.can("approval.definition.validate")}
             onClick={() => void run(validate, "校验完成")}
           >
             <ShieldCheck data-icon="inline-start" aria-hidden="true" />
             校验
           </Button>
           <Separator orientation="vertical" />
-          <Button onClick={() => setPreview(model.definition())}>
+          <Button disabled={!ready} onClick={() => setPreview(model.definition())}>
             <Eye data-icon="inline-start" aria-hidden="true" />
             预览
           </Button>
           <Button
-            disabled={!user.can("approval.definition.simulate")}
+            disabled={!ready || !user.can("approval.definition.simulate")}
             onClick={() => setSimulation({ definition: model.definition() })}
           >
             <Play data-icon="inline-start" aria-hidden="true" />
@@ -369,7 +380,7 @@ export default function DesignerPage() {
           </Button>
           <Button
             variant="primary"
-            disabled={busy || !can("approval.definition.publish")}
+            disabled={busy || !ready || !can("approval.definition.publish")}
             onClick={() => setPublishOpen(true)}
           >
             <Rocket data-icon="inline-start" aria-hidden="true" />
@@ -399,8 +410,10 @@ export default function DesignerPage() {
           { value: "settings", label: "发起设置" },
         ]}
       />
-      {loaded.loading ? (
+      {!ready ? (
+        loaded.loading ?
         <Loading />
+        : null
       ) : (
         <>
           <div

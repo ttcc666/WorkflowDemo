@@ -24,6 +24,8 @@ run(['pack', '--out', reactTar], join(web, 'packages/approval-react-ui'))
 await cp(join(web, 'apps/react-demo/src'), join(output, 'src'), { recursive: true })
 await cp(join(web, 'demo-shared'), join(output, 'demo-shared'), { recursive: true })
 await cp(join(web, 'apps/react-demo/index.html'), join(output, 'index.html'))
+await cp(join(root, 'eng/consumers/react-standalone/host.html'), join(output, 'host.html'))
+await cp(join(root, 'eng/consumers/react-standalone/StandaloneHost.tsx'), join(output, 'src/StandaloneHost.tsx'))
 const packageJson = {
   name: 'approval-react-package-consumer', private: true, type: 'module', packageManager: 'pnpm@10.20.0',
   pnpm: { overrides: { '@approval/shared': 'file:./approval-shared.tgz' } },
@@ -36,8 +38,12 @@ await writeFile(join(output, 'tsconfig.json'), JSON.stringify({ compilerOptions:
 await writeFile(join(output, 'vite.config.ts'), `import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { fileURLToPath, URL } from 'node:url'
-const proxy = { '/api': { target: process.env.APPROVAL_SMOKE_API ?? 'http://127.0.0.1:1', changeOrigin: true } }
-export default defineConfig({ plugins: [react()], resolve: { alias: { '@demo-shared': fileURLToPath(new URL('./demo-shared', import.meta.url)) } }, server: { proxy }, preview: { proxy }, build: { outDir: 'dist', emptyOutDir: true } })
+const proxy = {
+  '/api/tenant-a': { target: process.env.APPROVAL_SMOKE_API ?? 'http://127.0.0.1:1', changeOrigin: true, rewrite: (path: string) => path.replace('/api/tenant-a/approval', '/api/approval') },
+  '/api/tenant-b': { target: process.env.APPROVAL_TENANT_B_API ?? 'http://127.0.0.1:1', changeOrigin: true, rewrite: (path: string) => path.replace('/api/tenant-b/approval', '/api/approval') },
+  '/api': { target: process.env.APPROVAL_SMOKE_API ?? 'http://127.0.0.1:1', changeOrigin: true },
+}
+export default defineConfig({ plugins: [react()], resolve: { alias: { '@demo-shared': fileURLToPath(new URL('./demo-shared', import.meta.url)) } }, server: { proxy }, preview: { proxy }, build: { outDir: 'dist', emptyOutDir: true, rollupOptions: { input: ['index.html', 'host.html'] } } })
 `)
 await writeFile(join(output, 'src/contractsSmoke.tsx'), `import { FormField, createApprovalClient, type FlowDefinition, type FormSchema, type FormField as FieldModel } from '@approval/react-ui'
 const field: FieldModel = { key: 'name', label: '名称', type: 'Text' }
@@ -52,6 +58,12 @@ for (const name of ['approval-shared', 'approval-react-ui']) {
   if (installed.exports['.'].import !== './dist/index.js') throw new Error('Source exports leaked into packed package')
 }
 const publicTypes = await readFile(join(output, 'node_modules/@approval/react-ui/dist/types/index.d.ts'), 'utf8')
+const packedManifest = JSON.parse(await readFile(join(output, 'node_modules/@approval/react-ui/package.json'), 'utf8'))
+if (packedManifest.exports['./pages/*']?.import !== './dist/pages/*.js') throw new Error('Standalone page exports are missing')
+for (const page of ['WorkbenchPage', 'ApprovalDetailPage', 'StartCenterPage', 'StartFormPage', 'DefinitionsPage', 'DesignerPage', 'MonitorPage', 'OutboxPage', 'DiagnosticsPage']) {
+  await readFile(join(output, 'node_modules/@approval/react-ui/dist/pages', page + '.js'))
+  await readFile(join(output, 'node_modules/@approval/react-ui/dist/types/pages', page + '.d.ts'))
+}
 if (/import ['"][^'"]+\.css['"]/.test(publicTypes)) throw new Error('Public declarations must not contain a build-only stylesheet import')
 const publishedCss = await readFile(join(output, 'node_modules/@approval/react-ui/dist/approval-react-ui.css'), 'utf8')
 if (!publishedCss.includes('.approval-react') || !publishedCss.includes('--approval-')) throw new Error('Packed CSS is missing component styles or prefixed theme tokens')

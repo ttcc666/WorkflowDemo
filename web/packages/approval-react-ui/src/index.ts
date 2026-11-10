@@ -1,5 +1,6 @@
 export * from "@approval/shared";
-export * from "./client";
+export { createApprovalClient, ApprovalProvider, useApprovalClient, useApprovalUser, useApprovalIdentity, useDirectory } from "./client";
+export type { ApprovalUIOptions, ApprovalClient } from "./client";
 export * from "./hooks/useAsyncData";
 export * from "./hooks/useCommandIntent";
 export * from "./components/ui/primitives";

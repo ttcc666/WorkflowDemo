@@ -1,6 +1,6 @@
 import { Card } from "./ui/primitives";
-import { useEffect, useState } from "react";
-import { useNavigate } from "react-router";
+import { useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { UNSAFE_DataRouterContext, useLocation, useNavigate } from "react-router";
 import { formatDateTime, type ApprovalMessage } from "@approval/shared";
 import {
   useApprovalClient,
@@ -25,6 +25,23 @@ export function MessageBell({
   const user = useApprovalUser();
   const identity = useApprovalIdentity();
   const navigate = useNavigate();
+  const location = useLocation();
+  const router = useContext(UNSAFE_DataRouterContext)?.router;
+  const navigation = useRef({ key: location.key, version: 0 });
+  useLayoutEffect(() => {
+    if (!router) return;
+    const observe = () => {
+      // Observe navigation before loaders finish, including changes batched into one React render.
+      const key = (router.state.navigation.location ?? router.state.location).key;
+      if (navigation.current.key !== key) navigation.current = { key, version: navigation.current.version + 1 };
+    };
+    observe();
+    return router.subscribe(observe);
+  }, [router]);
+  useLayoutEffect(() => {
+    if (router) return;
+    if (navigation.current.key !== location.key) navigation.current = { key: location.key, version: navigation.current.version + 1 };
+  }, [location.key, router]);
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
@@ -38,7 +55,7 @@ export function MessageBell({
     [open],
     open && user.can("approval.message.read"),
   );
-  const intent = useCommandIntent("message-read");
+  const intent = useCommandIntent("message", { permission: "approval.message.write" });
   useEffect(() => {
     setOpen(false);
     setError(null);
@@ -47,7 +64,7 @@ export function MessageBell({
   useEffect(() => {
     const timer = window.setInterval(count.reload, 10000);
     return () => window.clearInterval(timer);
-  }, [client]);
+  }, [count.reload]);
   function refresh() {
     count.reload();
     messages.reload();
@@ -55,6 +72,7 @@ export function MessageBell({
   async function read(message?: ApprovalMessage) {
     if (busy) return;
     const owner = client.generation;
+    const navigationVersion = navigation.current.version;
     setBusy(true);
     setError(null);
     try {
@@ -66,16 +84,16 @@ export function MessageBell({
             : client.api.markAllRead(id),
         );
       }
-      if (owner !== client.generation) return;
+      if (owner !== client.generation || !intent.isCurrent()) return;
       refresh();
-      if (message?.instanceId) {
+      if (message?.instanceId && navigationVersion === navigation.current.version) {
         setOpen(false);
         navigate(detailPath(message.instanceId));
       }
     } catch (cause) {
-      if (owner === client.generation) setError(cause);
+      if (owner === client.generation && intent.isCurrent()) setError(cause);
     } finally {
-      if (owner === client.generation) setBusy(false);
+      if (owner === client.generation && intent.isCurrent()) setBusy(false);
     }
   }
   if (!user.can("approval.message.read")) return null;

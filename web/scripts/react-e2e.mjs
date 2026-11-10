@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile, createWriteStream } from 'node:fs'
+import { mkdir, readFile, writeFile, createWriteStream, cp, symlink } from 'node:fs'
 import { promisify } from 'node:util'
 import { spawn } from 'node:child_process'
 import { createServer } from 'node:net'
@@ -14,9 +14,10 @@ async function port() { const server = createServer(); server.listen(0, '127.0.0
 function start(command, args, cwd, name, env = {}) { const log = createWriteStream(join(output, name + '.log')); const child = spawn(command, args, { cwd, env: { ...process.env, ...env }, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] }); child.stdout.pipe(log); child.stderr.pipe(log); return child }
 async function ready(url, child) { const limit = Date.now() + 90000; while (Date.now() < limit) { if (child.exitCode !== null) throw new Error('Server failed: ' + url); try { if ((await fetch(url, { signal: AbortSignal.timeout(1500) })).ok) return } catch {} await new Promise(resolve => setTimeout(resolve, 250)) } throw new Error('Readiness failed: ' + url) }
 async function stop(child) { if (!child || child.exitCode !== null) return; child.kill(); await Promise.race([once(child, 'exit'), new Promise(resolve => setTimeout(resolve, 5000))]); if (child.exitCode === null) child.kill('SIGKILL') }
-let api, ui
+let api, tenantB, ui
 try {
   const apiUrl = 'http://127.0.0.1:' + await port()
+  const tenantBUrl = 'http://127.0.0.1:' + await port()
   const uiUrl = 'http://127.0.0.1:' + await port()
   const database = join(output, 'react-smoke.db')
   const apiRoot = join(root, 'samples/Certificate.Api')
@@ -26,22 +27,44 @@ try {
   if (buildCode !== 0) throw new Error('Browser host build failed; see ' + output)
   api = start('dotnet', [join(host, 'bin/Release/net10.0/ReactBrowserHost.dll'), '--Tests:SampleRoot', apiRoot, '--Tests:Output', output, '--urls', apiUrl, '--environment', 'Development', '--ConnectionStrings:Default', 'Data Source=' + database, '--Certificate:DemoMode', 'true', '--Approval:EnableBackgroundServices', 'true', '--Approval:Outbox:PollInterval', '00:00:00.250', '--Approval:BaseUrl', apiUrl, '--Approval:Actions:ErpEndpoint', 'https://erp.example.invalid/orders', '--Approval:Files:RootPath', join(output, 'files')], apiRoot, 'api')
   await ready(apiUrl + '/health/ready', api)
+  tenantB = start('dotnet', [join(host, 'bin/Release/net10.0/ReactBrowserHost.dll'), '--Tests:SampleRoot', apiRoot, '--Tests:Output', output, '--urls', tenantBUrl, '--environment', 'Development', '--ConnectionStrings:Default', 'Data Source=' + join(output, 'tenant-b-smoke.db'), '--Certificate:DemoMode', 'true', '--Approval:EnableBackgroundServices', 'true', '--Approval:Outbox:PollInterval', '00:00:00.250', '--Approval:BaseUrl', tenantBUrl, '--Approval:Actions:ErpEndpoint', 'https://erp.example.invalid/orders', '--Approval:Files:RootPath', join(output, 'tenant-b-files')], apiRoot, 'tenant-b-api')
+  await ready(tenantBUrl + '/health/ready', tenantB)
   const packed = process.argv.includes('--packed')
-  const uiRoot = packed ? JSON.parse(await promisify(readFile)(join(root, 'output/engineering/react-consumer-latest.json'), 'utf8')).consumerRoot : join(web, 'apps/react-demo')
+  const uiRoot = packed ? JSON.parse(await promisify(readFile)(join(root, 'output/engineering/react-consumer-latest.json'), 'utf8')).consumerRoot : join(output, 'source-ui')
   if (packed && !uiRoot.startsWith(join(root, 'output/engineering/react-consumer-'))) throw new Error('Consumer must be owned by the package verifier')
   if (!packed) {
+    await promisify(mkdir)(uiRoot, { recursive: true })
+    await promisify(cp)(join(web, 'apps/react-demo/src'), join(uiRoot, 'src'), { recursive: true })
+    await promisify(cp)(join(web, 'demo-shared'), join(uiRoot, 'demo-shared'), { recursive: true })
+    await promisify(cp)(join(web, 'apps/react-demo/index.html'), join(uiRoot, 'index.html'))
+    await promisify(cp)(join(root, 'eng/consumers/react-standalone/host.html'), join(uiRoot, 'host.html'))
+    await promisify(cp)(join(root, 'eng/consumers/react-standalone/StandaloneHost.tsx'), join(uiRoot, 'src/StandaloneHost.tsx'))
+    await promisify(symlink)(join(web, 'apps/react-demo/node_modules'), join(uiRoot, 'node_modules'), process.platform === 'win32' ? 'junction' : 'dir')
+    await promisify(writeFile)(join(uiRoot, 'package.json'), JSON.stringify({ type: 'module', private: true }))
+    await promisify(writeFile)(join(uiRoot, 'vite.config.ts'), `
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite'
+import { fileURLToPath, URL } from 'node:url'
+const proxy = {
+  '/api/tenant-a': { target: process.env.APPROVAL_SMOKE_API, changeOrigin: true, rewrite: (path: string) => path.replace('/api/tenant-a/approval', '/api/approval') },
+  '/api/tenant-b': { target: process.env.APPROVAL_TENANT_B_API, changeOrigin: true, rewrite: (path: string) => path.replace('/api/tenant-b/approval', '/api/approval') },
+  '/api': { target: process.env.APPROVAL_SMOKE_API, changeOrigin: true },
+}
+export default defineConfig({ plugins: [react(), tailwindcss()], resolve: { alias: { '@demo-shared': fileURLToPath(new URL('./demo-shared', import.meta.url)) } }, server: { proxy }, preview: { proxy }, build: { outDir: 'dist', rollupOptions: { input: ['index.html', 'host.html'] } } })
+`)
     const uiBuild = start(process.execPath, [join(uiRoot, 'node_modules/vite/bin/vite.js'), 'build'], uiRoot, 'react-build')
     const [uiBuildCode] = await once(uiBuild, 'exit')
     if (uiBuildCode !== 0) throw new Error('React production build failed; see ' + output)
   }
-  ui = start(process.execPath, [join(uiRoot, 'node_modules/vite/bin/vite.js'), 'preview', '--host', '127.0.0.1', '--port', new URL(uiUrl).port, '--strictPort'], uiRoot, 'react', { APPROVAL_SMOKE_API: apiUrl })
+  ui = start(process.execPath, [join(uiRoot, 'node_modules/vite/bin/vite.js'), 'preview', '--host', '127.0.0.1', '--port', new URL(uiUrl).port, '--strictPort'], uiRoot, 'react', { APPROVAL_SMOKE_API: apiUrl, APPROVAL_TENANT_B_API: tenantBUrl })
   await ready(uiUrl, ui)
-  await promisify(writeFile)(join(output, 'context.json'), JSON.stringify({ apiUrl, uiUrl, vueUrl: apiUrl, database }, null, 2))
+  await promisify(writeFile)(join(output, 'context.json'), JSON.stringify({ apiUrl, tenantBUrl, uiUrl, vueUrl: apiUrl, database }, null, 2))
   console.log('Isolated React / Vue test host ready; evidence: ' + output)
   if (process.argv.includes('--serve')) await new Promise(resolve => { process.once('SIGINT', resolve); process.once('SIGTERM', resolve) })
   else {
-    const tests = spawn(process.execPath, [join(web, 'node_modules/@playwright/test/cli.js'), 'test', '--config', 'playwright.react.config.ts', ...process.argv.slice(2).filter(arg => arg !== '--packed')], { cwd: web, windowsHide: true, stdio: 'inherit', env: { ...process.env, APPROVAL_SMOKE_API: apiUrl, APPROVAL_REACT_URL: uiUrl, APPROVAL_VUE_URL: apiUrl, APPROVAL_SMOKE_OUTPUT: output, APPROVAL_TEST_ROOT: root } })
+    const tests = spawn(process.execPath, [join(web, 'node_modules/@playwright/test/cli.js'), 'test', '--config', 'playwright.react.config.ts', ...process.argv.slice(2).filter(arg => arg !== '--packed')], { cwd: web, windowsHide: true, stdio: 'inherit', env: { ...process.env, APPROVAL_SMOKE_API: apiUrl, APPROVAL_TENANT_B_API: tenantBUrl, APPROVAL_REACT_URL: uiUrl, APPROVAL_VUE_URL: apiUrl, APPROVAL_SMOKE_OUTPUT: output, APPROVAL_TEST_ROOT: root, APPROVAL_PACKED_CONSUMER: packed ? '1' : '0' } })
     const [code] = await once(tests, 'exit')
     if (code !== 0) throw new Error('React parity acceptance failed; see ' + output)
   }
-} finally { await stop(ui); await stop(api) }
+} finally { await stop(ui); await stop(tenantB); await stop(api) }

@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { ApprovalProvider, createApprovalClient } from "../../src/client";
 import { useAsyncData } from "../../src/hooks/useAsyncData";
 
@@ -109,4 +109,30 @@ it("turns a synchronous loader failure into an error state rather than an unhand
     </ApprovalProvider>,
   );
   expect(await screen.findByText("invalid query")).toBeInTheDocument();
+});
+
+it("does not send a scheduled SDK request after the page unmounts", async () => {
+  const fetcher = vi.fn(async (_url: string) => Response.json({}));
+  const supplied = createApprovalClient({ fetcher });
+  function Panel() { useAsyncData(signal => supplied.api.startForm("old", signal)); return <p>mounted</p>; }
+  const view = render(<ApprovalProvider client={supplied}><Panel /></ApprovalProvider>);
+  view.unmount();
+  await act(async () => { await Promise.resolve(); });
+  expect(fetcher.mock.calls.some(([url]) => String(url).includes("/forms/old"))).toBe(false);
+});
+it("API Base invalidation hides the old tenant snapshot and ignores a late uncancellable loader", async () => {
+  const old = deferred<string>(), fresh = deferred<string>();
+  const supplied = createApprovalClient({ apiBase: "/a", userKey: () => "alice", fetcher: async () => Response.json({}) });
+  function Panel() {
+    const data = useAsyncData(() => supplied.config().apiBase === "/a" ? old.promise : fresh.promise);
+    return <output aria-label="data">{data.data ?? "empty"}</output>;
+  }
+  render(<ApprovalProvider client={supplied}><Panel /></ApprovalProvider>);
+  await act(async () => { await Promise.resolve(); });
+  await act(async () => { supplied.updateOptions({ apiBase: "/b" }); });
+  await act(async () => { old.resolve("A private data"); });
+  expect(screen.getByLabelText("data")).toHaveTextContent("empty");
+  await act(async () => { fresh.resolve("B data"); });
+  expect(screen.getByLabelText("data")).toHaveTextContent("B data");
+  expect(screen.queryByText("A private data")).not.toBeInTheDocument();
 });

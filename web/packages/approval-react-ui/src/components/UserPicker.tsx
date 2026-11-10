@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { DirectoryUser } from '@approval/shared'
 import { useApprovalIdentity, useApprovalClient, useDirectory } from '../client'
 import { Button, Badge, Loading } from './ui/primitives'
@@ -34,6 +34,9 @@ function DirectoryPicker({
   label = '搜索人员',
 }: UserPickerProps) {
   const directory = useDirectory()
+  const { resolve, search } = directory
+  const valueKey = JSON.stringify(value)
+  const selectedIds = useMemo(() => JSON.parse(valueKey) as string[], [valueKey])
   const aria = useFieldAria({ 'aria-label': label })
   const identity = useApprovalIdentity()
   const [keyword, setKeyword] = useState('')
@@ -45,21 +48,22 @@ function DirectoryPicker({
   useEffect(() => {
     let active = true
     setSelected([])
-    void directory.resolve(value).then((users) => {
+    void resolve(selectedIds).then((users) => {
       if (active) setSelected(users)
     })
     return () => {
       active = false
     }
-  }, [identity, JSON.stringify(value)])
+  }, [identity, selectedIds, resolve])
   useEffect(() => {
     const current = ++revision.current
+    let active = true
     setResult([])
     if (!open || disabled) return
     setLoading(true)
     const timer = window.setTimeout(() => {
-      void directory.search(keyword).then((users) => {
-        if (revision.current === current) {
+      void search(keyword).then((users) => {
+        if (active && revision.current === current) {
           setResult(users)
           setLoading(false)
         }
@@ -67,9 +71,9 @@ function DirectoryPicker({
     }, 180)
     return () => {
       window.clearTimeout(timer)
-      revision.current++
+      active = false
     }
-  }, [identity, keyword, open, disabled])
+  }, [identity, keyword, open, disabled, search])
   useEffect(() => {
     setKeyword('')
     setOpen(false)

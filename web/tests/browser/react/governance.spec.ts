@@ -73,6 +73,8 @@ test("React definition governance creates publishes compares selects versions an
     v1.id,
   );
   await dialog.getByRole("button", { name: "选用此版本" }).click();
+  const refreshedGovernance = page.waitForResponse(response =>
+    response.url().endsWith('/definitions/ui-governance/governance') && response.request().method() === 'GET');
   await page
     .getByRole("alertdialog", { name: "确认治理操作", exact: true })
     .getByRole("button", { name: "确认", exact: true })
@@ -90,18 +92,24 @@ test("React definition governance creates publishes compares selects versions an
         ).activeDefinitionId,
     )
     .toBe(v1.id);
+  const refreshed = await refreshedGovernance;
+  expect(refreshed.ok()).toBe(true);
+  expect((await refreshed.json()).activeDefinitionId).toBe(v1.id);
+  await expect(page.getByRole("alertdialog", { name: "确认治理操作", exact: true })).toHaveCount(0);
   await dialog.getByRole("button", { name: "停用流程" }).click();
   await page
     .getByRole("alertdialog", { name: "确认治理操作", exact: true })
     .getByRole("button", { name: "确认", exact: true })
     .click();
   await expect(dialog.getByRole("button", { name: "启用流程" })).toBeVisible();
+  await expect(page.getByRole("alertdialog", { name: "确认治理操作", exact: true })).toHaveCount(0);
   await dialog.getByRole("button", { name: "启用流程" }).click();
   await page
     .getByRole("alertdialog", { name: "确认治理操作", exact: true })
     .getByRole("button", { name: "确认", exact: true })
     .click();
   await expect(dialog.getByRole("button", { name: "停用流程" })).toBeVisible();
+  await expect(page.getByRole("alertdialog", { name: "确认治理操作", exact: true })).toHaveCount(0);
   await dialog.getByRole("tab", { name: "审计", exact: true }).click();
   await expect(
     dialog.getByText("恢复旧版本", { exact: true }).first(),

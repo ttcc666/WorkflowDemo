@@ -50,7 +50,7 @@ export default function OutboxPage() {
     "",
     user.can("approval.outbox.read"),
   );
-  const intent = useCommandIntent("outbox-retry");
+  const intent = useCommandIntent("outbox-retry", { permission: "approval.outbox.retry" });
   const [selected, setSelected] = useState<OutboxMessage | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -59,8 +59,10 @@ export default function OutboxPage() {
     [selected?.id],
     !!selected && user.can("approval.instance.read-sensitive"),
   );
+  const canRead = user.can("approval.outbox.read");
+  const { loading: listLoading, reload: reloadList } = list;
   useEffect(() => {
-    if (!user.can("approval.outbox.read") || list.loading) return;
+    if (!canRead || listLoading) return;
     let timer: number | undefined;
     let refreshing = false;
     const available = () =>
@@ -73,7 +75,7 @@ export default function OutboxPage() {
       clear();
       if (available() && !refreshing) {
         refreshing = true;
-        list.reload();
+        reloadList();
       }
     }
     function changed() {
@@ -90,9 +92,9 @@ export default function OutboxPage() {
       window.removeEventListener("online", changed);
       window.removeEventListener("offline", clear);
     };
-  }, [client, user.can("approval.outbox.read"), list.loading, list.reload]);
+  }, [canRead, listLoading, reloadList]);
   async function retry(message: OutboxMessage) {
-    if (busy) return;
+    if (busy || !user.can("approval.outbox.retry") || message.status === "Succeeded") return;
     setBusy(message.id);
     try {
       await intent.run(message.id, {}, (_, id) =>

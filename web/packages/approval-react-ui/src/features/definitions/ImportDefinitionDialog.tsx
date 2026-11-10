@@ -25,7 +25,7 @@ export function ImportDefinitionDialog({
   const client = useApprovalClient()
   const identity = useApprovalIdentity()
   const user = useApprovalUser()
-  const intent = useCommandIntent('definition-import')
+  const intent = useCommandIntent('import-definition', { permission: 'approval.definition.design' })
   const [file, setFile] = useState<Awaited<
     ReturnType<typeof readDefinitionFile>
   > | null>(null)
@@ -97,7 +97,7 @@ export function ImportDefinitionDialog({
         (body, id) =>
           client.api.importDefinitionDraft(body.key, body.packageBase64, id),
       )
-      if (revision.current === current) imported(result.key)
+      if (revision.current === current && intent.isCurrent()) imported(result.key)
     } catch (cause) {
       if (revision.current === current) setError(cause)
     } finally {
@@ -135,9 +135,7 @@ export function ImportDefinitionDialog({
       <CommandRecovery
         intent={intent}
         busy={busy}
-        recovered={() => {
-          if (key) imported(key)
-        }}
+        recovered={(_value, scope) => imported(scope)}
       />
       <Field label="流程定义文件">
         <Input

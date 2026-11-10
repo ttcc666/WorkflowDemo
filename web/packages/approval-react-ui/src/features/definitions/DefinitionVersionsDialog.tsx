@@ -43,7 +43,10 @@ export function DefinitionVersionsDialog({
 }) {
   const { api } = useApprovalClient();
   const user = useApprovalUser();
-  const intent = useCommandIntent("definition-governance");
+  const intent = useCommandIntent("definition-governance", { canExecute: scope => {
+    const permission = scope.startsWith("enabled:") ? "approval.definition.disable" : "approval.definition.publish";
+    return can(permission) && user.can(permission);
+  } });
   const governance = useAsyncData(
     (signal) => api.definitionGovernance(flowKey, signal),
     [flowKey],
@@ -78,7 +81,8 @@ export function DefinitionVersionsDialog({
   }
   async function govern() {
     const current = governance.data;
-    if (!current || !confirm || busy) return;
+    const permission = confirm === "enabled" ? "approval.definition.disable" : "approval.definition.publish";
+    if (!current || !confirm || busy || !can(permission) || !user.can(permission) || (confirm === "select" && !selected)) return;
     setBusy(true);
     setError(null);
     try {
@@ -357,6 +361,7 @@ export function DefinitionVersionsDialog({
         title="确认治理操作"
         confirm={() => void govern()}
         busy={busy}
+        confirmDisabled={!can(confirm === "enabled" ? "approval.definition.disable" : "approval.definition.publish") || !user.can(confirm === "enabled" ? "approval.definition.disable" : "approval.definition.publish") || (confirm === "select" && !selected)}
       >
         仅影响新申请，进行中的审批保持原发布版本。
       </ConfirmDialog>

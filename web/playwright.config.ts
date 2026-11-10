@@ -2,7 +2,7 @@ import { defineConfig } from '@playwright/test'
 
 export default defineConfig({
   testDir: './tests/browser',
-  testIgnore: '**/react/**',
+  testIgnore: ['**/react/**', '**/react-package/**'],
   workers: 1,
   retries: 0,
   timeout: 60000,

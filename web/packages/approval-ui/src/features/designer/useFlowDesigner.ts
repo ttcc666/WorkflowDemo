@@ -136,8 +136,8 @@ export function useFlowDesigner() {
     syncHistoryState()
   }
 
-  function markSaved() {
-    savedSnapshot = history.present
+  function markSaved(value = buildDefinition()) {
+    savedSnapshot = JSON.stringify(value)
     syncHistoryState()
   }
 

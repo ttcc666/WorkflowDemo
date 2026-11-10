@@ -65,7 +65,6 @@ export function useAsyncData<T>(
           },
         );
     return () => {
-      revision.current++;
       abort.abort();
     };
   }, [client, identity, key, enabled, tick]);

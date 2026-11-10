@@ -71,18 +71,19 @@ export function FileUploadInput({
 }) {
   const client = useApprovalClient();
   const identity = useApprovalIdentity();
-  const active = useRef(0);
+  const active = useRef({ revision: 0 });
   const input = useRef<HTMLInputElement>(null);
   const currentFiles = useRef(value);
   currentFiles.current = value;
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<unknown>(null);
   useEffect(() => {
-    active.current++;
+    const lifetime = active.current;
+    lifetime.revision++;
     setUploading(false);
     setError(null);
     return () => {
-      active.current++;
+      lifetime.revision++;
     };
   }, [identity]);
   const accept = field.accept?.length ? field.accept : defaultFileExtensions;
@@ -90,7 +91,7 @@ export function FileUploadInput({
   async function upload(files: FileList | null) {
     if (!files || uploading) return;
     const owner = client.generation;
-    const uploadId = ++active.current;
+    const uploadId = ++active.current.revision;
     setUploading(true);
     setError(null);
     try {
@@ -100,7 +101,7 @@ export function FileUploadInput({
         if (!accept.includes(file.name.split(".").pop()?.toLowerCase() ?? ""))
           throw new Error("文件类型不允许");
         const stored = await client.api.uploadFile(file);
-        if (client.generation !== owner || active.current !== uploadId) return;
+        if (client.generation !== owner || active.current.revision !== uploadId) return;
         const next = [...currentFiles.current, stored];
         currentFiles.current = next;
         onChange(next);
@@ -108,12 +109,12 @@ export function FileUploadInput({
     } catch (cause) {
       if (
         client.generation === owner &&
-        active.current === uploadId &&
+        active.current.revision === uploadId &&
         (cause as Error)?.name !== "AbortError"
       )
         setError(cause);
     } finally {
-      if (client.generation === owner && active.current === uploadId) {
+      if (client.generation === owner && active.current.revision === uploadId) {
         setUploading(false);
         if (input.current) input.current.value = "";
       }

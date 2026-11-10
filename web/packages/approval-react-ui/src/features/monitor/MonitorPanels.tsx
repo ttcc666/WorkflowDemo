@@ -55,16 +55,16 @@ export function MonitorInstances() {
     user.can("approval.instance.read-all"),
   );
   const flows = useAsyncData((signal) => api.flows(signal));
-  const intent = useCommandIntent("monitor-terminate");
+  const intent = useCommandIntent("monitor-terminate", { permission: "approval.instance.terminate" });
   const [selected, setSelected] = useState<string | null>(null);
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
   async function terminate() {
-    if (!selected || !reason.trim() || busy) return;
+    if (!selected || !reason.trim() || busy || !user.can("approval.instance.terminate")) return;
     setBusy(true);
     try {
-      await intent.run(selected, { reason }, (body, id) =>
+      await intent.run(selected, { reason: reason.trim() }, (body, id) =>
         api.terminate(selected, body.reason, id),
       );
       setSelected(null);
@@ -181,6 +181,7 @@ export function MonitorInstances() {
         }}
         title="终止流程"
         busy={busy}
+        confirmDisabled={!user.can("approval.instance.terminate") || !reason.trim()}
         confirm={() => void terminate()}
       >
         <Field label="终止原因" required>
@@ -675,14 +676,15 @@ export function HandoverPanel() {
     [fromId, page, pageSize, previewRevision],
     !!fromId && allowed,
   );
-  const intent = useCommandIntent("user-reassign", { retainOnError: true });
+  const intent = useCommandIntent("bulk-reassign", { retainOnError: true, permission: "approval.task.reassign-bulk" });
   const pendingScope =
-    intent.pending ?? (fromId && intent.hasPending(fromId) ? fromId : null);
+    intent.pending ?? intent.pendingScopes()[0] ?? (fromId && intent.hasPending(fromId) ? fromId : null);
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<ReassignResult | null>(null);
   const [error, setError] = useState<unknown>(null);
   const submitting = useRef(false);
+  const submittedRequest = useRef<{ from: string; to: string; reason: string } | null>(null);
   const active = useRef(true);
   useEffect(() => {
     setFrom([]);
@@ -695,6 +697,7 @@ export function HandoverPanel() {
     setConfirm(false);
     setBusy(false);
     submitting.current = false;
+    submittedRequest.current = null;
   }, [identity]);
   useEffect(() => {
     active.current = true;
@@ -729,9 +732,15 @@ export function HandoverPanel() {
       setResult(value);
       setError(null);
     }
+    const original = submittedRequest.current;
+    if (original?.from === scope) {
+      setFrom([original.from]);
+      setTo([original.to]);
+      setReason(original.reason);
+    }
     if (scope !== fromId) {
       setFrom([scope]);
-      setTo([]);
+      if (original?.from !== scope) setTo([]);
       setPage(1);
     } else {
       reloadPreview();
@@ -748,10 +757,13 @@ export function HandoverPanel() {
       return;
     setWorking(true);
     setError(null);
+    setResult(null);
+    const body = { from: fromId, to: toId, reason: normalizedReason };
+    submittedRequest.current = body;
     try {
       const result = await intent.run(
         fromId,
-        { from: fromId, to: toId, reason: normalizedReason },
+        body,
         (body, id) => api.reassignUser(body.from, body.to, body.reason, id),
       );
       if (!active.current || client.generation !== generation) return;
@@ -772,11 +784,14 @@ export function HandoverPanel() {
         <CommandRecovery
           intent={intent}
           scope={pendingScope}
+          description={pendingScope ? `原交出人员：${pendingScope}` : undefined}
           busy={busy}
           recovered={recovered}
           onRecoveringChange={setWorking}
           onReset={() => {
             setError(null);
+            setResult(null);
+            submittedRequest.current = null;
             reloadPreview();
           }}
         />
@@ -808,7 +823,7 @@ export function HandoverPanel() {
             label="搜索接收人员"
             value={to}
             onChange={(ids) => {
-              if (!submitting.current && allowed) setTo(ids);
+              if (!submitting.current && allowed) { setTo(ids); setResult(null); }
             }}
             excludedUsers={from}
             disabled={busy || !allowed}
@@ -874,7 +889,7 @@ export function HandoverPanel() {
           value={reason}
           disabled={busy || !allowed}
           onChange={(event) => {
-            if (!submitting.current && allowed) setReason(event.target.value);
+            if (!submitting.current && allowed) { setReason(event.target.value); setResult(null); }
           }}
         />
       </Field>

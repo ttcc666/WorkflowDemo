@@ -113,14 +113,16 @@ function FocusNode({
 }) {
   const initialized = useNodesInitialized()
   const flow = useReactFlow()
+  const position = nodes.find(node => node.id === id)?.position
+  const x = position?.x
+  const y = position?.y
   useEffect(() => {
     if (!initialized || !id) return
-    const node = nodes.find((node) => node.id === id)
-    if (node)
-      void flow.setCenter(node.position.x + 110, node.position.y + 36, {
+    if (x !== undefined && y !== undefined)
+      void flow.setCenter(x + 110, y + 36, {
         zoom: 1,
         duration: 200,
       })
-  }, [initialized, id])
+  }, [initialized, id, x, y, flow])
   return null
 }

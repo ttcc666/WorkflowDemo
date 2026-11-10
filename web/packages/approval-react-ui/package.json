@@ -9,6 +9,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./contracts": "./src/contracts.ts",
+    "./pages/*": "./src/pages/*.tsx",
     "./style.css": "./src/styles.css"
   },
   "files": [
@@ -24,6 +25,10 @@
       },
       "./contracts": {
         "types": "./dist/types/contracts.d.ts"
+      },
+      "./pages/*": {
+        "types": "./dist/types/pages/*.d.ts",
+        "import": "./dist/pages/*.js"
       },
       "./style.css": "./dist/approval-react-ui.css"
     },

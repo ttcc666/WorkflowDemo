@@ -8,7 +8,7 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
-import { formatDateTime } from "@approval/shared";
+import { createCommandIntent, formatDateTime } from "@approval/shared";
 import { ApprovalProvider, createApprovalClient } from "../../src/client";
 import type { UserPickerProps } from "../../src/components/UserPicker";
 import { HandoverPanel } from "../../src/features/monitor/MonitorPanels";
@@ -297,6 +297,31 @@ it("changing the handing-over user clears a conflicting receiver and resets the 
   ).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "批量改派" })).toBeDisabled();
 });
+it.each(['receiver', 'reason'])("changing the handover %s clears the previous result without another write", async (field) => {
+  const view = show();
+  await choose('alice', 'bob');
+  await submitHandover();
+  await screen.findByRole('heading', { name: '交接结果' });
+  if (field === 'receiver') fireEvent.click(within(screen.getByRole('group', { name: '接收人员' })).getByRole('button', { name: '选择 alice' }));
+  else fireEvent.change(screen.getByRole('textbox', { name: '交接原因' }), { target: { value: '新的交接原因' } });
+  expect(screen.queryByRole('heading', { name: '交接结果' })).not.toBeInTheDocument();
+  expect(view.posts).toHaveLength(1);
+});
+it('discovers an old React handover on mount and identifies its original sender without an automatic retry', async () => {
+  const legacy = createCommandIntent(() => ':/api/approval:user-reassign');
+  await expect(legacy.run('alice', { from: 'alice', to: 'bob', reason: '旧请求' }, async () => { throw new TypeError('lost'); })).rejects.toThrow('lost');
+  const before = { ...sessionStorage };
+  const view = show();
+  await screen.findByText('原交出人员：alice');
+  expect(screen.getByText('恢复状态：需要人工核对，禁止自动重试')).toBeVisible();
+  expect(screen.queryByRole('button', { name: '按原内容重试上次操作' })).not.toBeInTheDocument();
+  expect(view.posts).toHaveLength(0);
+  expect({ ...sessionStorage }).toEqual(before);
+  await choose('bob', 'alice');
+  expect(submitButton()).toBeDisabled();
+  expect(screen.getByText('原交出人员：alice')).toBeVisible();
+  expect(view.posts).toHaveLength(0);
+});
 it("failed handover recovers the original key and body through the recovery control even with an empty preview", async () => {
   const view = show(true, true);
   await choose("alice", "bob", "  交接验收  ");
@@ -310,6 +335,7 @@ it("failed handover recovers the original key and body through the recovery cont
   const reason = screen.getByRole("textbox", { name: "交接原因" });
   expect(reason).toHaveValue("  交接验收  ");
   fireEvent.change(reason, { target: { value: "另一个理由" } });
+  fireEvent.click(within(screen.getByRole("group", { name: "接收人员" })).getByRole("button", { name: "选择 alice" }));
   view.holdPost();
   const retry = screen.getByRole("button", { name: "按原内容重试上次操作" });
   fireEvent.click(retry);
@@ -325,6 +351,8 @@ it("failed handover recovers the original key and body through the recovery cont
   await view.complete();
   await screen.findByRole("heading", { name: "交接结果" });
   const metrics = screen.getAllByRole("listitem");
+  expect(reason).toHaveValue("交接验收");
+  expect(screen.getByText("搜索接收人员当前 bob")).toBeVisible();
   expect(within(metrics.find((item) => item.textContent?.includes("已改派任务"))!).getByText("2", { exact: true })).toBeVisible();
   expect(within(metrics.find((item) => item.textContent?.includes("跳过任务"))!).getByText("1", { exact: true })).toBeVisible();
   expect(screen.getByRole("row", { name: /跳过的申请.*已处理/ })).toBeVisible();

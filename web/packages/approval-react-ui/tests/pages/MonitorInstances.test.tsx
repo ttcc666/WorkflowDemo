@@ -1,4 +1,5 @@
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -8,7 +9,7 @@ import {
 import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { expect, it, vi } from "vitest";
-import { ApprovalProvider } from "../../src/client";
+import { ApprovalProvider, createApprovalClient } from "../../src/client";
 import { MonitorInstances } from "../../src/features/monitor/MonitorPanels";
 import type { UserPickerProps } from "../../src/components/UserPicker";
 import { localDayStart } from "@approval/shared/features/lists/listModel";
@@ -196,3 +197,24 @@ it("users without read-all permission never request the administrative instance 
   await waitFor(() => expect(view.fetcher).toHaveBeenCalled());
   expect(view.queries).toHaveLength(0);
 });
+
+it('revoking terminate permission in an open monitor confirmation prevents a write', async () => {
+  const posts: unknown[] = []
+  const client = createApprovalClient({ fetcher: vi.fn(async (url, init) => {
+    if (init.method === 'POST') { posts.push(JSON.parse(String(init.body))); return new Response(null, { status: 204 }) }
+    if (url.endsWith('/me')) return Response.json({ userId: 'admin', capabilities: { 'approval.instance.read-all': true, 'approval.instance.terminate': true } })
+    if (url.endsWith('/flows')) return Response.json([])
+    return Response.json({ items: [{ id: 'instance', title: '真实管理对象', status: 'Running', definitionName: '审批', createdAt: '' }], total: 1 })
+  }) })
+  const router = createMemoryRouter([{ path: '/monitor', Component: MonitorInstances }], { initialEntries: ['/monitor'] })
+  render(<ApprovalProvider client={client}><RouterProvider router={router} /></ApprovalProvider>)
+  await screen.findByText('真实管理对象')
+  fireEvent.click(screen.getByRole('button', { name: '终止流程' }))
+  const dialog = screen.getByRole('alertdialog', { name: '终止流程' })
+  fireEvent.change(screen.getByRole('textbox', { name: '终止原因' }), { target: { value: '  核对后终止  ' } })
+  await waitFor(() => expect(within(dialog).getByRole('button', { name: '确认' })).toBeEnabled())
+  act(() => { client.me.value = { ...client.me.value!, capabilities: { 'approval.instance.read-all': true } } })
+  expect(within(dialog).getByRole('button', { name: '确认' })).toBeDisabled()
+  fireEvent.click(within(dialog).getByRole('button', { name: '确认' }))
+  expect(posts).toEqual([])
+})

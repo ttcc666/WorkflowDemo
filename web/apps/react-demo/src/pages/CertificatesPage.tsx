@@ -66,13 +66,15 @@ export default function CertificatesPage() {
     !!params.get("reapply"),
   );
   useEffect(() => {
+    let active = true;
     const request = reapply.data?.request;
     if (request?.canReapply) {
       if (request.operation === "Revoke" && request.certificateId) {
         void api.get(request.certificateId).then((certificate) => {
+          if (!active) return;
           setRevoke(certificate);
           setReason(request.reason ?? "");
-        });
+        }).catch(cause => { if (active) setError(cause); });
       } else
         setForm({
           certificate: request.certificateId
@@ -84,7 +86,8 @@ export default function CertificatesPage() {
           source: request.id,
         });
     }
-  }, [reapply.data]);
+    return () => { active = false; };
+  }, [reapply.data, api]);
   async function submitRevoke() {
     if (!revoke || busy) return;
     if (!reason.trim()) {
