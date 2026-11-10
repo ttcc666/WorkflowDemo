@@ -18,6 +18,8 @@ flowchart TD
 
 可运行的仓库内实现见 [`samples/Approval.MultiTenantHost`](../samples/Approval.MultiTenantHost/README.md)：共享 SQLite、可信租户 claim、固定 Context、分区模型、报销生命周期与 Outbox 接收记录；A/B 隔离与并发集成测试纳入默认后端验证。
 
+示例宿主的租户 ID 为 1–64 个非空白、非控制字符；目录拒绝 `OrdinalIgnoreCase` 相等的重复条目（例如 `alpha` 与 `ALPHA`），但保留合法现有 ID 的大小写和 Unicode 原值。认证 claim、范围捕获与数据库参数必须使用目录中的精确值，查找仍按 ordinal 精确匹配；不会自动 Trim、转小写或重写已有数据。示例 SQLite 的分区列使用默认 BINARY 比较，与精确查找一致。其他 Provider 的宿主应按自己的已有 ID 和数据库 collation 验证比较语义（特别是大小写、重音和尾部空格）；Core 不替宿主规范化或迁移租户标识。
+
 注册宿主的 `IApprovalHostScopeProvider`。`Capture()` 返回不可变快照；`PartitionKey` 是稳定的宿主范围标识；`Enter()` 在当前调用链同步安装上下文，返回的 IDisposable 在完成或失败时恢复原上下文。不能依赖一个异步辅助方法设置 AsyncLocal 后返回，设置应覆盖实际执行委托。
 
 执行器捕获一次上下文，并在策略、授权、Find/Replay、业务委托、COMMIT 结果确认及每次重试中使用它。启用分区的宿主 DbContext 实现 `IApprovalPartitionContext`，暴露创建时固定的 PartitionKey；执行器在预约操作键前核对两者一致。`UseApproval()` 在每次 EF 命令和保存时验证该值非空且没有变化；使用 DI 创建 Context 时，还会核对其应用服务提供者中的 `IApprovalHostScopeProvider.Capture()`。直接构造 Context 的宿主仍负责将固定值与当前可信范围核对（示例 `TenantCommandGuard`）。分区 Context 不支持 `AddDbContextPool` / `PooledDbContextFactory`，检测到池化配置即拒绝；使用每个范围独立的普通 Context。
@@ -57,6 +59,8 @@ modelBuilder.ConfigureApprovalPartition("TenantId", typeof(HostDeliveryReceipt))
 ## 数据库级边界与部署前提
 
 以上是 EF 访问层保护，**不是同进程不可信代码的沙箱，也不等同于数据库 RLS**。`Database.GetDbConnection().CreateCommand()`、独立 ADO.NET 连接、持有数据库凭证的代码不经过 EF 拦截器。当前回归测试明确保留这一可复现边界；任意拥有共享数据库权限的宿主代码仍可以访问所有租户。不能将这些测试通过解释为“直接数据库命令已隔离”。已返回的对象、`DbSet.Local` 或跟踪缓存也不能在租户之间共享。
+
+当前支持的接入模型信任宿主基础设施代码：Core 内部事务、迁移和宿主受控数据库集成可以继续使用 ADO.NET，不要求部署 RLS。租户可触达的扩展必须保留捕获的宿主范围，不从流程 JSON / 表单 / Header 构造连接、租户范围或任意 SQL；业务回调使用本次操作的 scoped Context，不能缓存其他租户的 Context。内置 Sql 动作因缺少范围契约在分区流程中拒绝，其余已有单租户 SQL 集成不受影响。具备运行任意宿主代码或取得数据库凭证的攻击者属于另一种信任边界，不将全面禁止 ADO.NET 作为当前审批引擎的验收要求。
 
 | 数据库 | 数据库级选项 | 必须满足的部署条件 |
 | --- | --- | --- |

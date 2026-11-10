@@ -53,6 +53,8 @@ Development 下的 Demo token 只用于演练，均来自 `appsettings.Developme
 
 认证将凭据映射为可信 `sub` 与 `tenant_id` claim；`X-Tenant-Id` 或请求正文不会选择租户。`alice` 能发起并查询自己的报销，`bob` 有审批权限，`admin` 有定义治理及当前租户的广泛查询权限。权限来自配置中的显式列表，不由角色名推断。
 
+租户 ID 必须为 1–64 个非空白、非控制字符，目录中不能同时出现 `alpha` / `ALPHA` 这类仅大小写不同的条目。合法现有 ID（含大写或 Unicode）保持原样，可信 claim 必须精确匹配目录值；不自动 Trim、转小写或修改已有数据库中的 ID。非法配置在宿主构造时拒绝。共享 SQLite 使用默认 BINARY 比较；迁移到其他 Provider 时须核对宿主目录与数据库 collation 的比较语义。
+
 基础审批使用 `/api/approval` 下已有的定义、任务、实例、Outbox 等 Endpoint。宿主补充：
 
 - `POST /demo/expenses`：`Idempotency-Key` + `{ "businessKey": "EXP-001", "amount": 12 }`，业务与审批原子提交。

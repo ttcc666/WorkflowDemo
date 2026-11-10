@@ -11,8 +11,12 @@ public sealed class TenantDirectory
     {
         Tenants = configuration.GetSection("Directory:Tenants").Get<TenantEntry[]>() ?? [];
         DemoIdentities = configuration.GetSection("Authentication:DemoIdentities").Get<DemoIdentity[]>() ?? [];
-        if (Tenants.Length == 0 || Tenants.Select(t => t.Id).Distinct(StringComparer.Ordinal).Count() != Tenants.Length
-            || Tenants.Any(t => string.IsNullOrWhiteSpace(t.Id) || t.Id.Length > 64 || t.Users.Length == 0
+        // Keep the configured ID unchanged, but do not admit aliases that a case-insensitive
+        // database could treat as the same tenant. Claims still require an exact directory match.
+        if (Tenants.Length == 0 || Tenants.Select(t => t.Id).Distinct(StringComparer.OrdinalIgnoreCase).Count() != Tenants.Length
+            || Tenants.Any(t => string.IsNullOrWhiteSpace(t.Id) || t.Id.Length > 64 || t.Id.Any(c => char.IsWhiteSpace(c) || char.IsControl(c))))
+            throw new InvalidOperationException("宿主租户标识必须为 1–64 个非空白、非控制字符，且不能仅以大小写区分租户；不会自动规范化已有标识。");
+        if (Tenants.Any(t => t.Users.Length == 0
                 || t.Users.Select(u => u.Id).Distinct(StringComparer.Ordinal).Count() != t.Users.Length
                 || t.Users.Any(u => string.IsNullOrWhiteSpace(u.Id) || u.Permissions.Any(p => !ApprovalPermissions.All.Contains(p)
                     || p.StartsWith("approval.system.", StringComparison.Ordinal)))))
