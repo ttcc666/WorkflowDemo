@@ -22,7 +22,7 @@ async function retry() {
     props.recovered(result, current)
     if (active) ElMessage.success('上次操作结果已确认')
   } catch (cause) { if (active && owner === client.generation) error.value = errorMessage(cause) }
-  finally { recovering.value = false }
+  finally { if (active) recovering.value = false }
 }
 async function reset() {
   const current = props.scope, manager = props.intent, owner = client.generation

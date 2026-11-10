@@ -15,13 +15,13 @@ async function seed(scope: string) {
   vi.stubGlobal('crypto', webcrypto)
   await expect(coreIntent(() => owner).run(scope, { secret: 'private body' }, async () => { throw new Error('lost') })).rejects.toThrow('lost')
 }
-function show(initial?: string | null) {
+function show(initial?: string | null, canExecute?: (scope: string) => boolean) {
   vi.stubGlobal('crypto', webcrypto)
   const selected = shallowRef(initial), actor = shallowRef('alice')
   let intent!: ReturnType<typeof useCommandIntent>
   const recovered = vi.fn(), reset = vi.fn()
   const client = createApprovalClient({ userKey: () => actor.value, fetcher: async () => Response.json({}) })
-  const view = defineComponent({ setup() { intent = useCommandIntent('recovery-p2'); return () => h(CommandRecovery, { intent, scope: selected.value, onRecovered: recovered, onReset: reset }) } })
+  const view = defineComponent({ setup() { intent = useCommandIntent('recovery-p2', { canExecute }); return () => h(CommandRecovery, { intent, scope: selected.value, onRecovered: recovered, onReset: reset }) } })
   const container = document.createElement('div'); document.body.append(container)
   app = createApp(view).use(client).use(ElementPlus); app.mount(container)
   return { container, selected, actor, recovered, reset, get intent() { return intent } }
@@ -97,4 +97,18 @@ it('Vue keeps concurrent recovery rows independent until both original operation
   await nextTick()
   expect(view.container.querySelectorAll('.el-alert')).toHaveLength(0)
   expect(view.intent.pendingScopes()).toEqual([])
+})
+
+it('Vue checks the current scope before replay and preserves a different flow original intent', async () => {
+  let allowed = 'draft:a'
+  const view = show(undefined, scope => scope === allowed)
+  const send = vi.fn().mockRejectedValueOnce(new TypeError('lost')).mockResolvedValueOnce({ draftId: 'original' })
+  await expect(view.intent.run('draft:a', { original: 'body' }, send)).rejects.toThrow('lost')
+  await nextTick()
+  allowed = 'start:b'
+  button(row(view.container, 'draft:a'), '按原内容重试上次操作').click()
+  await vi.waitFor(() => expect(view.container.textContent).toContain('没有执行此操作的权限'))
+  expect(send).toHaveBeenCalledTimes(1)
+  expect(view.intent.hasPending('draft:a')).toBe(true)
+  expect(view.recovered).not.toHaveBeenCalled()
 })

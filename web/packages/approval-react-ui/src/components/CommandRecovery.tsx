@@ -1,6 +1,6 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { useCommandIntent } from '../hooks/useCommandIntent'
-import { useApprovalIdentity } from '../client'
+import { useApprovalClient, useApprovalIdentity } from '../client'
 import { Button, Card, ConfirmDialog, ErrorState } from './ui/primitives'
 type RecoveryProps = {
   intent: ReturnType<typeof useCommandIntent>
@@ -16,12 +16,15 @@ export function CommandRecovery(props: RecoveryProps) {
   return <CommandRecoveryList {...props} key={identity} />
 }
 function CommandRecoveryList(props: RecoveryProps) {
+  const active = useRef(true)
+  useEffect(() => { active.current = true; return () => { active.current = false } }, [])
   const scopes = props.scope === undefined ? props.intent.pendingScopes() : props.scope === null ? [] : [props.scope]
   const recoveringScopes = useRef(new Set<string>())
   return <>{scopes.map(scope => <CommandRecoveryItem {...props} key={scope} scope={scope}
+    recovered={(value, recoveredScope) => { if (active.current) props.recovered(value, recoveredScope) }}
     onRecoveringChange={recovering => {
       if (recovering) recoveringScopes.current.add(scope); else recoveringScopes.current.delete(scope)
-      if (props.intent.isCurrent()) props.onRecoveringChange?.(recoveringScopes.current.size > 0)
+      if (active.current && props.intent.isCurrent()) props.onRecoveringChange?.(recoveringScopes.current.size > 0)
     }} />)}</>
 }
 function CommandRecoveryItem({
@@ -33,6 +36,9 @@ function CommandRecoveryItem({
   onReset,
   description,
 }: RecoveryProps & { scope: string }) {
+  const client = useApprovalClient()
+  const active = useRef(true)
+  useEffect(() => { active.current = true; return () => { active.current = false } }, [])
   const [recovering, setRecovering] = useState(false)
   const retrying = useRef(false)
   const [confirmScope, setConfirmScope] = useState<string | null>(null)
@@ -41,18 +47,21 @@ function CommandRecoveryItem({
     if (busy || retrying.current || !intent.isCurrent() || !intent.canRetry(scope))
       return
     retrying.current = true
+    const owner = client.generation
     setRecovering(true)
     onRecoveringChange?.(true)
     setError(null)
     try {
       const result = await intent.retry(scope)
-      if (intent.isCurrent()) recovered(result, scope)
+      if (owner === client.generation && intent.isCurrent()) recovered(result, scope)
     } catch (cause) {
-      if (intent.isCurrent()) setError(cause)
+      if (active.current && owner === client.generation && intent.isCurrent()) setError(cause)
     } finally {
       retrying.current = false
-      setRecovering(false)
-      onRecoveringChange?.(false)
+      if (owner === client.generation && intent.isCurrent()) {
+        if (active.current) setRecovering(false)
+        onRecoveringChange?.(false)
+      }
     }
   }
   return (

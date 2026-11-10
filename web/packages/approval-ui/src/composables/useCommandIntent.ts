@@ -12,10 +12,10 @@ export function createCommandIntent(...args: Parameters<typeof createCoreIntent>
   return { ...core, pending, pendingScopes: () => { void revision.value; return core.pendingScopes() } }
 }
 export type CommandIntent = ReturnType<typeof createCommandIntent>
-export function useCommandIntent(namespace: string, options: { retainOnError?: boolean; permission?: string } = {}) {
+export function useCommandIntent(namespace: string, options: { retainOnError?: boolean; permission?: string; canExecute?: (scope: string) => boolean } = {}) {
   const client = useApprovalClient()
   const core = getApprovalClientCore(client)
   const resolved = resolveCommandNamespace(namespace)
   const owner = () => `${client.userKey.value}:${client.config().apiBase}`
-  return createCommandIntent(() => `${owner()}:${resolved.namespace}`, { ...options, aliases: () => resolved.aliases.map(alias => `${owner()}:${alias}`), scopeAliases: scope => commandScopeAliases(resolved.namespace, scope), canExecute: options.permission ? () => core.me.value?.capabilities?.[options.permission!] === true : undefined })
+  return createCommandIntent(() => `${owner()}:${resolved.namespace}`, { ...options, aliases: () => resolved.aliases.map(alias => `${owner()}:${alias}`), scopeAliases: scope => commandScopeAliases(resolved.namespace, scope), canExecute: scope => (!options.permission || core.me.value?.capabilities?.[options.permission] === true) && options.canExecute?.(scope) !== false })
 }

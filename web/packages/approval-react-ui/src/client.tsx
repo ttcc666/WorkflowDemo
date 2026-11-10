@@ -5,6 +5,7 @@ import {
   useLayoutEffect,
   useMemo,
   useRef,
+  useState,
   useSyncExternalStore,
   type ComponentType,
   type ReactNode,
@@ -46,6 +47,8 @@ export function createApprovalClient(
   })
 }
 const ClientContext = createContext<ApprovalClient | null>(null)
+const IdentityChangeContext = createContext(false)
+export function useApprovalIdentityChange() { return useContext(IdentityChangeContext) }
 export function ApprovalProvider({
   options = {},
   client: supplied,
@@ -61,6 +64,8 @@ export function ApprovalProvider({
     [supplied],
   )
   const key = options.userKey?.() ?? supplied?.identity.value ?? ''
+  const [previousKey, setPreviousKey] = useState(key)
+  useLayoutEffect(() => { setPreviousKey(key) }, [key])
   useLayoutEffect(() => {
     if (!supplied) client.updateOptions(options)
   }, [client, supplied, key, options])
@@ -72,11 +77,13 @@ export function ApprovalProvider({
   }, [client, key, supplied])
   return (
     <ClientContext.Provider value={client}>
+      <IdentityChangeContext.Provider value={previousKey !== key}>
       <TooltipProvider>
       <div key={key} className="approval-react">
         {children}
       </div>
       </TooltipProvider>
+      </IdentityChangeContext.Provider>
     </ClientContext.Provider>
   )
 }

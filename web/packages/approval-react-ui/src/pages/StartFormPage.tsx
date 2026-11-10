@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   Breadcrumb,
   BreadcrumbList,
@@ -35,6 +35,7 @@ import {
 import {
   useApprovalClient,
   useApprovalIdentity,
+  useApprovalIdentityChange,
   useApprovalUser,
 } from "../client";
 import { useAsyncData } from "../hooks/useAsyncData";
@@ -62,6 +63,23 @@ import {
   type FieldErrors,
 } from "../features/forms/DynamicForm";
 
+function startResult(value: unknown) {
+  if (!value || typeof value !== "object" || !("instanceId" in value) ||
+    typeof value.instanceId !== "string" || !value.instanceId.trim())
+    throw new Error("申请恢复结果缺少有效的 instanceId，请核对原操作结果");
+  return { instanceId: value.instanceId };
+}
+
+function draftResult(value: unknown) {
+  if (!value || typeof value !== "object" || !("draftId" in value) ||
+    typeof value.draftId !== "string" || !value.draftId.trim() ||
+    !("updatedAt" in value) || typeof value.updatedAt !== "string" ||
+    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,7})?(?:Z|[+-]\d{2}:\d{2})$/.test(value.updatedAt) ||
+    !Number.isFinite(Date.parse(value.updatedAt)))
+    throw new Error("草稿恢复结果缺少有效的 draftId 或 updatedAt，请核对原操作结果");
+  return { draftId: value.draftId, updatedAt: value.updatedAt };
+}
+
 export default function StartFormPage() {
   const { key = "" } = useParams();
   const [params, setParams] = useSearchParams();
@@ -69,6 +87,7 @@ export default function StartFormPage() {
   const navigate = useNavigate();
   const client = useApprovalClient();
   const identity = useApprovalIdentity();
+  const identityChanged = useApprovalIdentityChange();
   const user = useApprovalUser();
   const [draftId, setDraftId] = useState(params.get("draft"));
   const [openedDraft, setOpenedDraft] = useState(params.get("draft"));
@@ -85,7 +104,32 @@ export default function StartFormPage() {
     [openedDraft],
     !!start.data,
   );
-  const intent = useCommandIntent("form-start");
+  const intent = useCommandIntent("form-start", {
+    canExecute: (scope) =>
+      (scope === `start:${key}` && user.can("approval.instance.start")) ||
+      (scope === `draft:${key}` && user.can("approval.draft.write")),
+  });
+  const pageVersion = useRef(0);
+  const discardedDraft = useRef<string | null>(null);
+  const previousIdentity = useRef(client.identity.value);
+  // Query navigation must wait for RouterProvider to subscribe after a remount.
+  useEffect(() => {
+    if (!identityChanged && previousIdentity.current === client.identity.value) return;
+    previousIdentity.current = client.identity.value;
+    if (routeDraft) discardedDraft.current = routeDraft;
+    setDraftId(null);
+    setOpenedDraft(null);
+    setParams((previous) => {
+      const next = new URLSearchParams(previous);
+      next.delete("draft");
+      return next;
+    }, { replace: true });
+  }, [client, identity, identityChanged, routeDraft, setParams]);
+  useLayoutEffect(() => {
+    const version = ++pageVersion.current;
+    return () => { pageVersion.current = version + 1; };
+  }, [key, identity]);
+  const recoveredSnapshot = useRef("");
   const [values, setValues] = useState<FormValues>({});
   const [comment, setComment] = useState("");
   const [saved, setSaved] = useState("");
@@ -98,12 +142,17 @@ export default function StartFormPage() {
   const formRef = useRef<DynamicFormHandle>(null);
   const snapshot = JSON.stringify([values, comment.trim()]);
   const dirty = !!start.data && snapshot !== saved;
+  const current = useRef({ values, comment, snapshot, draftId, dirty });
+  current.current = { values, comment, snapshot, draftId, dirty };
   useEffect(() => {
-    if (routeDraft !== draftId) {
+    // Ignore the old identity's query until the router finishes replacing it.
+    if (routeDraft && routeDraft === discardedDraft.current) return;
+    discardedDraft.current = null;
+    if (routeDraft === null || routeDraft !== current.current.draftId) {
       setDraftId(routeDraft);
       setOpenedDraft(routeDraft);
     }
-  }, [routeDraft, draftId]);
+  }, [routeDraft]);
   useEffect(() => {
     setValues({});
     setComment("");
@@ -129,12 +178,11 @@ export default function StartFormPage() {
     if (draft.data?.adjusted)
       setNotice("流程已更新，草稿已按最新表单调整，请检查后提交");
   }, [start.data, draft.data, openedDraft]);
-  const current = useRef({ values, comment, snapshot, draftId, dirty });
-  current.current = { values, comment, snapshot, draftId, dirty };
   async function save(silent = false) {
     if (!start.data || !user.can("approval.draft.write") || lock.current)
       return;
     const owner = client.generation;
+    const version = pageVersion.current;
     const body = current.current;
     lock.current = true;
     setBusy(true);
@@ -146,16 +194,22 @@ export default function StartFormPage() {
           formData: body.values,
           comment: body.comment.trim(),
         },
-        (payload, id) =>
-          client.api.saveDraft(
+        async (payload, id) => {
+          const value = await client.api.saveDraft(
             key,
             payload.draftId,
             payload.formData,
             payload.comment,
             id,
-          ),
+          );
+          if (owner !== client.generation || version !== pageVersion.current)
+            throw new DOMException("页面或身份已变化", "AbortError");
+          const result = draftResult(value);
+          recoveredSnapshot.current = JSON.stringify([payload.formData, payload.comment]);
+          return result;
+        },
       );
-      if (owner !== client.generation || !intent.isCurrent()) return;
+      if (owner !== client.generation || version !== pageVersion.current || !intent.isCurrent()) return;
       setDraftId(result.draftId);
       setSavedAt(result.updatedAt);
       setSaved(body.snapshot);
@@ -170,12 +224,12 @@ export default function StartFormPage() {
       if (!silent) setNotice("草稿已保存");
     } catch (cause) {
       if (
-        owner === client.generation &&
+        owner === client.generation && version === pageVersion.current &&
         (cause as Error)?.name !== "AbortError"
       )
         setError(cause);
     } finally {
-      if (owner === client.generation) {
+      if (owner === client.generation && version === pageVersion.current) {
         lock.current = false;
         setBusy(false);
       }
@@ -203,6 +257,7 @@ export default function StartFormPage() {
   async function submit() {
     if (!start.data || lock.current || !formRef.current?.validate()) return;
     const owner = client.generation;
+    const version = pageVersion.current;
     lock.current = true;
     setBusy(true);
     setError(null);
@@ -211,22 +266,26 @@ export default function StartFormPage() {
       const result = await intent.run(
         `start:${key}`,
         { formData: values, comment: comment.trim(), draftId },
-        (body, id) =>
-          client.api.submitForm(
+        async (body, id) => {
+          const value = await client.api.submitForm(
             key,
             body.formData,
             body.comment,
             body.draftId,
             id,
-          ),
+          );
+          if (owner !== client.generation || version !== pageVersion.current)
+            throw new DOMException("页面或身份已变化", "AbortError");
+          return startResult(value);
+        },
       );
-      if (owner === client.generation && intent.isCurrent()) {
+      if (owner === client.generation && version === pageVersion.current && intent.isCurrent()) {
         setSaved(snapshot);
-        navigate("../approvals/" + result.instanceId);
+        navigate("../approvals/" + encodeURIComponent(result.instanceId));
       }
     } catch (cause) {
       if (
-        owner === client.generation &&
+        owner === client.generation && version === pageVersion.current &&
         (cause as Error)?.name !== "AbortError"
       ) {
         setError(cause);
@@ -234,7 +293,7 @@ export default function StartFormPage() {
           setFieldErrors(cause.errors);
       }
     } finally {
-      if (owner === client.generation) {
+      if (owner === client.generation && version === pageVersion.current) {
         lock.current = false;
         setBusy(false);
       }
@@ -284,12 +343,30 @@ export default function StartFormPage() {
         <p className="ar-page-description">{start.data.settings.description}</p>
       )}
       <CommandRecovery
+        key={key}
         intent={intent}
         busy={busy}
-        recovered={(_value, scope) => {
-          if (scope !== `draft:${key}` && scope !== `start:${key}`) return;
-          start.reload();
-          draft.reload();
+        onRecoveringChange={setBusy}
+        recovered={(value, scope) => {
+          if (!intent.isCurrent()) return;
+          if (scope === `start:${key}`) {
+            const result = startResult(value);
+            setError(null);
+            setSaved(current.current.snapshot);
+            navigate("../approvals/" + encodeURIComponent(result.instanceId));
+          } else if (scope === `draft:${key}`) {
+            const result = draftResult(value);
+            setError(null);
+            setDraftId(result.draftId);
+            setSavedAt(result.updatedAt);
+            setSaved(recoveredSnapshot.current);
+            setParams((previous) => {
+              const next = new URLSearchParams(previous);
+              next.set("draft", result.draftId);
+              return next;
+            }, { replace: true });
+            setNotice("草稿已保存");
+          }
         }}
       />
       <ErrorState error={error || draft.error} retry={draft.reload} />
